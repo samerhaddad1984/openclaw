@@ -1,8 +1,9 @@
-import { chunkText } from "../../../auto-reply/chunk.js";
+﻿import { chunkText } from "../../../auto-reply/chunk.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { OutboundSendDeps } from "../../../infra/outbound/deliver.js";
 import { resolveChannelMediaMaxBytes } from "../media-limits.js";
 import type { ChannelOutboundAdapter } from "../types.js";
+import { validateLedgerLinkOutputOrThrow } from "./ledgerlink-validator.js";
 
 type DirectSendOptions = {
   accountId?: string | null;
@@ -136,9 +137,54 @@ export function createDirectTextMediaOutbound<
     chunker: chunkText,
     chunkerMode: "text",
     textChunkLimit: 4000,
-    sendPayload: async (ctx) =>
-      await sendTextMediaPayload({ channel: params.channel, ctx, adapter: outbound }),
+
+    sendPayload: async (ctx) => {
+      const text = ctx.payload.text ?? "";
+      const urls = ctx.payload.mediaUrls?.length
+        ? ctx.payload.mediaUrls
+        : ctx.payload.mediaUrl
+          ? [ctx.payload.mediaUrl]
+          : [];
+
+      if (!text && urls.length === 0) {
+        return { channel: params.channel, messageId: "" };
+      }
+
+      if (urls.length > 0) {
+        // Validate caption text (only first media send includes text)
+        validateLedgerLinkOutputOrThrow(text, params.channel);
+
+        let lastResult = await outbound.sendMedia!({
+          ...ctx,
+          text,
+          mediaUrl: urls[0],
+        });
+        for (let i = 1; i < urls.length; i++) {
+          lastResult = await outbound.sendMedia!({
+            ...ctx,
+            text: "",
+            mediaUrl: urls[i],
+          });
+        }
+        return lastResult;
+      }
+
+      const limit = outbound.textChunkLimit;
+      const chunks = limit && outbound.chunker ? outbound.chunker(text, limit) : [text];
+
+      let lastResult: Awaited<ReturnType<NonNullable<typeof outbound.sendText>>>;
+      for (const chunk of chunks) {
+        // Validate per chunk so chunking cannot bypass CPA guardrails
+        validateLedgerLinkOutputOrThrow(chunk, params.channel);
+        lastResult = await outbound.sendText!({ ...ctx, text: chunk });
+      }
+      return lastResult!;
+    },
+
     sendText: async ({ cfg, to, text, accountId, deps, replyToId }) => {
+      // LedgerLink CPA Guardrail
+      validateLedgerLinkOutputOrThrow(text, params.channel);
+
       return await sendDirect({
         cfg,
         to,
@@ -149,7 +195,11 @@ export function createDirectTextMediaOutbound<
         buildOptions: params.buildTextOptions,
       });
     },
+
     sendMedia: async ({ cfg, to, text, mediaUrl, mediaLocalRoots, accountId, deps, replyToId }) => {
+      // LedgerLink CPA Guardrail (caption text)
+      validateLedgerLinkOutputOrThrow(text, params.channel);
+
       return await sendDirect({
         cfg,
         to,
@@ -163,5 +213,6 @@ export function createDirectTextMediaOutbound<
       });
     },
   };
+
   return outbound;
 }
