@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadDotEnv } from "../infra/dotenv.js";
@@ -62,6 +64,34 @@ export function shouldEnsureCliPath(argv: string[]): boolean {
   return true;
 }
 
+function tryLedgerLinkLogRotate(): void {
+  // Run once per process
+  if (process.env.LEDGERLINK_ROTATED === "1") return;
+  process.env.LEDGERLINK_ROTATED = "1";
+
+  // Repo root (best effort). If not in a repo, don't crash.
+  const gitTop = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf-8",
+    windowsHide: true,
+  });
+  const top = (gitTop.stdout || "").trim();
+  if (!top) return;
+
+  const ps1 = path.join(top, ".ledgerlink_system", "log_rotate.ps1");
+
+  // Don't fail startup if missing; we still want OpenClaw/CLI to run.
+  const res = spawnSync(
+    "powershell",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1],
+    { encoding: "utf-8", windowsHide: true, timeout: 60_000 },
+  );
+
+  // Silent success. Only warn on failure.
+  if (res.status && res.status !== 0) {
+    console.warn("[ledgerlink] log rotation failed:", (res.stderr || res.stdout || "").trim());
+  }
+}
+
 export async function runCli(argv: string[] = process.argv) {
   let normalizedArgv = normalizeWindowsArgv(argv);
   const parsedProfile = parseCliProfileArgs(normalizedArgv);
@@ -73,11 +103,15 @@ export async function runCli(argv: string[] = process.argv) {
   }
   normalizedArgv = parsedProfile.argv;
 
-  loadDotEnv({ quiet: true });
-  normalizeEnv();
-  if (shouldEnsureCliPath(normalizedArgv)) {
-    ensureOpenClawCliOnPath();
-  }
+loadDotEnv({ quiet: true });
+normalizeEnv();
+
+// LedgerLink: run startup hygiene once per process (fast + safe)
+tryLedgerLinkLogRotate();
+
+if (shouldEnsureCliPath(normalizedArgv)) {
+  ensureOpenClawCliOnPath();
+}
 
   // Enforce the minimum supported runtime before doing any work.
   assertSupportedRuntime();
