@@ -1,4 +1,5 @@
 import type { OutboundSendDeps } from "../../../infra/outbound/deliver.js";
+import { validateLedgerLinkOutputOrThrow } from "./ledgerlink-validator.js";
 import type { TelegramInlineButtons } from "../../../telegram/button-types.js";
 import { markdownToTelegramHtmlChunks } from "../../../telegram/format.js";
 import {
@@ -41,7 +42,11 @@ export const telegramOutbound: ChannelOutboundAdapter = {
   chunker: markdownToTelegramHtmlChunks,
   chunkerMode: "markdown",
   textChunkLimit: 4000,
+
   sendText: async ({ to, text, accountId, deps, replyToId, threadId }) => {
+    // LedgerLink CPA Guardrail: block numeric output without provenance
+    validateLedgerLinkOutputOrThrow(text, "telegram");
+
     const { send, baseOpts } = resolveTelegramSendContext({
       deps,
       accountId,
@@ -53,6 +58,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     });
     return { channel: "telegram", ...result };
   },
+
   sendMedia: async ({
     to,
     text,
@@ -63,6 +69,9 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     replyToId,
     threadId,
   }) => {
+    // LedgerLink CPA Guardrail: block numeric output without provenance
+    validateLedgerLinkOutputOrThrow(text, "telegram");
+
     const { send, baseOpts } = resolveTelegramSendContext({
       deps,
       accountId,
@@ -76,6 +85,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     });
     return { channel: "telegram", ...result };
   },
+
   sendPayload: async ({ to, payload, mediaLocalRoots, accountId, deps, replyToId, threadId }) => {
     const { send, baseOpts: contextOpts } = resolveTelegramSendContext({
       deps,
@@ -86,14 +96,21 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     const telegramData = payload.channelData?.telegram as
       | { buttons?: TelegramInlineButtons; quoteText?: string }
       | undefined;
+
     const quoteText =
       typeof telegramData?.quoteText === "string" ? telegramData.quoteText : undefined;
+
     const text = payload.text ?? "";
+
+    // LedgerLink CPA Guardrail: block numeric output without provenance
+    validateLedgerLinkOutputOrThrow(text, "telegram");
+
     const mediaUrls = payload.mediaUrls?.length
       ? payload.mediaUrls
       : payload.mediaUrl
         ? [payload.mediaUrl]
         : [];
+
     const payloadOpts = {
       ...contextOpts,
       quoteText,
@@ -119,6 +136,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
         ...(isFirst ? { buttons: telegramData?.buttons } : {}),
       });
     }
+
     return { channel: "telegram", ...(finalResult ?? { messageId: "unknown", chatId: to }) };
   },
 };
