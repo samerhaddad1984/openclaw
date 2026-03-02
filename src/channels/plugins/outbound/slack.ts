@@ -3,6 +3,7 @@ import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { sendMessageSlack, type SlackSendIdentity } from "../../../slack/send.js";
 import type { ChannelOutboundAdapter } from "../types.js";
 import { sendTextMediaPayload } from "./direct-text-media.js";
+import { validateLedgerLinkOutputOrThrow } from "./ledgerlink-validator.js";
 
 function resolveSlackSendIdentity(identity?: OutboundIdentity): SlackSendIdentity | undefined {
   if (!identity) {
@@ -59,9 +60,9 @@ async function sendSlackOutboundMessage(params: {
   identity?: OutboundIdentity;
 }) {
   const send = params.deps?.sendSlack ?? sendMessageSlack;
-  // Use threadId fallback so routed tool notifications stay in the Slack thread.
   const threadTs =
     params.replyToId ?? (params.threadId != null ? String(params.threadId) : undefined);
+
   const hookResult = await applySlackMessageSendingHooks({
     to: params.to,
     text: params.text,
@@ -69,6 +70,7 @@ async function sendSlackOutboundMessage(params: {
     mediaUrl: params.mediaUrl,
     accountId: params.accountId ?? undefined,
   });
+
   if (hookResult.cancelled) {
     return {
       channel: "slack" as const,
@@ -77,6 +79,9 @@ async function sendSlackOutboundMessage(params: {
       meta: { cancelled: true },
     };
   }
+
+  // LedgerLink CPA Guardrail: validate the FINAL outbound text after hooks
+  validateLedgerLinkOutputOrThrow(hookResult.text, "slack");
 
   const slackIdentity = resolveSlackSendIdentity(params.identity);
   const result = await send(params.to, hookResult.text, {
