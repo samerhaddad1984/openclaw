@@ -11,6 +11,7 @@ import type { OutboundIdentity } from "../../../infra/outbound/identity.js";
 import { normalizeDiscordOutboundTarget } from "../normalize/discord.js";
 import type { ChannelOutboundAdapter } from "../types.js";
 import { sendTextMediaPayload } from "./direct-text-media.js";
+import { validateLedgerLinkOutputOrThrow } from "./ledgerlink-validator.js";
 
 function resolveDiscordOutboundTarget(params: {
   to: string;
@@ -84,6 +85,9 @@ export const discordOutbound: ChannelOutboundAdapter = {
   sendPayload: async (ctx) =>
     await sendTextMediaPayload({ channel: "discord", ctx, adapter: discordOutbound }),
   sendText: async ({ to, text, accountId, deps, replyToId, threadId, identity, silent }) => {
+    // LedgerLink CPA Guardrail
+    validateLedgerLinkOutputOrThrow(text, "discord");
+
     if (!silent) {
       const webhookResult = await maybeSendDiscordWebhookText({
         text,
@@ -117,6 +121,9 @@ export const discordOutbound: ChannelOutboundAdapter = {
     threadId,
     silent,
   }) => {
+    // LedgerLink CPA Guardrail (caption text)
+    validateLedgerLinkOutputOrThrow(text, "discord");
+
     const send = deps?.sendDiscord ?? sendMessageDiscord;
     const target = resolveDiscordOutboundTarget({ to, threadId });
     const result = await send(target, text, {
@@ -131,6 +138,11 @@ export const discordOutbound: ChannelOutboundAdapter = {
   },
   sendPoll: async ({ to, poll, accountId, threadId, silent }) => {
     const target = resolveDiscordOutboundTarget({ to, threadId });
+
+    // LedgerLink CPA Guardrail: validate poll content too
+    const pollText = `${poll.question}\n${(poll.options || []).join("\n")}`;
+    validateLedgerLinkOutputOrThrow(pollText, "discord");
+
     return await sendPollDiscord(target, poll, {
       accountId: accountId ?? undefined,
       silent: silent ?? undefined,
