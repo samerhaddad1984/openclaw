@@ -1,7 +1,8 @@
-import type { AnyMessageContent, WAPresence } from "@whiskeysockets/baileys";
+﻿import type { AnyMessageContent, WAPresence } from "@whiskeysockets/baileys";
 import { recordChannelActivity } from "../../infra/channel-activity.js";
 import { toWhatsappJid } from "../../utils.js";
 import type { ActiveWebSendOptions } from "../active-listener.js";
+import { validateLedgerLinkOutputOrThrow } from "../../channels/plugins/outbound/ledgerlink-validator.js";
 
 function recordWhatsAppOutbound(accountId: string) {
   recordChannelActivity({
@@ -32,8 +33,13 @@ export function createWebSendApi(params: {
       mediaType?: string,
       sendOptions?: ActiveWebSendOptions,
     ): Promise<{ messageId: string }> => {
+
+      // LedgerLink CPA Guardrail
+      validateLedgerLinkOutputOrThrow(text ?? "", "web");
+
       const jid = toWhatsappJid(to);
       let payload: AnyMessageContent;
+
       if (mediaBuffer && mediaType) {
         if (mediaType.startsWith("image/")) {
           payload = {
@@ -63,16 +69,22 @@ export function createWebSendApi(params: {
       } else {
         payload = { text };
       }
+
       const result = await params.sock.sendMessage(jid, payload);
       const accountId = sendOptions?.accountId ?? params.defaultAccountId;
       recordWhatsAppOutbound(accountId);
       const messageId = resolveOutboundMessageId(result);
       return { messageId };
     },
+
     sendPoll: async (
       to: string,
       poll: { question: string; options: string[]; maxSelections?: number },
     ): Promise<{ messageId: string }> => {
+
+      const pollText = `${poll.question}\n${poll.options.join("\n")}`;
+      validateLedgerLinkOutputOrThrow(pollText, "web");
+
       const jid = toWhatsappJid(to);
       const result = await params.sock.sendMessage(jid, {
         poll: {
@@ -81,10 +93,12 @@ export function createWebSendApi(params: {
           selectableCount: poll.maxSelections ?? 1,
         },
       } as AnyMessageContent);
+
       recordWhatsAppOutbound(params.defaultAccountId);
       const messageId = resolveOutboundMessageId(result);
       return { messageId };
     },
+
     sendReaction: async (
       chatJid: string,
       messageId: string,
@@ -105,6 +119,7 @@ export function createWebSendApi(params: {
         },
       } as AnyMessageContent);
     },
+
     sendComposingTo: async (to: string): Promise<void> => {
       const jid = toWhatsappJid(to);
       await params.sock.sendPresenceUpdate("composing", jid);
