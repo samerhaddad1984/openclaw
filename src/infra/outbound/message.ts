@@ -1,4 +1,6 @@
+
 import type { OpenClawConfig } from "../../config/config.js";
+import { validateLedgerLinkOutputOrThrow } from "../../channels/plugins/outbound/ledgerlink-validator.js";import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import { callGatewayLeastPrivilege, randomIdempotencyKey } from "../../gateway/call.js";
 import type { PollInput } from "../../polls.js";
