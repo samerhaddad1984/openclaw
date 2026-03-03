@@ -164,6 +164,17 @@ async function callMessageGateway<T>(params: {
 }
 
 export async function sendMessage(params: MessageSendParams): Promise<MessageSendResult> {
+  // LedgerLink CPA Guardrail (global choke-point):
+  // Block outbound numeric text unless PROVENANCE + run log/source citation is present.
+  const __llText =
+    (params as any)?.text ??
+    (params as any)?.content ??
+    (params as any)?.message ??
+    "";
+  const __llChannel = String((params as any)?.channel ?? (params as any)?.channelId ?? "unknown");
+  if (typeof __llText === "string" && __llText.trim()) {
+    validateLedgerLinkOutputOrThrow(__llText, __llChannel);
+  }
   const cfg = params.cfg ?? loadConfig();
   const channel = await resolveRequiredChannel({ cfg, channel: params.channel });
   const plugin = resolveRequiredPlugin(channel, cfg);
