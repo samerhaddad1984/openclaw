@@ -1,18 +1,27 @@
-﻿
-# LedgerLink local env
+﻿# LedgerLink local env
 .venv/
 logs/
 run_logs/
 
-# per-install system scripts (keep local unless you explicitly decide to ship them in-repo)
+# LedgerLink system folder should be versioned (portable agent)
+!.ledgerlink_system/
+!.ledgerlink_system/**
 
-# installer helper (optional to commit)
+# BUT do not commit secrets, logs, caches
+.ledgerlink_system/secrets.*
+.ledgerlink_system/*.key
+.ledgerlink_system/*.env
+.ledgerlink_system/logs/
+.ledgerlink_system/**/logs/
+.ledgerlink_system/**/__pycache__/
+.ledgerlink_system/**/.pytest_cache/
+
+# per-install system scripts
 setup_portable.bat
 
 # OS/editor
 Thumbs.db
 .DS_Store
-<<<<<<< HEAD
 **/.DS_Store
 .idea
 .vscode/
@@ -132,22 +141,3 @@ dist/protocol.schema.json
 node_modules/
 **/node_modules/
 package-lock.json
-=======
-# LedgerLink system folder should be versioned (portable agent)
-!.ledgerlink_system/
-!.ledgerlink_system/**
-
-# BUT do not commit secrets, logs, caches
-.ledgerlink_system/secrets.*
-.ledgerlink_system/*.key
-.ledgerlink_system/*.env
-.ledgerlink_system/logs/
-.ledgerlink_system/**/logs/
-.ledgerlink_system/**/__pycache__/
-.ledgerlink_system/**/.pytest_cache/
-
-# Keep venv + runtime logs untracked
-.venv/
-run_logs/
-logs/
->>>>>>> 4d05e4c7d (LedgerLink: version log rotation scripts + refine gitignore)
