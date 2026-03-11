@@ -1,0 +1,1042 @@
+from __future__ import annotations
+
+import html
+import json
+import sqlite3
+import sys
+import traceback
+import urllib.parse
+from datetime import datetime, timezone
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from src.agents.tools.explain_decision_formatter import build_human_decision_summary
+from src.agents.tools.posting_builder import (
+    approve_posting_job,
+    build_posting_job,
+    retry_posting_job,
+)
+from src.agents.tools.qbo_online_adapter import post_one_ready_job as qbo_post_one_ready_job
+
+
+DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+HOST = "127.0.0.1"
+PORT = 8787
+DEFAULT_REVIEWER = "Sam"
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def open_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def safe_json_loads(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    try:
+        return json.loads(str(value))
+    except Exception:
+        return {}
+
+
+def esc(value: Any) -> str:
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def urlquote(value: Any) -> str:
+    return urllib.parse.quote("" if value is None else str(value), safe="")
+
+
+def parse_form_body(raw: bytes) -> dict[str, str]:
+    parsed = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+    return {k: v[0] if v else "" for k, v in parsed.items()}
+
+
+def review_status_badge(status: str) -> str:
+    status_clean = normalize_text(status)
+    css = "badge badge-muted"
+    if status_clean == "Ready":
+        css = "badge badge-ready"
+    elif status_clean == "NeedsReview":
+        css = "badge badge-needsreview"
+    elif status_clean == "Ignored":
+        css = "badge badge-ignored"
+    elif status_clean == "Exception":
+        css = "badge badge-exception"
+    return f'<span class="{css}">{esc(status_clean or "Unknown")}</span>'
+
+
+def posting_status_badge(status: str) -> str:
+    status_clean = normalize_text(status)
+    css = "badge badge-muted"
+    if status_clean == "posted":
+        css = "badge badge-ready"
+    elif status_clean == "ready_to_post":
+        css = "badge badge-posting"
+    elif status_clean == "post_failed":
+        css = "badge badge-exception"
+    elif status_clean == "draft":
+        css = "badge badge-ignored"
+    return f'<span class="{css}">{esc(status_clean or "none")}</span>'
+
+
+def approval_state_badge(status: str) -> str:
+    status_clean = normalize_text(status)
+    css = "badge badge-muted"
+    if status_clean == "approved_for_posting":
+        css = "badge badge-ready"
+    elif status_clean == "pending_human_approval":
+        css = "badge badge-needsreview"
+    elif status_clean == "rejected":
+        css = "badge badge-exception"
+    return f'<span class="{css}">{esc(status_clean or "none")}</span>'
+
+
+def get_documents(*, status: str = "", q: str = "") -> list[sqlite3.Row]:
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if status:
+        where_clauses.append("review_status = ?")
+        params.append(status)
+
+    if q:
+        like = f"%{q}%"
+        where_clauses.append(
+            """
+            (
+                file_name LIKE ?
+                OR file_path LIKE ?
+                OR vendor LIKE ?
+                OR client_code LIKE ?
+                OR doc_type LIKE ?
+                OR gl_account LIKE ?
+                OR category LIKE ?
+            )
+            """
+        )
+        params.extend([like, like, like, like, like, like, like])
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    sql = f"""
+        SELECT
+            document_id,
+            file_name,
+            file_path,
+            client_code,
+            vendor,
+            doc_type,
+            amount,
+            document_date,
+            gl_account,
+            tax_code,
+            category,
+            review_status,
+            confidence,
+            raw_result,
+            created_at,
+            updated_at
+        FROM documents
+        {where_sql}
+        ORDER BY
+            CASE review_status
+                WHEN 'NeedsReview' THEN 1
+                WHEN 'Exception' THEN 2
+                WHEN 'Ready' THEN 3
+                WHEN 'Ignored' THEN 4
+                ELSE 5
+            END,
+            updated_at DESC,
+            file_name ASC
+    """
+
+    with open_db() as conn:
+        return conn.execute(sql, tuple(params)).fetchall()
+
+
+def get_document(document_id: str) -> sqlite3.Row | None:
+    with open_db() as conn:
+        return conn.execute(
+            """
+            SELECT
+                document_id,
+                file_name,
+                file_path,
+                client_code,
+                vendor,
+                doc_type,
+                amount,
+                document_date,
+                gl_account,
+                tax_code,
+                category,
+                review_status,
+                confidence,
+                raw_result,
+                created_at,
+                updated_at
+            FROM documents
+            WHERE document_id = ?
+            """,
+            (document_id,),
+        ).fetchone()
+
+
+def get_status_counts() -> dict[str, int]:
+    counts = {
+        "Ready": 0,
+        "NeedsReview": 0,
+        "Ignored": 0,
+        "Exception": 0,
+    }
+
+    with open_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT review_status, COUNT(*) AS c
+            FROM documents
+            GROUP BY review_status
+            """
+        ).fetchall()
+
+    for row in rows:
+        key = normalize_text(row["review_status"])
+        counts[key] = int(row["c"])
+
+    return counts
+
+
+def update_document_fields(document_id: str, fields: dict[str, Any]) -> None:
+    allowed = {
+        "vendor",
+        "client_code",
+        "doc_type",
+        "amount",
+        "document_date",
+        "gl_account",
+        "tax_code",
+        "category",
+        "review_status",
+    }
+
+    updates: list[str] = []
+    params: list[Any] = []
+
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+
+        if key == "amount":
+            text = normalize_text(value)
+            if text:
+                try:
+                    params.append(round(float(text.replace(",", "")), 2))
+                except Exception:
+                    params.append(None)
+            else:
+                params.append(None)
+        else:
+            text = normalize_text(value)
+            params.append(text if text else None)
+
+        updates.append(f"{key} = ?")
+
+    if not updates:
+        return
+
+    updates.append("updated_at = ?")
+    params.append(utc_now_iso())
+    params.append(document_id)
+
+    sql = f"""
+        UPDATE documents
+        SET {", ".join(updates)}
+        WHERE document_id = ?
+    """
+
+    with open_db() as conn:
+        conn.execute(sql, tuple(params))
+        conn.commit()
+
+
+def set_document_status(document_id: str, review_status: str) -> None:
+    with open_db() as conn:
+        conn.execute(
+            """
+            UPDATE documents
+            SET
+                review_status = ?,
+                updated_at = ?
+            WHERE document_id = ?
+            """,
+            (review_status, utc_now_iso(), document_id),
+        )
+        conn.commit()
+
+
+def get_qbo_posting_job_for_document(document_id: str) -> sqlite3.Row | None:
+    with open_db() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM posting_jobs
+            WHERE document_id = ?
+              AND target_system = 'qbo'
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+            """,
+            (document_id,),
+        ).fetchone()
+
+
+def page_layout(title: str, body_html: str, flash: str = "", flash_error: str = "") -> str:
+    flash_html = ""
+    if flash:
+        flash_html += f'<div class="flash success">{esc(flash)}</div>'
+    if flash_error:
+        flash_html += f'<div class="flash error">{esc(flash_error)}</div>'
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{esc(title)}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {{
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    background: #f5f7fb;
+    color: #111827;
+}}
+header {{
+    background: #111827;
+    color: white;
+    padding: 16px 24px;
+}}
+main {{
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px 24px 40px 24px;
+}}
+.card {{
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}}
+h1, h2, h3 {{
+    margin-top: 0;
+}}
+a {{
+    color: #1d4ed8;
+    text-decoration: none;
+}}
+a:hover {{
+    text-decoration: underline;
+}}
+.flash {{
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 700;
+}}
+.flash.success {{
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+}}
+.flash.error {{
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}}
+.stats {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}}
+.stat {{
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 130px;
+}}
+.small {{
+    font-size: 12px;
+}}
+.muted {{
+    color: #6b7280;
+}}
+.filters {{
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: end;
+}}
+.grid-2 {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}}
+.grid-3 {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}}
+.field {{
+    margin-bottom: 12px;
+}}
+label {{
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+}}
+input[type="text"], select, textarea {{
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+}}
+textarea {{
+    min-height: 360px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    overflow: auto;
+}}
+.summary-box {{
+    white-space: pre-wrap;
+    line-height: 1.55;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+}}
+button, .button-link {{
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-block;
+    text-decoration: none;
+}}
+.btn-primary {{ background: #2563eb; color: white; }}
+.btn-success {{ background: #059669; color: white; }}
+.btn-warning {{ background: #d97706; color: white; }}
+.btn-danger {{ background: #dc2626; color: white; }}
+.btn-secondary {{ background: #e5e7eb; color: #111827; }}
+.actions {{
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}}
+table {{
+    width: 100%;
+    border-collapse: collapse;
+}}
+th, td {{
+    padding: 10px 8px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+    vertical-align: top;
+    font-size: 14px;
+}}
+th {{
+    background: #f9fafb;
+}}
+.badge {{
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}}
+.badge-ready {{ background: #dcfce7; color: #166534; }}
+.badge-needsreview {{ background: #fef3c7; color: #92400e; }}
+.badge-ignored {{ background: #e5e7eb; color: #374151; }}
+.badge-exception {{ background: #fee2e2; color: #991b1b; }}
+.badge-posting {{ background: #dbeafe; color: #1d4ed8; }}
+.badge-muted {{ background: #f3f4f6; color: #374151; }}
+pre {{
+    background: #111827;
+    color: #e5e7eb;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}}
+details {{
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #fff;
+}}
+summary {{
+    cursor: pointer;
+    font-weight: 700;
+}}
+@media (max-width: 900px) {{
+    .grid-2, .grid-3 {{
+        grid-template-columns: 1fr;
+    }}
+}}
+</style>
+</head>
+<body>
+<header>
+    <h1 style="margin:0; font-size:22px;">LedgerLink Review Dashboard</h1>
+</header>
+<main>
+    {flash_html}
+    {body_html}
+</main>
+</body>
+</html>"""
+
+
+def render_home(status: str, q: str, flash: str, flash_error: str) -> str:
+    rows = get_documents(status=status, q=q)
+    counts = get_status_counts()
+
+    stats_html = f"""
+    <div class="stats">
+        <div class="stat"><div class="small muted">Ready</div><div><strong>{counts.get("Ready", 0)}</strong></div></div>
+        <div class="stat"><div class="small muted">NeedsReview</div><div><strong>{counts.get("NeedsReview", 0)}</strong></div></div>
+        <div class="stat"><div class="small muted">Ignored</div><div><strong>{counts.get("Ignored", 0)}</strong></div></div>
+        <div class="stat"><div class="small muted">Exception</div><div><strong>{counts.get("Exception", 0)}</strong></div></div>
+        <div class="stat"><div class="small muted">Visible Rows</div><div><strong>{len(rows)}</strong></div></div>
+    </div>
+    """
+
+    filters_html = f"""
+    <div class="card">
+        <form method="GET" action="/">
+            <div class="filters">
+                <div style="min-width:220px;">
+                    <label>Status</label>
+                    <select name="status">
+                        <option value="">All</option>
+                        <option value="Ready" {"selected" if status == "Ready" else ""}>Ready</option>
+                        <option value="NeedsReview" {"selected" if status == "NeedsReview" else ""}>NeedsReview</option>
+                        <option value="Ignored" {"selected" if status == "Ignored" else ""}>Ignored</option>
+                        <option value="Exception" {"selected" if status == "Exception" else ""}>Exception</option>
+                    </select>
+                </div>
+                <div style="min-width:280px; flex:1;">
+                    <label>Search</label>
+                    <input type="text" name="q" value="{esc(q)}" placeholder="file, vendor, client, account...">
+                </div>
+                <div>
+                    <button class="btn-primary" type="submit">Apply Filters</button>
+                </div>
+                <div>
+                    <a class="button-link btn-secondary" href="/">Reset</a>
+                </div>
+            </div>
+        </form>
+    </div>
+    """
+
+    row_html: list[str] = []
+    for row in rows:
+        posting = get_qbo_posting_job_for_document(normalize_text(row["document_id"]))
+        posting_status = normalize_text(posting["posting_status"]) if posting else ""
+        approval_state = normalize_text(posting["approval_state"]) if posting else ""
+        external_id = normalize_text(posting["external_id"]) if posting else ""
+
+        row_html.append(
+            f"""
+            <tr>
+                <td><a href="/document?id={urlquote(row["document_id"])}">{esc(row["file_name"])}</a></td>
+                <td>{esc(row["vendor"])}</td>
+                <td>{esc(row["client_code"])}</td>
+                <td>{esc(row["doc_type"])}</td>
+                <td>{esc(row["amount"])}</td>
+                <td>{esc(row["document_date"])}</td>
+                <td>{esc(row["gl_account"])}</td>
+                <td>{review_status_badge(normalize_text(row["review_status"]))}</td>
+                <td>{approval_state_badge(approval_state)}</td>
+                <td>{posting_status_badge(posting_status)}</td>
+                <td>{esc(external_id)}</td>
+            </tr>
+            """
+        )
+
+    table_html = f"""
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>File</th>
+                    <th>Vendor</th>
+                    <th>Client</th>
+                    <th>Doc Type</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>GL Account</th>
+                    <th>Status</th>
+                    <th>Approval</th>
+                    <th>Posting</th>
+                    <th>External ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(row_html) if row_html else '<tr><td colspan="11" class="muted">No documents found.</td></tr>'}
+            </tbody>
+        </table>
+    </div>
+    """
+
+    return page_layout(
+        "LedgerLink Review Dashboard",
+        stats_html + filters_html + table_html,
+        flash=flash,
+        flash_error=flash_error,
+    )
+
+
+def render_document(document_id: str, flash: str, flash_error: str) -> str:
+    row = get_document(document_id)
+    if row is None:
+        return page_layout(
+            "Not Found",
+            '<div class="card"><h2>Document not found</h2><p><a href="/">Back</a></p></div>',
+            flash=flash,
+            flash_error=flash_error,
+        )
+
+    posting = get_qbo_posting_job_for_document(document_id)
+    raw_result = safe_json_loads(row["raw_result"])
+    explain_text = json.dumps(raw_result, indent=2, ensure_ascii=False)
+    human_summary = build_human_decision_summary(raw_result)
+
+    posting_html = """
+    <div class="card">
+        <h3>QBO Posting Status</h3>
+        <p class="muted">No QBO posting job yet.</p>
+    </div>
+    """
+
+    if posting:
+        posting_payload = safe_json_loads(posting["payload_json"])
+        posting_html = f"""
+        <div class="card">
+            <h3>QBO Posting Status</h3>
+            <div class="grid-3">
+                <div><strong>Posting ID</strong><div>{esc(posting["posting_id"])}</div></div>
+                <div><strong>Approval State</strong><div>{approval_state_badge(normalize_text(posting["approval_state"]))}</div></div>
+                <div><strong>Posting Status</strong><div>{posting_status_badge(normalize_text(posting["posting_status"]))}</div></div>
+                <div><strong>External ID</strong><div>{esc(posting["external_id"])}</div></div>
+                <div><strong>Reviewer</strong><div>{esc(posting["reviewer"])}</div></div>
+                <div><strong>Updated At</strong><div>{esc(posting["updated_at"])}</div></div>
+            </div>
+            <div class="field" style="margin-top:16px;">
+                <label>Last Error</label>
+                <textarea readonly>{esc(posting["error_text"])}</textarea>
+            </div>
+            <div class="field">
+                <label>Posting Payload</label>
+                <textarea readonly>{esc(json.dumps(posting_payload, indent=2, ensure_ascii=False))}</textarea>
+            </div>
+        </div>
+        """
+
+    body = f"""
+    <div class="card">
+        <div class="actions" style="margin-bottom:12px;">
+            <a href="/">Back to Queue</a>
+        </div>
+        <h2 style="margin-bottom:8px;">{esc(row["file_name"])}</h2>
+        <div class="small muted">Document ID: {esc(row["document_id"])}</div>
+    </div>
+
+    <div class="card">
+        <h3>Document Details</h3>
+        <div class="grid-3">
+            <div><strong>Status</strong><div>{review_status_badge(normalize_text(row["review_status"]))}</div></div>
+            <div><strong>Vendor</strong><div>{esc(row["vendor"])}</div></div>
+            <div><strong>Client</strong><div>{esc(row["client_code"])}</div></div>
+            <div><strong>Doc Type</strong><div>{esc(row["doc_type"])}</div></div>
+            <div><strong>Amount</strong><div>{esc(row["amount"])}</div></div>
+            <div><strong>Date</strong><div>{esc(row["document_date"])}</div></div>
+            <div><strong>GL Account</strong><div>{esc(row["gl_account"])}</div></div>
+            <div><strong>Tax Code</strong><div>{esc(row["tax_code"])}</div></div>
+            <div><strong>Category</strong><div>{esc(row["category"])}</div></div>
+            <div><strong>Confidence</strong><div>{esc(row["confidence"])}</div></div>
+            <div style="grid-column: 1 / -1;"><strong>File Path</strong><div>{esc(row["file_path"])}</div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Quick Actions</h3>
+        <div class="actions">
+            <form method="POST" action="/document/status">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <input type="hidden" name="review_status" value="Ready">
+                <button class="btn-success" type="submit">Mark Ready</button>
+            </form>
+            <form method="POST" action="/document/status">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <input type="hidden" name="review_status" value="NeedsReview">
+                <button class="btn-warning" type="submit">Mark NeedsReview</button>
+            </form>
+            <form method="POST" action="/document/status">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <input type="hidden" name="review_status" value="Ignored">
+                <button class="btn-secondary" type="submit">Mark Ignored</button>
+            </form>
+            <form method="POST" action="/document/status">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <input type="hidden" name="review_status" value="Exception">
+                <button class="btn-danger" type="submit">Mark Exception</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Edit Fields</h3>
+        <form method="POST" action="/document/update">
+            <input type="hidden" name="document_id" value="{esc(document_id)}">
+            <div class="grid-3">
+                <div class="field">
+                    <label>Vendor</label>
+                    <input type="text" name="vendor" value="{esc(row["vendor"])}">
+                </div>
+                <div class="field">
+                    <label>Client Code</label>
+                    <input type="text" name="client_code" value="{esc(row["client_code"])}">
+                </div>
+                <div class="field">
+                    <label>Doc Type</label>
+                    <input type="text" name="doc_type" value="{esc(row["doc_type"])}">
+                </div>
+                <div class="field">
+                    <label>Amount</label>
+                    <input type="text" name="amount" value="{esc(row["amount"])}">
+                </div>
+                <div class="field">
+                    <label>Document Date</label>
+                    <input type="text" name="document_date" value="{esc(row["document_date"])}">
+                </div>
+                <div class="field">
+                    <label>GL Account</label>
+                    <input type="text" name="gl_account" value="{esc(row["gl_account"])}">
+                </div>
+                <div class="field">
+                    <label>Tax Code</label>
+                    <input type="text" name="tax_code" value="{esc(row["tax_code"])}">
+                </div>
+                <div class="field">
+                    <label>Category</label>
+                    <input type="text" name="category" value="{esc(row["category"])}">
+                </div>
+                <div class="field">
+                    <label>Review Status</label>
+                    <select name="review_status">
+                        <option value="Ready" {"selected" if normalize_text(row["review_status"]) == "Ready" else ""}>Ready</option>
+                        <option value="NeedsReview" {"selected" if normalize_text(row["review_status"]) == "NeedsReview" else ""}>NeedsReview</option>
+                        <option value="Ignored" {"selected" if normalize_text(row["review_status"]) == "Ignored" else ""}>Ignored</option>
+                        <option value="Exception" {"selected" if normalize_text(row["review_status"]) == "Exception" else ""}>Exception</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn-primary" type="submit">Save Changes</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>QBO Actions</h3>
+        <div class="actions">
+            <form method="POST" action="/qbo/build">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <button class="btn-primary" type="submit">Create QBO Posting Job</button>
+            </form>
+            <form method="POST" action="/qbo/approve">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <button class="btn-success" type="submit">Approve for QBO</button>
+            </form>
+            <form method="POST" action="/qbo/post">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <button class="btn-warning" type="submit">Post Now to QBO</button>
+            </form>
+            <form method="POST" action="/qbo/retry">
+                <input type="hidden" name="document_id" value="{esc(document_id)}">
+                <button class="btn-secondary" type="submit">Retry Failed QBO Post</button>
+            </form>
+        </div>
+        <p class="small muted" style="margin-top:12px;">
+            Reviewer used by dashboard actions: <strong>{esc(DEFAULT_REVIEWER)}</strong>
+        </p>
+    </div>
+
+    {posting_html}
+
+    <div class="card">
+        <h3>Explain Decision</h3>
+        <div class="field">
+            <label>Human Summary</label>
+            <div class="summary-box">{esc(human_summary)}</div>
+        </div>
+        <details>
+            <summary>Show Raw Debug JSON</summary>
+            <div class="field" style="margin-top:12px;">
+                <label>Decision JSON</label>
+                <textarea readonly>{esc(explain_text)}</textarea>
+            </div>
+        </details>
+    </div>
+    """
+
+    return page_layout(
+        f"Document {normalize_text(row['file_name'])}",
+        body,
+        flash=flash,
+        flash_error=flash_error,
+    )
+
+
+class ReviewDashboardHandler(BaseHTTPRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+    def _send_html(self, content: str, status: int = 200) -> None:
+        body = content.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", location)
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+
+            flash = query.get("flash", [""])[0]
+            flash_error = query.get("error", [""])[0]
+
+            if path == "/":
+                status = query.get("status", [""])[0]
+                q = query.get("q", [""])[0]
+                self._send_html(render_home(status, q, flash, flash_error))
+                return
+
+            if path == "/document":
+                document_id = query.get("id", [""])[0]
+                self._send_html(render_document(document_id, flash, flash_error))
+                return
+
+            self._send_html(
+                page_layout(
+                    "Not Found",
+                    '<div class="card"><h2>Not Found</h2><p><a href="/">Back</a></p></div>',
+                ),
+                status=404,
+            )
+        except Exception:
+            self._send_html(
+                page_layout(
+                    "Unhandled Error",
+                    f'<div class="card"><h2>Unhandled Error</h2><pre>{esc(traceback.format_exc())}</pre></div>',
+                ),
+                status=500,
+            )
+
+    def do_POST(self) -> None:
+        document_id = ""
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length)
+            form = parse_form_body(raw)
+            document_id = form.get("document_id", "")
+            path = urllib.parse.urlparse(self.path).path
+
+            if path == "/document/update":
+                update_document_fields(
+                    document_id,
+                    {
+                        "vendor": form.get("vendor", ""),
+                        "client_code": form.get("client_code", ""),
+                        "doc_type": form.get("doc_type", ""),
+                        "amount": form.get("amount", ""),
+                        "document_date": form.get("document_date", ""),
+                        "gl_account": form.get("gl_account", ""),
+                        "tax_code": form.get("tax_code", ""),
+                        "category": form.get("category", ""),
+                        "review_status": form.get("review_status", ""),
+                    },
+                )
+                self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote('Document updated')}")
+                return
+
+            if path == "/document/status":
+                review_status = form.get("review_status", "")
+                set_document_status(document_id, review_status)
+                self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote('Status updated')}")
+                return
+
+            if path == "/qbo/build":
+                payload = build_posting_job(
+                    document_id=document_id,
+                    target_system="qbo",
+                    entry_kind="expense",
+                    db_path=DB_PATH,
+                )
+                message = "QBO posting job built: " + normalize_text(payload.posting_id)
+                self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote(message)}")
+                return
+
+            if path == "/qbo/approve":
+                posting = get_qbo_posting_job_for_document(document_id)
+                if posting is None:
+                    build_posting_job(
+                        document_id=document_id,
+                        target_system="qbo",
+                        entry_kind="expense",
+                        db_path=DB_PATH,
+                    )
+                    posting = get_qbo_posting_job_for_document(document_id)
+
+                if posting is None:
+                    raise ValueError("Could not create QBO posting job")
+
+                payload = approve_posting_job(
+                    posting_id=normalize_text(posting["posting_id"]),
+                    reviewer=DEFAULT_REVIEWER,
+                    db_path=DB_PATH,
+                )
+                message = "Approved for QBO: " + normalize_text(payload.posting_id)
+                self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote(message)}")
+                return
+
+            if path == "/qbo/post":
+                posting = get_qbo_posting_job_for_document(document_id)
+                if posting is None:
+                    build_posting_job(
+                        document_id=document_id,
+                        target_system="qbo",
+                        entry_kind="expense",
+                        db_path=DB_PATH,
+                    )
+                    posting = get_qbo_posting_job_for_document(document_id)
+
+                if posting is None:
+                    raise ValueError("Could not create QBO posting job")
+
+                posting_id = normalize_text(posting["posting_id"])
+                posting_status = normalize_text(posting["posting_status"])
+                approval_state = normalize_text(posting["approval_state"])
+
+                if posting_status == "post_failed":
+                    retry_posting_job(
+                        posting_id=posting_id,
+                        reviewer=DEFAULT_REVIEWER,
+                        note="retry from dashboard post-now",
+                        db_path=DB_PATH,
+                    )
+                elif approval_state != "approved_for_posting" or posting_status != "ready_to_post":
+                    approve_posting_job(
+                        posting_id=posting_id,
+                        reviewer=DEFAULT_REVIEWER,
+                        db_path=DB_PATH,
+                    )
+
+                result = qbo_post_one_ready_job(posting_id, db_path=DB_PATH)
+
+                if normalize_text(result.get("status")) == "posted":
+                    external_id = normalize_text(result.get("external_id"))
+                    message = "Posted to QBO. External ID: " + external_id
+                    self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote(message)}")
+                else:
+                    error_message = normalize_text(result.get("error")) or "QBO post failed"
+                    self._redirect(f"/document?id={urlquote(document_id)}&error={urlquote(error_message)}")
+                return
+
+            if path == "/qbo/retry":
+                posting = get_qbo_posting_job_for_document(document_id)
+                if posting is None:
+                    raise ValueError("No QBO posting job exists for this document")
+
+                payload = retry_posting_job(
+                    posting_id=normalize_text(posting["posting_id"]),
+                    reviewer=DEFAULT_REVIEWER,
+                    note="retry from dashboard",
+                    db_path=DB_PATH,
+                )
+                message = "Retry prepared: " + normalize_text(payload.posting_id)
+                self._redirect(f"/document?id={urlquote(document_id)}&flash={urlquote(message)}")
+                return
+
+            self._send_html(
+                page_layout(
+                    "Unknown Route",
+                    '<div class="card"><h2>Unknown POST route</h2><p><a href="/">Back</a></p></div>',
+                ),
+                status=404,
+            )
+
+        except Exception as exc:
+            target = f"/document?id={urlquote(document_id)}" if document_id else "/"
+            separator = "&" if "?" in target else "?"
+            self._redirect(f"{target}{separator}error={urlquote(str(exc))}")
+
+
+def main() -> int:
+    print()
+    print("LEDGERLINK REVIEW DASHBOARD")
+    print("=" * 100)
+    print(f"Database : {DB_PATH}")
+    print(f"URL      : http://{HOST}:{PORT}/")
+    print()
+    server = ThreadingHTTPServer((HOST, PORT), ReviewDashboardHandler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down dashboard...")
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
