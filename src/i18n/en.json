@@ -742,5 +742,26 @@
   "autofix_lic_none":       "No license installed — run scripts/generate_license.py",
   "autofix_lic_invalid":    "License invalid: {error}",
   "autofix_lic_expired":    "License EXPIRED on {expiry}",
-  "lbl_license":            "13. License check"
+  "lbl_license":            "13. License check",
+
+  "onb_step1_title":        "Add Your Staff",
+  "onb_step2_title":        "Add Your Clients",
+  "onb_step3_title":        "Staff Credentials",
+  "onb_add_staff":          "Add Staff Member",
+  "onb_add_client":         "Add Client",
+  "onb_display_name":       "Display Name",
+  "onb_username":           "Email / Username",
+  "onb_role":               "Role",
+  "onb_password":           "Temporary Password",
+  "onb_client_code":        "Client Code",
+  "onb_client_name":        "Client Name",
+  "onb_province":           "Province",
+  "onb_entity_type":        "Entity Type",
+  "onb_complete":           "Complete Setup",
+  "onb_print":              "Print",
+  "onb_credentials_note":   "Distribute these credentials securely to your staff.",
+  "onb_skip":               "Skip for now",
+  "onb_step_staff":         "Staff",
+  "onb_step_clients":       "Clients",
+  "onb_step_credentials":   "Credentials"
 }

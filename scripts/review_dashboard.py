@@ -4745,6 +4745,242 @@ def _check_period_not_locked_for_doc(document_id: str, lang: str = "fr") -> None
 
 
 # ---------------------------------------------------------------------------
+# Onboarding wizard helpers
+# ---------------------------------------------------------------------------
+
+def _onboarding_check_needed(user: dict[str, Any]) -> bool:
+    """Return True if the owner needs to be redirected to onboarding."""
+    if user.get("role") != "owner":
+        return False
+    with open_db() as conn:
+        # Check onboarding_complete setting
+        try:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key='onboarding_complete'"
+            ).fetchone()
+            if row and row["value"] == "1":
+                return False
+        except Exception:
+            pass
+
+        # Count users (only trigger if <=1 user or 0 clients)
+        try:
+            user_count = conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone()[0]
+        except Exception:
+            user_count = 0
+        try:
+            client_count = conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+        except Exception:
+            client_count = 0
+
+        return user_count <= 1 or client_count == 0
+
+
+def _ensure_settings_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+
+def render_onboarding_step1(ctx: dict[str, Any], user: dict[str, Any],
+                             flash: str = "", flash_error: str = "",
+                             lang: str = "fr") -> str:
+    """Onboarding step 1: Add staff members."""
+    with open_db() as conn:
+        staff_rows = conn.execute(
+            "SELECT username, display_name, role FROM dashboard_users WHERE role != 'owner' ORDER BY display_name"
+        ).fetchall()
+
+    staff_table = ""
+    if staff_rows:
+        rows_html = "".join(
+            f"<tr><td>{esc(r['display_name'] or r['username'])}</td>"
+            f"<td>{esc(r['username'])}</td><td>{esc(r['role'])}</td></tr>"
+            for r in staff_rows
+        )
+        staff_table = f"""
+        <h3 style="margin:24px 0 12px;">{esc(t("existing_users", lang))}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:.875rem;">
+          <thead><tr style="background:#f8fafc;">
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_display_name", lang))}</th>
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_username", lang))}</th>
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_role", lang))}</th>
+          </tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>"""
+
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash-error">{esc(flash_error)}</div>' if flash_error else ""
+    return page_layout(
+        t("onb_step1_title", lang),
+        f"""
+        {flash_html}{err_html}
+        <div class="card" style="max-width:700px;">
+          <h2>{esc(t("onb_step1_title", lang))}</h2>
+          <p style="color:#6b7280;margin-bottom:24px;">Step 1 / 3</p>
+          <h3 style="margin-bottom:16px;">{esc(t("onb_add_staff", lang))}</h3>
+          <form method="POST" action="/onboarding/staff/add">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_display_name", lang))}</label>
+                <input name="display_name" type="text" required style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_username", lang))}</label>
+                <input name="username" type="email" required placeholder="user@example.com" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_role", lang))}</label>
+                <select name="role" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+                  <option value="manager">{esc(t("role_manager", lang))}</option>
+                  <option value="employee">{esc(t("role_employee", lang))}</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_password", lang))}</label>
+                <input name="password" type="text" required style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+              </div>
+            </div>
+            <button type="submit" class="button-link btn-primary" style="margin-top:16px;">{esc(t("onb_add_staff", lang))}</button>
+          </form>
+          {staff_table}
+          <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:20px;">
+            <a href="/onboarding/step2" class="button-link btn-primary">{esc(t("btn_next", lang) if t("btn_next", lang) != "btn_next" else "Next →")}</a>
+            <a href="/" class="button-link btn-secondary" style="margin-left:8px;">{esc(t("onb_skip", lang))}</a>
+          </div>
+        </div>
+        """,
+        user=user, lang=lang,
+    )
+
+
+def render_onboarding_step2(ctx: dict[str, Any], user: dict[str, Any],
+                             flash: str = "", flash_error: str = "",
+                             lang: str = "fr") -> str:
+    """Onboarding step 2: Add clients."""
+    with open_db() as conn:
+        try:
+            client_rows = conn.execute(
+                "SELECT client_code, client_name FROM clients ORDER BY client_name"
+            ).fetchall()
+        except Exception:
+            client_rows = []
+
+    client_table = ""
+    if client_rows:
+        rows_html = "".join(
+            f"<tr><td style='padding:8px 12px;'>{esc(r['client_code'])}</td>"
+            f"<td style='padding:8px 12px;'>{esc(r['client_name'] or '')}</td></tr>"
+            for r in client_rows
+        )
+        client_table = f"""
+        <h3 style="margin:24px 0 12px;">{esc(t("existing_clients", lang) if t("existing_clients", lang) != "existing_clients" else "Clients")}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:.875rem;">
+          <thead><tr style="background:#f8fafc;">
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("onb_client_code", lang))}</th>
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("onb_client_name", lang))}</th>
+          </tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>"""
+
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash-error">{esc(flash_error)}</div>' if flash_error else ""
+    provinces = ["QC", "ON", "BC", "AB", "MB", "SK", "NS", "NB", "NL", "PE", "NT", "NU", "YT"]
+    prov_opts = "".join(f'<option value="{p}"{"selected" if p=="QC" else ""}>{p}</option>' for p in provinces)
+    entity_opts = "".join(
+        f'<option value="{v}">{esc(v.capitalize())}</option>'
+        for v in ["company", "individual", "partnership", "trust"]
+    )
+    return page_layout(
+        t("onb_step2_title", lang),
+        f"""
+        {flash_html}{err_html}
+        <div class="card" style="max-width:700px;">
+          <h2>{esc(t("onb_step2_title", lang))}</h2>
+          <p style="color:#6b7280;margin-bottom:24px;">Step 2 / 3</p>
+          <h3 style="margin-bottom:16px;">{esc(t("onb_add_client", lang))}</h3>
+          <form method="POST" action="/onboarding/client/add">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_client_code", lang))}</label>
+                <input name="client_code" type="text" required placeholder="ACME" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_client_name", lang))}</label>
+                <input name="client_name" type="text" required style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_province", lang))}</label>
+                <select name="province" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">{prov_opts}</select>
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_entity_type", lang))}</label>
+                <select name="entity_type" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">{entity_opts}</select>
+              </div>
+            </div>
+            <button type="submit" class="button-link btn-primary" style="margin-top:16px;">{esc(t("onb_add_client", lang))}</button>
+          </form>
+          {client_table}
+          <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:20px;">
+            <a href="/onboarding/step3" class="button-link btn-primary">{esc(t("btn_next", lang) if t("btn_next", lang) != "btn_next" else "Next →")}</a>
+            <a href="/onboarding/step1" class="button-link btn-secondary" style="margin-left:8px;">← Back</a>
+            <a href="/" class="button-link btn-secondary" style="margin-left:8px;">{esc(t("onb_skip", lang))}</a>
+          </div>
+        </div>
+        """,
+        user=user, lang=lang,
+    )
+
+
+def render_onboarding_step3(ctx: dict[str, Any], user: dict[str, Any],
+                             lang: str = "fr") -> str:
+    """Onboarding step 3: Staff credentials PDF summary."""
+    with open_db() as conn:
+        staff_rows = conn.execute(
+            "SELECT username, display_name, role FROM dashboard_users WHERE active=1 ORDER BY role, display_name"
+        ).fetchall()
+
+    rows_html = "".join(
+        f"<tr><td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;'>{esc(r['display_name'] or r['username'])}</td>"
+        f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;'>{esc(r['username'])}</td>"
+        f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;'>{esc(r['role'])}</td></tr>"
+        for r in staff_rows
+    )
+    return page_layout(
+        t("onb_step3_title", lang),
+        f"""
+        <div class="card" style="max-width:700px;">
+          <h2>{esc(t("onb_step3_title", lang))}</h2>
+          <p style="color:#6b7280;margin-bottom:8px;">Step 3 / 3</p>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:.875rem;color:#92400e;">
+            ⚠ {esc(t("onb_credentials_note", lang))}
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:.875rem;">
+            <thead><tr style="background:#f8fafc;">
+              <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_display_name", lang))}</th>
+              <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_username", lang))}</th>
+              <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("col_role", lang))}</th>
+            </tr></thead>
+            <tbody>{rows_html}</tbody>
+          </table>
+          <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:20px;display:flex;gap:12px;flex-wrap:wrap;">
+            <form method="POST" action="/onboarding/complete" style="display:inline;">
+              <button type="submit" class="button-link btn-primary">{esc(t("onb_complete", lang))}</button>
+            </form>
+            <button onclick="window.print()" class="button-link btn-secondary">{esc(t("onb_print", lang))}</button>
+            <a href="/onboarding/step2" class="button-link btn-secondary">← Back</a>
+          </div>
+        </div>
+        """,
+        user=user, lang=lang,
+    )
+
+
+# ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
 
@@ -4934,6 +5170,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             ctx = build_user_context(user)
 
             if path == "/":
+                # Onboarding redirect: owner with no staff or no clients
+                if _onboarding_check_needed(user):
+                    self._redirect("/onboarding/step1")
+                    return
                 status = qs.get("status", [""])[0]
                 q = qs.get("q", [""])[0]
                 include_ignored = qs.get("include_ignored", ["0"])[0] == "1"
@@ -5301,6 +5541,31 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_license_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            # ------------------------------------------------------------------
+            # Onboarding routes (GET)
+            # ------------------------------------------------------------------
+
+            if path == "/onboarding/step1":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                self._send_html(render_onboarding_step1(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/onboarding/step2":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                self._send_html(render_onboarding_step2(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/onboarding/step3":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                self._send_html(render_onboarding_step3(ctx, user, lang=lang))
                 return
 
             self._send_html(page_layout(
@@ -6171,6 +6436,90 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._flash_redirect("/license", flash=t("flash_lic_activated", lang))
                 except ValueError as exc:
                     self._flash_redirect("/license", error=f"{t('err_lic_invalid', lang)}: {exc}")
+                return
+
+            # ------------------------------------------------------------------
+            # Onboarding routes (POST)
+            # ------------------------------------------------------------------
+
+            if path == "/onboarding/staff/add":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                disp = normalize_text(form.get("display_name", ""))
+                uname = normalize_text(form.get("username", ""))
+                role_s = normalize_text(form.get("role", "employee"))
+                pw = form.get("password", "")
+                if role_s not in ("manager", "employee"):
+                    role_s = "employee"
+                if not disp or not uname or not pw:
+                    self._flash_redirect("/onboarding/step1", error=t("err_required", lang) if t("err_required", lang) != "err_required" else "All fields are required.")
+                    return
+                try:
+                    with open_db() as conn:
+                        _ensure_settings_table(conn)
+                        existing = conn.execute(
+                            "SELECT username FROM dashboard_users WHERE username=?", (uname,)
+                        ).fetchone()
+                        pw_hash = hash_password(pw)
+                        if existing:
+                            conn.execute(
+                                "UPDATE dashboard_users SET password_hash=?, display_name=?, role=?, active=1 WHERE username=?",
+                                (pw_hash, disp, role_s, uname),
+                            )
+                        else:
+                            conn.execute(
+                                "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, language, must_reset_password, created_at) VALUES (?,?,?,?,1,'fr',0,?)",
+                                (uname, pw_hash, role_s, disp, utc_now_iso()),
+                            )
+                        conn.commit()
+                    self._flash_redirect("/onboarding/step1", flash=t("flash_user_created", lang))
+                except Exception as exc:
+                    self._flash_redirect("/onboarding/step1", error=str(exc))
+                return
+
+            if path == "/onboarding/client/add":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                cc = normalize_text(form.get("client_code", "")).upper()
+                cname = normalize_text(form.get("client_name", ""))
+                province = normalize_text(form.get("province", "QC"))
+                entity_type = normalize_text(form.get("entity_type", "company"))
+                if not cc or not cname:
+                    self._flash_redirect("/onboarding/step2", error=t("err_required", lang) if t("err_required", lang) != "err_required" else "All fields are required.")
+                    return
+                try:
+                    with open_db() as conn:
+                        conn.execute(
+                            """INSERT INTO clients (client_code, client_name, province, entity_type)
+                               VALUES (?,?,?,?)
+                               ON CONFLICT(client_code) DO UPDATE SET
+                                 client_name=excluded.client_name,
+                                 province=excluded.province,
+                                 entity_type=excluded.entity_type""",
+                            (cc, cname, province, entity_type),
+                        )
+                        conn.commit()
+                    self._flash_redirect("/onboarding/step2", flash=t("flash_doc_updated", lang))
+                except Exception as exc:
+                    self._flash_redirect("/onboarding/step2", error=str(exc))
+                return
+
+            if path == "/onboarding/complete":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                try:
+                    with open_db() as conn:
+                        _ensure_settings_table(conn)
+                        conn.execute(
+                            "INSERT INTO settings (key, value) VALUES ('onboarding_complete','1') ON CONFLICT(key) DO UPDATE SET value='1'"
+                        )
+                        conn.commit()
+                except Exception:
+                    pass
+                self._redirect("/")
                 return
 
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
