@@ -70,6 +70,7 @@ from src.agents.core.filing_calendar import (
     period_label_to_dates as _period_label_to_dates,
 )
 import src.engines.audit_engine as _audit
+from src.engines.license_engine import get_license_status, save_license_to_config, check_limits, get_signing_secret, TIER_DEFAULTS
 
 
 DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
@@ -3662,6 +3663,174 @@ def render_engagement_detail(
     return page_layout(t("eng_detail", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+def render_license_page(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    """Render the /license management page (owner only)."""
+    status = get_license_status()
+    with open_db() as conn:
+        limits = check_limits(conn)
+
+    tier = status.get("tier", "none")
+    valid = status.get("valid", False)
+    firm_name = status.get("firm_name", "")
+    expiry_date = status.get("expiry_date", "")
+    days_remaining = status.get("days_remaining", 0)
+    features = status.get("features", [])
+    error = status.get("error", "")
+
+    # Tier badge color
+    tier_colors = {
+        "essentiel":     "#6b7280",
+        "professionnel": "#2563eb",
+        "cabinet":       "#7c3aed",
+        "entreprise":    "#b45309",
+    }
+    tier_color = tier_colors.get(tier, "#6b7280")
+    tier_label_key = f"lic_tier_{tier}" if tier != "none" else "lic_status_none"
+    tier_label = t(tier_label_key, lang)
+
+    # Status badge
+    if valid:
+        status_label = t("lic_status_valid", lang)
+        status_color = "#16a34a"
+    elif tier == "none":
+        status_label = t("lic_status_none", lang)
+        status_color = "#6b7280"
+    else:
+        status_label = t("lic_status_expired", lang)
+        status_color = "#dc2626"
+
+    # Expiry color
+    if valid:
+        if days_remaining < 30:
+            expiry_color = "#dc2626"
+        elif days_remaining < 90:
+            expiry_color = "#d97706"
+        else:
+            expiry_color = "#16a34a"
+    else:
+        expiry_color = "#6b7280"
+
+    # Usage bars
+    def _usage_bar(used: int, max_val: int, label: str, ok: bool) -> str:
+        if max_val <= 0:
+            pct = 0
+        else:
+            pct = min(100, int(used * 100 / max_val))
+        bar_color = "#16a34a" if ok else "#dc2626"
+        return (
+            f'<div style="margin-bottom:10px;">'
+            f'<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">'
+            f'<span style="font-weight:600;">{esc(label)}</span>'
+            f'<span>{used} / {max_val}</span></div>'
+            f'<div style="background:#e5e7eb;border-radius:4px;height:8px;">'
+            f'<div style="background:{bar_color};border-radius:4px;height:8px;width:{pct}%;"></div>'
+            f'</div></div>'
+        )
+
+    usage_html = (
+        _usage_bar(limits["client_count"], limits["max_clients"], t("lic_clients_used", lang), limits["clients_ok"])
+        + _usage_bar(limits["user_count"], limits["max_users"], t("lic_users_used", lang), limits["users_ok"])
+    )
+
+    # Feature checklist — all possible features in order
+    all_features = [
+        "basic_review", "basic_posting", "ai_router", "bank_parser",
+        "fraud_detection", "revenu_quebec", "time_tracking", "month_end",
+        "analytics", "microsoft365", "filing_calendar", "client_comms",
+        "audit_module", "financial_statements", "sampling", "api_access",
+    ]
+    feature_rows = ""
+    for feat in all_features:
+        enabled = feat in features
+        icon = "&#10003;" if enabled else "&#10007;"
+        color = "#16a34a" if enabled else "#9ca3af"
+        label_key = f"lic_feature_{feat}"
+        feature_rows += (
+            f'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'
+            f'border-bottom:1px solid #f3f4f6;">'
+            f'<span style="color:{color};font-weight:700;font-size:15px;">{icon}</span>'
+            f'<span style="font-size:13px;color:{"#374151" if enabled else "#9ca3af"};">'
+            f'{esc(t(label_key, lang))}</span></div>\n'
+        )
+
+    # Status info card
+    info_html = (
+        f'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
+        f'<span style="background:{tier_color};color:white;padding:4px 12px;border-radius:12px;font-size:13px;font-weight:600;">'
+        f'{esc(tier_label)}</span>'
+        f'<span style="background:{status_color};color:white;padding:4px 12px;border-radius:12px;font-size:13px;font-weight:600;">'
+        f'{esc(status_label)}</span>'
+        f'</div>'
+    )
+    if firm_name:
+        info_html += (
+            f'<div style="font-size:13px;margin-bottom:6px;">'
+            f'<strong>{esc(t("lic_firm", lang))}:</strong> {esc(firm_name)}</div>'
+        )
+    if expiry_date:
+        info_html += (
+            f'<div style="font-size:13px;margin-bottom:6px;">'
+            f'<strong>{esc(t("lic_expiry", lang))}:</strong> '
+            f'<span style="color:{expiry_color};font-weight:600;">{esc(expiry_date)}</span>'
+            f' &mdash; '
+            f'<span style="color:{expiry_color};">{days_remaining} {esc(t("lic_days_remaining", lang))}</span>'
+            f'</div>'
+        )
+    if error and not valid:
+        info_html += (
+            f'<div class="flash error" style="margin-top:8px;">{esc(error)}</div>'
+        )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("lic_title", lang))}</h2>'
+        f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div>\n'
+        f'<div class="grid-2">'
+
+        # Left column: status + usage
+        f'<div>'
+        f'<div class="card" style="margin-bottom:16px;">'
+        f'<h4 style="margin-top:0;">{esc(t("lic_tier", lang))}</h4>'
+        + info_html
+        + f'</div>'
+
+        f'<div class="card" style="margin-bottom:16px;">'
+        f'<h4 style="margin-top:0;">{esc(t("lic_usage_title", lang))}</h4>'
+        + usage_html
+        + f'</div>'
+
+        # Activate form
+        f'<div class="card">'
+        f'<h4 style="margin-top:0;">{esc(t("lic_activate_title", lang))}</h4>'
+        f'<form method="POST" action="/license/activate">'
+        f'<div class="field">'
+        f'<label>{esc(t("lic_key_label", lang))}</label>'
+        f'<textarea name="license_key" rows="3" placeholder="{esc(t("lic_key_ph", lang))}" '
+        f'style="width:100%;font-family:monospace;font-size:12px;padding:8px;border:1px solid #d1d5db;border-radius:4px;resize:vertical;"></textarea>'
+        f'</div>'
+        f'<button type="submit" class="btn-primary">{esc(t("lic_btn_activate", lang))}</button>'
+        f'</form>'
+        f'</div>'
+        f'</div>'
+
+        # Right column: features
+        f'<div class="card">'
+        f'<h4 style="margin-top:0;">{esc(t("lic_features_title", lang))}</h4>'
+        + feature_rows
+        + f'</div>'
+
+        f'</div>'
+    )
+    return page_layout(t("lic_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
 def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
                 flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
     flash_html = ""
@@ -3718,6 +3887,9 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
                 f'background:rgba(255,255,255,0.08);white-space:nowrap;">'
                 f'{esc(t(label_key, lang))}</a>'
             )
+        _lic_link = ""
+        if user.get("role") == "owner":
+            _lic_link = _anav("/license", "lic_nav_link")
         audit_nav_html = (
             f'<nav style="background:#1f2937;padding:6px 24px;display:flex;gap:4px;flex-wrap:wrap;">'
             + _anav("/working_papers", "wp_nav_link")
@@ -3726,6 +3898,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + _anav("/financial_statements", "fs_title")
             + _anav("/audit/analytical", "anal_title")
             + _anav("/engagements", "eng_title")
+            + _lic_link
             + f'</nav>'
         )
 
@@ -5119,6 +5292,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_engagement_detail(ctx, user, eng_id, flash, flash_error, lang=lang))
                 return
 
+            if path == "/license":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_lic_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_lic_forbidden", lang))}</h2>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_license_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
             self._send_html(page_layout(
                 t("err_not_found", lang),
                 f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2>'
@@ -5974,6 +6158,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
                 self.end_headers()
                 self.wfile.write(pdf_bytes)
+                return
+
+            if path == "/license/activate":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/license", error=t("err_lic_forbidden", lang))
+                    return
+                license_key = form.get("license_key", "").strip()
+                secret = get_signing_secret()
+                try:
+                    save_license_to_config(license_key, secret)
+                    self._flash_redirect("/license", flash=t("flash_lic_activated", lang))
+                except ValueError as exc:
+                    self._flash_redirect("/license", error=f"{t('err_lic_invalid', lang)}: {exc}")
                 return
 
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
