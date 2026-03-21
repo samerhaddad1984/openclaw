@@ -742,5 +742,26 @@
   "autofix_lic_none":       "Aucune licence installée — exécutez scripts/generate_license.py",
   "autofix_lic_invalid":    "Licence invalide : {error}",
   "autofix_lic_expired":    "Licence EXPIRÉE le {expiry}",
-  "lbl_license":            "13. Vérification de la licence"
+  "lbl_license":            "13. Vérification de la licence",
+
+  "onb_step1_title":        "Ajouter votre personnel",
+  "onb_step2_title":        "Ajouter vos clients",
+  "onb_step3_title":        "Identifiants du personnel",
+  "onb_add_staff":          "Ajouter un membre du personnel",
+  "onb_add_client":         "Ajouter un client",
+  "onb_display_name":       "Nom affiché",
+  "onb_username":           "Courriel / Nom d'utilisateur",
+  "onb_role":               "Rôle",
+  "onb_password":           "Mot de passe temporaire",
+  "onb_client_code":        "Code client",
+  "onb_client_name":        "Nom du client",
+  "onb_province":           "Province",
+  "onb_entity_type":        "Type d'entité",
+  "onb_complete":           "Terminer la configuration",
+  "onb_print":              "Imprimer",
+  "onb_credentials_note":   "Distribuez ces identifiants en toute sécurité à votre personnel.",
+  "onb_skip":               "Ignorer pour l'instant",
+  "onb_step_staff":         "Personnel",
+  "onb_step_clients":       "Clients",
+  "onb_step_credentials":   "Identifiants"
 }
