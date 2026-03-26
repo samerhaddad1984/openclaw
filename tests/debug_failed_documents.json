@@ -1,0 +1,720 @@
+[
+  {
+    "file_name": "abcd.PDF",
+    "review_status": "Ready",
+    "vendor": "Dell Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1478.0,
+    "doc_type": "invoice",
+    "gl_account": "Computer and Equipment Expense",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "Dell Canada Inc.",
+      "total": 1478.0,
+      "document_date": "2025-09-05",
+      "currency": "CAD",
+      "notes": "vendor_match:dell_canada_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Office Equipment",
+      "gl_account": "Computer and Equipment Expense",
+      "tax_code": "GST_QST",
+      "source": "vendor:Dell Canada Inc.",
+      "document_family": "invoice"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 37,
+      "matched_signals": [
+        "address:systemes sous-sol",
+        "address:systèmes sous-sol",
+        "address:systèmes sous-sol québec",
+        "client_name:systemes sous-sol",
+        "client_name:systèmes sous-sol",
+        "client_name:systèmes sous-sol québec",
+        "keyword:systemes sous-sol",
+        "keyword:systèmes sous-sol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document shows 'SYSTÈMES SOUS-SOL QUÉBEC INC' as the ship-to party, which matches exactly with the known_names 'systèmes sous-sol québec' in the registry for client_code SOUSSOL. No conflicting evidence from other registry entries."
+    },
+    "text_preview": "P:1/4 D:02 BP:QC SG:\n\nDell Canada Inc.\n155 Gordon Baker Rd.\nSuite 501\nNorth York, Ontario\nCanada M2H 3N5\n\nMainTelephone/Téléphone: 1-800-847-4096\nTechnical Support/Soutien Technique: 1-800-\n847-4096\nDell Online/Dell Site Internet: www.dell.ca\nGST/HST TPS No: 12123 3001 RT0001\nQST/TVQ No: 1008330537 TQ0001\n\nPST/TVP No: QC# 1008330537TQ0001\n\nINVOICE/FACTURE\n\nNo Payment Necessary!/Aucun\nrèglement n'est dû!\n\nSold to/Vendu à:\n\nShip To/Expédié à:\n\nMICHEL HAYDAMOUS\nMICHEL HAYDAMOUS\n15 RUE DE ROCHEBONNE\nBLAINVILLE QC J7B 1W8\nCanada\nMICHEL HAYDAMOUS \n\nSYSTÈMES SOUS-SOL QUÉBEC INC\nSAMER HADDAD\n2990 BLVD LE CORBUSIER\nLAVAL QC H7L 3M2\nCanada\nSYSTÈMES SOUS-SOL QUÉBEC INC \n\nInvoice No/\nNo de facture: 1018888568\n\nCustomer No/\nNo de client: 550055677118\n\nOrder No/\nNo de commande: 1023827232\n\nPage 1 of 4\n\nDispatch Date/Expédition:\nDue Date/Date d’échéance:\nInvoice Date/Date de facture:\nSalesperson/Vendeur(se):\n\n09/05/2025\n09/05/2025\n09/05/2025\nMASTER\n\nItem No\nCode \narticle\n\nDescription\nDescription\n\n210-BQNH Dell Pro Tower QCT1255 \n\nSystem Service Tag/No de serie:  4NSQXB4 , FMSQXB4\n\nMOD,LBL,REG,FSJ,180W,DELTA MT\n\nIntegrated Graphics\nNo Optical Drive\nChassis intrusion switch\n\n338-CSLW AMD Ryzen(TM) 5 8500G (6 cores, up to 5.0GHz)\n340-DVVC Quick Start Guide\n389-FKHG US/Canada Battery Warning Label\n328-BGNK MPP shipping material, DAO\n389-FKZY\n998-HNGW Fixed Hardware Configuration\n490-BKSX\n429-BBCH\n461-BBCD\n370-BCZG 8 GB: 1 x 8 GB, DDR5, up to 4800 MT/s, non-ECC\n400-BSWT\n555-BLXL\n329-BLGJ\n199-CFFL\n709-BHYH\n389-BBUU\n619-BBQD Windows 11 Pro\n387-BBLW ENERGY STAR Qualified\n450-AAOJ\n340-DNBV\n389-BDQH Print on Demand Label\n329-BBJL\n\n256GB SSD TLC\nNo Wireless LAN Card\nDell Pro Tower with 180W Bronze PSU (L5.5 DAO)\nBasic Onsite Service Extension, 24 Month(s)\nBasic Onsite Service 12 Months\nShipping Label\n\nSystem Power Cord (Philipine/TH/US)\nDocumentation\n\nTrusted Platform Module (Discrete TPM Enabled)\n\nOrder date/Date commande:\nWaybill Number/Numéro du bordereau:\nEstimate Delivery Date/Date de l"
+  },
+  {
+    "file_name": "Amzaon invoice-$106.77-Samer.pdf",
+    "review_status": "NeedsReview",
+    "vendor": null,
+    "client_code": null,
+    "amount": 13.95,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 13.95,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": null,
+      "client_name": null,
+      "assigned_to": null,
+      "score": 2,
+      "matched_signals": [
+        "keyword:basement systems"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.3,
+      "reason": "Weak evidence linking document to any client in registry. Document mentions 'BASEMENT SYSTEMS QUEBEC' and 'Basement Systems Quebec', which loosely resembles 'Quebec basement systems' in SOUSSOL's known_names, but no exact name, address, or account match. No data matches MARCHE_BRESIL. Insufficient for a reliable match."
+    },
+    "text_preview": "Invoice / Facture\n\nPaid / Payé \n\nSold by / Vendu par: Amazon.com.ca ULC\n\nGST/HST # / # de TPS/TVH: 85730 5932 RT0001 \n\nQST # / # de TVQ: 1201187016 TQ0001 \n\nBASEMENT SYSTEMS QUEBEC \n\n15 RUE DE ROCHEBONNE, MICHAEL HAYDAMOUS \n\nBLAINVILLE, QUEBEC, J7B 1W8 \n\nCA \n\nInvoice date / Date de facturation: 04 February 2026\n\nInvoice # / # de facture:\n\nCA6EYMRVACCUI\n\nTotal payable / Total à payer:\n\n$106.77\n\nFor questions about your order, call us at 877-586-3230 or visit www.amazon.ca/contact-us / Pour toute question concernant votre commande, appelez-nous\n\nau 877-586-3230 ou visitez le site www.amazon.ca/contact-us\n\nBilling address / Adresse de facturation \n\nDelivery address / Adresse de livraison \n\nSold by / Vendu par \n\nBasement Systems Quebec \n\nSamer Haddad \n\nAmazon.com.ca ULC \n\n15 Rue de Rochebonne, Michael Haydamous \n\n2990 Boulevard Le Corbusier \n\n40 King Street West 47th Floor \n\nBlainville, Quebec, J7B 1W8 \n\nLAVAL, Quebec, H7L 3M2 \n\nToronto, ON M5H 3Y2 \n\nCA \n\nCA \n\nCanada \n\nOrder information / Information sur la commande\n\nOrder date / Date de commande:\n\n29 January 2026\n\nOrder # / Commande #:\n\n702-7297903-6603467\n\nShipment date / Date d'expédition:\n\n04 February 2026\n\nShipment # / # d'expédition:\n\n456120491826301\n\nInvoice details / Détails de la facture\n\nDescription\n\nQuantity\n\nUnit\n\nDiscount\n\nFederal tax /\n\nProvincial tax / Taxe\n\nItem subtotal /\n\n/\n\nprice /\n\n/ Remise\n\nTaxe fédérale\n\nprovinciale\n\nSous-total de\n\nQuantité\n\nPrix à\n\n[GST/HST/TPS/TVH]\n\n[PST/RST/QST/TVP/TVD/TVQ]\n\nl’article\n\nla\n\npièce\n\nLogitech H390 Wired Headset for PC/Laptop, Stereo\n\n3 $29.99\n\n$0.00\n\n$1.50\n\n$3.00\n\n$103.47\n\nHeadphones with Noise Cancelling Microphone, USB-A,\n\nin-Line Controls, Works with Chromebook - Black, 1 Pack\n\n/ Logitech 981-000014 Noir \n\nASIN: B000UXZQ42\n\nShipping charges / Frais d'expédition\n\nEnvironmentalHandlingFee\n\n$0.00\n\n$0.00\n\n$2.85\n\n$0.00\n\n$0.00\n\n$0.15\n\n$0.00\n\n$0.30\n\n$0.00\n\n$3.30\n\nInvoice subtotal / Total partiel de la\n\nfacture\n\n$106.77\n\nAmazon.com.ca ULC \n40 King Street West 47th Floor,"
+  },
+  {
+    "file_name": "G142010201_eee5087efacc4541af1d479441e72c32.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 28.14,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 28.14,
+      "document_date": "2026-18-03",
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 13,
+      "matched_signals": [
+        "address:quebec basement systems",
+        "client_name:quebec basement systems",
+        "keyword:basement systems"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.4,
+      "reason": "Document mentions 'Basement Systems Quebec', which loosely aligns with 'Quebec basement systems' in the SOUSSOL registry entry, but no exact name, address, or account match. Evidence is weak due to lack of direct matches to known_names, known_addresses, or known_accounts."
+    },
+    "text_preview": "Microsoft Canada Inc. \n\n4400-81 Bay St. \n\nToronto, ON M5J 0E7 \n\nCanada \n\nGST/HST: 877845941 RT0001 \n\nQST: 1021036966 TQ0001\n\nSummary\n\nBilling Profile\n\nBilling Number\n\nDocument Date\n\nSold To \n\nBill To \n\nBasement Systems Quebec \n\nBasement Systems Quebec \n\n1620 Boul. Saint-Elzear O \n\n15 Rue De Rochebonne \n\nTotal Amount\n\nDue on 20/02/2026\n\nBilling Summary\n\nBasement Systems Quebec\n\nG142010201\n\n20/02/2026\n\nCAD 28.14\n\nLaval \n\nQC \n\nH7L 3N2 \n\nCA \n\nBlainville \n\nQC \n\nJ7B 1W8 \n\nCA\n\nQuestions on your bill? Visit https://aka.ms/invoice-billing\n\nInvoice for activity on 19/02/2026 \nThis invoice is for any subscription purchases, renewals, and recurring charges on the date indicated. The service period you are paying for is listed with \n\neach subscription below. Find more details about your bill at \n\nhttps://admin.microsoft.com/Adminportal/Home#/billoverview/invoice-list/G142010201\n\nBilling Summary\n\nCharges\n\nSubtotal\n\nGST/HST (5.00%)\n\nPST/QST (9.98%)\n\nTotal (including Tax)\n\nPayment Instructions:\n\nYour account has a credit card on file and there is no action for you to take. The card you have on file will be charged.\n\nPayment should only be made by Electronic Funds Transfer. \n\nDo not send any physical payment to any address on this invoice.\n\n24.48\n\n24.48\n\n1.22\n\n2.44\n\nCAD 28.14\n\n1/\n\n3\fBilling Profile\n\nTax Invoice Number\n\nTax Invoice Date\n\nInvoice\n\nBasement Systems Quebec\n\nCA-TI2600481791\n\n20/02/2026\n\nCharges\n\n(CAD)\n\n24.48\n\nTax Amount\n\nTotal (including Tax)\n\n(CAD)\n\n1.22 \n\n2.44 \n\n(CAD)\n\n28.14\n\n28.14\n\nMicrosoft Canada Inc. \n\n4400-81 Bay St. \n\nToronto, ON M5J 0E7 \n\nCanada \n\nGST/HST: 877845941 RT0001 \n\nQST: 1021036966 TQ0001\n\nSold To \n\nBill To \n\nBasement Systems Quebec \n\nBasement Systems Quebec \n\n1620 Boul. Saint-Elzear O \n\n15 Rue De Rochebonne \n\nLaval \n\nQC \n\nH7L 3N2 \n\nCA \n\nBlainville \n\nQC \n\nJ7B 1W8 \n\nCA\n\nInvoice for activity on 19/02/2026 \n\nSection Summary\n\nSection Name\n\nBasement Systems Quebec\n\nTotal\n\nBilling Details By Product\n\nBasement Systems Quebec\n\nPower Automate per user plan - One"
+  },
+  {
+    "file_name": "Implementation Plan.pdf",
+    "review_status": "NeedsReview",
+    "vendor": null,
+    "client_code": null,
+    "amount": null,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": null,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": null,
+      "client_name": null,
+      "assigned_to": null,
+      "score": 0,
+      "matched_signals": [],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.0,
+      "reason": "No direct evidence linking the document to any client in the registry. The document is a generic technical implementation plan for geolocation and staff matching, with no mentions of client names, addresses, or accounts from the registry."
+    },
+    "text_preview": "Implementation Plan Based on Existing System \n\n1. Geolocation Enablement \n\n•  Add Geolocation fields (latitude and longitude) to both Appointment and Staff objects \n\n• \n\nif not already present. \nImplement a geocoding process to convert address, city, and zip fields into coordinates \nfor: \n\no  New appointments \no  All staff records \n\n•  Use an external geocoding service (e.g. Google Maps API) via Apex callout, or a \n\nmiddleware integration if preferred. \n\n2. Staff Proximity Matching \n\n•  Develop an Apex utility or service that: \n\no  Accepts an appointment address (via geolocation) \no  Retrieves all active staff with valid coordinates \no  Calculates the distance between the appointment location and each staff address \no  Returns a list of staff sorted by proximity \n\n• \n\nIntegrate this logic into the appointment creation flow or screen, so the system can: \n\no  Display the nearest staff to select \no  Or automatically assign the nearest available staff if business rules allow \n\n3. Nearest to First Appointment Logic \n\n•  On creation of a subsequent appointment, implement logic to: \n\no  Retrieve the address of the first appointment \no  Geocode it if needed \no  Use the same proximity logic to find the nearest staff to that address \n•  Optionally, pass the first appointment ID into a custom screen or flow to drive the \n\nmatching logic \n\n4. Staff Availability Check \n\n•  Define availability by checking if a staff member is already booked during the requested \n\ntime. \n\n•  Use a SOQL query against the Appointment object to check for overlapping times: \n\no \n\nIf the requested start/end time overlaps with any existing appointment for that \nstaff, they are not available \n\n• \n\nIntegrate this availability check into the proximity logic: \n\no  First filter staff by availability \no  Then sort the available staff by distance \n\n \n \n\f5. Integration into Appointment Creation Process \n\n•  Modify the existing appointment creation process (Flow, screen component, or custom \n\nform) to: \n\no  Trig"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0084.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 1212.01,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 1212.01,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "Document 'Bill to' field matches known name variant 'Systemes Soussol Quebec' from registry, and email domain 'soussol.com' aligns with client code 'SOUSSOL'."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000084\n\nDate of issue\nDate due\n\nFebruary 6, 2026\nFebruary 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$1,212.01 USD due February 6, 2026\n\nPay online\n\nDescription\n\nRemaining time on 51 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nRemaining time on 50 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nUnused time on 51 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nRemaining time on 49 × Premium (with 29.42% off) after 13 Jan 2026\n\nJan 13\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 13 Jan 2026\nJan 13\u0000Feb 6, 2026\n\nRemaining time on 54 × Premium (with 29.42% off) after 20 Jan 2026\nJan 20\u0000Feb 6, 2026\n\nUnused time on 49 × Premium (with 29.42% off) after 20 Jan 2026\n\nJan 20\u0000Feb 6, 2026\n\nRemaining time on 53 × Premium (with 29.42% off) after 26 Jan 2026\n\nJan 25\u0000Feb 6, 2026\n\nQty\n\n51\n\n50\n\n50\n\n51\n\n49\n\n50\n\n54\n\n49\n\n53\n\nUnit price\n\nAmount\n\n$985.58\n\n\u0000$966.25\n\n$966.21\n\n\u0000$985.54\n\n$916.42\n\n\u0000$935.12\n\n$707.89\n\n\u0000$642.35\n\n$478.66\n\nPage 1 of 3\n\n \n \n \n \n \n \n \n \n \n \n\fUnused time on 54 × Premium (with 29.42% off) after 26 Jan 2026\n\nJan 25\u0000Feb 6, 2026\n\nRemaining time on 52 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nUnused time on 53 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 51 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nUnused time on 52 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 50 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nUnused time on 51 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 49 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0085.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 49.0,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field matches 'Systemes Soussol Quebec', which closely aligns with known names for SOUSSOL such as 'systemes soussol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also supports this match, as 'soussol' is a known name variant. No conflicting evidence from other registry entries was found."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000085\n\nDate of issue\nDate due\n\nFebruary 6, 2026\nFebruary 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$49.00 USD due February 6, 2026\n\nPay online\n\nDescription\n\nAdd on: Signatures\n\nFeb 6\u0000Mar 6, 2026\n\nQty\n\n1\n\nUnit price\n\nAmount\n\n$49.00\n\n$49.00\n\nSubtotal\n\nTotal\n\nAmount due\n\n$49.00\n\n$49.00\n\n$49.00 USD\n\nPage 1 of 1\n\n \n \n \n\f"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0086.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 49.0,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches the known name 'Systemes Sous-sol Quebec' in the registry, with minor spelling variations. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000086\n\nDate of issue\nDate due\n\nMarch 6, 2026\nMarch 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\n$49.00 USD due March 6, 2026\n\nPay online\n\nDescription\n\nAdd on: Signatures\n\nMar 6\u0000Apr 6, 2026\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\nQty\n\n1\n\nUnit price\n\nAmount\n\n$49.00\n\n$49.00\n\nSubtotal\n\nTotal\n\nAmount due\n\n$49.00\n\n$49.00\n\n$49.00 USD\n\nPage 1 of 1\n\n \n \n \n\f"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0087.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 912.44,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 912.44,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches known names for SOUSSOL such as 'systemes soussol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'. No conflicting evidence from other registry entries was found."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000087\n\nDate of issue\nDate due\n\nMarch 6, 2026\nMarch 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$912.44 USD due March 6, 2026\n\nPay online\n\nDescription\n\nRemaining time on 49 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 48 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 49 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 47 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 48 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 46 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 47 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 45 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nQty\n\n49\n\n50\n\n48\n\n49\n\n47\n\n48\n\n46\n\n47\n\n45\n\nUnit price\n\nAmount\n\n$967.37\n\n\u0000$987.11\n\n$947.63\n\n\u0000$967.36\n\n$927.87\n\n\u0000$947.62\n\n$908.12\n\n\u0000$927.87\n\n$888.29\n\nPage 1 of 3\n\n \n \n \n \n \n \n \n \n \n \n\fUnused time on 46 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 44 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 45 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 43 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 44 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 42 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 43 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 41 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 42 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nR"
+  },
+  {
+    "file_name": "abcd.PDF",
+    "review_status": "Ready",
+    "vendor": "Dell Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1478.0,
+    "doc_type": "invoice",
+    "gl_account": "Computer and Equipment Expense",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "Dell Canada Inc.",
+      "total": 1478.0,
+      "document_date": "2025-09-05",
+      "currency": "CAD",
+      "notes": "vendor_match:dell_canada_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Office Equipment",
+      "gl_account": "Computer and Equipment Expense",
+      "tax_code": "GST_QST",
+      "source": "vendor:Dell Canada Inc.",
+      "document_family": "invoice"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 37,
+      "matched_signals": [
+        "address:systemes sous-sol",
+        "address:systèmes sous-sol",
+        "address:systèmes sous-sol québec",
+        "client_name:systemes sous-sol",
+        "client_name:systèmes sous-sol",
+        "client_name:systèmes sous-sol québec",
+        "keyword:systemes sous-sol",
+        "keyword:systèmes sous-sol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "Exact match of client name 'SYSTÈMES SOUS-SOL QUÉBEC INC' in the 'Ship To' section with known_names in registry, including variations like 'systèmes sous-sol québec'."
+    },
+    "text_preview": "P:1/4 D:02 BP:QC SG:\n\nDell Canada Inc.\n155 Gordon Baker Rd.\nSuite 501\nNorth York, Ontario\nCanada M2H 3N5\n\nMainTelephone/Téléphone: 1-800-847-4096\nTechnical Support/Soutien Technique: 1-800-\n847-4096\nDell Online/Dell Site Internet: www.dell.ca\nGST/HST TPS No: 12123 3001 RT0001\nQST/TVQ No: 1008330537 TQ0001\n\nPST/TVP No: QC# 1008330537TQ0001\n\nINVOICE/FACTURE\n\nNo Payment Necessary!/Aucun\nrèglement n'est dû!\n\nSold to/Vendu à:\n\nShip To/Expédié à:\n\nMICHEL HAYDAMOUS\nMICHEL HAYDAMOUS\n15 RUE DE ROCHEBONNE\nBLAINVILLE QC J7B 1W8\nCanada\nMICHEL HAYDAMOUS \n\nSYSTÈMES SOUS-SOL QUÉBEC INC\nSAMER HADDAD\n2990 BLVD LE CORBUSIER\nLAVAL QC H7L 3M2\nCanada\nSYSTÈMES SOUS-SOL QUÉBEC INC \n\nInvoice No/\nNo de facture: 1018888568\n\nCustomer No/\nNo de client: 550055677118\n\nOrder No/\nNo de commande: 1023827232\n\nPage 1 of 4\n\nDispatch Date/Expédition:\nDue Date/Date d’échéance:\nInvoice Date/Date de facture:\nSalesperson/Vendeur(se):\n\n09/05/2025\n09/05/2025\n09/05/2025\nMASTER\n\nItem No\nCode \narticle\n\nDescription\nDescription\n\n210-BQNH Dell Pro Tower QCT1255 \n\nSystem Service Tag/No de serie:  4NSQXB4 , FMSQXB4\n\nMOD,LBL,REG,FSJ,180W,DELTA MT\n\nIntegrated Graphics\nNo Optical Drive\nChassis intrusion switch\n\n338-CSLW AMD Ryzen(TM) 5 8500G (6 cores, up to 5.0GHz)\n340-DVVC Quick Start Guide\n389-FKHG US/Canada Battery Warning Label\n328-BGNK MPP shipping material, DAO\n389-FKZY\n998-HNGW Fixed Hardware Configuration\n490-BKSX\n429-BBCH\n461-BBCD\n370-BCZG 8 GB: 1 x 8 GB, DDR5, up to 4800 MT/s, non-ECC\n400-BSWT\n555-BLXL\n329-BLGJ\n199-CFFL\n709-BHYH\n389-BBUU\n619-BBQD Windows 11 Pro\n387-BBLW ENERGY STAR Qualified\n450-AAOJ\n340-DNBV\n389-BDQH Print on Demand Label\n329-BBJL\n\n256GB SSD TLC\nNo Wireless LAN Card\nDell Pro Tower with 180W Bronze PSU (L5.5 DAO)\nBasic Onsite Service Extension, 24 Month(s)\nBasic Onsite Service 12 Months\nShipping Label\n\nSystem Power Cord (Philipine/TH/US)\nDocumentation\n\nTrusted Platform Module (Discrete TPM Enabled)\n\nOrder date/Date commande:\nWaybill Number/Numéro du bordereau:\nEstimate Delivery Date/Date de l"
+  },
+  {
+    "file_name": "Amzaon invoice-$106.77-Samer.pdf",
+    "review_status": "NeedsReview",
+    "vendor": null,
+    "client_code": null,
+    "amount": 13.95,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 13.95,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": null,
+      "client_name": null,
+      "assigned_to": null,
+      "score": 2,
+      "matched_signals": [
+        "keyword:basement systems"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.4,
+      "reason": "The document mentions 'BASEMENT SYSTEMS QUEBEC' and 'Basement Systems Quebec', which is similar to 'Quebec Basement Systems' in the known_names for SOUSSOL. However, the address '15 RUE DE ROCHEBONNE, MICHAEL HAYDAMOUS, BLAINVILLE, QUEBEC, J7B 1W8' does not match any known_addresses for SOUSSOL, and the document is an invoice from Amazon, not directly from the client. There is no mention of 'Soussol', 'Systèmes Sous-sol', or other primary known names. The evidence is weak and indirect."
+    },
+    "text_preview": "Invoice / Facture\n\nPaid / Payé \n\nSold by / Vendu par: Amazon.com.ca ULC\n\nGST/HST # / # de TPS/TVH: 85730 5932 RT0001 \n\nQST # / # de TVQ: 1201187016 TQ0001 \n\nBASEMENT SYSTEMS QUEBEC \n\n15 RUE DE ROCHEBONNE, MICHAEL HAYDAMOUS \n\nBLAINVILLE, QUEBEC, J7B 1W8 \n\nCA \n\nInvoice date / Date de facturation: 04 February 2026\n\nInvoice # / # de facture:\n\nCA6EYMRVACCUI\n\nTotal payable / Total à payer:\n\n$106.77\n\nFor questions about your order, call us at 877-586-3230 or visit www.amazon.ca/contact-us / Pour toute question concernant votre commande, appelez-nous\n\nau 877-586-3230 ou visitez le site www.amazon.ca/contact-us\n\nBilling address / Adresse de facturation \n\nDelivery address / Adresse de livraison \n\nSold by / Vendu par \n\nBasement Systems Quebec \n\nSamer Haddad \n\nAmazon.com.ca ULC \n\n15 Rue de Rochebonne, Michael Haydamous \n\n2990 Boulevard Le Corbusier \n\n40 King Street West 47th Floor \n\nBlainville, Quebec, J7B 1W8 \n\nLAVAL, Quebec, H7L 3M2 \n\nToronto, ON M5H 3Y2 \n\nCA \n\nCA \n\nCanada \n\nOrder information / Information sur la commande\n\nOrder date / Date de commande:\n\n29 January 2026\n\nOrder # / Commande #:\n\n702-7297903-6603467\n\nShipment date / Date d'expédition:\n\n04 February 2026\n\nShipment # / # d'expédition:\n\n456120491826301\n\nInvoice details / Détails de la facture\n\nDescription\n\nQuantity\n\nUnit\n\nDiscount\n\nFederal tax /\n\nProvincial tax / Taxe\n\nItem subtotal /\n\n/\n\nprice /\n\n/ Remise\n\nTaxe fédérale\n\nprovinciale\n\nSous-total de\n\nQuantité\n\nPrix à\n\n[GST/HST/TPS/TVH]\n\n[PST/RST/QST/TVP/TVD/TVQ]\n\nl’article\n\nla\n\npièce\n\nLogitech H390 Wired Headset for PC/Laptop, Stereo\n\n3 $29.99\n\n$0.00\n\n$1.50\n\n$3.00\n\n$103.47\n\nHeadphones with Noise Cancelling Microphone, USB-A,\n\nin-Line Controls, Works with Chromebook - Black, 1 Pack\n\n/ Logitech 981-000014 Noir \n\nASIN: B000UXZQ42\n\nShipping charges / Frais d'expédition\n\nEnvironmentalHandlingFee\n\n$0.00\n\n$0.00\n\n$2.85\n\n$0.00\n\n$0.00\n\n$0.15\n\n$0.00\n\n$0.30\n\n$0.00\n\n$3.30\n\nInvoice subtotal / Total partiel de la\n\nfacture\n\n$106.77\n\nAmazon.com.ca ULC \n40 King Street West 47th Floor,"
+  },
+  {
+    "file_name": "G142010201_eee5087efacc4541af1d479441e72c32.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 28.14,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 28.14,
+      "document_date": "2026-18-03",
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 13,
+      "matched_signals": [
+        "address:quebec basement systems",
+        "client_name:quebec basement systems",
+        "keyword:basement systems"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.4,
+      "reason": "Document mentions 'Basement Systems Quebec', which loosely matches 'Quebec basement systems' in known_names for SOUSSOL, but no exact name, address, or account match. Evidence is weak; insufficient to confidently assign a client_code."
+    },
+    "text_preview": "Microsoft Canada Inc. \n\n4400-81 Bay St. \n\nToronto, ON M5J 0E7 \n\nCanada \n\nGST/HST: 877845941 RT0001 \n\nQST: 1021036966 TQ0001\n\nSummary\n\nBilling Profile\n\nBilling Number\n\nDocument Date\n\nSold To \n\nBill To \n\nBasement Systems Quebec \n\nBasement Systems Quebec \n\n1620 Boul. Saint-Elzear O \n\n15 Rue De Rochebonne \n\nTotal Amount\n\nDue on 20/02/2026\n\nBilling Summary\n\nBasement Systems Quebec\n\nG142010201\n\n20/02/2026\n\nCAD 28.14\n\nLaval \n\nQC \n\nH7L 3N2 \n\nCA \n\nBlainville \n\nQC \n\nJ7B 1W8 \n\nCA\n\nQuestions on your bill? Visit https://aka.ms/invoice-billing\n\nInvoice for activity on 19/02/2026 \nThis invoice is for any subscription purchases, renewals, and recurring charges on the date indicated. The service period you are paying for is listed with \n\neach subscription below. Find more details about your bill at \n\nhttps://admin.microsoft.com/Adminportal/Home#/billoverview/invoice-list/G142010201\n\nBilling Summary\n\nCharges\n\nSubtotal\n\nGST/HST (5.00%)\n\nPST/QST (9.98%)\n\nTotal (including Tax)\n\nPayment Instructions:\n\nYour account has a credit card on file and there is no action for you to take. The card you have on file will be charged.\n\nPayment should only be made by Electronic Funds Transfer. \n\nDo not send any physical payment to any address on this invoice.\n\n24.48\n\n24.48\n\n1.22\n\n2.44\n\nCAD 28.14\n\n1/\n\n3\fBilling Profile\n\nTax Invoice Number\n\nTax Invoice Date\n\nInvoice\n\nBasement Systems Quebec\n\nCA-TI2600481791\n\n20/02/2026\n\nCharges\n\n(CAD)\n\n24.48\n\nTax Amount\n\nTotal (including Tax)\n\n(CAD)\n\n1.22 \n\n2.44 \n\n(CAD)\n\n28.14\n\n28.14\n\nMicrosoft Canada Inc. \n\n4400-81 Bay St. \n\nToronto, ON M5J 0E7 \n\nCanada \n\nGST/HST: 877845941 RT0001 \n\nQST: 1021036966 TQ0001\n\nSold To \n\nBill To \n\nBasement Systems Quebec \n\nBasement Systems Quebec \n\n1620 Boul. Saint-Elzear O \n\n15 Rue De Rochebonne \n\nLaval \n\nQC \n\nH7L 3N2 \n\nCA \n\nBlainville \n\nQC \n\nJ7B 1W8 \n\nCA\n\nInvoice for activity on 19/02/2026 \n\nSection Summary\n\nSection Name\n\nBasement Systems Quebec\n\nTotal\n\nBilling Details By Product\n\nBasement Systems Quebec\n\nPower Automate per user plan - One"
+  },
+  {
+    "file_name": "Implementation Plan.pdf",
+    "review_status": "NeedsReview",
+    "vendor": null,
+    "client_code": null,
+    "amount": null,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": null,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": null,
+      "client_name": null,
+      "assigned_to": null,
+      "score": 0,
+      "matched_signals": [],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": null,
+      "assigned_to": null,
+      "confidence": 0.0,
+      "reason": "No evidence in document text linking to any client in the registry. Document is a generic implementation plan for geolocation and staff matching, with no names, addresses, or accounts matching registry entries."
+    },
+    "text_preview": "Implementation Plan Based on Existing System \n\n1. Geolocation Enablement \n\n•  Add Geolocation fields (latitude and longitude) to both Appointment and Staff objects \n\n• \n\nif not already present. \nImplement a geocoding process to convert address, city, and zip fields into coordinates \nfor: \n\no  New appointments \no  All staff records \n\n•  Use an external geocoding service (e.g. Google Maps API) via Apex callout, or a \n\nmiddleware integration if preferred. \n\n2. Staff Proximity Matching \n\n•  Develop an Apex utility or service that: \n\no  Accepts an appointment address (via geolocation) \no  Retrieves all active staff with valid coordinates \no  Calculates the distance between the appointment location and each staff address \no  Returns a list of staff sorted by proximity \n\n• \n\nIntegrate this logic into the appointment creation flow or screen, so the system can: \n\no  Display the nearest staff to select \no  Or automatically assign the nearest available staff if business rules allow \n\n3. Nearest to First Appointment Logic \n\n•  On creation of a subsequent appointment, implement logic to: \n\no  Retrieve the address of the first appointment \no  Geocode it if needed \no  Use the same proximity logic to find the nearest staff to that address \n•  Optionally, pass the first appointment ID into a custom screen or flow to drive the \n\nmatching logic \n\n4. Staff Availability Check \n\n•  Define availability by checking if a staff member is already booked during the requested \n\ntime. \n\n•  Use a SOQL query against the Appointment object to check for overlapping times: \n\no \n\nIf the requested start/end time overlaps with any existing appointment for that \nstaff, they are not available \n\n• \n\nIntegrate this availability check into the proximity logic: \n\no  First filter staff by availability \no  Then sort the available staff by distance \n\n \n \n\f5. Integration into Appointment Creation Process \n\n•  Modify the existing appointment creation process (Flow, screen component, or custom \n\nform) to: \n\no  Trig"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0084.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 1212.01,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 1212.01,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "Document 'Bill to' field matches known name variant 'Systemes Soussol Quebec' from registry, and email domain 'soussol.com' aligns with client code 'SOUSSOL'."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000084\n\nDate of issue\nDate due\n\nFebruary 6, 2026\nFebruary 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$1,212.01 USD due February 6, 2026\n\nPay online\n\nDescription\n\nRemaining time on 51 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nRemaining time on 50 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nUnused time on 51 × Premium (with 29.42% off) after 12 Jan 2026\n\nJan 12\u0000Feb 6, 2026\n\nRemaining time on 49 × Premium (with 29.42% off) after 13 Jan 2026\n\nJan 13\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 13 Jan 2026\nJan 13\u0000Feb 6, 2026\n\nRemaining time on 54 × Premium (with 29.42% off) after 20 Jan 2026\nJan 20\u0000Feb 6, 2026\n\nUnused time on 49 × Premium (with 29.42% off) after 20 Jan 2026\n\nJan 20\u0000Feb 6, 2026\n\nRemaining time on 53 × Premium (with 29.42% off) after 26 Jan 2026\n\nJan 25\u0000Feb 6, 2026\n\nQty\n\n51\n\n50\n\n50\n\n51\n\n49\n\n50\n\n54\n\n49\n\n53\n\nUnit price\n\nAmount\n\n$985.58\n\n\u0000$966.25\n\n$966.21\n\n\u0000$985.54\n\n$916.42\n\n\u0000$935.12\n\n$707.89\n\n\u0000$642.35\n\n$478.66\n\nPage 1 of 3\n\n \n \n \n \n \n \n \n \n \n \n\fUnused time on 54 × Premium (with 29.42% off) after 26 Jan 2026\n\nJan 25\u0000Feb 6, 2026\n\nRemaining time on 52 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nUnused time on 53 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 51 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nUnused time on 52 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 50 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nUnused time on 51 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb 6, 2026\n\nRemaining time on 49 × Premium (with 29.42% off) after 29 Jan 2026\nJan 29\u0000Feb 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 29 Jan 2026\n\nJan 29\u0000Feb"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0085.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 49.0,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field matches 'Systemes Soussol Quebec', which aligns closely with known names for SOUSSOL such as 'systemes soussol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also contains 'soussol', reinforcing the match. No conflicting evidence from other registry entries was found."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000085\n\nDate of issue\nDate due\n\nFebruary 6, 2026\nFebruary 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$49.00 USD due February 6, 2026\n\nPay online\n\nDescription\n\nAdd on: Signatures\n\nFeb 6\u0000Mar 6, 2026\n\nQty\n\n1\n\nUnit price\n\nAmount\n\n$49.00\n\n$49.00\n\nSubtotal\n\nTotal\n\nAmount due\n\n$49.00\n\n$49.00\n\n$49.00 USD\n\nPage 1 of 1\n\n \n \n \n\f"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0086.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 49.0,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches known names for SOUSSOL such as 'systemes soussol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'. No conflicting evidence from other registry entries was found."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000086\n\nDate of issue\nDate due\n\nMarch 6, 2026\nMarch 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\n$49.00 USD due March 6, 2026\n\nPay online\n\nDescription\n\nAdd on: Signatures\n\nMar 6\u0000Apr 6, 2026\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\nQty\n\n1\n\nUnit price\n\nAmount\n\n$49.00\n\n$49.00\n\nSubtotal\n\nTotal\n\nAmount due\n\n$49.00\n\n$49.00\n\n$49.00 USD\n\nPage 1 of 1\n\n \n \n \n\f"
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0087.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": "SOUSSOL",
+    "amount": 912.44,
+    "doc_type": null,
+    "gl_account": "Uncategorized Expense",
+    "raw_rules_output": {
+      "doc_type": null,
+      "confidence": 0.4,
+      "vendor_name": null,
+      "total": 912.44,
+      "document_date": null,
+      "currency": null,
+      "notes": "no_vendor_match"
+    },
+    "raw_vendor_output": {
+      "category": "Uncategorized",
+      "gl_account": "Uncategorized Expense",
+      "tax_code": "GST_QST",
+      "source": "default",
+      "document_family": "unknown"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 24,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "keyword:soussol"
+      ],
+      "min_score_required": 6
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches known names for SOUSSOL in the registry, such as 'systemes soussol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'. No conflicting evidence from other registry entries was found."
+    },
+    "text_preview": "Invoice\n\nInvoice number FBBD891C\u00000087\n\nDate of issue\nDate due\n\nMarch 6, 2026\nMarch 6, 2026\n\nCompanyCam\n\nNebraska\n\nUnited States\n\nsupport@companycam.com\n\nBill to\n\nSystemes Soussol Quebec\n\naccounting@soussol.com\n\n$912.44 USD due March 6, 2026\n\nPay online\n\nDescription\n\nRemaining time on 49 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 50 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 48 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 49 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 47 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 48 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 46 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 47 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 45 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nQty\n\n49\n\n50\n\n48\n\n49\n\n47\n\n48\n\n46\n\n47\n\n45\n\nUnit price\n\nAmount\n\n$967.37\n\n\u0000$987.11\n\n$947.63\n\n\u0000$967.36\n\n$927.87\n\n\u0000$947.62\n\n$908.12\n\n\u0000$927.87\n\n$888.29\n\nPage 1 of 3\n\n \n \n \n \n \n \n \n \n \n \n\fUnused time on 46 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 44 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 45 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 43 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 44 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 42 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 43 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nRemaining time on 41 × Premium (with 29.42% off) after 11 Feb 2026\nFeb 11\u0000Mar 6, 2026\n\nUnused time on 42 × Premium (with 29.42% off) after 11 Feb 2026\n\nFeb 11\u0000Mar 6, 2026\n\nR"
+  }
+]

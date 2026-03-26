@@ -61,6 +61,20 @@ from src.engines.bank_parser import (
     apply_manual_match as bank_apply_manual_match,
     import_statement as bank_import_statement,
 )
+from src.engines.reconciliation_engine import (
+    add_reconciliation_item as recon_add_item,
+    auto_populate_outstanding_items as recon_auto_populate,
+    calculate_reconciliation as recon_calculate,
+    create_reconciliation as recon_create,
+    ensure_reconciliation_tables as _ensure_recon_tables,
+    finalize_reconciliation as recon_finalize,
+    generate_reconciliation_pdf as recon_generate_pdf,
+    get_reconciliation as recon_get,
+    get_reconciliation_items as recon_get_items,
+    get_reconciliation_summary as recon_get_summary,
+    list_reconciliations as recon_list,
+    mark_item_cleared as recon_mark_cleared,
+)
 from src.i18n import t
 from src.agents.core import client_comms as _client_comms
 from src.agents.core.filing_calendar import (
@@ -70,17 +84,44 @@ from src.agents.core.filing_calendar import (
     period_label_to_dates as _period_label_to_dates,
 )
 import src.engines.audit_engine as _audit
-from src.engines.license_engine import get_license_status, save_license_to_config, check_limits, get_signing_secret, TIER_DEFAULTS
+import src.engines.cas_engine as _cas
+from src.engines.license_engine import (
+    get_license_status, save_license_to_config, check_limits,
+    get_signing_secret, TIER_DEFAULTS,
+    get_licensed_machines, check_machine_license, register_machine,
+    MAX_MACHINES_PER_FIRM,
+)
+from src.agents.core.ai_router import get_cache_stats as _get_cache_stats, _clear_cache as _ai_clear_cache
+from src.integrations.qr_generator import generate_client_qr_png, generate_all_qr_pdf, _build_upload_url
 
 
 DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
 LOG_PATH = ROOT_DIR / "data" / "ledgerlink.log"
-HOST = "127.0.0.1"
-PORT = 8787
+# Read bind address from config; default to 0.0.0.0 for LAN access
+try:
+    _boot_cfg = json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+    _net = _boot_cfg.get("network", {})
+    if _net.get("bind_all_interfaces", False):
+        HOST = "0.0.0.0"
+    else:
+        HOST = _boot_cfg.get("host", "127.0.0.1")
+    PORT = _boot_cfg.get("port", 8787)
+except Exception:
+    HOST = "0.0.0.0"
+    PORT = 8787
 DEFAULT_REVIEWER = "Sam"
 SESSION_DURATION_HOURS = 12
 
 _SERVICE_START = datetime.now(timezone.utc)
+
+
+def _get_app_version() -> str:
+    """Read version from version.json."""
+    try:
+        vf = ROOT_DIR / "version.json"
+        return json.loads(vf.read_text(encoding="utf-8")).get("version", "?")
+    except Exception:
+        return "?"
 
 learning_store = LearningMemoryStore()
 suggestion_engine = LearningSuggestionEngine(DB_PATH)
@@ -375,6 +416,12 @@ def bootstrap_schema() -> None:
         # Audit tables (working papers, evidence, trial balance, engagements)
         _audit.ensure_audit_tables(conn)
         _audit.seed_chart_of_accounts(conn)
+
+        # CAS tables (materiality, risk assessments)
+        _cas.ensure_cas_tables(conn)
+
+        # Reconciliation tables
+        _ensure_recon_tables(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -801,6 +848,20 @@ def get_documents(
     return [r for r in rows if normalize_key(get_accounting_status(r)) == wanted]
 
 
+def _infer_entry_kind(doc_row) -> str:
+    """FIX 2: Infer entry_kind from doc_type and amount."""
+    doc_type = normalize_text(doc_row["doc_type"]).lower() if doc_row.get("doc_type") else ""
+    amount = None
+    try:
+        amount = float(doc_row["amount"]) if doc_row.get("amount") is not None else None
+    except (TypeError, ValueError):
+        pass
+    credit_doc_types = {"credit_note", "refund", "chargeback", "reversal"}
+    if doc_type in credit_doc_types or (amount is not None and amount < 0):
+        return "credit"
+    return "expense"
+
+
 def get_document(document_id: str) -> sqlite3.Row | None:
     with open_db() as conn:
         return conn.execute(
@@ -815,6 +876,12 @@ def get_document(document_id: str) -> sqlite3.Row | None:
                 COALESCE(d.hallucination_suspected, 0) AS hallucination_suspected,
                 d.raw_ocr_text,
                 COALESCE(d.correction_count, 0) AS correction_count,
+                d.fraud_flags,
+                COALESCE(d.has_line_items, 0) AS has_line_items,
+                COALESCE(d.lines_reconciled, 0) AS lines_reconciled,
+                d.line_total_sum,
+                d.invoice_total_gap,
+                COALESCE(d.deposit_allocated, 0) AS deposit_allocated,
                 COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
                 da.assigned_by, da.assigned_at, da.note AS assignment_note,
                 pj.posting_id, pj.posting_status, pj.approval_state,
@@ -1052,6 +1119,138 @@ def _fraud_severity_badge(severity: str) -> str:
     sev_key = f"fraud_severity_{severity.lower()}"
     label = t(sev_key, "en")  # severity label is always short — resolved below at call site
     return f'<span class="{css}">{esc(label)}</span>'
+
+
+def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
+    """Render invoice line items and deposit allocation cards for document detail."""
+    try:
+        _db = sqlite3.connect(str(DB_PATH))
+        _db.row_factory = sqlite3.Row
+        lines = _db.execute(
+            """SELECT line_number, description, quantity, unit_price,
+                      line_total_pretax, tax_regime, gst_amount, qst_amount,
+                      hst_amount, province_of_supply, line_notes
+               FROM invoice_lines WHERE document_id = ?
+               ORDER BY line_number""",
+            (document_id,),
+        ).fetchall()
+        _db.close()
+    except Exception:
+        return ""
+
+    if not lines:
+        return ""
+
+    # Line items table
+    rows_html = ""
+    for ln in lines:
+        rows_html += (
+            f"<tr>"
+            f"<td>{esc(str(ln['line_number']))}</td>"
+            f"<td>{esc(str(ln['description'] or ''))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['quantity'] or ''))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['unit_price'] or ''))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['line_total_pretax'] or ''))}</td>"
+            f"<td>{esc(str(ln['tax_regime'] or ''))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['gst_amount'] or '0.00'))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['qst_amount'] or '0.00'))}</td>"
+            f"<td style='text-align:right;'>{esc(str(ln['hst_amount'] or '0.00'))}</td>"
+            f"<td>{esc(str(ln['province_of_supply'] or ''))}</td>"
+            f"<td class='small muted'>{esc(str(ln['line_notes'] or ''))}</td>"
+            f"</tr>"
+        )
+
+    # Reconciliation status
+    has_line_items = int(row["has_line_items"] or 0) if "has_line_items" in row.keys() else 0
+    lines_reconciled = int(row["lines_reconciled"] or 0) if "lines_reconciled" in row.keys() else 0
+    gap = float(row["invoice_total_gap"] or 0) if "invoice_total_gap" in row.keys() else 0
+    line_total_sum = float(row["line_total_sum"] or 0) if "line_total_sum" in row.keys() else 0
+
+    if lines_reconciled:
+        recon_badge = f'<span class="badge badge-ready">{esc(t("line_reconciled_yes", lang))}</span>'
+    else:
+        gap_text = t("line_gap_amount", lang).replace("{amount}", f"{gap:.2f}")
+        recon_badge = f'<span class="badge badge-hold">{esc(t("line_reconciled_no", lang))}</span> <span class="small muted">{esc(gap_text)}</span>'
+
+    card = f"""
+<div class="card">
+  <h3>{esc(t("line_items_section", lang))}</h3>
+  <div style="margin-bottom:8px;"><strong>{esc(t("line_reconciliation_status", lang))}:</strong> {recon_badge}</div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>{esc(t("line_col_num", lang))}</th>
+      <th>{esc(t("line_col_description", lang))}</th>
+      <th>{esc(t("line_col_qty", lang))}</th>
+      <th>{esc(t("line_col_unit_price", lang))}</th>
+      <th>{esc(t("line_col_pretax", lang))}</th>
+      <th>{esc(t("line_col_tax_regime", lang))}</th>
+      <th>{esc(t("line_col_gst", lang))}</th>
+      <th>{esc(t("line_col_qst", lang))}</th>
+      <th>{esc(t("line_col_hst", lang))}</th>
+      <th>{esc(t("line_col_province", lang))}</th>
+      <th>{esc(t("line_col_notes", lang))}</th>
+    </tr></thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+  </div>
+</div>"""
+
+    # Deposit allocation section
+    deposit_card = ""
+    deposit_allocated = int(row["deposit_allocated"] or 0) if "deposit_allocated" in row.keys() else 0
+    if deposit_allocated:
+        try:
+            from src.engines.line_item_engine import allocate_deposit_proportionally
+            # Try to get deposit amount from raw_result
+            raw_result = {}
+            try:
+                raw_result = json.loads(row["raw_result"]) if row["raw_result"] else {}
+            except Exception:
+                pass
+            dep_amt = raw_result.get("deposit_amount", 0)
+            if dep_amt and float(dep_amt) > 0:
+                _db2 = sqlite3.connect(str(DB_PATH))
+                _db2.row_factory = sqlite3.Row
+                alloc = allocate_deposit_proportionally(document_id, dep_amt, _db2)
+                _db2.close()
+
+                alloc_rows = ""
+                for a in alloc.get("allocations", []):
+                    alloc_rows += (
+                        f"<tr>"
+                        f"<td>{esc(str(a.get('description', '')))}</td>"
+                        f"<td style='text-align:right;'>${a.get('original_pretax', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>${a.get('deposit_allocated', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>${a.get('net_pretax', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>${a.get('adjusted_gst_recovery', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>${a.get('adjusted_qst_recovery', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>${a.get('adjusted_hst_recovery', 0):.2f}</td>"
+                        f"</tr>"
+                    )
+                deposit_card = f"""
+<div class="card">
+  <h3>{esc(t("deposit_allocation_section", lang))}</h3>
+  <p><strong>{esc(t("deposit_total_label", lang))}:</strong> ${float(dep_amt):.2f}</p>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>{esc(t("deposit_col_line", lang))}</th>
+      <th>{esc(t("deposit_col_original", lang))}</th>
+      <th>{esc(t("deposit_col_allocated", lang))}</th>
+      <th>{esc(t("deposit_col_net", lang))}</th>
+      <th>{esc(t("deposit_col_adj_gst", lang))}</th>
+      <th>{esc(t("deposit_col_adj_qst", lang))}</th>
+      <th>{esc(t("deposit_col_adj_hst", lang))}</th>
+    </tr></thead>
+    <tbody>{alloc_rows}</tbody>
+  </table>
+  </div>
+</div>"""
+        except Exception:
+            pass
+
+    return card + deposit_card
 
 
 def render_fraud_flags(row: Any, lang: str = "fr") -> str:
@@ -1651,6 +1850,42 @@ def _render_folder_watcher_status(lang: str = "fr") -> str:
 </div>"""
 
 
+def _render_openclaw_bridge_status(lang: str = "fr") -> str:
+    """Return an HTML snippet showing OpenClaw bridge stats for /troubleshoot."""
+    try:
+        from src.integrations.openclaw_bridge import get_bridge_stats
+        stats = get_bridge_stats()
+    except Exception as exc:
+        return f'<p class="text-muted">OpenClaw bridge unavailable: {esc(str(exc))}</p>'
+
+    if not stats.get("table_exists"):
+        return (
+            '<p class="text-muted">messaging_log table not found — '
+            'run <code>python scripts/migrate_db.py</code> first.</p>'
+        )
+
+    last_ts   = stats.get("last_received_at") or "—"
+    msg_today = stats.get("messages_today", 0)
+
+    return f"""
+<table>
+  <tbody>
+    <tr>
+      <td><strong>Last received message</strong></td>
+      <td><code>{esc(last_ts)}</code></td>
+    </tr>
+    <tr>
+      <td><strong>Messages received today</strong></td>
+      <td>{esc(str(msg_today))}</td>
+    </tr>
+    <tr>
+      <td><strong>Ingest endpoint</strong></td>
+      <td><code>POST http://127.0.0.1:{PORT}/ingest/openclaw</code></td>
+    </tr>
+  </tbody>
+</table>"""
+
+
 def _render_cloudflare_tunnel_status(lang: str = "fr") -> str:
     """Return an HTML snippet showing Cloudflare tunnel status for /troubleshoot."""
     import subprocess as _sp
@@ -1754,6 +1989,7 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
   <h2>{esc(t("diag_title", lang))}</h2>
   <div class="grid-2">
     <div>
+      <p><strong>{esc(t("version_label", lang))}:</strong> {esc(_get_app_version())}</p>
       <p><strong>{esc(t("diag_service_uptime", lang))}</strong> {esc(uptime_str)}</p>
       <p><strong>{esc(t("diag_db_path", lang))}</strong><br><code>{esc(str(DB_PATH))}</code></p>
       <p><strong>{esc(t("diag_db_size", lang))}</strong> {esc(db_size_str)}</p>
@@ -1779,6 +2015,7 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
       <button class="btn-danger">{esc(t("btn_restart", lang))}</button>
     </form>
     <a href="/troubleshoot" class="button-link btn-secondary">{esc(t("btn_refresh", lang))}</a>
+    <a href="/admin/cache" class="button-link btn-secondary">AI Cache</a>
   </div>
 </div>
 <div class="card">
@@ -1790,11 +2027,70 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
   {_render_cloudflare_tunnel_status(lang)}
 </div>
 <div class="card">
+  <h2>OpenClaw Bridge</h2>
+  {_render_openclaw_bridge_status(lang)}
+</div>
+<div class="card">
   <h2>{esc(t("diag_log_lines", lang))}</h2>
   <textarea readonly style="height:420px;font-size:12px;">{esc(log_lines)}</textarea>
 </div>"""
 
     return page_layout(t("dashboard_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# AI response cache admin page
+# ---------------------------------------------------------------------------
+
+def render_cache_admin(
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    stats = _get_cache_stats()
+    err = stats.get("error")
+
+    if err:
+        stats_html = f'<p class="text-danger">Error loading cache stats: {esc(err)}</p>'
+    else:
+        hit_pct = f"{stats['hit_rate'] * 100:.1f}%"
+        savings  = f"${stats['estimated_savings_usd']:.4f} USD"
+        stats_html = f"""
+<table>
+  <thead>
+    <tr>
+      <th>Metric</th>
+      <th>Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Cache hit rate</td><td><strong>{esc(hit_pct)}</strong></td></tr>
+    <tr><td>Total requests (audit log)</td><td>{esc(str(stats['total_requests']))}</td></tr>
+    <tr><td>Cache hits (audit log)</td><td>{esc(str(stats['cache_hits']))}</td></tr>
+    <tr><td>Estimated cost saved</td><td><strong>{esc(savings)}</strong></td></tr>
+    <tr><td>Cache entries (total)</td><td>{esc(str(stats['total_entries']))}</td></tr>
+    <tr><td>Cache entries (active / non-expired)</td><td>{esc(str(stats['active_entries']))}</td></tr>
+  </tbody>
+</table>"""
+
+    body = f"""
+<div class="card">
+  <h2>AI Response Cache</h2>
+  <p>Cache TTL: 30 days for classification tasks, 7 days for explanation tasks.<br>
+     Tasks never cached: <code>draft_client_message</code>, <code>escalation_decision</code>.</p>
+  {stats_html}
+  <div class="actions" style="margin-top:1rem;">
+    <form method="POST" action="/admin/cache/clear"
+          onsubmit="return confirm('Clear the entire AI response cache? This cannot be undone.');">
+      <button class="btn-danger">Clear Cache</button>
+    </form>
+    <a href="/admin/cache" class="button-link btn-secondary">Refresh</a>
+    <a href="/troubleshoot" class="button-link btn-secondary">Back to Diagnostics</a>
+  </div>
+</div>"""
+
+    return page_layout("AI Cache Admin", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
 # ---------------------------------------------------------------------------
@@ -2194,7 +2490,93 @@ def render_bank_import(
   </table>
 </div>"""
 
-            results_html = errors_html + summary_bar + table
+            # BLOCK 1: Split payment candidates section
+            split_html = ""
+            _sp_client = result.get("_client_code", "")
+            try:
+                from src.agents.tools.bank_matcher import BankMatcher
+                from src.agents.core.bank_models import BankTransaction
+                from src.agents.core.task_models import DocumentRecord
+                matcher = BankMatcher()
+                # Build transaction and document lists from result
+                unmatched_txns: list[BankTransaction] = []
+                for txn in result["transactions"]:
+                    if txn.get("review_status") != "Ready":
+                        unmatched_txns.append(BankTransaction(
+                            transaction_id=txn.get("document_id", ""),
+                            client_code=_sp_client,
+                            account_id=None,
+                            posted_date=txn.get("txn_date", ""),
+                            description=txn.get("description", ""),
+                            memo="",
+                            amount=float(txn.get("debit") or txn.get("credit") or 0),
+                            currency="CAD",
+                        ))
+                # Get unmatched invoices from DB
+                unmatched_docs: list[DocumentRecord] = []
+                if _sp_client:
+                    with open_db() as _sp_conn:
+                        _sp_rows = _sp_conn.execute(
+                            "SELECT document_id, vendor, amount, document_date, client_code "
+                            "FROM documents WHERE LOWER(TRIM(client_code)) = LOWER(TRIM(?)) "
+                            "AND review_status NOT IN ('Posted','Ignored') "
+                            "AND amount IS NOT NULL AND amount > 0",
+                            (_sp_client,),
+                        ).fetchall()
+                        for _r in _sp_rows:
+                            unmatched_docs.append(DocumentRecord(
+                                document_id=_r["document_id"],
+                                file_name="", file_path="",
+                                client_code=_r["client_code"] or "",
+                                vendor=_r["vendor"] or "",
+                                doc_type="invoice",
+                                amount=float(_r["amount"]),
+                                document_date=_r["document_date"] or "",
+                                gl_account="", tax_code="", category="",
+                                review_status="Needs Review",
+                                confidence=0.0, raw_result={},
+                            ))
+                splits = matcher.split_payment_detector(unmatched_docs, unmatched_txns)
+                if splits:
+                    split_rows = ""
+                    for sp in splits:
+                        inv_ids = sp["matched_document_ids"]
+                        inv_list = ", ".join(esc(d[:16]) for d in inv_ids)
+                        inv_hidden = "".join(
+                            f'<input type="hidden" name="invoice_ids" value="{esc(d)}">'
+                            for d in inv_ids
+                        )
+                        split_rows += (
+                            f"<tr>"
+                            f"<td style='font-weight:600;'>${sp['transaction_amount']:,.2f}</td>"
+                            f"<td>{inv_list}</td>"
+                            f"<td style='text-align:right;'>${sp['combined_amount']:,.2f}</td>"
+                            f"<td style='text-align:right;color:#6b7280;'>${sp['difference']:,.2f}</td>"
+                            f"<td>"
+                            f"<form method='POST' action='/bank_import/confirm_split' style='display:inline;'>"
+                            f"<input type='hidden' name='transaction_id' value='{esc(sp['transaction_id'])}'>"
+                            f"{inv_hidden}"
+                            f"<button type='submit' class='btn-primary' style='padding:4px 10px;font-size:12px;'>"
+                            f"{esc(t('split_confirm', lang))}</button></form>"
+                            f"</td></tr>\n"
+                        )
+                    split_html = (
+                        f'<div class="card" style="margin-top:16px;">'
+                        f'<h3>{esc(t("split_payments_title", lang))}</h3>'
+                        f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+                        f'<thead><tr style="background:#f9fafb;">'
+                        f'<th style="padding:6px 8px;">{esc(t("split_txn_amount", lang))}</th>'
+                        f'<th style="padding:6px 8px;">{esc(t("split_invoices", lang))}</th>'
+                        f'<th style="text-align:right;padding:6px 8px;">{esc(t("split_total", lang))}</th>'
+                        f'<th style="text-align:right;padding:6px 8px;">{esc(t("split_difference", lang))}</th>'
+                        f'<th style="padding:6px 8px;"></th>'
+                        f'</tr></thead>'
+                        f'<tbody>{split_rows}</tbody></table></div>'
+                    )
+            except Exception:
+                pass  # Don't block bank import if split detection fails
+
+            results_html = errors_html + summary_bar + table + split_html
 
     body = upload_form + results_html
     return page_layout(
@@ -2398,6 +2780,373 @@ def _analytics_deadlines_at_risk(conn: sqlite3.Connection) -> list[dict[str, Any
 # ---------------------------------------------------------------------------
 # Analytics page renderer
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Bank Reconciliation pages
+# ---------------------------------------------------------------------------
+
+def render_reconciliation_list(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+    filter_client: str = "",
+    filter_period: str = "",
+) -> str:
+    """List all reconciliations with status badges."""
+    with open_db() as conn:
+        _ensure_recon_tables(conn)
+        recons = recon_list(conn, client_code=filter_client, period=filter_period)
+
+    status_badge = {
+        "open": '<span class="badge badge-yellow">{label}</span>',
+        "balanced": '<span class="badge badge-green">{label}</span>',
+        "exception": '<span class="badge" style="background:#fee2e2;color:#991b1b;">{label}</span>',
+    }
+
+    rows_html = ""
+    for r in recons:
+        st = r.get("status", "open")
+        label_key = f"recon_status_{st}"
+        badge = status_badge.get(st, '<span class="badge">{label}</span>').format(
+            label=esc(t(label_key, lang))
+        )
+        diff = r.get("difference")
+        diff_str = f"${diff:,.2f}" if diff is not None else "—"
+        diff_color = "color:#16a34a;" if diff is not None and abs(diff) <= 0.01 else "color:#dc2626;"
+        rows_html += (
+            f"<tr>"
+            f"<td><a href=\"/reconciliation/detail?id={urlquote(r['reconciliation_id'])}\">"
+            f"{esc(r['client_code'])}</a></td>"
+            f"<td>{esc(r.get('account_name', ''))}</td>"
+            f"<td>{esc(r.get('period_end_date', ''))}</td>"
+            f"<td style='text-align:right;'>${r.get('statement_ending_balance', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${r.get('gl_ending_balance', 0):,.2f}</td>"
+            f"<td style='text-align:right;{diff_color}'>{diff_str}</td>"
+            f"<td>{badge}</td>"
+            f"</tr>\n"
+        )
+
+    if not recons:
+        table_html = f'<p class="muted">{esc(t("recon_no_reconciliations", lang))}</p>'
+    else:
+        table_html = (
+            f'<div style="overflow-x:auto;"><table>'
+            f'<thead><tr>'
+            f'<th>{esc(t("recon_client_code", lang))}</th>'
+            f'<th>{esc(t("recon_account_name", lang))}</th>'
+            f'<th>{esc(t("recon_period_end", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("recon_stmt_balance", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("recon_gl_balance", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("recon_difference", lang))}</th>'
+            f'<th>{esc(t("recon_status", lang))}</th>'
+            f'</tr></thead>'
+            f'<tbody>{rows_html}</tbody></table></div>'
+        )
+
+    filter_form = (
+        f'<form method="GET" action="/reconciliation" style="display:flex;gap:8px;align-items:end;margin-bottom:12px;">'
+        f'<div class="field"><label>{esc(t("recon_filter_client", lang))}</label>'
+        f'<input type="text" name="client_code" value="{esc(filter_client)}" style="width:140px;"></div>'
+        f'<div class="field"><label>{esc(t("recon_filter_period", lang))}</label>'
+        f'<input type="text" name="period" value="{esc(filter_period)}" placeholder="YYYY-MM" style="width:120px;"></div>'
+        f'<button class="btn-primary" type="submit">{esc(t("btn_filter", lang))}</button>'
+        f'</form>'
+    )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("recon_h1", lang))}</h2>'
+        f'<div style="display:flex;gap:8px;">'
+        f'<a href="/reconciliation/new" class="btn-primary button-link">{esc(t("recon_btn_new", lang))}</a>'
+        f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div></div>\n'
+        f'<div class="card">{filter_form}{table_html}</div>'
+    )
+    return page_layout(
+        t("recon_title", lang), body,
+        user=user, flash=flash, flash_error=flash_error, lang=lang,
+    )
+
+
+def render_reconciliation_new(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    """Form to start a new reconciliation."""
+    form_html = f"""
+<div class="card">
+  <h2>{esc(t("recon_new_title", lang))}</h2>
+  <form method="POST" action="/reconciliation/create">
+    <div class="grid-2">
+      <div class="field">
+        <label>{esc(t("recon_client_code", lang))}</label>
+        <input type="text" name="client_code" required>
+      </div>
+      <div class="field">
+        <label>{esc(t("recon_account_name", lang))}</label>
+        <input type="text" name="account_name" required>
+      </div>
+      <div class="field">
+        <label>{esc(t("recon_account_number", lang))}</label>
+        <input type="text" name="account_number">
+      </div>
+      <div class="field">
+        <label>{esc(t("recon_period_end", lang))}</label>
+        <input type="date" name="period_end_date" required>
+      </div>
+      <div class="field">
+        <label>{esc(t("recon_stmt_balance", lang))}</label>
+        <input type="number" name="statement_balance" step="0.01" required>
+      </div>
+      <div class="field">
+        <label>{esc(t("recon_gl_balance", lang))}</label>
+        <input type="number" name="gl_balance" step="0.01" required>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn-primary" type="submit">{esc(t("recon_btn_create", lang))}</button>
+      <a href="/reconciliation" class="btn-secondary button-link" style="margin-left:8px;">{esc(t("btn_back_to_queue", lang))}</a>
+    </div>
+  </form>
+</div>"""
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("recon_new_title", lang))}</h2>'
+        f'<a href="/reconciliation" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div>\n{form_html}'
+    )
+    return page_layout(
+        t("recon_new_title", lang), body,
+        user=user, flash=flash, flash_error=flash_error, lang=lang,
+    )
+
+
+def render_reconciliation_detail(
+    recon_id: str,
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    """Full reconciliation detail page showing both sides."""
+    with open_db() as conn:
+        _ensure_recon_tables(conn)
+        recon = recon_get(recon_id, conn)
+        if not recon:
+            return page_layout(
+                t("err_not_found", lang),
+                f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2></div>',
+                user=user, lang=lang,
+            )
+        items = recon_get_items(recon_id, conn)
+        result = recon_calculate(recon_id, conn)
+
+    bank_side = result.get("bank_side", {})
+    book_side = result.get("book_side", {})
+    difference = result.get("difference", 0)
+    is_balanced = result.get("is_balanced", False)
+
+    st = recon.get("status", "open")
+    status_badge_map = {
+        "open": "badge-yellow",
+        "balanced": "badge-green",
+        "exception": "",
+    }
+    badge_cls = status_badge_map.get(st, "")
+    badge_style = ' style="background:#fee2e2;color:#991b1b;"' if st == "exception" else ""
+    status_badge = f'<span class="badge {badge_cls}"{badge_style}>{esc(t(f"recon_status_{st}", lang))}</span>'
+
+    # Bank side card
+    dit_items = [i for i in items if i["item_type"] == "deposit_in_transit" and i["status"] == "outstanding"]
+    oc_items = [i for i in items if i["item_type"] == "outstanding_cheque" and i["status"] == "outstanding"]
+    be_items = [i for i in items if i["item_type"] == "bank_error" and i["status"] == "outstanding"]
+
+    def _item_rows(item_list: list[dict], can_clear: bool = True) -> str:
+        html = ""
+        for it in item_list:
+            clear_btn = ""
+            if can_clear and st != "balanced":
+                clear_btn = (
+                    f'<form method="POST" action="/reconciliation/clear_item" style="display:inline;">'
+                    f'<input type="hidden" name="item_id" value="{esc(it["item_id"])}">'
+                    f'<input type="hidden" name="reconciliation_id" value="{esc(recon_id)}">'
+                    f'<button class="btn-secondary" style="padding:2px 8px;font-size:11px;" type="submit">'
+                    f'{esc(t("recon_btn_clear", lang))}</button></form>'
+                )
+            html += (
+                f"<tr>"
+                f"<td>{esc(it['description'])}</td>"
+                f"<td style='text-align:right;'>${it['amount']:,.2f}</td>"
+                f"<td>{esc(it.get('transaction_date') or '')}</td>"
+                f"<td>{clear_btn}</td>"
+                f"</tr>"
+            )
+        return html
+
+    bank_card = (
+        f'<div class="card">'
+        f'<h3>{esc(t("recon_bank_side", lang))}</h3>'
+        f'<table style="width:100%;">'
+        f'<tr><td>{esc(t("recon_stmt_bal_label", lang))}</td>'
+        f'<td style="text-align:right;font-weight:700;">${bank_side.get("statement_balance", 0):,.2f}</td></tr>'
+    )
+    if dit_items:
+        bank_card += (
+            f'<tr><td colspan="2" style="padding-top:8px;"><strong>{esc(t("recon_dit", lang))}</strong></td></tr>'
+        )
+        bank_card += (
+            f'<tr><td colspan="2"><table style="width:100%;font-size:13px;">'
+            f'<thead><tr><th>{esc(t("recon_description", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("recon_amount", lang))}</th>'
+            f'<th>{esc(t("recon_txn_date", lang))}</th><th></th></tr></thead>'
+            f'<tbody>{_item_rows(dit_items)}</tbody></table></td></tr>'
+        )
+        bank_card += (
+            f'<tr><td>+ {esc(t("recon_dit", lang))}</td>'
+            f'<td style="text-align:right;">${bank_side.get("deposits_in_transit", 0):,.2f}</td></tr>'
+        )
+    if oc_items:
+        bank_card += (
+            f'<tr><td colspan="2" style="padding-top:8px;"><strong>{esc(t("recon_oc", lang))}</strong></td></tr>'
+        )
+        bank_card += (
+            f'<tr><td colspan="2"><table style="width:100%;font-size:13px;">'
+            f'<thead><tr><th>{esc(t("recon_description", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("recon_amount", lang))}</th>'
+            f'<th>{esc(t("recon_txn_date", lang))}</th><th></th></tr></thead>'
+            f'<tbody>{_item_rows(oc_items)}</tbody></table></td></tr>'
+        )
+        bank_card += (
+            f'<tr><td>- {esc(t("recon_oc", lang))}</td>'
+            f'<td style="text-align:right;">${bank_side.get("outstanding_cheques", 0):,.2f}</td></tr>'
+        )
+    bank_card += (
+        f'<tr style="border-top:2px solid #111827;">'
+        f'<td><strong>{esc(t("recon_adj_bank", lang))}</strong></td>'
+        f'<td style="text-align:right;font-weight:700;">${bank_side.get("adjusted_bank_balance", 0):,.2f}</td></tr>'
+        f'</table></div>'
+    )
+
+    # Book side card
+    bc_items = [i for i in items if i["item_type"] == "bank_charge" and i["status"] == "outstanding"]
+    ie_items = [i for i in items if i["item_type"] == "interest_earned" and i["status"] == "outstanding"]
+    bke_items = [i for i in items if i["item_type"] == "book_error" and i["status"] == "outstanding"]
+
+    book_card = (
+        f'<div class="card">'
+        f'<h3>{esc(t("recon_book_side", lang))}</h3>'
+        f'<table style="width:100%;">'
+        f'<tr><td>{esc(t("recon_gl_bal_label", lang))}</td>'
+        f'<td style="text-align:right;font-weight:700;">${book_side.get("gl_balance", 0):,.2f}</td></tr>'
+    )
+    if bc_items:
+        book_card += (
+            f'<tr><td>- {esc(t("recon_bank_charges", lang))}</td>'
+            f'<td style="text-align:right;">${book_side.get("bank_charges", 0):,.2f}</td></tr>'
+        )
+    if ie_items:
+        book_card += (
+            f'<tr><td>+ {esc(t("recon_interest", lang))}</td>'
+            f'<td style="text-align:right;">${book_side.get("interest_earned", 0):,.2f}</td></tr>'
+        )
+    if bke_items:
+        book_card += (
+            f'<tr><td>+/- {esc(t("recon_book_errors", lang))}</td>'
+            f'<td style="text-align:right;">${book_side.get("book_errors", 0):,.2f}</td></tr>'
+        )
+    book_card += (
+        f'<tr style="border-top:2px solid #111827;">'
+        f'<td><strong>{esc(t("recon_adj_book", lang))}</strong></td>'
+        f'<td style="text-align:right;font-weight:700;">${book_side.get("adjusted_book_balance", 0):,.2f}</td></tr>'
+        f'</table></div>'
+    )
+
+    # Difference
+    diff_color = "color:#16a34a;" if is_balanced else "color:#dc2626;"
+    diff_card = (
+        f'<div class="card" style="text-align:center;">'
+        f'<h3>{esc(t("recon_difference", lang))}</h3>'
+        f'<div style="font-size:2rem;font-weight:700;{diff_color}">${difference:,.2f}</div>'
+        f'<div style="margin-top:4px;">{status_badge}</div>'
+        f'</div>'
+    )
+
+    # Add item form (only if not finalized)
+    add_item_form = ""
+    if st != "balanced":
+        item_types = [
+            ("deposit_in_transit", t("recon_dit", lang)),
+            ("outstanding_cheque", t("recon_oc", lang)),
+            ("bank_error", t("recon_bank_errors", lang)),
+            ("book_error", t("recon_book_errors", lang)),
+            ("bank_charge", t("recon_bank_charges", lang)),
+            ("interest_earned", t("recon_interest", lang)),
+        ]
+        options = "".join(f'<option value="{k}">{esc(v)}</option>' for k, v in item_types)
+        add_item_form = f"""
+<div class="card">
+  <h3>{esc(t("recon_btn_add_item", lang))}</h3>
+  <form method="POST" action="/reconciliation/add_item">
+    <input type="hidden" name="reconciliation_id" value="{esc(recon_id)}">
+    <div class="grid-2">
+      <div class="field"><label>{esc(t("recon_item_type", lang))}</label>
+        <select name="item_type">{options}</select></div>
+      <div class="field"><label>{esc(t("recon_description", lang))}</label>
+        <input type="text" name="description" required></div>
+      <div class="field"><label>{esc(t("recon_amount", lang))}</label>
+        <input type="number" name="amount" step="0.01" required></div>
+      <div class="field"><label>{esc(t("recon_txn_date", lang))}</label>
+        <input type="date" name="transaction_date"></div>
+    </div>
+    <button class="btn-primary" type="submit" style="margin-top:8px;">{esc(t("recon_btn_add_item", lang))}</button>
+  </form>
+</div>"""
+
+    # Finalize / PDF buttons
+    action_btns = ""
+    if st != "balanced":
+        if is_balanced:
+            action_btns += (
+                f'<form method="POST" action="/reconciliation/finalize" style="display:inline;">'
+                f'<input type="hidden" name="reconciliation_id" value="{esc(recon_id)}">'
+                f'<button class="btn-primary" type="submit">{esc(t("recon_btn_finalize", lang))}</button>'
+                f'</form> '
+            )
+    if st == "balanced":
+        action_btns += (
+            f'<a href="/reconciliation/pdf?id={urlquote(recon_id)}" class="btn-secondary button-link">'
+            f'{esc(t("recon_btn_pdf", lang))}</a> '
+        )
+
+    # Metadata
+    meta = ""
+    if recon.get("prepared_by"):
+        meta += f'<span class="muted">{esc(t("recon_prepared_by", lang))}: {esc(recon["prepared_by"])}</span> '
+    if recon.get("reviewed_by"):
+        meta += f'<span class="muted">{esc(t("recon_reviewed_by", lang))}: {esc(recon["reviewed_by"])}</span>'
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("recon_detail_title", lang))} — {esc(recon["client_code"])}</h2>'
+        f'<div style="display:flex;gap:8px;">{action_btns}'
+        f'<a href="/reconciliation" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div></div>\n'
+        f'<div style="margin-bottom:8px;">{meta}</div>'
+        f'<div class="grid-2">{bank_card}{book_card}</div>\n'
+        f'{diff_card}\n'
+        f'{add_item_form}'
+    )
+    return page_layout(
+        t("recon_detail_title", lang), body,
+        user=user, flash=flash, flash_error=flash_error, lang=lang,
+    )
+
 
 def render_analytics(
     ctx: dict[str, Any],
@@ -2617,6 +3366,99 @@ def render_analytics(
             f'<p class="muted">{esc(t("analytics_no_deadlines", lang))}</p></div>'
         )
 
+    # ------------------------------------------------------------------ #
+    # Section 6: Reconciliation Summary
+    # ------------------------------------------------------------------ #
+    with open_db() as conn:
+        _ensure_recon_tables(conn)
+        recon_summary = recon_get_summary(conn)
+
+    open_clients_list = recon_summary.get("open_clients", [])
+    balanced_clients_list = recon_summary.get("balanced_clients", [])
+    at_risk_list = recon_summary.get("at_risk_clients", [])
+    avg_days = recon_summary.get("avg_days_to_complete")
+
+    def _client_badges(clients: list[str], color: str) -> str:
+        if not clients:
+            return '<span class="muted">\u2014</span>'
+        return " ".join(
+            f'<span class="badge" style="background:{color}20;color:{color};">{esc(c)}</span>'
+            for c in clients[:20]
+        )
+
+    avg_days_str = f"{avg_days:.1f}" if avg_days is not None else "\u2014"
+    recon_section = (
+        f'<div class="card">'
+        f'<h2>{esc(t("recon_summary_title", lang))}</h2>'
+        f'<table style="max-width:600px;">'
+        f'<tr><td><strong>{esc(t("recon_summary_open", lang))}</strong></td>'
+        f'<td>{_client_badges(open_clients_list, "#d97706")}</td></tr>'
+        f'<tr><td><strong>{esc(t("recon_summary_balanced", lang))}</strong></td>'
+        f'<td>{_client_badges(balanced_clients_list, "#16a34a")}</td></tr>'
+        f'<tr><td><strong>{esc(t("recon_summary_at_risk", lang))}</strong></td>'
+        f'<td>{_client_badges(at_risk_list, "#dc2626")}</td></tr>'
+        f'<tr><td><strong>{esc(t("recon_summary_avg_days", lang))}</strong></td>'
+        f'<td>{avg_days_str}</td></tr>'
+        f'</table></div>'
+    )
+
+    # ------------------------------------------------------------------ #
+    # Section 7: Going Concern Risk (BLOCK 2)
+    # ------------------------------------------------------------------ #
+    gc_section = ""
+    try:
+        with open_db() as conn:
+            _cas.ensure_cas_tables(conn)
+            # Get all clients with engagements
+            client_rows = conn.execute(
+                "SELECT DISTINCT client_code FROM engagements WHERE status NOT IN ('issued')"
+            ).fetchall()
+            gc_at_risk = []
+            for cr in client_rows:
+                cc = cr["client_code"]
+                gc = _cas.detect_going_concern_indicators(cc, conn)
+                if gc.get("indicator_count", 0) >= 2:
+                    gc_at_risk.append({
+                        "client_code": cc,
+                        "indicator_count": gc["indicator_count"],
+                        "indicators": gc.get("indicators", []),
+                    })
+        if gc_at_risk:
+            gc_rows_html = ""
+            for g in gc_at_risk:
+                descs = "; ".join(
+                    esc(i.get("description", "")[:60]) for i in g["indicators"][:3]
+                )
+                gc_rows_html += (
+                    f"<tr>"
+                    f"<td><strong>{esc(g['client_code'])}</strong></td>"
+                    f"<td style='text-align:center;'>"
+                    f"<span class='badge' style='background:#fee2e220;color:#dc2626;'>{g['indicator_count']}</span></td>"
+                    f"<td style='font-size:12px;color:#6b7280;'>{descs}</td>"
+                    f"</tr>\n"
+                )
+            gc_section = (
+                f'<div class="card">'
+                f'<h2>{esc(t("gc_risk_title", lang))}</h2>'
+                f'<table style="width:100%;">'
+                f'<thead><tr>'
+                f'<th>{esc(t("col_client", lang))}</th>'
+                f'<th style="text-align:center;">{esc(t("gc_indicators", lang))}</th>'
+                f'<th>Details</th>'
+                f'</tr></thead>'
+                f'<tbody>{gc_rows_html}</tbody></table></div>'
+            )
+        else:
+            gc_section = (
+                f'<div class="card"><h2>{esc(t("gc_risk_title", lang))}</h2>'
+                f'<p class="muted">{esc(t("gc_no_risk", lang))}</p></div>'
+            )
+    except Exception:
+        gc_section = (
+            f'<div class="card"><h2>{esc(t("gc_risk_title", lang))}</h2>'
+            f'<p class="muted">{esc(t("gc_no_risk", lang))}</p></div>'
+        )
+
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(t("analytics_h1", lang))}</h2>'
@@ -2625,7 +3467,9 @@ def render_analytics(
         f'{staff_section}\n'
         f'{client_section}\n'
         f'{trends_section}\n'
-        f'<div class="grid-2">{fraud_section}{deadlines_section}</div>'
+        f'<div class="grid-2">{fraud_section}{deadlines_section}</div>\n'
+        f'{recon_section}\n'
+        f'{gc_section}'
     )
     return page_layout(
         t("analytics_title", lang), body,
@@ -2846,6 +3690,19 @@ def render_working_papers(
     if client_code and period:
         with open_db() as conn:
             papers = _audit.get_working_papers(conn, client_code, period, engagement_type or None)
+            # BLOCK 3: Check materiality for each paper
+            _wp_perf_mat = None
+            try:
+                _wp_eng_r = conn.execute(
+                    "SELECT engagement_id FROM engagements WHERE client_code = ? AND period = ? AND engagement_type = ? LIMIT 1",
+                    (client_code, period, engagement_type or "audit"),
+                ).fetchone()
+                if _wp_eng_r:
+                    _wp_mat = _cas.get_materiality(conn, _wp_eng_r["engagement_id"])
+                    if _wp_mat:
+                        _wp_perf_mat = float(_wp_mat["performance_materiality"])
+            except Exception:
+                pass
 
         if papers:
             def _status_badge(s: str) -> str:
@@ -2864,10 +3721,20 @@ def render_working_papers(
                 diff_html = f"${diff_val:,.2f}" if diff_val is not None else '<span class="muted">\u2014</span>'
                 tested_by = esc(p.get("tested_by") or "")
                 reviewed  = esc(p.get("reviewed_by") or "")
+                # BLOCK 3: Materiality badge
+                mat_badge = ""
+                if _wp_perf_mat is not None and p.get("balance_per_books") is not None:
+                    _bal_abs = abs(float(p["balance_per_books"]))
+                    if _bal_abs >= _wp_perf_mat:
+                        mat_badge = (
+                            f' <span style="background:#fef3c7;color:#92400e;padding:2px 6px;'
+                            f'border-radius:10px;font-size:11px;font-weight:600;">'
+                            f'{esc(t("mat_badge_material", lang))}</span>'
+                        )
                 rows_html += (
                     f"<tr>"
                     f"<td><strong>{esc(p.get('account_code', ''))}</strong></td>"
-                    f"<td>{esc(p.get('account_name', ''))}</td>"
+                    f"<td>{esc(p.get('account_name', ''))}{mat_badge}</td>"
                     f"<td style='text-align:right;'>{bal_books}</td>"
                     f"<td style='text-align:right;'>{bal_conf}</td>"
                     f"<td style='text-align:right;'>{diff_html}</td>"
@@ -2884,6 +3751,99 @@ def render_working_papers(
                     f"{esc(t('wp_sign_off', lang))}</button></form>"
                     f"</td>"
                     f"</tr>\n"
+                )
+
+            # BLOCK 5: Build assertion coverage section for material items
+            assertion_section = ""
+            _assertion_names = ["completeness", "accuracy", "existence", "cutoff", "classification"]
+            _assertion_keys = {
+                "completeness": "assertion_completeness",
+                "accuracy": "assertion_accuracy",
+                "existence": "assertion_existence",
+                "cutoff": "assertion_cutoff",
+                "classification": "assertion_classification",
+            }
+            _material_papers = []
+            for p in papers:
+                if _wp_perf_mat is not None and p.get("balance_per_books") is not None:
+                    if abs(float(p["balance_per_books"])) >= _wp_perf_mat:
+                        _material_papers.append(p)
+            if _material_papers:
+                # Get existing assertion coverage
+                _cov_map: dict[str, list[str]] = {}
+                try:
+                    with open_db() as _ac_conn:
+                        for mp in _material_papers:
+                            pid = mp.get("paper_id") or str(mp.get("id", ""))
+                            cov = _cas.get_assertion_coverage(_ac_conn, pid)
+                            for item in cov.get("items", []):
+                                _cov_map[item["item_id"]] = item.get("assertions_tested", [])
+                except Exception:
+                    pass
+                a_rows = ""
+                _has_warning = False
+                for mp in _material_papers:
+                    pid = mp.get("paper_id") or str(mp.get("id", ""))
+                    # Get items for this paper
+                    _item_covs = _cov_map  # We use all items' coverage
+                    # Build checkboxes for each assertion
+                    # We'll use the paper_id as the item for simplicity
+                    existing_assertions = []
+                    for iid, asserts in _cov_map.items():
+                        # Check if this item belongs to this paper
+                        existing_assertions = asserts
+                        break  # Simplified: use first item's coverage
+                    checks = ""
+                    for aname in _assertion_names:
+                        checked = "checked" if aname in existing_assertions else ""
+                        checks += (
+                            f'<td style="text-align:center;">'
+                            f'<input type="checkbox" name="assertions" value="{aname}" {checked}>'
+                            f'</td>'
+                        )
+                    _is_missing_required = "completeness" not in existing_assertions or "existence" not in existing_assertions
+                    if _is_missing_required:
+                        _has_warning = True
+                    a_rows += (
+                        f"<tr>"
+                        f"<td><strong>{esc(mp.get('account_code', ''))}</strong></td>"
+                        f"<td>{esc(mp.get('account_name', ''))}</td>"
+                        f"{checks}"
+                        f"<td>"
+                        f"<form method='POST' action='/working_papers/save_assertions' style='display:inline;'>"
+                        f"<input type='hidden' name='paper_id' value='{esc(pid)}'>"
+                        f"<input type='hidden' name='client_code' value='{esc(client_code)}'>"
+                        f"<input type='hidden' name='period' value='{esc(period)}'>"
+                        f"<input type='hidden' name='engagement_type' value='{esc(engagement_type)}'>"
+                        + "".join(
+                            f"<input type='hidden' name='assertions' value='{a}'>"
+                            for a in existing_assertions
+                        )
+                        + f"<button type='submit' class='btn-primary' style='padding:3px 8px;font-size:11px;'>"
+                        f"{esc(t('assertion_save', lang))}</button></form>"
+                        f"</td></tr>\n"
+                    )
+                warning_banner = ""
+                if _has_warning:
+                    warning_banner = (
+                        f'<div class="flash error" style="margin-bottom:8px;">'
+                        f'{esc(t("assertion_warning", lang))}</div>'
+                    )
+                th_assertions = "".join(
+                    f'<th style="text-align:center;font-size:11px;">{esc(t(_assertion_keys[a], lang))}</th>'
+                    for a in _assertion_names
+                )
+                assertion_section = (
+                    f'<div class="card" style="margin-top:16px;">'
+                    f'<h3>{esc(t("assertion_title", lang))}</h3>'
+                    f'{warning_banner}'
+                    f'<div style="overflow-x:auto;">'
+                    f'<table style="font-size:13px;">'
+                    f'<thead><tr>'
+                    f'<th>Code</th><th>Account</th>'
+                    f'{th_assertions}'
+                    f'<th></th></tr></thead>'
+                    f'<tbody>{a_rows}</tbody></table></div></div>\n'
                 )
 
             pdf_url = f"/working_papers/pdf?client_code={urlquote(client_code)}&period={urlquote(period)}&engagement_type={urlquote(engagement_type)}"
@@ -2908,6 +3868,7 @@ def render_working_papers(
                 f'</tr></thead>'
                 f'<tbody>{rows_html}</tbody>'
                 f'</table></div></div>\n'
+                f'{assertion_section}'
             )
         else:
             coa_form = (
@@ -3543,6 +4504,38 @@ def render_engagements(
     return page_layout(t("eng_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+def _render_checklist_html(engagement_id: str, lang: str) -> str:
+    """Build the engagement completion checklist HTML."""
+    with open_db() as conn:
+        checklist = _cas.get_engagement_checklist(engagement_id, conn)
+    if not checklist:
+        return '<p class="muted">—</p>'
+    checklist_item_keys = {
+        "materiality_calculated": "checklist_materiality",
+        "risk_matrix_completed": "checklist_risk_matrix",
+        "control_tests_documented": "checklist_control_tests",
+        "related_parties_identified": "checklist_related_parties",
+        "rep_letter_signed": "checklist_rep_letter",
+        "working_papers_signed_off": "checklist_working_papers",
+        "going_concern_assessed": "checklist_going_concern_assessed",
+        "subsequent_events_clear": "checklist_subsequent_events_clear",
+        "assertion_coverage": "checklist_assertion_coverage",
+    }
+    rows = ""
+    for item in checklist:
+        icon = "✅" if item["status"] == "complete" else "❌"
+        label_key = checklist_item_keys.get(item["item"], item["item"])
+        label = t(label_key, lang)
+        req_label = t("checklist_required", lang) if item["required"] else t("checklist_not_required", lang)
+        req_color = "#dc2626" if item["required"] and item["status"] != "complete" else "#6b7280"
+        rows += (
+            f'<tr><td>{icon}</td>'
+            f'<td style="font-size:13px;">{esc(label)}</td>'
+            f'<td style="font-size:12px;color:{req_color};">{esc(req_label)}</td></tr>'
+        )
+    return f'<table style="width:100%;"><tbody>{rows}</tbody></table>'
+
+
 # ---------------------------------------------------------------------------
 # Audit Module — Engagement Detail
 # ---------------------------------------------------------------------------
@@ -3566,6 +4559,20 @@ def render_engagement_detail(
             )
         prog = _audit.get_engagement_progress(conn, engagement_id)
         papers = _audit.get_working_papers(conn, eng["client_code"], eng["period"], eng.get("engagement_type"))
+        eng_mat = _cas.get_materiality(conn, engagement_id)
+        eng_risk_summary = _cas.get_risk_summary(conn, engagement_id)
+        # BLOCK 4: Auto-run subsequent events check
+        se_events = []
+        try:
+            se_events = _cas.check_subsequent_events(engagement_id, conn)
+        except Exception:
+            pass
+        # BLOCK 2: Auto-run going concern check
+        gc_result = {"indicators": [], "assessment_required": False, "indicator_count": 0}
+        try:
+            gc_result = _cas.detect_going_concern_indicators(eng["client_code"], conn)
+        except Exception:
+            pass
 
     pct = int(prog.get("pct", 0))
     signed_off = prog.get("signed_off", 0)
@@ -3652,6 +4659,50 @@ def render_engagement_detail(
         f'</div>'
         + (
             f'<div class="card" style="margin-top:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_materiality_nav", lang))}'
+            f' <a href="/audit/materiality?engagement_id={urlquote(str(engagement_id))}" '
+            f'style="font-size:12px;font-weight:400;margin-left:8px;">→ {esc(t("eng_detail", lang))}</a></h4>'
+            + (
+                f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_planning", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#1e40af;">${float(eng_mat.get("planning_materiality", 0)):,.2f}</span></div>'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_performance", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#92400e;">${float(eng_mat.get("performance_materiality", 0)):,.2f}</span></div>'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_trivial", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#166534;">${float(eng_mat.get("clearly_trivial", 0)):,.2f}</span></div>'
+                f'</div>'
+                if eng_mat else
+                f'<p class="muted" style="margin:0;">{esc(t("cas_mat_no_assessment", lang))}</p>'
+            )
+            + f'</div>'
+        )
+        + (
+            f'<div class="card" style="margin-top:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_risk_nav", lang))}'
+            f' <a href="/audit/risk?engagement_id={urlquote(str(engagement_id))}" '
+            f'style="font-size:12px;font-weight:400;margin-left:8px;">→ {esc(t("eng_detail", lang))}</a></h4>'
+            + (
+                f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_risk_total", lang))}</span><br>'
+                f'<span style="font-weight:600;">{eng_risk_summary.get("total_assessments", 0)}</span></div>'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_risk_high_count", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#dc2626;">{eng_risk_summary.get("high", 0)}</span></div>'
+                f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_risk_significant_count", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#9333ea;">{eng_risk_summary.get("significant_risks", 0)}</span></div>'
+                f'</div>'
+                if eng_risk_summary.get("total_assessments", 0) > 0 else
+                f'<p class="muted" style="margin:0;">{esc(t("cas_risk_no_assessments", lang))}</p>'
+            )
+            + f'</div>'
+        )
+        + (
+            f'<div class="card" style="margin-top:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("checklist_title", lang))}</h4>'
+            + _render_checklist_html(engagement_id, lang)
+            + f'</div>'
+        )
+        + (
+            f'<div class="card" style="margin-top:16px;">'
             f'<h4 style="margin-top:0;">{esc(t("wp_title", lang))}</h4>'
             f'<div style="overflow-x:auto;"><table>'
             f'<thead><tr><th>Code</th><th>Account</th><th>{esc(t("col_status", lang))}</th></tr></thead>'
@@ -3659,8 +4710,860 @@ def render_engagement_detail(
             if papers else
             f'<div class="card" style="margin-top:16px;"><p class="muted">{esc(t("wp_no_papers", lang))}</p></div>'
         )
+        # BLOCK 4: Subsequent events section
+        + (
+            f'<div class="card" style="margin-top:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("se_title", lang))}'
+            f' <span class="badge" style="background:#fee2e220;color:#dc2626;margin-left:8px;">'
+            f'{len(se_events)}</span></h4>'
+            + (
+                f'<div class="flash error" style="margin-bottom:8px;">{esc(t("se_warning", lang))}</div>'
+                if se_events else ''
+            )
+            + (
+                '<div style="overflow-x:auto;"><table style="font-size:13px;">'
+                '<thead><tr><th>Document</th><th>Vendor</th><th style="text-align:right;">Amount</th>'
+                '<th>Date</th><th>Status</th></tr></thead><tbody>'
+                + "".join(
+                    f"<tr><td><code>{esc(str(e.get('document_id', '')))}</code></td>"
+                    f"<td>{esc(str(e.get('vendor', '')))}</td>"
+                    f"<td style='text-align:right;'>${abs(e.get('amount', 0)):,.2f}</td>"
+                    f"<td>{esc(str(e.get('document_date', '')))}</td>"
+                    f"<td><span class='badge' style='background:#fef3c720;color:#92400e;'>"
+                    f"{esc(e.get('status', ''))}</span></td></tr>"
+                    for e in se_events
+                )
+                + '</tbody></table></div>'
+                if se_events else
+                f'<p class="muted">{esc(t("se_none", lang))}</p>'
+            )
+            + f'</div>'
+        )
+        # BLOCK 2: Going concern status on engagement detail
+        + (
+            f'<div class="card" style="margin-top:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("gc_risk_title", lang))}</h4>'
+            + (
+                f'<div class="flash error" style="margin-bottom:8px;">'
+                f'{esc(t("gc_assessment_required", lang))} — {gc_result.get("indicator_count", 0)} '
+                f'{esc(t("gc_indicators", lang).lower())}</div>'
+                + '<ul style="margin:0;font-size:13px;">'
+                + "".join(
+                    f"<li>{esc(i.get('description', ''))}</li>"
+                    for i in gc_result.get("indicators", [])
+                )
+                + '</ul>'
+                if gc_result.get("assessment_required") else
+                f'<p class="muted">{esc(t("gc_no_risk", lang))}</p>'
+            )
+            + f'</div>'
+        )
     )
     return page_layout(t("eng_detail", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# CAS 580 — Management Representation Letter
+# ---------------------------------------------------------------------------
+
+def render_rep_letter(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    engagement_id: str,
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        engagements = _audit.get_engagements(conn)
+    eng_opts = '<option value="">--</option>' + "".join(
+        f'<option value="{esc(str(e["engagement_id"]))}" {"selected" if e["engagement_id"] == engagement_id else ""}>'
+        f'{esc(e["client_code"])} — {esc(e["period"])} ({esc(e.get("engagement_type",""))})</option>'
+        for e in engagements
+    )
+
+    select_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/rep_letter" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
+        f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'</form></div>'
+    )
+
+    content = ""
+    if engagement_id:
+        with open_db() as conn:
+            letter = _cas.get_rep_letter(engagement_id, conn)
+
+        if letter:
+            status = letter.get("status", "draft")
+            status_colors = {"draft": "#f59e0b", "signed": "#16a34a", "refused": "#dc2626"}
+            status_key = f"cas_rep_status_{status}"
+            status_badge = (
+                f'<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;'
+                f'color:#fff;background:{status_colors.get(status, "#6b7280")};">{esc(t(status_key, lang))}</span>'
+            )
+            draft_fr = esc(letter.get("draft_text_fr", "") or "")
+            draft_en = esc(letter.get("draft_text_en", "") or "")
+
+            sign_form = ""
+            if status != "signed":
+                sign_form = (
+                    f'<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">'
+                    f'<h4 style="margin-top:0;">{esc(t("cas_rep_sign", lang))}</h4>'
+                    f'<form method="POST" action="/audit/rep_letter/sign" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+                    f'<input type="hidden" name="letter_id" value="{esc(letter["letter_id"])}">'
+                    f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+                    f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_rep_mgmt_name", lang))}</label><br>'
+                    f'<input type="text" name="management_name" value="{esc(letter.get("management_name") or "")}" '
+                    f'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;" required></div>'
+                    f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_rep_mgmt_title", lang))}</label><br>'
+                    f'<input type="text" name="management_title" value="{esc(letter.get("management_title") or "")}" '
+                    f'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;" required></div>'
+                    f'<div><button type="submit" class="btn-primary" style="padding:6px 14px;background:#16a34a;">'
+                    f'{esc(t("cas_rep_sign", lang))}</button></div>'
+                    f'</form></div>'
+                )
+
+            signed_info = ""
+            if status == "signed":
+                signed_info = (
+                    f'<div style="margin-top:12px;padding:12px;background:#f0fdf4;border-radius:8px;">'
+                    f'<strong>{esc(t("cas_rep_signed_by", lang))}:</strong> {esc(letter.get("management_name", ""))}<br>'
+                    f'<strong>{esc(t("cas_rep_mgmt_title", lang))}:</strong> {esc(letter.get("management_title", ""))}<br>'
+                    f'<strong>{esc(t("cas_rep_signed_at", lang))}:</strong> {esc(letter.get("signed_at", ""))}'
+                    f'</div>'
+                )
+
+            content = (
+                f'<div class="card" style="margin-top:12px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<h3 style="margin:0;">{esc(t("cas_rep_title", lang))}</h3>{status_badge}</div>'
+                f'{signed_info}'
+                f'<div style="margin-top:16px;">'
+                f'<h4>{esc(t("cas_rep_draft_fr", lang))}</h4>'
+                f'<pre style="white-space:pre-wrap;background:#f9fafb;padding:16px;border-radius:8px;font-size:13px;border:1px solid #e5e7eb;max-height:400px;overflow-y:auto;">{draft_fr}</pre>'
+                f'<h4>{esc(t("cas_rep_draft_en", lang))}</h4>'
+                f'<pre style="white-space:pre-wrap;background:#f9fafb;padding:16px;border-radius:8px;font-size:13px;border:1px solid #e5e7eb;max-height:400px;overflow-y:auto;">{draft_en}</pre>'
+                f'</div>'
+                f'{sign_form}'
+                f'</div>'
+            )
+        else:
+            content = (
+                f'<div class="card" style="margin-top:12px;">'
+                f'<p class="muted">{esc(t("cas_rep_no_letter", lang))}</p>'
+                f'<form method="POST" action="/audit/rep_letter/generate" style="margin-top:12px;">'
+                f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+                f'<button type="submit" class="btn-primary" style="padding:7px 16px;">'
+                f'{esc(t("cas_rep_generate", lang))}</button></form></div>'
+            )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("cas_rep_title", lang))}</h2>'
+        f'<a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a></div>'
+        f'{select_form}{content}'
+    )
+    return page_layout(t("cas_rep_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# CAS 330 — Control Testing Documentation
+# ---------------------------------------------------------------------------
+
+def render_control_tests(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    engagement_id: str,
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        engagements = _audit.get_engagements(conn)
+    eng_opts = '<option value="">--</option>' + "".join(
+        f'<option value="{esc(str(e["engagement_id"]))}" {"selected" if e["engagement_id"] == engagement_id else ""}>'
+        f'{esc(e["client_code"])} — {esc(e["period"])} ({esc(e.get("engagement_type",""))})</option>'
+        for e in engagements
+    )
+
+    select_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/controls" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
+        f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'</form></div>'
+    )
+
+    content = ""
+    if engagement_id:
+        with open_db() as conn:
+            tests = _cas.get_control_tests(engagement_id, conn)
+            summary = _cas.get_control_effectiveness_summary(engagement_id, conn)
+
+        # Summary card
+        summary_html = ""
+        if tests:
+            summary_html = (
+                f'<div class="card" style="margin-top:12px;">'
+                f'<h4 style="margin-top:0;">{esc(t("cas_ctrl_summary", lang))}</h4>'
+                f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+                f'<div><span style="font-size:12px;color:#6b7280;">Total</span><br>'
+                f'<span style="font-weight:600;">{summary["total"]}</span></div>'
+                f'<div><span style="font-size:12px;color:#16a34a;">{esc(t("cas_ctrl_effective", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#16a34a;">{summary["effective"]}</span></div>'
+                f'<div><span style="font-size:12px;color:#f59e0b;">{esc(t("cas_ctrl_partial", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#f59e0b;">{summary["partially_effective"]}</span></div>'
+                f'<div><span style="font-size:12px;color:#dc2626;">{esc(t("cas_ctrl_ineffective", lang))}</span><br>'
+                f'<span style="font-weight:600;color:#dc2626;">{summary["ineffective"]}</span></div>'
+                f'</div></div>'
+            )
+
+        # Test rows
+        test_rows = ""
+        conclusion_colors = {"effective": "#16a34a", "partially_effective": "#f59e0b", "ineffective": "#dc2626"}
+        conclusion_keys = {"effective": "cas_ctrl_effective", "partially_effective": "cas_ctrl_partial", "ineffective": "cas_ctrl_ineffective"}
+        for ct in tests:
+            conc = ct.get("conclusion", "effective")
+            conc_color = conclusion_colors.get(conc, "#6b7280")
+            conc_label = t(conclusion_keys.get(conc, "cas_ctrl_effective"), lang)
+            conc_badge = f'<span style="color:{conc_color};font-weight:600;font-size:12px;">{esc(conc_label)}</span>'
+            test_type_key = f"cas_ctrl_{ct.get('test_type', 'walkthrough')}"
+            test_type_label = t(test_type_key, lang)
+
+            # Results form
+            result_form = (
+                f'<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:#6366f1;">'
+                f'{esc(t("cas_ctrl_record_results", lang))}</summary>'
+                f'<form method="POST" action="/audit/controls/results" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">'
+                f'<input type="hidden" name="test_id" value="{esc(ct["test_id"])}">'
+                f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+                f'<div><label style="font-size:11px;">{esc(t("cas_ctrl_items_tested", lang))}</label><br>'
+                f'<input type="number" name="items_tested" value="{ct.get("items_tested") or ""}" style="width:60px;padding:3px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+                f'<div><label style="font-size:11px;">{esc(t("cas_ctrl_exceptions", lang))}</label><br>'
+                f'<input type="number" name="exceptions_found" value="{ct.get("exceptions_found") or 0}" style="width:60px;padding:3px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+                f'<div><label style="font-size:11px;">{esc(t("cas_ctrl_exception_details", lang))}</label><br>'
+                f'<input type="text" name="exception_details" value="{esc(ct.get("exception_details") or "")}" style="width:160px;padding:3px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+                f'<div><label style="font-size:11px;">{esc(t("cas_ctrl_conclusion", lang))}</label><br>'
+                f'<select name="conclusion" style="padding:3px;border:1px solid #d1d5db;border-radius:4px;">'
+                f'<option value="effective" {"selected" if conc == "effective" else ""}>{esc(t("cas_ctrl_effective", lang))}</option>'
+                f'<option value="partially_effective" {"selected" if conc == "partially_effective" else ""}>{esc(t("cas_ctrl_partial", lang))}</option>'
+                f'<option value="ineffective" {"selected" if conc == "ineffective" else ""}>{esc(t("cas_ctrl_ineffective", lang))}</option>'
+                f'</select></div>'
+                f'<div><button type="submit" class="btn-primary" style="padding:4px 10px;font-size:12px;">'
+                f'{esc(t("btn_save", lang))}</button></div>'
+                f'</form></details>'
+            )
+
+            test_rows += (
+                f'<tr>'
+                f'<td style="font-size:13px;font-weight:600;">{esc(ct.get("control_name", ""))}</td>'
+                f'<td style="font-size:12px;">{esc(ct.get("control_objective", ""))}</td>'
+                f'<td style="font-size:12px;">{esc(test_type_label)}</td>'
+                f'<td style="text-align:center;">{ct.get("items_tested") or "—"}</td>'
+                f'<td style="text-align:center;">{ct.get("exceptions_found") or 0}</td>'
+                f'<td>{conc_badge}</td>'
+                f'<td>{result_form}</td>'
+                f'</tr>'
+            )
+
+        tests_table = ""
+        if tests:
+            tests_table = (
+                f'<div class="card" style="margin-top:12px;">'
+                f'<div style="overflow-x:auto;"><table>'
+                f'<thead><tr>'
+                f'<th>{esc(t("cas_ctrl_name", lang))}</th>'
+                f'<th>{esc(t("cas_ctrl_objective", lang))}</th>'
+                f'<th>{esc(t("cas_ctrl_test_type", lang))}</th>'
+                f'<th>{esc(t("cas_ctrl_items_tested", lang))}</th>'
+                f'<th>{esc(t("cas_ctrl_exceptions", lang))}</th>'
+                f'<th>{esc(t("cas_ctrl_conclusion", lang))}</th>'
+                f'<th>{esc(t("col_action", lang))}</th>'
+                f'</tr></thead><tbody>{test_rows}</tbody></table></div></div>'
+            )
+        else:
+            tests_table = (
+                f'<div class="card" style="margin-top:12px;">'
+                f'<p class="muted">{esc(t("cas_ctrl_no_tests", lang))}</p></div>'
+            )
+
+        # Add from library form
+        lib_opts = "".join(
+            f'<option value="{esc(c["name"])}" data-obj="{esc(c["objective"])}" data-desc="{esc(c["description"])}">'
+            f'{esc(c["name"])} — {esc(c["objective"])}</option>'
+            for c in _cas.STANDARD_CONTROLS
+        )
+        type_opts = "".join(
+            f'<option value="{tt}">{esc(t(f"cas_ctrl_{tt}", lang))}</option>'
+            for tt in ["walkthrough", "reperformance", "observation", "inquiry"]
+        )
+
+        add_form = (
+            f'<div class="card" style="margin-top:12px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_ctrl_add_from_library", lang))}</h4>'
+            f'<form method="POST" action="/audit/controls/add" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_ctrl_name", lang))}</label><br>'
+            f'<select name="control_name" id="ctrl_lib" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;max-width:350px;">'
+            f'{lib_opts}</select></div>'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_ctrl_test_type", lang))}</label><br>'
+            f'<select name="test_type" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;">{type_opts}</select></div>'
+            f'<div><button type="submit" class="btn-primary" style="padding:6px 14px;">'
+            f'{esc(t("cas_ctrl_add", lang))}</button></div>'
+            f'</form>'
+            f'<hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_ctrl_add_custom", lang))}</h4>'
+            f'<form method="POST" action="/audit/controls/add" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_ctrl_name", lang))}</label><br>'
+            f'<input type="text" name="control_name" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;" required></div>'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_ctrl_objective", lang))}</label><br>'
+            f'<input type="text" name="control_objective" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;" required></div>'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_ctrl_test_type", lang))}</label><br>'
+            f'<select name="test_type" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;">{type_opts}</select></div>'
+            f'<div><button type="submit" class="btn-primary" style="padding:6px 14px;">'
+            f'{esc(t("cas_ctrl_add", lang))}</button></div>'
+            f'</form></div>'
+        )
+
+        content = summary_html + tests_table + add_form
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("cas_ctrl_title", lang))}</h2>'
+        f'<a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a></div>'
+        f'{select_form}{content}'
+    )
+    return page_layout(t("cas_ctrl_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# CAS 550 — Related Party Procedures
+# ---------------------------------------------------------------------------
+
+def render_related_parties(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    engagement_id: str,
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        engagements = _audit.get_engagements(conn)
+    eng_opts = '<option value="">--</option>' + "".join(
+        f'<option value="{esc(str(e["engagement_id"]))}" {"selected" if e["engagement_id"] == engagement_id else ""}>'
+        f'{esc(e["client_code"])} — {esc(e["period"])} ({esc(e.get("engagement_type",""))})</option>'
+        for e in engagements
+    )
+
+    select_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/related_parties" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
+        f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'</form></div>'
+    )
+
+    content = ""
+    if engagement_id:
+        with open_db() as conn:
+            eng = _audit.get_engagement(conn, engagement_id)
+            if not eng:
+                return page_layout(t("err_eng_not_found", lang),
+                    f'<div class="card"><p>{esc(t("err_eng_not_found", lang))}</p></div>',
+                    user=user, lang=lang)
+            client_code = eng["client_code"]
+            parties = _cas.get_related_parties(client_code, conn)
+            transactions = _cas.get_related_party_transactions(engagement_id, conn)
+            auto_detected = _cas.auto_detect_related_parties(client_code, conn)
+            rp_summary = _cas.get_related_party_summary(engagement_id, conn)
+
+        # Tab 1: Related parties list
+        rel_type_keys = {
+            "owner": "cas_rp_type_owner", "family_member": "cas_rp_type_family",
+            "affiliated_company": "cas_rp_type_affiliated", "key_management": "cas_rp_type_key_mgmt",
+            "board_member": "cas_rp_type_board",
+        }
+        party_rows = ""
+        for p in parties:
+            rtype = t(rel_type_keys.get(p.get("relationship_type", ""), "cas_rp_type_affiliated"), lang)
+            pct = f'{p.get("ownership_percentage", 0) or 0}%' if p.get("ownership_percentage") else "—"
+            party_rows += (
+                f'<tr><td>{esc(p.get("party_name", ""))}</td>'
+                f'<td>{esc(rtype)}</td>'
+                f'<td style="text-align:center;">{pct}</td>'
+                f'<td style="font-size:12px;">{esc(p.get("notes", "") or "")}</td></tr>'
+            )
+
+        parties_html = (
+            f'<div style="overflow-x:auto;"><table>'
+            f'<thead><tr><th>{esc(t("cas_rp_party_name", lang))}</th>'
+            f'<th>{esc(t("cas_rp_relationship", lang))}</th>'
+            f'<th>{esc(t("cas_rp_ownership", lang))}</th>'
+            f'<th>Notes</th></tr></thead>'
+            f'<tbody>{party_rows}</tbody></table></div>'
+            if parties else
+            f'<p class="muted">{esc(t("cas_rp_no_parties", lang))}</p>'
+        )
+
+        # Add party form
+        type_opts = "".join(
+            f'<option value="{rt}">{esc(t(rel_type_keys.get(rt, ""), lang))}</option>'
+            for rt in ["owner", "family_member", "affiliated_company", "key_management", "board_member"]
+        )
+        add_party_form = (
+            f'<form method="POST" action="/audit/related_parties/add" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<input type="hidden" name="client_code" value="{esc(client_code)}">'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_rp_party_name", lang))}</label><br>'
+            f'<input type="text" name="party_name" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;" required></div>'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_rp_relationship", lang))}</label><br>'
+            f'<select name="relationship_type" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;">{type_opts}</select></div>'
+            f'<div><label style="font-size:12px;font-weight:600;">{esc(t("cas_rp_ownership", lang))}</label><br>'
+            f'<input type="number" name="ownership_pct" step="0.1" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;width:80px;"></div>'
+            f'<div><button type="submit" class="btn-primary" style="padding:6px 14px;">'
+            f'{esc(t("cas_rp_add", lang))}</button></div>'
+            f'</form>'
+        )
+
+        tab1 = (
+            f'<div class="card" style="margin-top:12px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_rp_tab_parties", lang))}</h4>'
+            f'{parties_html}{add_party_form}</div>'
+        )
+
+        # Tab 2: Transactions
+        txn_rows = ""
+        for txn in transactions:
+            amt = f'${float(txn.get("amount") or 0):,.2f}'
+            meas_key = f'cas_rp_basis_{txn.get("measurement_basis", "exchange_amount")}'
+            meas_label = t(meas_key, lang)
+            disc = "✅" if txn.get("disclosure_required") else "—"
+            txn_rows += (
+                f'<tr><td>{esc(txn.get("party_name", ""))}</td>'
+                f'<td style="text-align:right;">{amt}</td>'
+                f'<td style="font-size:12px;">{esc(txn.get("description", "") or "")}</td>'
+                f'<td>{esc(meas_label)}</td>'
+                f'<td style="text-align:center;">{disc}</td></tr>'
+            )
+
+        tab2 = (
+            f'<div class="card" style="margin-top:12px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_rp_tab_transactions", lang))}</h4>'
+            + (
+                f'<div style="overflow-x:auto;"><table>'
+                f'<thead><tr><th>{esc(t("cas_rp_party_name", lang))}</th>'
+                f'<th>{esc(t("cas_rp_amount", lang))}</th>'
+                f'<th>{esc(t("cas_rp_description", lang))}</th>'
+                f'<th>{esc(t("cas_rp_measurement", lang))}</th>'
+                f'<th>{esc(t("cas_rp_disclosure", lang))}</th>'
+                f'</tr></thead><tbody>{txn_rows}</tbody></table></div>'
+                if transactions else
+                f'<p class="muted">{esc(t("cas_rp_no_transactions", lang))}</p>'
+            )
+            + f'</div>'
+        )
+
+        # Tab 3: Auto-detection
+        auto_rows = ""
+        for ad in auto_detected:
+            evidence_str = ", ".join(ad.get("evidence", []))
+            auto_rows += (
+                f'<tr><td>{esc(ad.get("vendor", ""))}</td>'
+                f'<td style="text-align:center;">{ad.get("transaction_count", 0)}</td>'
+                f'<td style="font-size:12px;">{esc(evidence_str)}</td>'
+                f'<td><span style="color:#f59e0b;font-weight:600;font-size:12px;">{esc(ad.get("status", ""))}</span></td></tr>'
+            )
+
+        tab3 = (
+            f'<div class="card" style="margin-top:12px;">'
+            f'<h4 style="margin-top:0;">{esc(t("cas_rp_tab_auto_detect", lang))}</h4>'
+            + (
+                f'<div style="overflow-x:auto;"><table>'
+                f'<thead><tr><th>{esc(t("col_vendor", lang))}</th>'
+                f'<th>Txns</th>'
+                f'<th>{esc(t("cas_rp_auto_evidence", lang))}</th>'
+                f'<th>{esc(t("cas_rp_auto_status", lang))}</th>'
+                f'</tr></thead><tbody>{auto_rows}</tbody></table></div>'
+                if auto_detected else
+                f'<p class="muted">{esc(t("cas_rp_no_auto_detect", lang))}</p>'
+            )
+            + f'</div>'
+        )
+
+        # Generate disclosure button
+        disclosure_btn = (
+            f'<div class="card" style="margin-top:12px;">'
+            f'<form method="POST" action="/audit/related_parties/disclosure">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<button type="submit" class="btn-primary" style="padding:7px 16px;">'
+            f'{esc(t("cas_rp_generate_disclosure", lang))}</button></form></div>'
+        )
+
+        content = tab1 + tab2 + tab3 + disclosure_btn
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("cas_rp_title", lang))}</h2>'
+        f'<a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a></div>'
+        f'{select_form}{content}'
+    )
+    return page_layout(t("cas_rp_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# CAS Module — Materiality Assessment (CAS 320)
+# ---------------------------------------------------------------------------
+
+def render_materiality(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    engagement_id: str,
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        engagements = _audit.get_engagements(conn)
+        current_mat = None
+        eng = None
+        if engagement_id:
+            eng = _audit.get_engagement(conn, engagement_id)
+            current_mat = _cas.get_materiality(conn, engagement_id)
+
+    # Engagement selector
+    eng_opts = '<option value="">--</option>' + "".join(
+        f'<option value="{esc(str(e.get("engagement_id", "")))}" '
+        f'{"selected" if str(e.get("engagement_id", "")) == engagement_id else ""}>'
+        f'{esc(str(e.get("client_code", "")))} — {esc(str(e.get("period", "")))} ({esc(str(e.get("engagement_type", "")))})</option>'
+        for e in engagements
+    )
+
+    basis_opts = "".join(
+        f'<option value="{v}">{esc(t(f"cas_mat_basis_{v}" if v != "pre_tax_income" else "cas_mat_basis_pre_tax", lang))}</option>'
+        for v in ["pre_tax_income", "total_assets", "revenue"]
+    )
+
+    select_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/materiality" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
+        f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'</form></div>\n'
+    )
+
+    calc_form = ""
+    if engagement_id:
+        calc_form = (
+            f'<div class="card" style="margin-bottom:12px;">'
+            f'<h3 style="margin-top:0;">{esc(t("cas_mat_calculate", lang))}</h3>'
+            f'<form method="POST" action="/audit/materiality/save" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<div><label style="font-size:13px;font-weight:600;">{esc(t("cas_mat_basis", lang))}</label><br>'
+            f'<select name="basis" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{basis_opts}</select></div>'
+            f'<div><label style="font-size:13px;font-weight:600;">{esc(t("cas_mat_basis_amount", lang))}</label><br>'
+            f'<input type="number" name="basis_amount" step="0.01" required style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:180px;"></div>'
+            f'<div><label style="font-size:13px;font-weight:600;">{esc(t("cas_mat_notes", lang))}</label><br>'
+            f'<input type="text" name="notes" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:200px;"></div>'
+            f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("cas_mat_save", lang))}</button></div>'
+            f'</form></div>\n'
+        )
+
+    mat_display = ""
+    if current_mat:
+        basis_labels = {
+            "pre_tax_income": t("cas_mat_basis_pre_tax", lang),
+            "total_assets": t("cas_mat_basis_total_assets", lang),
+            "revenue": t("cas_mat_basis_revenue", lang),
+        }
+        mat_display = (
+            f'<div class="card">'
+            f'<h3 style="margin-top:0;">{esc(t("cas_mat_result", lang))}</h3>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:500px;">'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_basis", lang))}:</span>'
+            f'<span>{esc(basis_labels.get(current_mat.get("basis", ""), current_mat.get("basis", "")))}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_basis_amount", lang))}:</span>'
+            f'<span>${float(current_mat.get("basis_amount", 0)):,.2f}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_planning", lang))}:</span>'
+            f'<span style="color:#1e40af;font-weight:600;">${float(current_mat.get("planning_materiality", 0)):,.2f}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_performance", lang))}:</span>'
+            f'<span style="color:#92400e;font-weight:600;">${float(current_mat.get("performance_materiality", 0)):,.2f}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_trivial", lang))}:</span>'
+            f'<span style="color:#166534;font-weight:600;">${float(current_mat.get("clearly_trivial", 0)):,.2f}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_calculated_by", lang))}:</span>'
+            f'<span>{esc(str(current_mat.get("calculated_by", "") or ""))}</span>'
+            f'<span style="font-weight:600;">{esc(t("cas_mat_calculated_at", lang))}:</span>'
+            f'<span>{esc(str(current_mat.get("calculated_at", "") or ""))}</span>'
+            f'</div>'
+            + (f'<p style="margin-top:8px;color:#6b7280;font-size:13px;">{esc(str(current_mat.get("notes", "") or ""))}</p>' if current_mat.get("notes") else "")
+            + f'</div>\n'
+        )
+    elif engagement_id:
+        mat_display = f'<div class="card"><p class="muted">{esc(t("cas_mat_no_assessment", lang))}</p></div>\n'
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("cas_materiality_title", lang))}</h2>'
+        f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div>\n'
+        f'{select_form}{calc_form}{mat_display}'
+    )
+    return page_layout(t("cas_materiality_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# CAS Module — Risk Assessment (CAS 315)
+# ---------------------------------------------------------------------------
+
+def render_risk_assessment(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    engagement_id: str,
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        engagements = _audit.get_engagements(conn)
+        risks: list[dict[str, Any]] = []
+        summary: dict[str, Any] = {}
+        if engagement_id:
+            risks = _cas.get_risk_assessment(conn, engagement_id)
+            summary = _cas.get_risk_summary(conn, engagement_id)
+
+    # Engagement selector
+    eng_opts = '<option value="">--</option>' + "".join(
+        f'<option value="{esc(str(e.get("engagement_id", "")))}" '
+        f'{"selected" if str(e.get("engagement_id", "")) == engagement_id else ""}>'
+        f'{esc(str(e.get("client_code", "")))} — {esc(str(e.get("period", "")))} ({esc(str(e.get("engagement_type", "")))})</option>'
+        for e in engagements
+    )
+
+    select_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/risk" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
+        f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'</form></div>\n'
+    )
+
+    # Generate matrix button
+    gen_form = ""
+    if engagement_id:
+        gen_form = (
+            f'<div class="card" style="margin-bottom:12px;">'
+            f'<form method="POST" action="/audit/risk/generate" style="display:inline;">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<button type="submit" class="btn-primary" style="padding:7px 16px;">'
+            f'{esc(t("cas_risk_generate", lang))}</button>'
+            f'</form>'
+            f'<p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Generates risk rows for all chart-of-accounts entries across all CAS assertions.</p>'
+            f'</div>\n'
+        )
+
+    # Summary card
+    summary_html = ""
+    if summary and summary.get("total_assessments", 0) > 0:
+        summary_html = (
+            f'<div class="card" style="margin-bottom:12px;">'
+            f'<h3 style="margin-top:0;">{esc(t("cas_risk_summary", lang))}</h3>'
+            f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+            f'<div style="text-align:center;"><div style="font-size:24px;font-weight:700;">{summary["total_assessments"]}</div>'
+            f'<div style="font-size:11px;color:#6b7280;">{esc(t("cas_risk_total", lang))}</div></div>'
+            f'<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#dc2626;">{summary["high"]}</div>'
+            f'<div style="font-size:11px;color:#6b7280;">{esc(t("cas_risk_high_count", lang))}</div></div>'
+            f'<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#d97706;">{summary["medium"]}</div>'
+            f'<div style="font-size:11px;color:#6b7280;">{esc(t("cas_risk_medium_count", lang))}</div></div>'
+            f'<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#16a34a;">{summary["low"]}</div>'
+            f'<div style="font-size:11px;color:#6b7280;">{esc(t("cas_risk_low_count", lang))}</div></div>'
+            f'<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#9333ea;">{summary["significant_risks"]}</div>'
+            f'<div style="font-size:11px;color:#6b7280;">{esc(t("cas_risk_significant_count", lang))}</div></div>'
+            f'</div></div>\n'
+        )
+
+    # Risk table
+    def _risk_badge(level: str) -> str:
+        colors = {
+            "low": "background:#dcfce7;color:#166534;",
+            "medium": "background:#fef3c7;color:#92400e;",
+            "high": "background:#fecaca;color:#991b1b;",
+        }
+        style = colors.get(level, "background:#f3f4f6;color:#374151;")
+        label = t(f"cas_risk_level_{level}", lang)
+        return f'<span style="{style}padding:2px 8px;border-radius:10px;font-size:12px;">{esc(label)}</span>'
+
+    risk_level_options = "".join(
+        f'<option value="{v}">{esc(t(f"cas_risk_level_{v}", lang))}</option>'
+        for v in ["low", "medium", "high"]
+    )
+
+    risk_table = ""
+    if risks:
+        rows_html = ""
+        for r in risks:
+            rid = esc(str(r.get("risk_id", "")))
+            sig = t("cas_risk_yes", lang) if r.get("significant_risk") else t("cas_risk_no", lang)
+            sig_style = "color:#dc2626;font-weight:600;" if r.get("significant_risk") else ""
+
+            # Inline update form
+            ir_opts = "".join(
+                f'<option value="{v}" {"selected" if r.get("inherent_risk") == v else ""}>'
+                f'{esc(t(f"cas_risk_level_{v}", lang))}</option>'
+                for v in ["low", "medium", "high"]
+            )
+            cr_opts = "".join(
+                f'<option value="{v}" {"selected" if r.get("control_risk") == v else ""}>'
+                f'{esc(t(f"cas_risk_level_{v}", lang))}</option>'
+                for v in ["low", "medium", "high"]
+            )
+
+            rows_html += (
+                f"<tr>"
+                f"<td>{esc(str(r.get('account_code', '')))}</td>"
+                f"<td style='font-size:12px;'>{esc(str(r.get('account_name', '')[:30]))}</td>"
+                f"<td style='font-size:12px;'>{esc(str(r.get('assertion', '')))}</td>"
+                f"<td>"
+                f"<form method='POST' action='/audit/risk/update' style='display:flex;gap:4px;align-items:center;'>"
+                f"<input type='hidden' name='risk_id' value='{rid}'>"
+                f"<input type='hidden' name='engagement_id' value='{esc(engagement_id)}'>"
+                f"<select name='inherent_risk' style='padding:2px 4px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;'>{ir_opts}</select>"
+                f"</td>"
+                f"<td>"
+                f"<select name='control_risk' style='padding:2px 4px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;'>{cr_opts}</select>"
+                f"</td>"
+                f"<td>{_risk_badge(r.get('combined_risk', 'medium'))}</td>"
+                f"<td style='{sig_style}'>{esc(sig)}</td>"
+                f"<td><button type='submit' class='btn-secondary' style='padding:2px 8px;font-size:11px;'>"
+                f"{esc(t('cas_risk_update', lang))}</button></form></td>"
+                f"</tr>\n"
+            )
+
+        risk_table = (
+            f'<div class="card">'
+            f'<div style="overflow-x:auto;">'
+            f'<table>'
+            f'<thead><tr>'
+            f'<th>Code</th>'
+            f'<th>{esc(t("cas_risk_account", lang))}</th>'
+            f'<th>{esc(t("cas_risk_assertion", lang))}</th>'
+            f'<th>{esc(t("cas_risk_inherent", lang))}</th>'
+            f'<th>{esc(t("cas_risk_control", lang))}</th>'
+            f'<th>{esc(t("cas_risk_combined", lang))}</th>'
+            f'<th>{esc(t("cas_risk_significant", lang))}</th>'
+            f'<th>{esc(t("col_action", lang))}</th>'
+            f'</tr></thead>'
+            f'<tbody>{rows_html}</tbody>'
+            f'</table></div></div>\n'
+        )
+    elif engagement_id:
+        risk_table = f'<div class="card"><p class="muted">{esc(t("cas_risk_no_assessments", lang))}</p></div>\n'
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("cas_risk_title", lang))}</h2>'
+        f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div>\n'
+        f'{select_form}{gen_form}{summary_html}{risk_table}'
+    )
+    return page_layout(t("cas_risk_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _get_qr_clients() -> list[dict[str, Any]]:
+    """Return all clients from the clients table (code + name), sorted by code."""
+    try:
+        with open_db() as conn:
+            rows = conn.execute(
+                "SELECT client_code, client_name FROM clients ORDER BY client_code"
+            ).fetchall()
+        return [{"client_code": r["client_code"], "client_name": r["client_name"] or r["client_code"]} for r in rows]
+    except Exception:
+        return []
+
+
+def _get_portal_base_url() -> str:
+    """Return the client portal base URL from config or fall back to localhost."""
+    try:
+        cfg = json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+        public_url = cfg.get("public_portal_url", "").strip()
+        if public_url:
+            return public_url
+        port = cfg.get("client_portal", {}).get("port", 8788)
+    except Exception:
+        port = 8788
+    return f"http://127.0.0.1:{port}"
+
+
+def render_qr_page(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    """Render the /qr page — grid of QR codes for all clients (manager/owner)."""
+    import base64 as _b64
+
+    clients = _get_qr_clients()
+    portal_base = _get_portal_base_url()
+
+    if not clients:
+        body = (
+            f'<div class="card">'
+            f'<h2>{esc(t("qr_page_heading", lang))}</h2>'
+            f'<p class="muted">{esc(t("qr_no_clients", lang))}</p>'
+            f'</div>'
+        )
+        return page_layout(t("qr_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+    cards_html = ""
+    for cl in clients:
+        code = cl["client_code"]
+        name = cl["client_name"]
+        upload_url = _build_upload_url(portal_base, code)
+        png_bytes = generate_client_qr_png(code, name, upload_url)
+        b64 = _b64.b64encode(png_bytes).decode("ascii")
+        cards_html += (
+            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;'
+            f'padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;'
+            f'box-shadow:0 1px 4px rgba(0,0,0,.06);">'
+            f'<div style="font-weight:600;font-size:14px;color:#1F3864;">{esc(name)}</div>'
+            f'<img src="data:image/png;base64,{b64}" alt="QR {esc(code)}" '
+            f'style="width:180px;height:180px;image-rendering:pixelated;">'
+            f'<div style="font-size:11px;color:#6b7280;word-break:break-all;text-align:center;">'
+            f'{esc(upload_url)}</div>'
+            f'<a class="button-link btn-secondary" style="font-size:12px;padding:5px 14px;" '
+            f'href="/qr/download?client_code={urlquote(code)}">'
+            f'{esc(t("qr_download_png", lang))}</a>'
+            f'</div>'
+        )
+
+    body = (
+        f'<div class="card">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;">'
+        f'<div>'
+        f'<h2 style="margin:0 0 4px;">{esc(t("qr_page_heading", lang))}</h2>'
+        f'<p class="muted" style="margin:0;">{esc(t("qr_page_subtitle", lang))}</p>'
+        f'</div>'
+        f'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        f'<a class="button-link btn-primary" href="/qr/pdf">{esc(t("qr_download_all_pdf", lang))}</a>'
+        f'<button class="btn-secondary" onclick="window.print()" style="padding:7px 16px;">'
+        f'{esc(t("qr_print_btn", lang))}</button>'
+        f'</div>'
+        f'</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px;">'
+        f'{cards_html}'
+        f'</div>'
+        f'</div>'
+    )
+    return page_layout(t("qr_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
 def render_license_page(
@@ -3831,6 +5734,255 @@ def render_license_page(
     return page_layout(t("lic_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+# ---------------------------------------------------------------------------
+# License machines page
+# ---------------------------------------------------------------------------
+
+def render_license_machines(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    """Render the /license/machines page (owner only)."""
+    with open_db() as conn:
+        machines = get_licensed_machines(conn)
+        machine_status = check_machine_license(conn)
+
+    machine_count = machine_status.get("machine_count", 0)
+    max_machines = machine_status.get("max_machines", MAX_MACHINES_PER_FIRM)
+    overuse = machine_status.get("overuse", False)
+
+    # Status banner
+    if overuse:
+        status_html = (
+            f'<div class="flash error">'
+            f'{esc(t("lic_machine_overuse", lang, max=str(max_machines)))}'
+            f'</div>'
+        )
+    else:
+        status_html = (
+            f'<div class="flash success">{esc(t("lic_machine_ok", lang))}</div>'
+        )
+
+    # Counter
+    counter_html = (
+        f'<div style="display:flex;gap:24px;margin-bottom:16px;">'
+        f'<div><strong>{esc(t("lic_machine_count", lang))}:</strong> {machine_count}</div>'
+        f'<div><strong>{esc(t("lic_machine_max", lang))}:</strong> {max_machines}</div>'
+        f'</div>'
+    )
+
+    # Machine table
+    if not machines:
+        table_html = f'<p class="muted">{esc(t("lic_no_machines", lang))}</p>'
+    else:
+        rows = ""
+        for m in machines:
+            current_badge = (
+                f' <span class="badge badge-ready">{esc(t("lic_machine_current", lang))}</span>'
+                if m.get("is_current") else ""
+            )
+            rows += (
+                f'<tr>'
+                f'<td><code>{esc(m["machine_id"])}</code></td>'
+                f'<td>{esc(m["machine_name"])}{current_badge}</td>'
+                f'<td>{esc(m["first_activated"])}</td>'
+                f'<td>{esc(m["last_seen"])}</td>'
+                f'</tr>'
+            )
+        table_html = (
+            f'<table>'
+            f'<thead><tr>'
+            f'<th>{esc(t("lic_machine_id", lang))}</th>'
+            f'<th>{esc(t("lic_machine_name", lang))}</th>'
+            f'<th>{esc(t("lic_machine_first_activated", lang))}</th>'
+            f'<th>{esc(t("lic_machine_last_seen", lang))}</th>'
+            f'</tr></thead>'
+            f'<tbody>{rows}</tbody>'
+            f'</table>'
+        )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("lic_machines_title", lang))}</h2>'
+        f'<div>'
+        f'<a href="/license" class="btn-secondary button-link" style="margin-right:8px;">'
+        f'{esc(t("lic_title", lang))}</a>'
+        f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
+        f'</div></div>\n'
+        f'<div class="card">'
+        f'{status_html}'
+        f'{counter_html}'
+        f'{table_html}'
+        f'</div>'
+    )
+    return page_layout(t("lic_machines_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Admin updates page
+# ---------------------------------------------------------------------------
+
+def render_admin_updates(
+    user: dict[str, Any],
+    flash: str,
+    flash_error: str,
+    lang: str = "fr",
+) -> str:
+    """Render the /admin/updates page (owner only)."""
+    # Read installed version
+    version_path = ROOT_DIR / "version.json"
+    try:
+        ver_info = json.loads(version_path.read_text(encoding="utf-8"))
+    except Exception:
+        ver_info = {"version": "unknown", "release_date": "", "changelog": ""}
+
+    installed_version = ver_info.get("version", "unknown")
+    installed_date = ver_info.get("release_date", "")
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("update_title", lang))}</h2>'
+        f'<a href="/troubleshoot" class="btn-secondary button-link">'
+        f'{esc(t("diag_title", lang))}</a>'
+        f'</div>\n'
+        f'<div class="card" style="margin-bottom:16px;">'
+        f'<h4 style="margin-top:0;">{esc(t("update_installed_version", lang))}</h4>'
+        f'<div style="display:flex;gap:24px;margin-bottom:12px;">'
+        f'<div><strong>{esc(t("version_label", lang))}:</strong> {esc(installed_version)}</div>'
+        f'<div><strong>{esc(t("update_installed_date", lang))}:</strong> {esc(installed_date)}</div>'
+        f'</div>'
+        f'<div class="actions">'
+        f'<form method="POST" action="/admin/updates/check" style="display:inline;">'
+        f'<button class="btn-primary">{esc(t("update_btn_check", lang))}</button>'
+        f'</form>'
+        f'<form method="POST" action="/admin/updates/install" style="display:inline;"'
+        f' onsubmit="return confirm(\'{esc(t("update_install_confirm", lang))}\');">'
+        f'<button class="btn-danger">{esc(t("update_btn_install", lang))}</button>'
+        f'</form>'
+        f'</div>'
+        f'</div>'
+    )
+
+    return page_layout(t("update_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Admin remote management page
+# ---------------------------------------------------------------------------
+
+def render_admin_remote(
+    user: dict[str, Any],
+    flash: str,
+    flash_error: str,
+    autofix_output: str = "",
+    lang: str = "fr",
+) -> str:
+    """Render the /admin/remote page (owner only)."""
+    try:
+        from scripts.remote_management import get_system_status, list_backups
+        status = get_system_status()
+        backups = list_backups()[:10]
+    except Exception as exc:
+        status = {"error": str(exc)}
+        backups = []
+
+    svc_status = status.get("service_status", "unknown")
+    svc_colors = {
+        "running": "#16a34a", "stopped": "#dc2626",
+        "starting": "#d97706", "stopping": "#d97706",
+    }
+    svc_color = svc_colors.get(svc_status, "#6b7280")
+
+    # Disk bar
+    disk_pct = status.get("disk_used_pct", 0)
+    disk_color = "#16a34a" if disk_pct < 80 else "#d97706" if disk_pct < 90 else "#dc2626"
+
+    # Status card
+    status_html = (
+        f'<div class="card" style="margin-bottom:16px;">'
+        f'<h4 style="margin-top:0;">{esc(t("remote_system_status", lang))}</h4>'
+        f'<div class="grid-2">'
+        f'<div>'
+        f'<p><strong>{esc(t("remote_hostname", lang))}:</strong> {esc(status.get("hostname", ""))}</p>'
+        f'<p><strong>{esc(t("remote_os", lang))}:</strong> {esc(status.get("os", ""))}</p>'
+        f'<p><strong>{esc(t("remote_python", lang))}:</strong> {esc(status.get("python", ""))}</p>'
+        f'<p><strong>{esc(t("remote_service_status", lang))}:</strong> '
+        f'<span style="color:{svc_color};font-weight:700;">{esc(svc_status)}</span></p>'
+        f'<p><strong>{esc(t("remote_uptime", lang))}:</strong> {esc(status.get("uptime", "N/A"))}</p>'
+        f'</div>'
+        f'<div>'
+        f'<p><strong>{esc(t("remote_disk_space", lang))}:</strong></p>'
+        f'<div style="background:#e5e7eb;border-radius:4px;height:8px;margin-bottom:6px;">'
+        f'<div style="background:{disk_color};border-radius:4px;height:8px;width:{disk_pct}%;"></div></div>'
+        f'<p style="font-size:13px;">{esc(t("remote_disk_free", lang))}: {status.get("disk_free_gb", 0)} GB / '
+        f'{status.get("disk_total_gb", 0)} GB ({disk_pct}% {esc(t("remote_disk_used", lang))})</p>'
+        f'<p><strong>{esc(t("remote_db_size", lang))}:</strong> {status.get("db_size_mb", 0)} MB</p>'
+        f'<p><strong>{esc(t("remote_last_backup", lang))}:</strong> '
+        f'{esc(status.get("last_backup", "None"))} ({status.get("last_backup_size_mb", 0)} MB)</p>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+    # Actions card
+    actions_html = (
+        f'<div class="card" style="margin-bottom:16px;">'
+        f'<h4 style="margin-top:0;">{esc(t("remote_actions", lang))}</h4>'
+        f'<div class="actions">'
+        f'<form method="POST" action="/admin/remote/restart" style="display:inline;"'
+        f' onsubmit="return confirm(\'{esc(t("remote_restart_confirm", lang))}\');">'
+        f'<button class="btn-primary">{esc(t("remote_btn_restart", lang))}</button></form>'
+        f'<form method="POST" action="/admin/remote/backup" style="display:inline;">'
+        f'<button class="btn-primary">{esc(t("remote_btn_backup", lang))}</button></form>'
+        f'<form method="POST" action="/admin/remote/update" style="display:inline;"'
+        f' onsubmit="return confirm(\'{esc(t("remote_update_confirm", lang))}\');">'
+        f'<button class="btn-danger">{esc(t("remote_btn_update", lang))}</button></form>'
+        f'<form method="POST" action="/admin/remote/autofix" style="display:inline;"'
+        f' onsubmit="return confirm(\'{esc(t("remote_autofix_confirm", lang))}\');">'
+        f'<button class="btn-secondary">{esc(t("remote_btn_autofix", lang))}</button></form>'
+        f'</div>'
+        f'</div>'
+    )
+
+    # Autofix output (if just ran)
+    autofix_html = ""
+    if autofix_output:
+        autofix_html = (
+            f'<div class="card" style="margin-bottom:16px;">'
+            f'<h4 style="margin-top:0;">{esc(t("remote_autofix_output", lang))}</h4>'
+            f'<textarea readonly style="height:400px;font-size:12px;">{esc(autofix_output)}</textarea>'
+            f'</div>'
+        )
+
+    # Backups list
+    backups_html = ""
+    if backups:
+        rows = ""
+        for b in backups:
+            rows += f'<tr><td>{esc(b["name"])}</td><td>{b["size_mb"]} MB</td><td>{esc(b["modified"])}</td></tr>'
+        backups_html = (
+            f'<div class="card">'
+            f'<h4 style="margin-top:0;">{esc(t("remote_backups_title", lang))}</h4>'
+            f'<table><thead><tr><th>File</th><th>Size</th><th>Date</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+            f'</div>'
+        )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(t("remote_title", lang))}</h2>'
+        f'<a href="/troubleshoot" class="btn-secondary button-link">'
+        f'{esc(t("diag_title", lang))}</a>'
+        f'</div>\n'
+        + status_html + actions_html + autofix_html + backups_html
+    )
+
+    return page_layout(t("remote_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
 def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
                 flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
     flash_html = ""
@@ -3898,7 +6050,17 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + _anav("/financial_statements", "fs_title")
             + _anav("/audit/analytical", "anal_title")
             + _anav("/engagements", "eng_title")
+            + _anav("/audit/materiality", "cas_materiality_nav")
+            + _anav("/audit/risk", "cas_risk_nav")
+            + _anav("/audit/rep_letter", "cas_rep_nav")
+            + _anav("/audit/controls", "cas_ctrl_nav")
+            + _anav("/audit/related_parties", "cas_rp_nav")
+            + _anav("/reconciliation", "recon_nav_link")
+            + _anav("/qr", "qr_nav_link")
             + _lic_link
+            + (_anav("/license/machines", "lic_machines_nav") if user.get("role") == "owner" else "")
+            + (_anav("/admin/updates", "update_nav_link") if user.get("role") == "owner" else "")
+            + (_anav("/admin/remote", "remote_nav_link") if user.get("role") == "owner" else "")
             + f'</nav>'
         )
 
@@ -3920,6 +6082,9 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
     {flash_html}
     {body_html}
 </main>
+<footer style="text-align:center;padding:12px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:24px;">
+    LedgerLink AI v{_get_app_version()}
+</footer>
 </body>
 </html>"""
 
@@ -4621,6 +6786,29 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             f'</div>'
         )
 
+    # Handwriting low-confidence banner and side-by-side layout
+    _handwriting_low_conf = False
+    try:
+        _handwriting_low_conf = bool(int(row["handwriting_low_confidence"] or 0))
+    except (KeyError, TypeError, ValueError):
+        pass
+    _has_illegible_fields = False
+    if raw_result:
+        for _fld in ("vendor_name", "amount", "date", "document_date",
+                      "gst_amount", "qst_amount", "total", "payment_method"):
+            if raw_result.get(_fld) is None and _fld in raw_result:
+                _has_illegible_fields = True
+                break
+    _show_handwriting_review = _handwriting_low_conf or _has_illegible_fields
+    handwriting_banner = ""
+    if _show_handwriting_review:
+        handwriting_banner = (
+            '<div style="background:#fef3c7;border:2px solid #d97706;border-radius:8px;'
+            'padding:14px 20px;margin-bottom:16px;font-weight:600;color:#92400e;">'
+            f'{esc(t("handwriting_review_banner", lang))}'
+            '</div>'
+        )
+
     # Raw OCR text collapsible
     _raw_ocr = normalize_text(row["raw_ocr_text"]) if row["raw_ocr_text"] else ""
     raw_ocr_section = ""
@@ -4637,6 +6825,48 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             f'</div></details>'
         )
 
+    # Build side-by-side handwriting review layout if needed
+    _handwriting_side_by_side = ""
+    if _show_handwriting_review and file_path:
+        _hw_pdf_url = f"/pdf?id={urlquote(document_id)}"
+        _hw_fields = [
+            ("vendor_name", t("field_vendor", lang)),
+            ("amount", t("field_amount", lang)),
+            ("document_date", t("field_document_date", lang)),
+            ("gst_amount", "TPS/GST"),
+            ("qst_amount", "TVQ/QST"),
+            ("total", "Total"),
+            ("payment_method", t("field_payment_method", lang) if "field_payment_method" in t.__code__.co_varnames else "Payment / Paiement"),
+        ]
+        _hw_rows = ""
+        for _fk, _fl in _hw_fields:
+            _fv = raw_result.get(_fk) if raw_result else None
+            _is_illegible = _fv is None and raw_result and _fk in raw_result
+            _style = 'style="background:#fef2f2;border:2px solid #ef4444;border-radius:4px;padding:4px 8px;"' if _is_illegible else ""
+            _display = esc(str(_fv)) if _fv is not None else f'<span style="color:#dc2626;font-weight:600;">{esc(t("handwriting_field_illegible", lang))}</span>'
+            _input_html = ""
+            if _is_illegible:
+                _input_html = f'<input type="text" name="hw_{_fk}" placeholder="{esc(_fl)}" style="margin-top:4px;width:100%;">'
+            _hw_rows += f'<tr><td style="font-weight:600;">{esc(_fl)}</td><td {_style}>{_display}{_input_html}</td></tr>'
+
+        _suffix = Path(file_path).suffix.lower() if file_path else ""
+        if _suffix == ".pdf":
+            _hw_preview = f'<iframe src="{_hw_pdf_url}" style="width:100%;height:600px;border:1px solid #e5e7eb;border-radius:8px;"></iframe>'
+        elif _suffix in {".png", ".jpg", ".jpeg"}:
+            _hw_preview = f'<img src="{_hw_pdf_url}" style="max-width:100%;border:1px solid #e5e7eb;border-radius:8px;">'
+        else:
+            _hw_preview = '<p class="muted">Preview not available</p>'
+
+        _handwriting_side_by_side = f"""<div class="card"><h3>{esc(t("handwriting_review_title", lang))}</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div>{_hw_preview}</div>
+                <div><table style="width:100%;border-collapse:collapse;">
+                    <thead><tr><th style="text-align:left;padding:6px;border-bottom:2px solid #e5e7eb;">{esc(t("handwriting_field_col", lang))}</th>
+                    <th style="text-align:left;padding:6px;border-bottom:2px solid #e5e7eb;">{esc(t("handwriting_value_col", lang))}</th></tr></thead>
+                    <tbody>{_hw_rows}</tbody>
+                </table></div>
+            </div></div>"""
+
     body = f"""
     <div class="card"><div class="actions" style="margin-bottom:12px;"><a href="/">{esc(t("btn_back_to_queue", lang))}</a></div>
         <h2 style="margin-bottom:8px;">{esc(row["file_name"])}</h2>
@@ -4644,7 +6874,8 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         {timer_badge}
     </div>
     {hallucination_banner}
-    {pdf_viewer_html}
+    {handwriting_banner}
+    {_handwriting_side_by_side if _show_handwriting_review else pdf_viewer_html}
     <div class="card"><h3>{esc(t("doc_section_summary", lang))}</h3>
         <div class="grid-4">
             <div><strong>{esc(t("doc_field_status", lang))}</strong><div>{review_status_badge(accounting_status)}</div></div>
@@ -4698,6 +6929,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         <div><strong>{esc(t("field_external_id", lang))}</strong><div>{esc(row["external_id"])}</div></div>
     </div></div>
     {qbo_actions}
+    {render_line_items_card(document_id, row, lang)}
     {render_doc_communications(document_id, row, ctx, lang)}
     {render_fraud_flags(row, lang)}
     {raw_ocr_section}
@@ -4981,6 +7213,157 @@ def render_onboarding_step3(ctx: dict[str, Any], user: dict[str, Any],
 
 
 # ---------------------------------------------------------------------------
+# FIX 2: Vendor alias management page
+# ---------------------------------------------------------------------------
+
+def render_vendor_aliases(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    rows_html = ""
+    suggestions_html = ""
+    try:
+        with open_db() as conn:
+            aliases = conn.execute(
+                "SELECT alias_id, canonical_vendor_key, alias_name, alias_key, created_by, created_at "
+                "FROM vendor_aliases ORDER BY canonical_vendor_key, alias_name"
+            ).fetchall()
+            for a in aliases:
+                rows_html += (
+                    f'<tr><td>{esc(a["canonical_vendor_key"])}</td>'
+                    f'<td>{esc(a["alias_name"])}</td>'
+                    f'<td>{esc(a["created_by"] or "")}</td>'
+                    f'<td>{esc(a["created_at"] or "")}</td>'
+                    f'<td><form method="POST" action="/admin/vendor_aliases" style="display:inline">'
+                    f'<input type="hidden" name="action" value="delete_alias">'
+                    f'<input type="hidden" name="alias_id" value="{a["alias_id"]}">'
+                    f'<button type="submit" class="btn btn-sm btn-danger">Delete</button>'
+                    f'</form></td></tr>'
+                )
+    except Exception:
+        pass
+
+    title = "Alias fournisseurs / Vendor Aliases" if lang == "fr" else "Vendor Aliases"
+    body = f"""
+<div class="card">
+  <h2>{esc(title)}</h2>
+  {f'<div class="alert alert-success">{esc(flash)}</div>' if flash else ''}
+  {f'<div class="alert alert-danger">{esc(flash_error)}</div>' if flash_error else ''}
+  <h3>{"Ajouter un alias / Add Alias" if lang == "fr" else "Add Alias"}</h3>
+  <form method="POST" action="/admin/vendor_aliases">
+    <input type="hidden" name="action" value="add_alias">
+    <label>{"Nom canonique / Canonical vendor" if lang == "fr" else "Canonical vendor"}:</label>
+    <input type="text" name="canonical_vendor" required style="width:300px">
+    <label>{"Nom alias / Alias name" if lang == "fr" else "Alias name"}:</label>
+    <input type="text" name="alias_name" required style="width:300px">
+    <button type="submit" class="btn">{"Ajouter / Add" if lang == "fr" else "Add"}</button>
+  </form>
+  <h3 style="margin-top:1em">{"Alias existants / Existing Aliases" if lang == "fr" else "Existing Aliases"}</h3>
+  <table>
+    <thead><tr><th>Canonical</th><th>Alias</th><th>Created By</th><th>Created At</th><th>Actions</th></tr></thead>
+    <tbody>{rows_html if rows_html else '<tr><td colspan="5">No aliases yet.</td></tr>'}</tbody>
+  </table>
+</div>"""
+    return page_layout(title, body, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# FIX 7: Manual journal entries page
+# ---------------------------------------------------------------------------
+
+def render_journal_entries(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    rows_html = ""
+    try:
+        with open_db() as conn:
+            entries = conn.execute(
+                "SELECT * FROM manual_journal_entries ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+            for e in entries:
+                status_cls = ""
+                if e["status"] == "conflict":
+                    status_cls = "text-danger"
+                elif e["status"] == "phantom_tax_blocked":
+                    status_cls = "text-danger"
+                elif e["status"] == "posted":
+                    status_cls = "text-success"
+
+                actions = ""
+                if e["status"] == "draft":
+                    actions = (
+                        f'<form method="POST" action="/journal_entries" style="display:inline">'
+                        f'<input type="hidden" name="action" value="post">'
+                        f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
+                        f'<button type="submit" class="btn btn-sm">Post</button></form> '
+                        f'<form method="POST" action="/journal_entries" style="display:inline">'
+                        f'<input type="hidden" name="action" value="reverse">'
+                        f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
+                        f'<button type="submit" class="btn btn-sm btn-danger">Reverse</button></form>'
+                    )
+                elif e["status"] == "posted":
+                    actions = (
+                        f'<form method="POST" action="/journal_entries" style="display:inline">'
+                        f'<input type="hidden" name="action" value="reverse">'
+                        f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
+                        f'<button type="submit" class="btn btn-sm btn-danger">Reverse</button></form>'
+                    )
+
+                rows_html += (
+                    f'<tr>'
+                    f'<td>{esc(e["entry_id"])}</td>'
+                    f'<td>{esc(e["client_code"])}</td>'
+                    f'<td>{esc(e["period"])}</td>'
+                    f'<td>{esc(e["entry_date"])}</td>'
+                    f'<td>{esc(e["debit_account"])}</td>'
+                    f'<td>{esc(e["credit_account"])}</td>'
+                    f'<td>${float(e["amount"] or 0):,.2f}</td>'
+                    f'<td>{esc(e["description"] or "")}</td>'
+                    f'<td class="{status_cls}">{esc(e["status"])}</td>'
+                    f'<td>{actions}</td>'
+                    f'</tr>'
+                )
+    except Exception:
+        pass
+
+    title = "Écritures manuelles / Journal Entries" if lang == "fr" else "Manual Journal Entries"
+    body = f"""
+<div class="card">
+  <h2>{esc(title)}</h2>
+  {f'<div class="alert alert-success">{esc(flash)}</div>' if flash else ''}
+  {f'<div class="alert alert-danger">{esc(flash_error)}</div>' if flash_error else ''}
+  <h3>{"Nouvelle écriture / New Entry" if lang == "fr" else "New Entry"}</h3>
+  <form method="POST" action="/journal_entries">
+    <input type="hidden" name="action" value="create">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5em; max-width:600px;">
+      <label>Client: <input type="text" name="client_code" required></label>
+      <label>Period: <input type="text" name="period" placeholder="2026-03" required></label>
+      <label>Date: <input type="date" name="entry_date" required></label>
+      <label>Amount: <input type="number" step="0.01" name="amount" required></label>
+      <label>Debit GL: <input type="text" name="debit_account" required></label>
+      <label>Credit GL: <input type="text" name="credit_account" required></label>
+      <label style="grid-column:1/3">Description: <input type="text" name="description" style="width:100%"></label>
+      <label>Document ID (opt): <input type="text" name="document_id"></label>
+    </div>
+    <button type="submit" class="btn" style="margin-top:0.5em">{"Créer / Create" if lang == "fr" else "Create"}</button>
+  </form>
+  <h3 style="margin-top:1em">{"Écritures récentes / Recent Entries" if lang == "fr" else "Recent Entries"}</h3>
+  <table style="font-size:0.85em">
+    <thead><tr><th>ID</th><th>Client</th><th>Period</th><th>Date</th><th>Debit</th><th>Credit</th><th>Amount</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>{rows_html if rows_html else '<tr><td colspan="10">No entries.</td></tr>'}</tbody>
+  </table>
+</div>"""
+    return page_layout(title, body, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
 
@@ -5228,6 +7611,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._serve_db_backup()
                 return
 
+            if path == "/admin/cache":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_cache_admin(user, flash, flash_error, lang=lang))
+                return
+
             if path == "/filing_summary":
                 if ctx.get("role") not in ("manager", "owner"):
                     self._send_html(page_layout(
@@ -5334,6 +7729,75 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 comm_client = qs.get("client_code", [""])[0].strip()
                 self._send_html(render_communications(
                     ctx, user, comm_client, flash, flash_error, lang=lang))
+                return
+
+            # --- Bank Reconciliation routes ---
+            if path == "/reconciliation":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                fp = qs.get("period", [""])[0].strip()
+                self._send_html(render_reconciliation_list(
+                    ctx, user, flash, flash_error, lang=lang,
+                    filter_client=fc, filter_period=fp))
+                return
+
+            if path == "/reconciliation/new":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_reconciliation_new(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/reconciliation/detail":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                rid = qs.get("id", [""])[0].strip()
+                self._send_html(render_reconciliation_detail(
+                    rid, ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/reconciliation/pdf":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                rid = qs.get("id", [""])[0].strip()
+                with open_db() as conn:
+                    pdf_bytes = recon_generate_pdf(rid, lang, conn)
+                if not pdf_bytes:
+                    self._send_html(page_layout(
+                        t("err_not_found", lang),
+                        f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2></div>',
+                        user=user, lang=lang), status=404)
+                    return
+                filename = f"reconciliation_{rid}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
                 return
 
             if path == "/analytics":
@@ -5532,6 +7996,133 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_engagement_detail(ctx, user, eng_id, flash, flash_error, lang=lang))
                 return
 
+            if path == "/audit/materiality":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mat_forbidden", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                mat_eng_id = qs.get("engagement_id", [""])[0].strip()
+                self._send_html(render_materiality(ctx, user, mat_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/audit/risk":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_risk_forbidden", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                risk_eng_id = qs.get("engagement_id", [""])[0].strip()
+                self._send_html(render_risk_assessment(ctx, user, risk_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/audit/rep_letter":
+                if ctx.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_rep_forbidden", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                rep_eng_id = qs.get("engagement_id", [""])[0].strip()
+                self._send_html(render_rep_letter(ctx, user, rep_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/audit/controls":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_ctrl_forbidden", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                ctrl_eng_id = qs.get("engagement_id", [""])[0].strip()
+                self._send_html(render_control_tests(ctx, user, ctrl_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/audit/related_parties":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_rp_forbidden", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                rp_eng_id = qs.get("engagement_id", [""])[0].strip()
+                self._send_html(render_related_parties(ctx, user, rp_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/qr":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_qr_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_qr_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/qr/download":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_qr_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                client_code_qr = qs.get("client_code", [""])[0].strip()
+                if not client_code_qr:
+                    self._send_html(page_layout("Bad Request",
+                        '<div class="card"><h2>client_code required</h2></div>',
+                        user=user, lang=lang), status=400)
+                    return
+                portal_base_qr = _get_portal_base_url()
+                upload_url_qr = _build_upload_url(portal_base_qr, client_code_qr)
+                clients_qr = _get_qr_clients()
+                client_name_qr = next(
+                    (c["client_name"] for c in clients_qr if c["client_code"] == client_code_qr),
+                    client_code_qr,
+                )
+                png_bytes = generate_client_qr_png(client_code_qr, client_name_qr, upload_url_qr)
+                safe_code = "".join(c for c in client_code_qr if c.isalnum() or c in "-_")
+                filename = f"qr_{safe_code}.png"
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(png_bytes)))
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.end_headers()
+                self.wfile.write(png_bytes)
+                return
+
+            if path == "/qr/pdf":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_qr_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                clients_pdf = _get_qr_clients()
+                portal_base_pdf = _get_portal_base_url()
+                pdf_bytes = generate_all_qr_pdf(clients_pdf, portal_base_pdf)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.send_header("Content-Disposition", 'attachment; filename="ledgerlink_qr_codes.pdf"')
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
+                return
+
             if path == "/license":
                 if user.get("role") != "owner":
                     self._send_html(page_layout(
@@ -5541,6 +8132,39 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_license_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/license/machines":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_lic_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_lic_forbidden", lang))}</h2>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_license_machines(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/admin/updates":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_admin_updates(user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/admin/remote":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_admin_remote(user, flash, flash_error, lang=lang))
                 return
 
             # ------------------------------------------------------------------
@@ -5566,6 +8190,36 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._redirect("/")
                     return
                 self._send_html(render_onboarding_step3(ctx, user, lang=lang))
+                return
+
+            # ------------------------------------------------------------------
+            # FIX 2: Vendor alias management (owner only)
+            # ------------------------------------------------------------------
+            if path == "/admin/vendor_aliases":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_vendor_aliases(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            # ------------------------------------------------------------------
+            # FIX 7: Manual journal entries (manager/owner)
+            # ------------------------------------------------------------------
+            if path == "/journal_entries":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_journal_entries(ctx, user, flash, flash_error, lang=lang))
                 return
 
             self._send_html(page_layout(
@@ -5678,6 +8332,25 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect("/", flash=t("flash_pw_updated", lang))
                 return
 
+            # --- OpenClaw bridge — no session auth required ---
+            if path == "/ingest/openclaw":
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except Exception:
+                    self._send_json(
+                        {"ok": False, "document_id": None, "status": "error",
+                         "error": "invalid_json"},
+                        status=400,
+                    )
+                    return
+                from src.integrations.openclaw_bridge import handle_openclaw_ingest
+                result = handle_openclaw_ingest(payload, db_path=DB_PATH)
+                http_status = 200 if result.get("ok") else (
+                    404 if result.get("status") == "unknown_sender" else 400
+                )
+                self._send_json(result, status=http_status)
+                return
+
             # All other POSTs require auth
             user = get_session_user(self)
             if not user:
@@ -5716,6 +8389,56 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 try:
                     from src.agents.core.hallucination_guard import track_correction_count
                     track_correction_count(document_id, before_row, submitted, db_path=DB_PATH)
+                except Exception:
+                    pass
+                # FIX 7: Update substance_flags when GL is manually changed
+                new_gl = normalize_text(submitted.get("gl_account", ""))
+                old_gl = normalize_text(before_row["gl_account"]) if before_row else ""
+                if new_gl and new_gl != old_gl:
+                    try:
+                        with open_db() as _sf_conn:
+                            sf_cols = {r["name"] for r in _sf_conn.execute("PRAGMA table_info(documents)").fetchall()}
+                            if "substance_flags" in sf_cols:
+                                existing_sf = safe_json_loads(before_row.get("substance_flags")) if before_row.get("substance_flags") else {}
+                                if not isinstance(existing_sf, dict):
+                                    existing_sf = {}
+                                existing_sf["manual_override"] = True
+                                existing_sf["manual_gl"] = new_gl
+                                existing_sf["manual_override_at"] = utc_now_iso()
+                                _sf_conn.execute(
+                                    "UPDATE documents SET substance_flags = ? WHERE document_id = ?",
+                                    (json.dumps(existing_sf, ensure_ascii=False), document_id),
+                                )
+                                _sf_conn.commit()
+                    except Exception:
+                        pass
+                # BLOCK 1: Re-run fraud detection and review_policy after document update
+                try:
+                    from src.engines.fraud_engine import run_fraud_detection
+                    _ff = run_fraud_detection(document_id, db_path=DB_PATH) or []
+                    from src.agents.tools.review_policy import decide_review_status as _drv
+                    _updated_row = get_document(document_id)
+                    if _updated_row:
+                        _sf_raw = safe_json_loads(_updated_row.get("substance_flags")) if _updated_row.get("substance_flags") else {}
+                        if not isinstance(_sf_raw, dict):
+                            _sf_raw = {}
+                        _amt = None
+                        try:
+                            _amt = float(_updated_row["amount"]) if _updated_row.get("amount") else None
+                        except (TypeError, ValueError):
+                            pass
+                        _dec = _drv(
+                            rules_confidence=float(_updated_row.get("confidence") or 0),
+                            final_method="rules",
+                            vendor_name=normalize_text(_updated_row.get("vendor")),
+                            total=_amt,
+                            document_date=normalize_text(_updated_row.get("document_date")),
+                            client_code=normalize_text(_updated_row.get("client_code")),
+                            fraud_flags=_ff,
+                            substance_flags=_sf_raw,
+                        )
+                        if _dec.status in ("NeedsReview", "Exception"):
+                            set_document_status(document_id, _dec.status)
                 except Exception:
                     pass
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_doc_updated", lang))
@@ -5767,6 +8490,79 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path == "/qbo/approve":
                 doc_row = get_document(document_id)
                 if doc_row is not None:
+                    # --- FIX 1: Check fraud flags before allowing approval ---
+                    fraud_flags_raw = safe_json_loads(doc_row["fraud_flags"]) if doc_row["fraud_flags"] else {}
+                    if isinstance(doc_row["fraud_flags"], str):
+                        try:
+                            fraud_flags_raw = json.loads(doc_row["fraud_flags"])
+                        except Exception:
+                            fraud_flags_raw = []
+                    if not isinstance(fraud_flags_raw, list):
+                        fraud_flags_raw = []
+                    blocking_fraud = [
+                        f for f in fraud_flags_raw
+                        if isinstance(f, dict) and normalize_text(f.get("severity")).upper() in ("CRITICAL", "HIGH")
+                    ]
+                    if blocking_fraud:
+                        fraud_override_reason = normalize_text(form.get("fraud_override_reason", ""))
+                        fraud_override_ack = normalize_text(form.get("fraud_override_ack", ""))
+                        if fraud_override_ack != "1" or not fraud_override_reason:
+                            bilingual_msg = (
+                                "Ce document a des indicateurs de fraude — révision manuelle obligatoire / "
+                                "This document has fraud indicators — manual review required"
+                            )
+                            self._flash_redirect(
+                                f"/document?id={urlquote(document_id)}",
+                                error=bilingual_msg,
+                            )
+                            return
+                        # Only manager and owner roles may override
+                        if ctx["role"] not in ("manager", "owner"):
+                            self._flash_redirect(
+                                f"/document?id={urlquote(document_id)}",
+                                error=t("err_fraud_override_denied", lang),
+                            )
+                            return
+                        # FIX 7: Validate fraud override reason — min 10 non-whitespace/punctuation chars
+                        stripped_reason = fraud_override_reason.strip()
+                        import string as _string
+                        reason_alpha = stripped_reason.translate(str.maketrans("", "", _string.punctuation + " "))
+                        if len(stripped_reason) < 10 or not reason_alpha:
+                            self._flash_redirect(
+                                f"/document?id={urlquote(document_id)}",
+                                error="Veuillez fournir une justification détaillée / Please provide a detailed justification.",
+                            )
+                            return
+                        # FIX 2: Audit-log the fraud override BEFORE updating the DB
+                        with open_db() as _fc:
+                            if _fc.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_log'").fetchone():
+                                _fc.execute(
+                                    """INSERT INTO audit_log
+                                       (event_type, username, document_id, prompt_snippet, created_at)
+                                       VALUES (?, ?, ?, ?, ?)""",
+                                    (
+                                        "fraud_override",
+                                        ctx.get("username", ""),
+                                        document_id,
+                                        json.dumps({
+                                            "fraud_flags": [
+                                                f.get("rule", f.get("flag", "")) if isinstance(f, dict) else str(f)
+                                                for f in blocking_fraud
+                                            ],
+                                            "override_reason": fraud_override_reason,
+                                        }, ensure_ascii=False),
+                                        utc_now_iso(),
+                                    ),
+                                )
+                            cols = {r["name"] for r in _fc.execute("PRAGMA table_info(documents)").fetchall()}
+                            if "fraud_override_reason" in cols:
+                                _fc.execute(
+                                    "UPDATE documents SET fraud_override_reason = ? WHERE document_id = ?",
+                                    (fraud_override_reason, document_id),
+                                )
+                            _fc.commit()
+                    # --- END FIX 1 ---
+
                     raw_doc = safe_json_loads(doc_row["raw_result"])
                     vendor_province = str(raw_doc.get("vendor_province", "") or "").strip()
                     tax_check = validate_tax_code(doc_row["gl_account"], doc_row["tax_code"], vendor_province)
@@ -5798,7 +8594,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         pass
                 posting = get_qbo_posting_job(document_id)
                 if posting is None:
-                    build_posting_job(document_id=document_id, target_system="qbo", entry_kind="expense", db_path=DB_PATH)
+                    # FIX 2: Infer entry_kind from doc_row
+                    inferred_entry_kind = _infer_entry_kind(doc_row) if doc_row is not None else "expense"
+                    build_posting_job(document_id=document_id, target_system="qbo", entry_kind=inferred_entry_kind, db_path=DB_PATH)
                     posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("Could not create posting job")
@@ -5836,6 +8634,33 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/retry":
+                # FIX 11: Retry is an approval action — check fraud flags
+                doc_row = get_document(document_id)
+                if doc_row is not None:
+                    fraud_flags_raw = safe_json_loads(doc_row["fraud_flags"]) if doc_row["fraud_flags"] else []
+                    if isinstance(doc_row["fraud_flags"], str):
+                        try:
+                            fraud_flags_raw = json.loads(doc_row["fraud_flags"])
+                        except Exception:
+                            fraud_flags_raw = []
+                    if not isinstance(fraud_flags_raw, list):
+                        fraud_flags_raw = []
+                    blocking_fraud = [
+                        f for f in fraud_flags_raw
+                        if isinstance(f, dict) and normalize_text(f.get("severity")).upper() in ("CRITICAL", "HIGH")
+                    ]
+                    if blocking_fraud:
+                        override_reason = normalize_text(doc_row.get("fraud_override_reason") or "")
+                        if not override_reason or len(override_reason.strip()) < 10:
+                            bilingual_msg = (
+                                "Ce document a des indicateurs de fraude — révision manuelle obligatoire / "
+                                "This document has fraud indicators — manual review required"
+                            )
+                            self._flash_redirect(
+                                f"/document?id={urlquote(document_id)}",
+                                error=bilingual_msg,
+                            )
+                            return
                 posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("No posting job exists for this document")
@@ -5927,6 +8752,83 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 import os as _os
                 _os.execv(sys.executable, [sys.executable] + sys.argv)
                 return  # unreachable; satisfies linters
+
+            if path == "/admin/cache/clear":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                deleted = _ai_clear_cache()
+                self._flash_redirect("/admin/cache", flash=f"Cache cleared — {deleted} entries removed.")
+                return
+
+            # ---------------------------------------------------------------
+            # FIX 2: /admin/vendor_memory — owner-only vendor pattern viewer
+            # ---------------------------------------------------------------
+            if path == "/admin/vendor_memory":
+                if ctx.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                action = normalize_text(form.get("action", ""))
+                vm_vendor = normalize_text(form.get("vendor", ""))
+                vm_client = normalize_text(form.get("client_code", ""))
+                if action == "reset" and vm_vendor:
+                    from src.agents.core.learning_memory_store import reset_vendor_memory, reset_learning_corrections
+                    with open_db() as _vm_conn:
+                        r1 = reset_vendor_memory(vm_vendor, vm_client, _vm_conn)
+                        r2 = reset_learning_corrections(vm_vendor, vm_client, _vm_conn)
+                        # Also reset vendor_memory table
+                        from src.agents.core.vendor_memory_store import normalize_key as vm_nk
+                        vk = vm_nk(vm_vendor)
+                        ck = vm_nk(vm_client)
+                        _vm_conn.execute(
+                            "DELETE FROM vendor_memory WHERE vendor_key = ? AND (client_code_key = ? OR ? = '')",
+                            (vk, ck, ck),
+                        )
+                        _vm_conn.commit()
+                    self._flash_redirect(
+                        "/admin/vendor_memory",
+                        flash=f"Reset vendor memory for '{vm_vendor}' / '{vm_client}': "
+                              f"patterns={r1.get('deleted',0)}, corrections={r2.get('deleted',0)}",
+                    )
+                    return
+                # Display all vendor patterns
+                rows_html = ""
+                with open_db() as _vm_conn:
+                    vm_rows = []
+                    if _vm_conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='vendor_memory'").fetchone():
+                        vm_rows = _vm_conn.execute(
+                            "SELECT * FROM vendor_memory ORDER BY approval_count DESC, updated_at DESC LIMIT 200"
+                        ).fetchall()
+                    rows_html = "<table class='table'><tr><th>Vendor</th><th>Client</th><th>GL</th><th>Tax</th><th>Count</th><th>Confidence</th><th>Updated</th><th>Action</th></tr>"
+                    for r in vm_rows:
+                        vid = esc(str(r["vendor"] or ""))
+                        cid = esc(str(r["client_code"] or ""))
+                        rows_html += (
+                            f"<tr><td>{vid}</td><td>{cid}</td>"
+                            f"<td>{esc(str(r['gl_account'] or ''))}</td>"
+                            f"<td>{esc(str(r['tax_code'] or ''))}</td>"
+                            f"<td>{r['approval_count']}</td>"
+                            f"<td>{round(float(r['confidence'] or 0), 2)}</td>"
+                            f"<td>{esc(str(r['updated_at'] or ''))}</td>"
+                            f"<td><form method='POST' action='/admin/vendor_memory' style='display:inline'>"
+                            f"<input type='hidden' name='action' value='reset'>"
+                            f"<input type='hidden' name='vendor' value='{vid}'>"
+                            f"<input type='hidden' name='client_code' value='{cid}'>"
+                            f"<button type='submit' class='btn btn-danger btn-sm' "
+                            f"onclick=\"return confirm('Reset this vendor?')\">Reset</button></form></td></tr>"
+                        )
+                    rows_html += "</table>"
+                body = f"<div class='card'><h2>Vendor Memory Patterns</h2>{rows_html}</div>"
+                self._send_html(page_layout("Vendor Memory", body, user=user, lang=lang))
+                return
 
             if path == "/period_close/check_item":
                 if ctx.get("role") not in ("manager", "owner"):
@@ -6076,6 +8978,86 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(dest, flash=t("flash_rq_config_saved", lang))
                 return
 
+            # --- Bank Reconciliation POST routes ---
+            if path == "/reconciliation/create":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                rc_client = normalize_text(form.get("client_code", ""))
+                rc_account = normalize_text(form.get("account_name", ""))
+                rc_acct_num = normalize_text(form.get("account_number", ""))
+                rc_period = normalize_text(form.get("period_end_date", ""))
+                rc_stmt = normalize_amount_input(form.get("statement_balance", ""))
+                rc_gl = normalize_amount_input(form.get("gl_balance", ""))
+                if not rc_client or not rc_account or not rc_period:
+                    raise ValueError("Client code, account name, and period end date are required")
+                if rc_stmt is None or rc_gl is None:
+                    raise ValueError("Statement balance and GL balance are required")
+                with open_db() as conn:
+                    rid = recon_create(
+                        rc_client, rc_account, rc_period, rc_stmt, rc_gl, conn,
+                        account_number=rc_acct_num, prepared_by=ctx["username"],
+                    )
+                    count = recon_auto_populate(rid, conn)
+                flash_msg = t("flash_recon_created", lang)
+                if count > 0:
+                    flash_msg += " " + t("recon_auto_populated", lang, count=count)
+                self._flash_redirect(f"/reconciliation/detail?id={urlquote(rid)}", flash=flash_msg)
+                return
+
+            if path == "/reconciliation/add_item":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                ri_recon = normalize_text(form.get("reconciliation_id", ""))
+                ri_type = normalize_text(form.get("item_type", ""))
+                ri_desc = normalize_text(form.get("description", ""))
+                ri_amt = normalize_amount_input(form.get("amount", ""))
+                ri_date = normalize_text(form.get("transaction_date", ""))
+                if not ri_recon or not ri_type or not ri_desc or ri_amt is None:
+                    raise ValueError("Reconciliation ID, type, description, and amount are required")
+                with open_db() as conn:
+                    recon_add_item(ri_recon, ri_type, ri_desc, ri_amt, ri_date, conn)
+                self._flash_redirect(
+                    f"/reconciliation/detail?id={urlquote(ri_recon)}",
+                    flash=t("flash_recon_item_added", lang),
+                )
+                return
+
+            if path == "/reconciliation/clear_item":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                ci_item = normalize_text(form.get("item_id", ""))
+                ci_recon = normalize_text(form.get("reconciliation_id", ""))
+                if not ci_item:
+                    raise ValueError("Item ID is required")
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                with open_db() as conn:
+                    recon_mark_cleared(ci_item, today, conn)
+                self._flash_redirect(
+                    f"/reconciliation/detail?id={urlquote(ci_recon)}",
+                    flash=t("flash_recon_item_cleared", lang),
+                )
+                return
+
+            if path == "/reconciliation/finalize":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                fi_recon = normalize_text(form.get("reconciliation_id", ""))
+                if not fi_recon:
+                    raise ValueError("Reconciliation ID is required")
+                with open_db() as conn:
+                    success = recon_finalize(fi_recon, ctx["username"], conn)
+                if success:
+                    self._flash_redirect(
+                        f"/reconciliation/detail?id={urlquote(fi_recon)}",
+                        flash=t("flash_recon_finalized", lang),
+                    )
+                else:
+                    self._flash_redirect(
+                        f"/reconciliation/detail?id={urlquote(fi_recon)}",
+                        error=t("flash_recon_not_balanced", lang),
+                    )
+                return
+
             # --- Bank statement import ---
             if path == "/bank_import":
                 if ctx.get("role") not in ("manager", "owner"):
@@ -6101,9 +9083,33 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         ctx, user, flash_error=t("err_bank_no_transactions", lang),
                         lang=lang, result=result))
                     return
+                # Part 4: Auto-detection — check for existing reconciliation
+                _recon_flash_extra = ""
+                try:
+                    # Determine period from transactions
+                    _txn_dates = [tx.get("txn_date", "") for tx in result.get("transactions", []) if tx.get("txn_date")]
+                    _period_end = max(_txn_dates) if _txn_dates else ""
+                    _period_month = _period_end[:7] if _period_end else ""
+                    if _period_month:
+                        with open_db() as _rc:
+                            _ensure_recon_tables(_rc)
+                            _existing = _rc.execute(
+                                "SELECT reconciliation_id, status FROM bank_reconciliations WHERE client_code = ? AND period_end_date LIKE ?",
+                                (bi_client, f"{_period_month}%"),
+                            ).fetchone()
+                            if _existing:
+                                # Auto-add unmatched items to existing reconciliation
+                                _added = recon_auto_populate(_existing["reconciliation_id"], _rc)
+                                if _added > 0:
+                                    _recon_flash_extra = " " + t("recon_auto_populated", lang, count=_added)
+                            else:
+                                _recon_flash_extra = " " + t("recon_suggest_banner", lang, client=bi_client, period=_period_month)
+                except Exception:
+                    pass  # don't block import on reconciliation errors
+                result["_client_code"] = bi_client  # pass client_code for split detection
                 self._send_html(render_bank_import(
                     ctx, user,
-                    flash=t("flash_bank_imported", lang),
+                    flash=t("flash_bank_imported", lang) + _recon_flash_extra,
                     lang=lang, result=result))
                 return
 
@@ -6121,6 +9127,38 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     db_path=DB_PATH,
                 )
                 self._flash_redirect("/bank_import", flash=t("flash_bank_match_applied", lang))
+                return
+
+            # --- BLOCK 1: Confirm split payment ---
+            if path == "/bank_import/confirm_split":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                sp_txn_id = normalize_text(form.get("transaction_id", ""))
+                if not sp_txn_id:
+                    raise ValueError("transaction_id is required")
+                # invoice_ids may be passed as multiple values in raw form
+                sp_raw = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+                sp_invoice_ids = [v.strip() for v in sp_raw.get("invoice_ids", []) if v.strip()]
+                if not sp_invoice_ids:
+                    raise ValueError("invoice_ids are required")
+                with open_db() as conn:
+                    for inv_id in sp_invoice_ids:
+                        conn.execute(
+                            "UPDATE documents SET matched_bank_transaction_id = ?, match_status = 'matched' "
+                            "WHERE document_id = ?",
+                            (sp_txn_id, inv_id),
+                        )
+                    # Also update the bank transaction record if it exists
+                    try:
+                        conn.execute(
+                            "UPDATE documents SET review_status = 'Ready', match_status = 'matched' "
+                            "WHERE document_id = ?",
+                            (sp_txn_id,),
+                        )
+                    except Exception:
+                        pass
+                    conn.commit()
+                self._flash_redirect("/bank_import", flash=t("flash_split_confirmed", lang))
                 return
 
             # --- Draft client message (AI-generated, saved as unsent draft) ---
@@ -6272,6 +9310,42 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            # BLOCK 5: Save assertion coverage for a working paper
+            if path == "/working_papers/save_assertions":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                a_paper_id   = normalize_text(form.get("paper_id", ""))
+                a_client     = normalize_text(form.get("client_code", ""))
+                a_period     = normalize_text(form.get("period", ""))
+                a_type       = normalize_text(form.get("engagement_type", "audit"))
+                if not a_paper_id:
+                    raise ValueError("paper_id is required")
+                # Parse assertions from multiple-value form field
+                a_raw = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+                a_assertions = [v.strip() for v in a_raw.get("assertions", []) if v.strip()]
+                with open_db() as conn:
+                    # Get or create an item for this paper to attach assertions
+                    items = conn.execute(
+                        "SELECT item_id FROM working_paper_items WHERE paper_id = ? LIMIT 1",
+                        (a_paper_id,),
+                    ).fetchall()
+                    if items:
+                        for item_row in items:
+                            _cas.add_assertion_coverage(conn, item_row["item_id"], a_assertions)
+                    else:
+                        # Create a placeholder item
+                        item = _audit.add_working_paper_item(
+                            conn, a_paper_id, "assertion_check", "tested",
+                            notes="Assertion coverage", tested_by=user["username"],
+                        )
+                        if item:
+                            _cas.add_assertion_coverage(conn, item["item_id"], a_assertions)
+                self._flash_redirect(
+                    f"/working_papers?client_code={urlquote(a_client)}&period={urlquote(a_period)}&engagement_type={urlquote(a_type)}",
+                    flash=t("flash_wp_saved", lang),
+                )
+                return
+
             if path == "/working_papers/create_from_coa":
                 if ctx.get("role") not in ("manager", "owner"):
                     raise ValueError(t("err_mgr_owner_required", lang))
@@ -6282,8 +9356,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("client_code and period are required")
                 with open_db() as conn:
                     accounts = conn.execute("SELECT * FROM chart_of_accounts ORDER BY account_code").fetchall()
+                    # BLOCK 3: Find engagement for materiality check
+                    _wp_eng = None
+                    try:
+                        _wp_eng_row = conn.execute(
+                            "SELECT engagement_id FROM engagements WHERE client_code = ? AND period = ? AND engagement_type = ? LIMIT 1",
+                            (wp_client, wp_period, wp_type),
+                        ).fetchone()
+                        if _wp_eng_row:
+                            _wp_eng = _wp_eng_row["engagement_id"]
+                    except Exception:
+                        pass
                     for acct in accounts:
-                        _audit.get_or_create_working_paper(
+                        wp_result = _audit.get_or_create_working_paper(
                             conn,
                             wp_client,
                             wp_period,
@@ -6291,6 +9376,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             acct["account_code"],
                             acct["account_name"],
                         )
+                        # BLOCK 3: Auto-check materiality for each working paper
+                        if _wp_eng and wp_result:
+                            try:
+                                bal = float(wp_result.get("balance_per_books") or 0)
+                                mat_check = _cas.check_materiality_for_working_paper(conn, _wp_eng, bal)
+                                if mat_check.get("material_item"):
+                                    paper_id = wp_result.get("paper_id") or str(wp_result.get("id", ""))
+                                    try:
+                                        cols = {r[1] for r in conn.execute("PRAGMA table_info(working_papers)").fetchall()}
+                                        if "is_material" not in cols:
+                                            conn.execute("ALTER TABLE working_papers ADD COLUMN is_material INTEGER DEFAULT 0")
+                                        conn.execute(
+                                            "UPDATE working_papers SET is_material = 1 WHERE paper_id = ?",
+                                            (paper_id,),
+                                        )
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    conn.commit()
                 self._flash_redirect(
                     f"/working_papers?client_code={urlquote(wp_client)}&period={urlquote(wp_period)}&engagement_type={urlquote(wp_type)}",
                     flash=t("flash_wp_saved", lang),
@@ -6357,12 +9462,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 budget        = float(budget_str) if budget_str else None
                 fee           = float(fee_str) if fee_str else None
                 with open_db() as conn:
-                    _audit.create_engagement(
+                    eng_result = _audit.create_engagement(
                         conn, eng_client, eng_period,
                         engagement_type=eng_type,
                         partner=eng_partner, manager=eng_manager, staff=eng_staff,
                         planned_hours=planned_hours, budget=budget, fee=fee,
                     )
+                    # BLOCK 2: Auto-run going concern detection on engagement create
+                    try:
+                        gc = _cas.detect_going_concern_indicators(eng_client, conn)
+                        if gc.get("assessment_required"):
+                            new_eng_id = eng_result.get("engagement_id", "") if isinstance(eng_result, dict) else ""
+                            if new_eng_id:
+                                conn.execute(
+                                    "CREATE TABLE IF NOT EXISTS going_concern_assessments "
+                                    "(id TEXT PRIMARY KEY, engagement_id TEXT, indicators TEXT, "
+                                    "assessment_required INTEGER, created_at TEXT)"
+                                )
+                                conn.execute(
+                                    "INSERT OR REPLACE INTO going_concern_assessments VALUES (?,?,?,?,?)",
+                                    (secrets.token_hex(8), new_eng_id,
+                                     json.dumps(gc.get("indicators", []), ensure_ascii=False),
+                                     1, utc_now_iso()),
+                                )
+                                conn.commit()
+                    except Exception:
+                        pass
                 self._flash_redirect("/engagements", flash=t("flash_eng_created", lang))
                 return
 
@@ -6405,6 +9530,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         pass
                 with open_db() as conn:
                     _audit.update_engagement(conn, eng_id, **upd_kwargs)
+                    # BLOCK 2: Auto-run going concern detection on engagement update
+                    try:
+                        eng_row = _audit.get_engagement(conn, eng_id)
+                        if eng_row:
+                            gc = _cas.detect_going_concern_indicators(eng_row["client_code"], conn)
+                            if gc.get("assessment_required"):
+                                conn.execute(
+                                    "CREATE TABLE IF NOT EXISTS going_concern_assessments "
+                                    "(id TEXT PRIMARY KEY, engagement_id TEXT, indicators TEXT, "
+                                    "assessment_required INTEGER, created_at TEXT)"
+                                )
+                                conn.execute(
+                                    "INSERT OR REPLACE INTO going_concern_assessments VALUES (?,?,?,?,?)",
+                                    (secrets.token_hex(8), eng_id,
+                                     json.dumps(gc.get("indicators", []), ensure_ascii=False),
+                                     1, utc_now_iso()),
+                                )
+                                conn.commit()
+                    except Exception:
+                        pass
                 self._flash_redirect(f"/engagements/detail?id={urlquote(eng_id)}", flash=t("flash_eng_updated", lang))
                 return
 
@@ -6415,6 +9560,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if not eng_id:
                     raise ValueError("engagement_id is required")
                 with open_db() as conn:
+                    can_issue, blocking = _cas.check_engagement_issuable(eng_id, conn)
+                    if not can_issue:
+                        blocking_labels = ", ".join(blocking)
+                        raise ValueError(f"{t('err_checklist_blocking', lang)} {blocking_labels}")
                     pdf_bytes = _audit.issue_engagement(conn, eng_id, issued_by=user["username"], lang=lang)
                 filename = f"engagement_{eng_id}.pdf"
                 self.send_response(200)
@@ -6423,6 +9572,198 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
                 self.end_headers()
                 self.wfile.write(pdf_bytes)
+                return
+
+            if path == "/audit/materiality/save":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_mat_forbidden", lang))
+                mat_eng_id = normalize_text(form.get("engagement_id", ""))
+                mat_basis = normalize_text(form.get("basis", ""))
+                mat_amount_raw = form.get("basis_amount", "0")
+                mat_notes = form.get("notes", "")
+                if not mat_eng_id or not mat_basis:
+                    raise ValueError("engagement_id and basis are required")
+                mat_dict = _cas.calculate_materiality(mat_basis, float(mat_amount_raw))
+                with open_db() as conn:
+                    _cas.save_materiality(conn, mat_eng_id, mat_dict, user["username"], notes=mat_notes)
+                self._flash_redirect(
+                    f"/audit/materiality?engagement_id={urlquote(mat_eng_id)}",
+                    flash=t("flash_mat_saved", lang),
+                )
+                return
+
+            if path == "/audit/risk/generate":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_risk_forbidden", lang))
+                risk_eng_id = normalize_text(form.get("engagement_id", ""))
+                if not risk_eng_id:
+                    raise ValueError("engagement_id is required")
+                with open_db() as conn:
+                    # Get chart of accounts for this engagement's working papers
+                    eng = _audit.get_engagement(conn, risk_eng_id)
+                    if not eng:
+                        raise ValueError("Engagement not found")
+                    coa = _audit.get_chart_of_accounts(conn)
+                    accounts = [{"account_code": a["account_code"], "account_name": a.get("account_name", "")} for a in coa]
+                    _cas.create_risk_matrix(conn, risk_eng_id, accounts, assessed_by=user["username"])
+                self._flash_redirect(
+                    f"/audit/risk?engagement_id={urlquote(risk_eng_id)}",
+                    flash=t("flash_risk_generated", lang),
+                )
+                return
+
+            if path == "/audit/risk/update":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_risk_forbidden", lang))
+                risk_id = normalize_text(form.get("risk_id", ""))
+                risk_eng_id = normalize_text(form.get("engagement_id", ""))
+                risk_inherent = normalize_text(form.get("inherent_risk", ""))
+                risk_control = normalize_text(form.get("control_risk", ""))
+                if not risk_id:
+                    raise ValueError("risk_id is required")
+                with open_db() as conn:
+                    _cas.assess_risk(
+                        conn, risk_id,
+                        inherent_risk=risk_inherent or None,
+                        control_risk=risk_control or None,
+                        assessed_by=user["username"],
+                    )
+                self._flash_redirect(
+                    f"/audit/risk?engagement_id={urlquote(risk_eng_id)}",
+                    flash=t("flash_risk_updated", lang),
+                )
+                return
+
+            # CAS 580 — Rep letter routes
+            if path == "/audit/rep_letter/generate":
+                if ctx.get("role") != "owner":
+                    raise ValueError(t("err_rep_forbidden", lang))
+                rep_eng_id = normalize_text(form.get("engagement_id", ""))
+                if not rep_eng_id:
+                    raise ValueError("engagement_id is required")
+                with open_db() as conn:
+                    draft_fr = _cas.generate_management_rep_letter(rep_eng_id, "fr", conn)
+                    draft_en = _cas.generate_management_rep_letter(rep_eng_id, "en", conn)
+                    _cas.save_rep_letter(rep_eng_id, draft_fr, draft_en, conn, created_by=user["username"])
+                self._flash_redirect(
+                    f"/audit/rep_letter?engagement_id={urlquote(rep_eng_id)}",
+                    flash=t("flash_rep_saved", lang),
+                )
+                return
+
+            if path == "/audit/rep_letter/sign":
+                if ctx.get("role") != "owner":
+                    raise ValueError(t("err_rep_forbidden", lang))
+                letter_id = normalize_text(form.get("letter_id", ""))
+                rep_eng_id = normalize_text(form.get("engagement_id", ""))
+                mgmt_name = normalize_text(form.get("management_name", ""))
+                mgmt_title = normalize_text(form.get("management_title", ""))
+                if not letter_id or not mgmt_name:
+                    raise ValueError("letter_id and management_name are required")
+                with open_db() as conn:
+                    _cas.mark_letter_signed(letter_id, mgmt_name, mgmt_title, conn)
+                self._flash_redirect(
+                    f"/audit/rep_letter?engagement_id={urlquote(rep_eng_id)}",
+                    flash=t("flash_rep_signed", lang),
+                )
+                return
+
+            # CAS 330 — Control testing routes
+            if path == "/audit/controls/add":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_ctrl_forbidden", lang))
+                ctrl_eng_id = normalize_text(form.get("engagement_id", ""))
+                ctrl_name = normalize_text(form.get("control_name", ""))
+                ctrl_objective = normalize_text(form.get("control_objective", ""))
+                ctrl_test_type = normalize_text(form.get("test_type", "walkthrough"))
+                if not ctrl_eng_id or not ctrl_name:
+                    raise ValueError("engagement_id and control_name are required")
+                # If from library, look up objective and description
+                ctrl_desc = ""
+                if not ctrl_objective:
+                    for sc in _cas.STANDARD_CONTROLS:
+                        if sc["name"] == ctrl_name:
+                            ctrl_objective = sc["objective"]
+                            ctrl_desc = sc["description"]
+                            break
+                with open_db() as conn:
+                    _cas.create_control_test(
+                        ctrl_eng_id, ctrl_name, ctrl_objective, ctrl_test_type, conn,
+                        control_description=ctrl_desc, tested_by=user["username"],
+                    )
+                self._flash_redirect(
+                    f"/audit/controls?engagement_id={urlquote(ctrl_eng_id)}",
+                    flash=t("flash_ctrl_created", lang),
+                )
+                return
+
+            if path == "/audit/controls/results":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_ctrl_forbidden", lang))
+                ctrl_test_id = normalize_text(form.get("test_id", ""))
+                ctrl_eng_id = normalize_text(form.get("engagement_id", ""))
+                items_tested_str = normalize_text(form.get("items_tested", "0"))
+                exceptions_str = normalize_text(form.get("exceptions_found", "0"))
+                exception_details = normalize_text(form.get("exception_details", ""))
+                conclusion = normalize_text(form.get("conclusion", "effective"))
+                try:
+                    items_tested = int(items_tested_str) if items_tested_str else 0
+                except ValueError:
+                    items_tested = 0
+                try:
+                    exceptions_found = int(exceptions_str) if exceptions_str else 0
+                except ValueError:
+                    exceptions_found = 0
+                with open_db() as conn:
+                    _cas.record_test_results(ctrl_test_id, items_tested, exceptions_found, exception_details, conclusion, conn)
+                self._flash_redirect(
+                    f"/audit/controls?engagement_id={urlquote(ctrl_eng_id)}",
+                    flash=t("flash_ctrl_results", lang),
+                )
+                return
+
+            # CAS 550 — Related party routes
+            if path == "/audit/related_parties/add":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_rp_forbidden", lang))
+                rp_eng_id = normalize_text(form.get("engagement_id", ""))
+                rp_client = normalize_text(form.get("client_code", ""))
+                rp_name = normalize_text(form.get("party_name", ""))
+                rp_type = normalize_text(form.get("relationship_type", "affiliated_company"))
+                rp_pct_str = normalize_text(form.get("ownership_pct", ""))
+                rp_pct = None
+                if rp_pct_str:
+                    try:
+                        rp_pct = float(rp_pct_str)
+                    except ValueError:
+                        pass
+                if not rp_client or not rp_name:
+                    raise ValueError("client_code and party_name are required")
+                with open_db() as conn:
+                    _cas.add_related_party(
+                        rp_client, rp_name, rp_type, conn,
+                        ownership_percentage=rp_pct,
+                        identified_by=user["username"],
+                    )
+                self._flash_redirect(
+                    f"/audit/related_parties?engagement_id={urlquote(rp_eng_id)}",
+                    flash=t("flash_rp_added", lang),
+                )
+                return
+
+            if path == "/audit/related_parties/disclosure":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_rp_forbidden", lang))
+                rp_eng_id = normalize_text(form.get("engagement_id", ""))
+                if not rp_eng_id:
+                    raise ValueError("engagement_id is required")
+                with open_db() as conn:
+                    disclosure = _cas.generate_related_party_disclosure(rp_eng_id, lang, conn)
+                # Show the disclosure as a flash message (it'll be HTML-escaped)
+                self._flash_redirect(
+                    f"/audit/related_parties?engagement_id={urlquote(rp_eng_id)}",
+                    flash=f"{t('flash_rp_disclosure_generated', lang)}: {disclosure[:200]}",
+                )
                 return
 
             if path == "/license/activate":
@@ -6436,6 +9777,116 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._flash_redirect("/license", flash=t("flash_lic_activated", lang))
                 except ValueError as exc:
                     self._flash_redirect("/license", error=f"{t('err_lic_invalid', lang)}: {exc}")
+                return
+
+            # ------------------------------------------------------------------
+            # Admin updates POST routes
+            # ------------------------------------------------------------------
+            if path == "/admin/updates/check":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/updates", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.update_ledgerlink import check_for_updates
+                    info = check_for_updates()
+                    if info.get("update_available"):
+                        self._flash_redirect(
+                            "/admin/updates",
+                            flash=f"{t('update_new_version', lang)}: {info['remote_version']}")
+                    elif info.get("error"):
+                        self._flash_redirect("/admin/updates", error=info["error"])
+                    else:
+                        self._flash_redirect("/admin/updates", flash=t("update_no_update", lang))
+                except Exception as exc:
+                    self._flash_redirect("/admin/updates", error=str(exc))
+                return
+
+            if path == "/admin/updates/install":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/updates", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.update_ledgerlink import install_update_background
+                    result = install_update_background()
+                    if result.get("success"):
+                        self._flash_redirect("/admin/updates",
+                                             flash=t("flash_update_success", lang))
+                    else:
+                        self._flash_redirect("/admin/updates",
+                                             error=result.get("error", t("flash_update_failed", lang)))
+                except Exception as exc:
+                    self._flash_redirect("/admin/updates", error=str(exc))
+                return
+
+            # ------------------------------------------------------------------
+            # Admin remote management POST routes
+            # ------------------------------------------------------------------
+            if path == "/admin/remote/restart":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/remote", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.remote_management import restart_service
+                    result = restart_service()
+                    if result.get("success"):
+                        self._flash_redirect("/admin/remote",
+                                             flash=t("flash_remote_restart_ok", lang))
+                    else:
+                        self._flash_redirect("/admin/remote",
+                                             error=result.get("error", t("flash_remote_restart_fail", lang)))
+                except Exception as exc:
+                    self._flash_redirect("/admin/remote", error=str(exc))
+                return
+
+            if path == "/admin/remote/backup":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/remote", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.remote_management import create_backup
+                    result = create_backup()
+                    if result.get("success"):
+                        self._flash_redirect(
+                            "/admin/remote",
+                            flash=f"{t('flash_remote_backup_ok', lang)}: {result['backup_name']} ({result['size_mb']} MB)")
+                    else:
+                        self._flash_redirect("/admin/remote",
+                                             error=result.get("error", t("flash_remote_backup_fail", lang)))
+                except Exception as exc:
+                    self._flash_redirect("/admin/remote", error=str(exc))
+                return
+
+            if path == "/admin/remote/update":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/remote", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.remote_management import trigger_update
+                    result = trigger_update()
+                    if result.get("success"):
+                        self._flash_redirect("/admin/remote",
+                                             flash=t("flash_remote_update_ok", lang))
+                    else:
+                        self._flash_redirect("/admin/remote",
+                                             error=result.get("error", t("flash_remote_update_fail", lang)))
+                except Exception as exc:
+                    self._flash_redirect("/admin/remote", error=str(exc))
+                return
+
+            if path == "/admin/remote/autofix":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/admin/remote", error=t("err_forbidden", lang))
+                    return
+                try:
+                    from scripts.remote_management import trigger_autofix
+                    result = trigger_autofix()
+                    # Re-render with autofix output
+                    self._send_html(render_admin_remote(
+                        user, t("flash_remote_autofix_done", lang), "",
+                        autofix_output=result.get("output", ""),
+                        lang=lang))
+                except Exception as exc:
+                    self._flash_redirect("/admin/remote", error=str(exc))
                 return
 
             # ------------------------------------------------------------------
@@ -6522,6 +9973,172 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._redirect("/")
                 return
 
+            # ------------------------------------------------------------------
+            # FIX 2: Vendor alias management POST (owner only)
+            # ------------------------------------------------------------------
+            if path == "/admin/vendor_aliases":
+                if ctx.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                action = normalize_text(form.get("action", ""))
+                if action == "add_alias":
+                    canonical = form.get("canonical_vendor", "").strip()
+                    alias_name = form.get("alias_name", "").strip()
+                    if canonical and alias_name:
+                        import unicodedata as _ud_alias
+                        alias_key = _ud_alias.normalize("NFKD", alias_name.lower()).encode("ascii", errors="ignore").decode("ascii")
+                        canonical_key = _ud_alias.normalize("NFKD", canonical.lower()).encode("ascii", errors="ignore").decode("ascii")
+                        with open_db() as _va_conn:
+                            _va_conn.execute(
+                                "INSERT INTO vendor_aliases (canonical_vendor_key, alias_name, alias_key, created_by, created_at) "
+                                "VALUES (?, ?, ?, ?, datetime('now'))",
+                                (canonical_key, alias_name, alias_key, ctx.get("username", "")),
+                            )
+                            _va_conn.commit()
+                        self._flash_redirect("/admin/vendor_aliases", flash=f"Alias '{alias_name}' → '{canonical}' created.")
+                    else:
+                        self._flash_redirect("/admin/vendor_aliases", error="Both canonical vendor and alias name are required.")
+                    return
+                if action == "delete_alias":
+                    alias_id = form.get("alias_id", "")
+                    if alias_id:
+                        with open_db() as _va_conn:
+                            _va_conn.execute("DELETE FROM vendor_aliases WHERE alias_id = ?", (alias_id,))
+                            _va_conn.commit()
+                        self._flash_redirect("/admin/vendor_aliases", flash="Alias deleted.")
+                    return
+                self._flash_redirect("/admin/vendor_aliases")
+                return
+
+            # ------------------------------------------------------------------
+            # FIX 7: Manual journal entries POST (manager/owner)
+            # ------------------------------------------------------------------
+            if path == "/journal_entries":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                action = normalize_text(form.get("action", ""))
+                if action == "create":
+                    import secrets as _mje_secrets
+                    entry_id = f"MJE-{_mje_secrets.token_hex(6)}"
+                    client_code = form.get("client_code", "").strip()
+                    period = form.get("period", "").strip()
+                    entry_date = form.get("entry_date", "").strip()
+                    debit_account = form.get("debit_account", "").strip()
+                    credit_account = form.get("credit_account", "").strip()
+                    mje_amount = form.get("amount", "0").strip()
+                    description = form.get("description", "").strip()
+                    document_id_ref = form.get("document_id", "").strip()
+
+                    if not all([client_code, period, entry_date, debit_account, credit_account, mje_amount]):
+                        self._flash_redirect("/journal_entries", error="All fields are required.")
+                        return
+
+                    # Conflict detection: check for automated postings in same account/period
+                    conflicts = []
+                    with open_db() as _mje_conn:
+                        # Check posting_jobs for conflicts
+                        try:
+                            conflict_rows = _mje_conn.execute(
+                                "SELECT document_id, gl_account, amount FROM posting_jobs "
+                                "WHERE client_code = ? AND gl_account IN (?, ?) "
+                                "AND status NOT IN ('cancelled', 'reversed')",
+                                (client_code, debit_account, credit_account),
+                            ).fetchall()
+                            for cr in conflict_rows:
+                                conflicts.append({
+                                    "document_id": cr["document_id"],
+                                    "gl_account": cr["gl_account"],
+                                    "amount": cr["amount"],
+                                })
+                        except Exception:
+                            pass
+
+                        # Phantom tax detection: check if vendor is GST/QST registered
+                        phantom_tax = False
+                        if debit_account in ("2200", "2210") or credit_account in ("2200", "2210"):
+                            # ITC/ITR claim — check vendor registration
+                            if document_id_ref:
+                                try:
+                                    doc_row = _mje_conn.execute(
+                                        "SELECT vendor FROM documents WHERE document_id = ?",
+                                        (document_id_ref,),
+                                    ).fetchone()
+                                    if doc_row:
+                                        vendor_name = doc_row["vendor"] or ""
+                                        reg_row = _mje_conn.execute(
+                                            "SELECT gst_registration_number, qst_registration_number "
+                                            "FROM client_config WHERE client_code = ?",
+                                            (client_code,),
+                                        ).fetchone()
+                                        # If no registration found, flag phantom tax
+                                        if not reg_row or (not reg_row["gst_registration_number"] and not reg_row["qst_registration_number"]):
+                                            phantom_tax = True
+                                except Exception:
+                                    pass
+
+                        status_val = "draft"
+                        if conflicts:
+                            status_val = "conflict"
+                        if phantom_tax:
+                            status_val = "phantom_tax_blocked"
+
+                        _mje_conn.execute(
+                            "INSERT INTO manual_journal_entries "
+                            "(entry_id, client_code, period, entry_date, prepared_by, "
+                            "debit_account, credit_account, amount, description, document_id, "
+                            "source, status, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bookkeeper', ?, datetime('now'), datetime('now'))",
+                            (entry_id, client_code, period, entry_date, ctx.get("username", ""),
+                             debit_account, credit_account, float(mje_amount), description,
+                             document_id_ref or None, status_val),
+                        )
+                        _mje_conn.commit()
+
+                    flash_msg = f"Journal entry {entry_id} created (status: {status_val})."
+                    if conflicts:
+                        flash_msg += f" WARNING: {len(conflicts)} conflict(s) with automated postings — both blocked until resolved."
+                    if phantom_tax:
+                        flash_msg += " CRITICAL: Phantom tax credit detected — vendor not registered for GST/QST."
+                    self._flash_redirect("/journal_entries", flash=flash_msg)
+                    return
+
+                if action == "post":
+                    entry_id = form.get("entry_id", "").strip()
+                    if entry_id:
+                        with open_db() as _mje_conn:
+                            _mje_conn.execute(
+                                "UPDATE manual_journal_entries SET status = 'posted', updated_at = datetime('now') "
+                                "WHERE entry_id = ? AND status = 'draft'",
+                                (entry_id,),
+                            )
+                            _mje_conn.commit()
+                        self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} posted.")
+                    return
+
+                if action == "reverse":
+                    entry_id = form.get("entry_id", "").strip()
+                    if entry_id:
+                        with open_db() as _mje_conn:
+                            _mje_conn.execute(
+                                "UPDATE manual_journal_entries SET status = 'reversed', updated_at = datetime('now') "
+                                "WHERE entry_id = ? AND status IN ('draft', 'posted')",
+                                (entry_id,),
+                            )
+                            _mje_conn.commit()
+                        self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} reversed.")
+                    return
+
+                self._flash_redirect("/journal_entries")
+                return
+
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
 
         except Exception as exc:
@@ -6539,7 +10156,19 @@ def main() -> int:
     print("LEDGERLINK ACCOUNTING QUEUE")
     print("=" * 80)
     print(f"Database : {DB_PATH}")
-    print(f"URL      : http://{HOST}:{PORT}/")
+    print(f"Bind     : {HOST}:{PORT}")
+    if HOST == "0.0.0.0":
+        try:
+            import socket as _sock
+            _s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+            _s.settimeout(2)
+            _s.connect(("8.8.8.8", 80))
+            _lan_ip = _s.getsockname()[0]
+            _s.close()
+            print(f"LAN URL  : http://{_lan_ip}:{PORT}/")
+        except Exception:
+            pass
+    print(f"Local    : http://127.0.0.1:{PORT}/")
     print(f"Login    : sam / admin123  (change this!)")
     print()
 

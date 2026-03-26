@@ -6,7 +6,9 @@ Bilingual FR/EN (default: FR). Guides the user through 6 setup steps.
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import socket
 import socketserver
 import sqlite3
 import sys
@@ -18,6 +20,25 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import bcrypt
+
+
+# ---------------------------------------------------------------------------
+# Network helpers
+# ---------------------------------------------------------------------------
+
+def get_local_ip() -> str:
+    """Auto-detect the machine's local network IP address."""
+    try:
+        # Connect to an external address to determine the local IP
+        # No data is actually sent
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -93,6 +114,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "license_valid": "Licence valide",
         "license_invalid": "Clé de licence invalide",
         "save_success": "Enregistré avec succès",
+        "network_heading": "Configuration réseau",
+        "local_url": "URL réseau local (auto-détecté)",
+        "remote_url": "URL accès distant (après Cloudflare)",
+        "network_info": "Votre serveur LedgerLink sera accessible à",
+        "network_info_suffix": "sur votre réseau local",
+        "download_access_pdf": "Télécharger les instructions d'accès (PDF)",
+        "access_pdf_info": "Générez un PDF avec les URLs et identifiants pour distribuer à votre équipe.",
     },
     "en": {
         "title": "LedgerLink Setup Wizard",
@@ -156,6 +184,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "license_valid": "License is valid",
         "license_invalid": "Invalid license key",
         "save_success": "Saved successfully",
+        "network_heading": "Network Setup",
+        "local_url": "Local network URL (auto-detected)",
+        "remote_url": "Remote access URL (after Cloudflare setup)",
+        "network_info": "Your LedgerLink server will be accessible at",
+        "network_info_suffix": "on your local network",
+        "download_access_pdf": "Download Access Instructions (PDF)",
+        "access_pdf_info": "Generate a PDF with URLs and credentials to distribute to your staff.",
     },
 }
 
@@ -426,12 +461,186 @@ def _page(content: str, state: dict, current_step: int, lang: str,
 
 
 # ---------------------------------------------------------------------------
+# PDF Access Instructions generator
+# ---------------------------------------------------------------------------
+
+def generate_access_instructions_pdf(lang: str = "fr") -> bytes:
+    """Generate a one-page PDF with access instructions for staff."""
+    try:
+        import qrcode
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.pdfgen import canvas as rl_canvas
+        from reportlab.lib.colors import HexColor
+    except ImportError:
+        raise RuntimeError("reportlab and qrcode are required for PDF generation")
+
+    cfg = load_config()
+    firm = cfg.get("firm", {})
+    firm_name = firm.get("firm_name", "LedgerLink")
+    network = cfg.get("network", {})
+    local_ip = network.get("local_ip") or get_local_ip()
+    local_port = network.get("local_port", 8787)
+    local_url = f"http://{local_ip}:{local_port}/"
+
+    firm_slug = firm_name.strip().lower().replace(" ", "-").replace("&", "and")
+    firm_slug = "".join(c for c in firm_slug if c.isalnum() or c == "-") or "yourfirm"
+    remote_url = f"https://{firm_slug}.ledgerlink.app/"
+
+    # Fetch staff users from DB
+    staff_users: list[dict] = []
+    try:
+        with _open_db() as conn:
+            _ensure_dashboard_users_table(conn)
+            rows = conn.execute(
+                "SELECT username, display_name, role FROM dashboard_users WHERE active=1 ORDER BY role, username"
+            ).fetchall()
+            for row in rows:
+                staff_users.append({
+                    "username": row["username"],
+                    "display_name": row["display_name"] or row["username"],
+                    "role": row["role"],
+                })
+    except Exception:
+        pass
+
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=letter)
+    w, h = letter
+    blue = HexColor("#1F3864")
+    grey = HexColor("#475569")
+    light_grey = HexColor("#f1f5f9")
+
+    # Header
+    c.setFont("Helvetica-Bold", 22)
+    c.setFillColor(blue)
+    y = h - 60
+    c.drawCentredString(w / 2, y, firm_name)
+
+    y -= 28
+    c.setFont("Helvetica", 12)
+    c.setFillColor(grey)
+    title = "Instructions d'accès — LedgerLink" if lang == "fr" else "Access Instructions — LedgerLink"
+    c.drawCentredString(w / 2, y, title)
+
+    # Divider
+    y -= 16
+    c.setStrokeColor(HexColor("#e2e8f0"))
+    c.setLineWidth(1)
+    c.line(60, y, w - 60, y)
+
+    # Network URLs section
+    y -= 32
+    c.setFont("Helvetica-Bold", 13)
+    c.setFillColor(blue)
+    net_title = "Accès réseau" if lang == "fr" else "Network Access"
+    c.drawString(60, y, net_title)
+
+    y -= 22
+    c.setFont("Helvetica", 10)
+    c.setFillColor(grey)
+    office_label = "Bureau / Office (réseau local):" if lang == "fr" else "Office (local network):"
+    c.drawString(72, y, office_label)
+    y -= 16
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(blue)
+    c.drawString(72, y, local_url)
+
+    y -= 22
+    c.setFont("Helvetica", 10)
+    c.setFillColor(grey)
+    remote_label = "Accès distant (Cloudflare):" if lang == "fr" else "Remote access (Cloudflare):"
+    c.drawString(72, y, remote_label)
+    y -= 16
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(blue)
+    c.drawString(72, y, remote_url)
+
+    # QR code for dashboard URL
+    y -= 16
+    try:
+        qr = qrcode.QRCode(version=1, box_size=6, border=2)
+        qr.add_data(local_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format="PNG")
+        qr_buf.seek(0)
+        from reportlab.lib.utils import ImageReader
+        qr_reader = ImageReader(qr_buf)
+        qr_size = 1.2 * inch
+        c.drawImage(qr_reader, w - 60 - qr_size, y - qr_size + 16, qr_size, qr_size)
+        c.setFont("Helvetica", 8)
+        c.setFillColor(grey)
+        scan_label = "Scannez pour accéder" if lang == "fr" else "Scan to access"
+        c.drawCentredString(w - 60 - qr_size / 2, y - qr_size + 8, scan_label)
+    except Exception:
+        pass  # QR generation is best-effort
+
+    # Staff credentials table
+    y -= 50
+    c.setFont("Helvetica-Bold", 13)
+    c.setFillColor(blue)
+    staff_title = "Identifiants de connexion" if lang == "fr" else "Login Credentials"
+    c.drawString(60, y, staff_title)
+
+    if staff_users:
+        y -= 22
+        # Table header
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(grey)
+        name_hdr = "Nom / Name" if lang == "fr" else "Name"
+        user_hdr = "Utilisateur / Username" if lang == "fr" else "Username"
+        role_hdr = "Rôle / Role" if lang == "fr" else "Role"
+        pw_hdr = "Mot de passe temp." if lang == "fr" else "Temp. Password"
+        c.drawString(72, y, name_hdr)
+        c.drawString(200, y, user_hdr)
+        c.drawString(370, y, role_hdr)
+        c.drawString(440, y, pw_hdr)
+
+        y -= 4
+        c.setStrokeColor(HexColor("#d1d5db"))
+        c.line(72, y, w - 60, y)
+
+        c.setFont("Helvetica", 9)
+        c.setFillColor(HexColor("#1e293b"))
+        for user in staff_users:
+            y -= 16
+            if y < 60:
+                break
+            c.drawString(72, y, user["display_name"][:22])
+            c.drawString(200, y, user["username"][:28])
+            c.drawString(370, y, user["role"])
+            c.drawString(440, y, "(set at login)")
+    else:
+        y -= 20
+        c.setFont("Helvetica", 10)
+        c.setFillColor(grey)
+        no_staff = "Aucun utilisateur configuré." if lang == "fr" else "No users configured yet."
+        c.drawString(72, y, no_staff)
+
+    # Footer
+    c.setFont("Helvetica", 8)
+    c.setFillColor(HexColor("#94a3b8"))
+    footer = f"LedgerLink AI — {firm_name}"
+    c.drawCentredString(w / 2, 30, footer)
+
+    c.save()
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
 # Step renderers
 # ---------------------------------------------------------------------------
 
 def _render_step1(lang: str, state: dict, error: str = "", data: dict | None = None) -> str:
     d = data or {}
     err_html = f'<div class="alert alert-error">{_esc(error)}</div>' if error else ""
+    local_ip = get_local_ip()
+    local_url = f"http://{local_ip}:8787/"
+    firm_slug = d.get("firm_name", "").strip().lower().replace(" ", "-").replace("&", "and")
+    firm_slug = "".join(c for c in firm_slug if c.isalnum() or c == "-") or "yourfirm"
+    remote_url = f"https://{firm_slug}.ledgerlink.app/"
     return _page(f"""
 {err_html}
 <div class="card">
@@ -441,7 +650,8 @@ def _render_step1(lang: str, state: dict, error: str = "", data: dict | None = N
     <div class="form-row">
       <div class="form-group">
         <label>{_esc(_s(lang, "firm_name"))}</label>
-        <input type="text" name="firm_name" value="{_esc(d.get('firm_name',''))}" required>
+        <input type="text" name="firm_name" value="{_esc(d.get('firm_name',''))}" required
+               oninput="updateRemoteUrl(this.value)">
       </div>
       <div class="form-group">
         <label>{_esc(_s(lang, "firm_address"))}</label>
@@ -479,11 +689,38 @@ def _render_step1(lang: str, state: dict, error: str = "", data: dict | None = N
         <input type="password" name="owner_password_confirm" required>
       </div>
     </div>
+
+    <hr style="margin: 20px 0; border-color: #e2e8f0;">
+    <h3 style="margin-bottom:16px;">{_esc(_s(lang, "network_heading"))}</h3>
+    <div class="alert alert-info" style="margin-bottom:16px;">
+      {_esc(_s(lang, "network_info"))}
+      <strong><a href="{_esc(local_url)}" style="color:#1d4ed8;">{_esc(local_url)}</a></strong>
+      {_esc(_s(lang, "network_info_suffix"))}
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>{_esc(_s(lang, "local_url"))}</label>
+        <input type="text" value="{_esc(local_url)}" readonly
+               style="background:#f8fafc;color:#475569;cursor:default;">
+      </div>
+      <div class="form-group">
+        <label>{_esc(_s(lang, "remote_url"))}</label>
+        <input type="text" id="remoteUrlField" value="{_esc(remote_url)}" readonly
+               style="background:#f8fafc;color:#475569;cursor:default;">
+      </div>
+    </div>
+
     <div class="btn-actions">
       <button type="submit" class="btn btn-primary">{_esc(_s(lang, "btn_next"))}</button>
     </div>
   </form>
 </div>
+<script>
+function updateRemoteUrl(name) {{
+  var slug = name.trim().toLowerCase().replace(/\\s+/g, '-').replace(/&/g, 'and').replace(/[^a-z0-9-]/g, '') || 'yourfirm';
+  document.getElementById('remoteUrlField').value = 'https://' + slug + '.ledgerlink.app/';
+}}
+</script>
 """, state, 1, lang, _s(lang, "step1"))
 
 
@@ -733,8 +970,15 @@ def _render_step6(lang: str, state: dict) -> str:
             tier = status.get("tier", "—")
         except Exception:
             pass
-    port = cfg.get("port", 8787)
-    dash_url = f"http://127.0.0.1:{port}"
+    network = cfg.get("network", {})
+    local_ip = network.get("local_ip") or get_local_ip()
+    local_port = network.get("local_port", cfg.get("port", 8787))
+    local_url = f"http://{local_ip}:{local_port}/"
+    firm_slug = firm_name.strip().lower().replace(" ", "-").replace("&", "and")
+    firm_slug = "".join(c for c in firm_slug if c.isalnum() or c == "-") or "yourfirm"
+    remote_url = f"https://{firm_slug}.ledgerlink.app/"
+    pdf_label = _s(lang, "download_access_pdf")
+    pdf_info = _s(lang, "access_pdf_info")
     return _page(f"""
 <div class="card">
   <div class="complete-box">
@@ -745,13 +989,21 @@ def _render_step6(lang: str, state: dict) -> str:
       <span class="summary-pill">{_esc(firm_name)}</span>
       <span class="summary-pill">{_esc(tier)}</span>
     </div>
-    <p style="margin-bottom:6px;"><strong>{_esc(_s(lang, "dashboard_url_label"))}:</strong></p>
-    <p><a href="{_esc(dash_url)}" style="color:#2563eb;">{_esc(dash_url)}</a></p>
-    <div style="margin-top:32px;">
-      <a href="{_esc(dash_url)}" class="btn btn-primary" style="font-size:1rem;padding:14px 28px;">
+    <div style="text-align:left;max-width:480px;margin:0 auto 20px;">
+      <p style="margin-bottom:6px;"><strong>{_esc(_s(lang, "local_url"))}:</strong></p>
+      <p style="margin-bottom:12px;"><a href="{_esc(local_url)}" style="color:#2563eb;">{_esc(local_url)}</a></p>
+      <p style="margin-bottom:6px;"><strong>{_esc(_s(lang, "remote_url"))}:</strong></p>
+      <p style="margin-bottom:12px;"><a href="{_esc(remote_url)}" style="color:#2563eb;">{_esc(remote_url)}</a></p>
+    </div>
+    <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;">
+      <a href="{_esc(local_url)}" class="btn btn-primary" style="font-size:1rem;padding:14px 28px;">
         {_esc(_s(lang, "btn_open_dashboard"))}
       </a>
+      <a href="/setup/access-pdf?lang={_esc(lang)}" class="btn btn-secondary" style="font-size:0.9rem;padding:12px 20px;">
+        📄 {_esc(pdf_label)}
+      </a>
     </div>
+    <p style="margin-top:10px;font-size:0.8rem;color:#6b7280;">{_esc(pdf_info)}</p>
   </div>
 </div>
 """, state, 6, lang, _s(lang, "step6"))
@@ -915,6 +1167,22 @@ class SetupWizardHandler(BaseHTTPRequestHandler):
                 self._send_html(_render_step6(lang, state))
                 return
 
+            if path == "/setup/access-pdf":
+                pdf_lang = qs.get("lang", [lang])[0]
+                if pdf_lang not in ("fr", "en"):
+                    pdf_lang = "fr"
+                try:
+                    pdf_bytes = generate_access_instructions_pdf(pdf_lang)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/pdf")
+                    self.send_header("Content-Disposition", 'attachment; filename="LedgerLink_Access_Instructions.pdf"')
+                    self.send_header("Content-Length", str(len(pdf_bytes)))
+                    self.end_headers()
+                    self.wfile.write(pdf_bytes)
+                except Exception as exc:
+                    self._send_html(f"<h2>PDF Error</h2><pre>{_esc(str(exc))}</pre>", 500)
+                return
+
             # 404
             self._send_html(f"<h2>404 Not Found</h2><p><a href='/'>Home</a></p>", 404)
 
@@ -951,6 +1219,15 @@ class SetupWizardHandler(BaseHTTPRequestHandler):
                     "owner_name": form["owner_name"].strip(),
                     "owner_email": form["owner_email"].strip(),
                 }
+                # Save network configuration
+                local_ip = get_local_ip()
+                cfg["network"] = {
+                    "local_ip": local_ip,
+                    "local_port": 8787,
+                    "bind_all_interfaces": True,
+                }
+                # Also update host to bind all interfaces
+                cfg["host"] = "0.0.0.0"
                 save_config(cfg)
                 # Create owner user
                 try:

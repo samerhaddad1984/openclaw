@@ -1,0 +1,19 @@
+You are an accounting document classification engine.
+
+Classify the document described below. Return strict JSON only.
+
+File name    : {FILE_NAME}
+Client       : {CLIENT}
+Vendor       : {VENDOR}
+Extracted text (first 2000 chars):
+{TEXT_SNIPPET}
+
+Return ONLY valid JSON with exactly these keys:
+  doc_type   — e.g. invoice, receipt, credit_note, statement, other
+  category   — e.g. office_supplies, travel, utilities, professional_services, other
+  vendor     — best-guess vendor name (or empty string)
+  confidence — float between 0.0 and 1.0
+  reason     — one-sentence justification
+
+Example output:
+{"doc_type": "invoice", "category": "office_supplies", "vendor": "Staples Canada", "confidence": 0.92, "reason": "Header contains 'INVOICE' and vendor logo."}

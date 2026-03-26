@@ -1,0 +1,38 @@
+{
+  "vendors": {
+    "Google": {
+      "qbo_name": "Google"
+    },
+    "CIBC Costco World Mastercard": {
+      "qbo_name": "CIBC Costco World Mastercard"
+    },
+    "Microsoft Canada Inc.": {
+      "qbo_name": "Microsoft Canada Inc."
+    },
+    "Hydro-Québec": {
+      "qbo_name": "Hydro-Québec"
+    },
+    "CompanyCam": {
+      "qbo_name": "CompanyCam"
+    }
+  },
+  "accounts": {
+    "Software Expense": {
+      "qbo_name": "Office Expenses"
+    },
+    "Utilities - Electricity": {
+      "qbo_name": "Utilities"
+    },
+    "Credit Card Payable": {
+      "qbo_name": "Mastercard"
+    }
+  },
+  "tax_codes": {
+    "NONE": "NON",
+    "GST_QST": "TAX"
+  },
+  "payment": {
+    "default_account_name": "Mastercard",
+    "default_payment_type": "CreditCard"
+  }
+}

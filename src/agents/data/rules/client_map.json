@@ -1,0 +1,91 @@
+{
+  "default_min_score": 6,
+  "clients": [
+    {
+      "client_code": "MARCHE_BRESIL",
+      "client_name": "Marché Brésil",
+      "assigned_to": "Sam",
+      "min_score": 6,
+      "sender_emails": [],
+      "account_numbers": [
+        "299121756041",
+        "112051989",
+        "628903221158",
+        "700003808336"
+      ],
+      "addresses": [
+        "729 rue saint-pierre",
+        "chambly qc j3l 1m1",
+        "chambly qc"
+      ],
+      "client_names": [
+        "marché brésil",
+        "marche bresil",
+        "marché brésil inc",
+        "marche bresil inc",
+        "marche brasil",
+        "marché brasil"
+      ],
+      "pdf_keywords": [
+        "hydro-quebec",
+        "hydro québec",
+        "hydroquebec"
+      ]
+    },
+    {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "min_score": 4,
+      "sender_emails": [],
+      "account_numbers": [],
+      "addresses": [
+        "soussol",
+        "systemes sous-sol",
+        "systèmes sous-sol",
+        "systemes soussol quebec",
+        "systèmes sous-sol québec",
+        "quebec basement systems",
+        "mh home systems",
+        "2990 boulevard le corbusier",
+        "2990 blvd le corbusier",
+        "laval quebec h7l 3m2",
+        "laval qc h7l 3m2",
+        "1620 boul saint-elzear o",
+        "1620 boul. saint-elzear o",
+        "15 rue de rochebonne",
+        "blainville quebec j7b 1w8",
+        "blainville qc j7b 1w8",
+        "1620 boulevard saint-elzear ouest"
+      ],
+      "client_names": [
+        "soussol",
+        "systemes sous-sol",
+        "systèmes sous-sol",
+        "systemes soussol quebec",
+        "systèmes sous-sol québec",
+        "quebec basement systems",
+        "mh home systems",
+        "mh home",
+        "basement systems quebec",
+        "systèmes soussol québec",
+        "systemes sous-sol quebec",
+        "basement systems"
+      ],
+      "pdf_keywords": [
+        "basement systems",
+        "soussol",
+        "systemes sous-sol",
+        "systèmes sous-sol",
+        "basement systems quebec",
+        "quebec basement systems",
+        "microsoft canada inc",
+        "amazon.com.ca ulc",
+        "companycam",
+        "accounting@soussol.com",
+        "2990 boulevard le corbusier",
+        "15 rue de rochebonne"
+      ]
+    }
+  ]
+}

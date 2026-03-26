@@ -1,0 +1,563 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import unicodedata
+from dataclasses import asdict, dataclass
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
+from typing import Any
+
+
+_EMPTY_SENTINEL = "unknown"
+
+_VENDOR_SUFFIXES = {
+    "inc",
+    "inc.",
+    "incorporated",
+    "corp",
+    "corp.",
+    "corporation",
+    "co",
+    "co.",
+    "company",
+    "ltd",
+    "ltd.",
+    "limited",
+    "llc",
+    "l.l.c.",
+    "pllc",
+    "lp",
+    "l.p.",
+    "sarl",
+    "sa",
+    "gmbh",
+    "pte",
+    "pte.",
+    "bv",
+    "b.v.",
+    "ulc",
+}
+
+_DOC_TYPE_ALIASES = {
+    "invoice": "invoice",
+    "bill": "invoice",
+    "vendor_invoice": "invoice",
+    "purchase_invoice": "invoice",
+    "receipt": "receipt",
+    "expense_receipt": "receipt",
+    "utility_bill": "utility_bill",
+    "statement": "statement",
+    "bank_statement": "statement",
+    "credit_card_statement": "statement",
+    "credit_note": "credit_note",
+    "refund": "refund",
+    "deposit": "deposit",
+    "purchase_order": "purchase_order",
+}
+
+_INVOICE_LABEL_RE = re.compile(
+    r"\b(invoice|inv|facture|bill|ref|reference|receipt|no|num|number|#)\b[:\s\-]*",
+    flags=re.IGNORECASE,
+)
+
+_MULTI_SPACE_RE = re.compile(r"\s+")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+_ONLY_DIGITS_RE = re.compile(r"^\d+$")
+_DATE_YYYY_MM_DD_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_YYYYMMDD_RE = re.compile(r"^\d{8}$")
+_DATE_DDMMYYYY_SLASH_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
+_DATE_DDMMYYYY_DASH_RE = re.compile(r"^\d{1,2}-\d{1,2}-\d{4}$")
+
+
+@dataclass(slots=True)
+class FingerprintBundle:
+    physical_id: str
+    logical_fingerprint: str
+    logical_key: str
+    normalized_vendor: str
+    normalized_doc_type: str
+    normalized_document_date: str
+    normalized_amount: str
+    normalized_invoice_number: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _strip_accents(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _coerce_to_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _stable_hash(text: str, length: int = 16) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:length]
+
+
+def _stable_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def normalize_free_text(value: Any) -> str:
+    text = _coerce_to_text(value)
+    if not text:
+        return _EMPTY_SENTINEL
+
+    text = _strip_accents(text).lower()
+    text = text.replace("&", " and ")
+    text = _NON_ALNUM_RE.sub(" ", text)
+    text = _MULTI_SPACE_RE.sub(" ", text).strip()
+
+    return text or _EMPTY_SENTINEL
+
+
+def normalize_vendor(vendor: Any) -> str:
+    text = normalize_free_text(vendor)
+    if text == _EMPTY_SENTINEL:
+        return text
+
+    parts = [p for p in text.split(" ") if p]
+    while parts and parts[-1] in _VENDOR_SUFFIXES:
+        parts.pop()
+
+    normalized = " ".join(parts).strip()
+    return normalized or _EMPTY_SENTINEL
+
+
+def normalize_doc_type(doc_type: Any) -> str:
+    text = normalize_free_text(doc_type)
+    if text == _EMPTY_SENTINEL:
+        return text
+    return _DOC_TYPE_ALIASES.get(text, text)
+
+
+def normalize_invoice_number(invoice_number: Any) -> str:
+    text = _coerce_to_text(invoice_number)
+    if not text:
+        return _EMPTY_SENTINEL
+
+    text = _strip_accents(text).lower().strip()
+    text = _INVOICE_LABEL_RE.sub("", text)
+    text = text.replace(" ", "")
+    text = re.sub(r"[^a-z0-9\-_/]", "", text)
+
+    if not text:
+        return _EMPTY_SENTINEL
+
+    text = text.strip("-_/")
+    return text or _EMPTY_SENTINEL
+
+
+def normalize_amount(amount: Any) -> str:
+    if amount is None or amount == "":
+        return _EMPTY_SENTINEL
+
+    if isinstance(amount, Decimal):
+        dec = amount
+    else:
+        raw = _coerce_to_text(amount)
+
+        # Remove currency symbols and spaces.
+        raw = raw.replace("$", "").replace("€", "").replace("£", "").replace(" ", "")
+
+        # Handle common formatting:
+        # 1,234.56 -> 1234.56
+        # 1.234,56 -> 1234.56
+        if raw.count(",") > 0 and raw.count(".") > 0:
+            if raw.rfind(",") > raw.rfind("."):
+                raw = raw.replace(".", "")
+                raw = raw.replace(",", ".")
+            else:
+                raw = raw.replace(",", "")
+        elif raw.count(",") > 0 and raw.count(".") == 0:
+            raw = raw.replace(",", ".")
+
+        try:
+            dec = Decimal(raw)
+        except (InvalidOperation, ValueError):
+            return _EMPTY_SENTINEL
+
+    dec = dec.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(dec, "f")
+
+
+def normalize_date(value: Any) -> str:
+    if value is None or value == "":
+        return _EMPTY_SENTINEL
+
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    text = _coerce_to_text(value)
+    if not text:
+        return _EMPTY_SENTINEL
+
+    if _DATE_YYYY_MM_DD_RE.match(text):
+        return text
+
+    if _DATE_YYYYMMDD_RE.match(text):
+        return f"{text[0:4]}-{text[4:6]}-{text[6:8]}"
+
+    if _DATE_DDMMYYYY_SLASH_RE.match(text):
+        day, month, year = text.split("/")
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+
+    if _DATE_DDMMYYYY_DASH_RE.match(text):
+        day, month, year = text.split("-")
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+
+    # Try a small safe set of common formats.
+    candidate_formats = (
+        "%Y/%m/%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%m/%d/%Y",
+        "%m-%d-%Y",
+        "%d %b %Y",
+        "%d %B %Y",
+        "%b %d %Y",
+        "%B %d %Y",
+    )
+    for fmt in candidate_formats:
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return parsed.date().isoformat()
+        except ValueError:
+            continue
+
+    return _EMPTY_SENTINEL
+
+
+def derive_best_invoice_number(record: dict[str, Any] | None) -> str:
+    if not record:
+        return _EMPTY_SENTINEL
+
+    keys = (
+        "invoice_number",
+        "invoice_no",
+        "invoice_num",
+        "inv_number",
+        "reference",
+        "reference_number",
+        "receipt_number",
+        "doc_number",
+        "document_number",
+    )
+    for key in keys:
+        value = record.get(key)
+        normalized = normalize_invoice_number(value)
+        if normalized != _EMPTY_SENTINEL:
+            return normalized
+
+    return _EMPTY_SENTINEL
+
+
+def derive_best_vendor(record: dict[str, Any] | None) -> str:
+    if not record:
+        return _EMPTY_SENTINEL
+
+    keys = (
+        "vendor_normalized",
+        "vendor",
+        "merchant",
+        "supplier",
+        "payee",
+    )
+    for key in keys:
+        value = record.get(key)
+        normalized = normalize_vendor(value)
+        if normalized != _EMPTY_SENTINEL:
+            return normalized
+
+    return _EMPTY_SENTINEL
+
+
+def derive_best_doc_type(record: dict[str, Any] | None) -> str:
+    if not record:
+        return _EMPTY_SENTINEL
+
+    keys = (
+        "doc_type",
+        "document_type",
+        "type",
+    )
+    for key in keys:
+        value = record.get(key)
+        normalized = normalize_doc_type(value)
+        if normalized != _EMPTY_SENTINEL:
+            return normalized
+
+    return _EMPTY_SENTINEL
+
+
+def derive_best_amount(record: dict[str, Any] | None) -> str:
+    if not record:
+        return _EMPTY_SENTINEL
+
+    keys = (
+        "amount",
+        "total_amount",
+        "grand_total",
+        "net_amount",
+        "gross_amount",
+    )
+    for key in keys:
+        value = record.get(key)
+        normalized = normalize_amount(value)
+        if normalized != _EMPTY_SENTINEL:
+            return normalized
+
+    return _EMPTY_SENTINEL
+
+
+def derive_best_document_date(record: dict[str, Any] | None) -> str:
+    if not record:
+        return _EMPTY_SENTINEL
+
+    keys = (
+        "document_date",
+        "date",
+        "invoice_date",
+        "txn_date",
+        "transaction_date",
+        "posting_date",
+    )
+    for key in keys:
+        value = record.get(key)
+        normalized = normalize_date(value)
+        if normalized != _EMPTY_SENTINEL:
+            return normalized
+
+    return _EMPTY_SENTINEL
+
+
+def build_physical_identity(
+    *,
+    source_type: Any = None,
+    source_ref: Any = None,
+    file_name: Any = None,
+    file_path: Any = None,
+    file_hash: Any = None,
+) -> str:
+    """
+    Physical identity = exact file instance identity.
+
+    This should change if:
+    - source changes
+    - source reference changes
+    - filename changes
+    - underlying file hash changes
+
+    It is intentionally not the same thing as the logical business document identity.
+    """
+    payload = {
+        "source_type": normalize_free_text(source_type),
+        "source_ref": _coerce_to_text(source_ref) or _EMPTY_SENTINEL,
+        "file_name": _coerce_to_text(file_name) or _EMPTY_SENTINEL,
+        "file_path": _coerce_to_text(file_path) or _EMPTY_SENTINEL,
+        "file_hash": _coerce_to_text(file_hash) or _EMPTY_SENTINEL,
+    }
+    base = _stable_json(payload)
+    return f"phys_{_stable_hash(base, 24)}"
+
+
+def build_logical_key(
+    *,
+    vendor: Any = None,
+    doc_type: Any = None,
+    amount: Any = None,
+    document_date: Any = None,
+    invoice_number: Any = None,
+) -> str:
+    """
+    Logical key = business identity of the accounting document.
+
+    Primary shape:
+        vendor|date|amount|doc_type|invoice_number(optional)
+
+    Rules:
+    - invoice number is included when present because it is a high-value discriminator
+    - missing values are explicitly represented so the key stays stable
+    """
+    normalized_vendor = normalize_vendor(vendor)
+    normalized_doc_type = normalize_doc_type(doc_type)
+    normalized_amount = normalize_amount(amount)
+    normalized_date = normalize_date(document_date)
+    normalized_invoice = normalize_invoice_number(invoice_number)
+
+    parts = [
+        normalized_vendor,
+        normalized_date,
+        normalized_amount,
+        normalized_doc_type,
+    ]
+
+    if normalized_invoice != _EMPTY_SENTINEL:
+        parts.append(normalized_invoice)
+
+    return "|".join(parts)
+
+
+def build_logical_fingerprint(
+    *,
+    vendor: Any = None,
+    doc_type: Any = None,
+    amount: Any = None,
+    document_date: Any = None,
+    invoice_number: Any = None,
+) -> str:
+    logical_key = build_logical_key(
+        vendor=vendor,
+        doc_type=doc_type,
+        amount=amount,
+        document_date=document_date,
+        invoice_number=invoice_number,
+    )
+    return f"log_{_stable_hash(logical_key, 24)}"
+
+
+def build_fingerprint_bundle(
+    record: dict[str, Any] | None = None,
+    *,
+    source_type: Any = None,
+    source_ref: Any = None,
+    file_name: Any = None,
+    file_path: Any = None,
+    file_hash: Any = None,
+    vendor: Any = None,
+    doc_type: Any = None,
+    amount: Any = None,
+    document_date: Any = None,
+    invoice_number: Any = None,
+) -> FingerprintBundle:
+    """
+    Flexible builder:
+    - can consume a record dict
+    - can consume explicit keyword values
+    - explicit keyword values override dict-derived values
+    """
+    record = record or {}
+
+    final_vendor = vendor if vendor is not None else derive_best_vendor(record)
+    final_doc_type = doc_type if doc_type is not None else derive_best_doc_type(record)
+    final_amount = amount if amount is not None else derive_best_amount(record)
+    final_date = (
+        document_date if document_date is not None else derive_best_document_date(record)
+    )
+    final_invoice = (
+        invoice_number
+        if invoice_number is not None
+        else derive_best_invoice_number(record)
+    )
+
+    physical_id = build_physical_identity(
+        source_type=source_type if source_type is not None else record.get("source_type"),
+        source_ref=source_ref if source_ref is not None else record.get("source_ref"),
+        file_name=file_name if file_name is not None else record.get("file_name"),
+        file_path=file_path if file_path is not None else record.get("file_path"),
+        file_hash=file_hash if file_hash is not None else record.get("file_hash"),
+    )
+
+    logical_key = build_logical_key(
+        vendor=final_vendor,
+        doc_type=final_doc_type,
+        amount=final_amount,
+        document_date=final_date,
+        invoice_number=final_invoice,
+    )
+
+    logical_fingerprint = build_logical_fingerprint(
+        vendor=final_vendor,
+        doc_type=final_doc_type,
+        amount=final_amount,
+        document_date=final_date,
+        invoice_number=final_invoice,
+    )
+
+    return FingerprintBundle(
+        physical_id=physical_id,
+        logical_fingerprint=logical_fingerprint,
+        logical_key=logical_key,
+        normalized_vendor=normalize_vendor(final_vendor),
+        normalized_doc_type=normalize_doc_type(final_doc_type),
+        normalized_document_date=normalize_date(final_date),
+        normalized_amount=normalize_amount(final_amount),
+        normalized_invoice_number=normalize_invoice_number(final_invoice),
+    )
+
+
+def compute_file_sha256(file_path: str | Path, chunk_size: int = 1024 * 1024) -> str:
+    path = Path(file_path)
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def is_probably_same_logical_document(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    left_bundle = build_fingerprint_bundle(left)
+    right_bundle = build_fingerprint_bundle(right)
+    return left_bundle.logical_fingerprint == right_bundle.logical_fingerprint
+
+
+def build_minimal_logical_fingerprint_for_transaction_match(
+    *,
+    vendor: Any = None,
+    amount: Any = None,
+    document_date: Any = None,
+) -> str:
+    """
+    Small helper for matching flows where doc_type/invoice_number may not exist yet.
+    """
+    logical_key = "|".join(
+        [
+            normalize_vendor(vendor),
+            normalize_date(document_date),
+            normalize_amount(amount),
+        ]
+    )
+    return f"txnlog_{_stable_hash(logical_key, 24)}"
+
+
+__all__ = [
+    "FingerprintBundle",
+    "build_fingerprint_bundle",
+    "build_logical_fingerprint",
+    "build_logical_key",
+    "build_minimal_logical_fingerprint_for_transaction_match",
+    "build_physical_identity",
+    "compute_file_sha256",
+    "derive_best_amount",
+    "derive_best_doc_type",
+    "derive_best_document_date",
+    "derive_best_invoice_number",
+    "derive_best_vendor",
+    "is_probably_same_logical_document",
+    "normalize_amount",
+    "normalize_date",
+    "normalize_doc_type",
+    "normalize_free_text",
+    "normalize_invoice_number",
+    "normalize_vendor",
+]

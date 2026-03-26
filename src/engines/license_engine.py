@@ -17,7 +17,9 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import sqlite3
+import subprocess
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -312,3 +314,186 @@ def generate_license_key(
     json_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     b64 = base64.urlsafe_b64encode(json_bytes).decode().rstrip("=")
     return f"LLAI-{b64}"
+
+
+# ---------------------------------------------------------------------------
+# Machine ID & Multi-machine license management
+# ---------------------------------------------------------------------------
+
+MAX_MACHINES_PER_FIRM = 3
+
+
+def get_machine_id() -> str:
+    """Generate a unique machine ID from Windows machine name + disk serial.
+
+    Returns a SHA-256 hex digest of the combined identifiers.
+    """
+    machine_name = platform.node()
+    disk_serial = ""
+
+    try:
+        result = subprocess.run(
+            ["wmic", "diskdrive", "get", "SerialNumber", "/value"],
+            capture_output=True, text=True, timeout=10,
+        )
+        for line in result.stdout.strip().splitlines():
+            if line.startswith("SerialNumber="):
+                serial = line.split("=", 1)[1].strip()
+                if serial:
+                    disk_serial = serial
+                    break
+    except Exception:
+        pass
+
+    # Fallback: use volume serial if WMIC fails
+    if not disk_serial:
+        try:
+            result = subprocess.run(
+                ["vol", "C:"],
+                capture_output=True, text=True, timeout=10,
+                shell=True,
+            )
+            for line in result.stdout.strip().splitlines():
+                if "Serial Number" in line or "numéro de série" in line.lower():
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        disk_serial = parts[-1].strip().replace("-", "")
+                        break
+        except Exception:
+            pass
+
+    combined = f"{machine_name}|{disk_serial}".encode("utf-8")
+    return hashlib.sha256(combined).hexdigest()
+
+
+def _ensure_license_machines_table(conn: sqlite3.Connection) -> None:
+    """Create the license_machines table if it doesn't exist."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS license_machines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            license_key_hash TEXT NOT NULL,
+            machine_id TEXT NOT NULL,
+            machine_name TEXT NOT NULL DEFAULT '',
+            first_activated TEXT NOT NULL DEFAULT '',
+            last_seen TEXT NOT NULL DEFAULT '',
+            UNIQUE(license_key_hash, machine_id)
+        )
+    """)
+    conn.commit()
+
+
+def register_machine(conn: sqlite3.Connection) -> dict:
+    """Register the current machine for the active license.
+
+    Returns:
+        {"registered": bool, "machine_count": int, "max_machines": int,
+         "overuse": bool, "error": str}
+    """
+    _ensure_license_machines_table(conn)
+
+    status = get_license_status()
+    result = {
+        "registered": False,
+        "machine_count": 0,
+        "max_machines": MAX_MACHINES_PER_FIRM,
+        "overuse": False,
+        "error": "",
+    }
+
+    if not status.get("valid"):
+        result["error"] = "No valid license"
+        return result
+
+    # Get license key hash for grouping
+    config_path = ROOT_DIR / "ledgerlink.config.json"
+    try:
+        cfg = json.loads(config_path.read_text(encoding="utf-8"))
+        lic_key = cfg.get("license", {}).get("key", "")
+    except Exception:
+        result["error"] = "Could not read license config"
+        return result
+
+    key_hash = hashlib.sha256(lic_key.encode()).hexdigest()[:16]
+    machine_id = get_machine_id()
+    machine_name = platform.node()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Upsert this machine
+    conn.execute(
+        """INSERT INTO license_machines (license_key_hash, machine_id, machine_name, first_activated, last_seen)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(license_key_hash, machine_id) DO UPDATE SET
+             machine_name = excluded.machine_name,
+             last_seen = excluded.last_seen""",
+        (key_hash, machine_id, machine_name, now, now),
+    )
+    conn.commit()
+
+    # Count machines for this license
+    row = conn.execute(
+        "SELECT COUNT(*) FROM license_machines WHERE license_key_hash = ?",
+        (key_hash,),
+    ).fetchone()
+    machine_count = row[0] if row else 0
+
+    result["registered"] = True
+    result["machine_count"] = machine_count
+    result["overuse"] = machine_count > MAX_MACHINES_PER_FIRM
+
+    return result
+
+
+def get_licensed_machines(conn: sqlite3.Connection) -> list[dict]:
+    """Return all machines activated for the current license."""
+    _ensure_license_machines_table(conn)
+
+    config_path = ROOT_DIR / "ledgerlink.config.json"
+    try:
+        cfg = json.loads(config_path.read_text(encoding="utf-8"))
+        lic_key = cfg.get("license", {}).get("key", "")
+    except Exception:
+        return []
+
+    if not lic_key:
+        return []
+
+    key_hash = hashlib.sha256(lic_key.encode()).hexdigest()[:16]
+    current_machine_id = get_machine_id()
+
+    rows = conn.execute(
+        "SELECT machine_id, machine_name, first_activated, last_seen "
+        "FROM license_machines WHERE license_key_hash = ? ORDER BY first_activated",
+        (key_hash,),
+    ).fetchall()
+
+    machines = []
+    for r in rows:
+        machines.append({
+            "machine_id": r[0][:12] + "...",  # Truncate for display
+            "machine_name": r[1],
+            "first_activated": r[2],
+            "last_seen": r[3],
+            "is_current": r[0] == current_machine_id,
+        })
+    return machines
+
+
+def check_machine_license(conn: sqlite3.Connection) -> dict:
+    """Check if this machine is properly licensed. Register if not.
+
+    Returns status dict with overuse warning if applicable.
+    """
+    _ensure_license_machines_table(conn)
+    status = get_license_status()
+
+    if not status.get("valid"):
+        return {"licensed": False, "overuse": False, "error": status.get("error", "")}
+
+    reg = register_machine(conn)
+    return {
+        "licensed": reg["registered"],
+        "overuse": reg["overuse"],
+        "machine_count": reg["machine_count"],
+        "max_machines": reg["max_machines"],
+        "error": reg.get("error", ""),
+    }

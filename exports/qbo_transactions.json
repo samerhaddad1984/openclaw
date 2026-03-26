@@ -1,0 +1,32 @@
+[
+  {
+    "TxnDate": "2026-01-06",
+    "Vendor": "CompanyCam",
+    "ClientCode": "SOUSSOL",
+    "Amount": 1139.54,
+    "Account": "Software Expense",
+    "TaxCode": "NONE",
+    "Description": "CompanyCam expense",
+    "SourceDocument": "Invoice-FBBD891C-0083.pdf"
+  },
+  {
+    "TxnDate": "2025-30-09",
+    "Vendor": "Microsoft Canada Inc.",
+    "ClientCode": "SOUSSOL",
+    "Amount": 1002.31,
+    "Account": "Software Expense",
+    "TaxCode": "GST_QST",
+    "Description": "Microsoft Canada Inc. expense",
+    "SourceDocument": "G117449472_Invoice.pdf"
+  },
+  {
+    "TxnDate": "2025-12-21",
+    "Vendor": "OpenAI, LLC",
+    "ClientCode": "SOUSSOL",
+    "Amount": 23.0,
+    "Account": "Software Expense",
+    "TaxCode": "GST_QST",
+    "Description": "OpenAI, LLC expense",
+    "SourceDocument": "Receipt-2167-0997-5794.pdf"
+  }
+]

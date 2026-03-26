@@ -1,0 +1,162 @@
+{
+  "total_documents": 44,
+  "non_ready_documents": 10,
+  "status_counts": {
+    "NeedsReview": 5,
+    "Ignored": 3,
+    "Exception": 2
+  },
+  "bucket_counts": {
+    "status:NeedsReview": 5,
+    "amount:zero": 1,
+    "missing:client": 7,
+    "missing:amount": 7,
+    "status:Ignored": 3,
+    "missing:vendor": 5,
+    "missing:doc_type": 5,
+    "note:non_accounting:personal_massage_receipt": 3,
+    "note:non_accounting_document_filtered": 3,
+    "status:Exception": 2,
+    "error:ocr_failed": 2
+  },
+  "vendor_counts": {
+    "Microsoft Canada Inc.": 1,
+    "LastPass Technologies Canada ULC.": 1,
+    "CIBC Costco World Mastercard": 1,
+    "Google": 1,
+    "CompanyCam": 1,
+    "<no vendor>": 5
+  },
+  "grouped_files": {
+    "status:NeedsReview": [
+      "G122225655_Invoice.pdf",
+      "PayPal_ Transaction Details.pdf",
+      "Receipt-2167-0997-5794.pdf",
+      "invoice_8922355.pdf",
+      "onlineStatement_2024-07-09.pdf"
+    ],
+    "amount:zero": [
+      "G122225655_Invoice.pdf"
+    ],
+    "missing:client": [
+      "PayPal_ Transaction Details.pdf",
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf",
+      "onlineStatement_2024-07-09.pdf",
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "missing:amount": [
+      "Receipt-2167-0997-5794.pdf",
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf",
+      "onlineStatement_2024-07-09.pdf",
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "status:Ignored": [
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "missing:vendor": [
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf",
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "missing:doc_type": [
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf",
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "note:non_accounting:personal_massage_receipt": [
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "note:non_accounting_document_filtered": [
+      "recu_de_massotherapie (13).pdf",
+      "recu_de_massotherapie (14).pdf",
+      "recu_de_massotherapie (15).pdf"
+    ],
+    "status:Exception": [
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf"
+    ],
+    "error:ocr_failed": [
+      "Scan_20251125_171239.pdf",
+      "Telus Alarm 2024 (2).pdf"
+    ]
+  },
+  "file_buckets": {
+    "G122225655_Invoice.pdf": [
+      "status:NeedsReview",
+      "amount:zero"
+    ],
+    "invoice_8922355.pdf": [
+      "status:NeedsReview"
+    ],
+    "onlineStatement_2024-07-09.pdf": [
+      "status:NeedsReview",
+      "missing:client",
+      "missing:amount"
+    ],
+    "PayPal_ Transaction Details.pdf": [
+      "status:NeedsReview",
+      "missing:client"
+    ],
+    "Receipt-2167-0997-5794.pdf": [
+      "status:NeedsReview",
+      "missing:amount"
+    ],
+    "recu_de_massotherapie (13).pdf": [
+      "status:Ignored",
+      "missing:vendor",
+      "missing:client",
+      "missing:amount",
+      "missing:doc_type",
+      "note:non_accounting:personal_massage_receipt",
+      "note:non_accounting_document_filtered"
+    ],
+    "recu_de_massotherapie (14).pdf": [
+      "status:Ignored",
+      "missing:vendor",
+      "missing:client",
+      "missing:amount",
+      "missing:doc_type",
+      "note:non_accounting:personal_massage_receipt",
+      "note:non_accounting_document_filtered"
+    ],
+    "recu_de_massotherapie (15).pdf": [
+      "status:Ignored",
+      "missing:vendor",
+      "missing:client",
+      "missing:amount",
+      "missing:doc_type",
+      "note:non_accounting:personal_massage_receipt",
+      "note:non_accounting_document_filtered"
+    ],
+    "Scan_20251125_171239.pdf": [
+      "status:Exception",
+      "missing:vendor",
+      "missing:client",
+      "missing:amount",
+      "missing:doc_type",
+      "error:ocr_failed"
+    ],
+    "Telus Alarm 2024 (2).pdf": [
+      "status:Exception",
+      "missing:vendor",
+      "missing:client",
+      "missing:amount",
+      "missing:doc_type",
+      "error:ocr_failed"
+    ]
+  }
+}

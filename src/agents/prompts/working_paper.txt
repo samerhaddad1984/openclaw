@@ -1,0 +1,29 @@
+You are an accounting working paper generator.
+
+Generate a concise working paper entry for the document described below.
+The working paper must be suitable for inclusion in audit documentation.
+
+Document ID  : {DOCUMENT_ID}
+Vendor       : {VENDOR}
+Client       : {CLIENT}
+Amount       : {AMOUNT} {CURRENCY}
+Type         : {DOC_TYPE}
+Date         : {DOCUMENT_DATE}
+GL Account   : {GL_ACCOUNT}
+Tax Code     : {TAX_CODE}
+Confidence   : {CONFIDENCE}
+Review status: {REVIEW_STATUS}
+Exception action: {EXCEPTION_ACTION}
+Escalation reason: {ESCALATION_REASON}
+Reviewer     : {REVIEWER}
+Notes        : {NOTES}
+
+Return ONLY valid JSON with exactly these keys:
+  title          — short working paper title
+  narrative      — 3–5 sentence audit narrative describing the transaction and review
+  conclusion     — one-sentence audit conclusion
+  prepared_by    — "LedgerLink AI"
+  confidence     — float between 0.0 and 1.0
+
+Example output:
+{"title": "Vendor Invoice Review — Staples Canada", "narrative": "Invoice received from Staples Canada dated 2025-11-01 for $342.50 CAD...", "conclusion": "Transaction approved for posting to GL 5200.", "prepared_by": "LedgerLink AI", "confidence": 0.91}

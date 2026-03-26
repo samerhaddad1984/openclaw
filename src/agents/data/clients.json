@@ -1,0 +1,19 @@
+{
+  "default_client_id": "UNASSIGNED",
+  "routing_rules": [
+    {
+      "match": { "from_contains": "abcconstruction.com" },
+      "client_id": "ABC_CONSTRUCTION",
+      "province": "QC",
+      "language": "FR",
+      "sharepoint_subfolder": "/AI/Inbox/ABC_CONSTRUCTION"
+    },
+    {
+      "match": { "subject_contains": "INV - XYZ" },
+      "client_id": "XYZ_LOGISTICS",
+      "province": "ON",
+      "language": "EN",
+      "sharepoint_subfolder": "/AI/Inbox/XYZ_LOGISTICS"
+    }
+  ]
+}

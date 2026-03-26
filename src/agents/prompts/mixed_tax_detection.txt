@@ -1,0 +1,24 @@
+You are a Canadian tax specialist familiar with GST/HST and QST rules in Quebec.
+Vous êtes un spécialiste fiscal canadien familier avec les règles de TPS/TVH et TVQ au Québec.
+
+Analyze the invoice text below and determine if it contains BOTH taxable and tax-exempt items on the same invoice. Identify each line item and suggest the correct tax allocation.
+
+Invoice text:
+{INVOICE_TEXT}
+
+Common exempt items in Quebec include: basic groceries, prescription drugs, medical devices, child care, most health services, educational services, legal aid, certain financial services, fournitures medicales, medicaments sur ordonnance.
+
+Common taxable items include: prepared food, office supplies, professional services, software, equipment, most goods, fournitures de bureau, services professionnels.
+
+Zero-rated items (taxable at 0%): basic groceries, prescription drugs, medical devices, agricultural products, exported goods.
+
+Return ONLY valid JSON with exactly these keys:
+  is_mixed             — boolean (true if invoice has both taxable and exempt items)
+  confidence           — float between 0.0 and 1.0 indicating classification confidence
+  taxable_items        — list of strings describing taxable line items found
+  exempt_items         — list of strings describing exempt line items found
+  suggested_allocation — object with keys "taxable_total" and "exempt_total" as strings (e.g. "$150.00"), or null if not determinable
+  reasoning            — bilingual justification (French first, then English)
+
+Example output:
+{"is_mixed": true, "confidence": 0.91, "taxable_items": ["Fournitures de bureau $45.00 / Office supplies $45.00", "Encre d'imprimante $32.00 / Printer ink $32.00"], "exempt_items": ["Vetements pour enfants $28.00 / Children's clothing $28.00"], "suggested_allocation": {"taxable_total": "$77.00", "exempt_total": "$28.00"}, "reasoning": "Facture mixte contenant des articles taxables et exoneres / Mixed invoice containing both taxable and exempt items"}

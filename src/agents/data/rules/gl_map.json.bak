@@ -1,0 +1,42 @@
+{
+  "vendors": {
+    "Hydro-Québec": {
+      "gl_account": "Utilities - Electricity",
+      "tax_code": "GST_QST"
+    },
+    "CIBC Costco World Mastercard": {
+      "gl_account": "Credit Card Payable",
+      "tax_code": "NONE"
+    },
+    "CompanyCam": {
+      "gl_account": "Software Expense",
+      "tax_code": "GST_QST"
+    }
+  },
+  "doc_types": {
+    "utility_bill": {
+      "gl_account": "Utilities - Electricity",
+      "tax_code": "GST_QST"
+    },
+    "credit_note": {
+      "gl_account": "Utilities - Electricity",
+      "tax_code": "GST_QST"
+    },
+    "credit_card_statement": {
+      "gl_account": "Credit Card Payable",
+      "tax_code": "NONE"
+    },
+    "invoice": {
+      "gl_account": "General Expense",
+      "tax_code": "GST_QST"
+    },
+    "receipt": {
+      "gl_account": "General Expense",
+      "tax_code": "GST_QST"
+    }
+  },
+  "default": {
+    "gl_account": "Uncategorized Expense",
+    "tax_code": "GST_QST"
+  }
+}

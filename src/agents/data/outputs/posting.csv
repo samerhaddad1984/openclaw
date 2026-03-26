@@ -1,0 +1,902 @@
+﻿run_at,list_item_id,file_name,vendor,document_date,total,currency,method,notes
+2026-03-06T14:32:25.106756Z,5,AAMkADhl_628903221158.pdf,Hydro-Québec,2025-11-25T08:00:00Z,,CAD,rules,vendor_match:hydro_quebec
+2026-03-06T14:57:27.123428Z,6,AAMkADhl_628903221158.pdf,Hydro-Québec,2025-11-25T08:00:00Z,1052.12,CAD,rules,vendor_match:hydro_quebec
+2026-03-06T15:12:26.255218Z,7,AAMkADhl_628903221158.pdf,Hydro-Québec,2025-11-25T08:00:00Z,1052.12,CAD,rules,vendor_match:hydro_quebec
+2026-03-06T15:22:26.813665Z,7,AAMkADhl_628903221158.pdf,Hydro-Québec,2025-11-25T08:00:00Z,1052.12,CAD,rules,vendor_match:hydro_quebec
+2026-03-06T15:32:37.334870Z,9,AAMkADhl_628903221158.pdf,Hydro-Québec,2026-01-28T08:00:00Z,1052.12,CAD,rules,vendor_match:hydro_quebec
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"AAMkADhl_CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,1212.01,USD,AAMkADhl_Invoice-FBBD891C-0084.pdf,rules+ai
+2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,rules
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,AQMkADhl_cibc 2024-2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,CIBC 2nd half of 2025.pdf,rules+ai
+2025-11-09,CIBC Costco World Mastercard,credit_card_statement,6899.17,CAD,"CIBC sept,oct,nov 2025.pdf",rules+ai
+"February 6, 2026",CompanyCam,invoice,49.0,USD,Invoice-FBBD891C-0085.pdf,rules+ai

@@ -152,6 +152,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "lic_none":           "No license installed — run: python scripts/generate_license.py",
         "lic_invalid":        "License invalid: {error}",
         "lic_expired":        "License EXPIRED on {expiry}",
+        "lbl_version":        "14. Version check",
+        "ver_ok":             "Up to date — version {version}",
+        "ver_update":         "Update available: {installed} → {remote}",
+        "ver_error":          "Could not check for updates: {error}",
+        "ver_no_file":        "version.json not found",
         # summary
         "summary_ok":       "System healthy",
         "summary_issues":   "{n} issue(s) need manual attention:",
@@ -258,6 +263,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "lic_none":           "Aucune licence installée — exécutez : python scripts/generate_license.py",
         "lic_invalid":        "Licence invalide : {error}",
         "lic_expired":        "Licence EXPIRÉE le {expiry}",
+        "lbl_version":        "14. Vérification de version",
+        "ver_ok":             "À jour — version {version}",
+        "ver_update":         "Mise à jour disponible : {installed} → {remote}",
+        "ver_error":          "Impossible de vérifier les mises à jour : {error}",
+        "ver_no_file":        "version.json introuvable",
         # summary
         "summary_ok":       "Système en bonne santé",
         "summary_issues":   "{n} problème(s) nécessitent une intervention manuelle :",
@@ -1358,6 +1368,47 @@ def check_license() -> None:
     _record(label, "pass", t("lic_ok", tier=status["tier"], expiry=status["expiry_date"]))
 
 
+# Check 14 — Version
+def check_version() -> None:
+    label = t("lbl_version")
+    version_file = ROOT / "version.json"
+    if not version_file.exists():
+        _record(label, "warn", t("ver_no_file"))
+        return
+
+    try:
+        ver_data = json.loads(version_file.read_text(encoding="utf-8"))
+        installed = ver_data.get("version", "0.0.0")
+    except Exception as exc:
+        _record(label, "warn", t("ver_error", error=str(exc)))
+        return
+
+    # Try to check for updates
+    try:
+        update_url = None
+        if CONFIG_PATH.exists():
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            update_url = cfg.get("update_url")
+        if not update_url:
+            update_url = "https://releases.ledgerlink.ai/latest/version.json"
+
+        req = urllib.request.Request(update_url, headers={"User-Agent": "LedgerLink-Autofix/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            remote_data = json.loads(resp.read().decode("utf-8"))
+        remote_ver = remote_data.get("version", "0.0.0")
+
+        installed_tuple = tuple(int(x) for x in installed.split("."))
+        remote_tuple = tuple(int(x) for x in remote_ver.split("."))
+
+        if remote_tuple > installed_tuple:
+            _record(label, "warn", t("ver_update", installed=installed, remote=remote_ver))
+        else:
+            _record(label, "pass", t("ver_ok", version=installed))
+    except Exception:
+        # Cannot reach update server — just report installed version
+        _record(label, "pass", t("ver_ok", version=installed))
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1419,6 +1470,8 @@ def main() -> None:
     check_cloudflare_tunnel()
     print()
     check_license()
+    print()
+    check_version()
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print()

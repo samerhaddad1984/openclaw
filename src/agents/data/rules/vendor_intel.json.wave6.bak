@@ -1,0 +1,125 @@
+{
+  "vendors": {
+    "Hydro-Québec": {
+      "category": "Utilities",
+      "document_family": "electricity",
+      "gl_account": "Utilities - Electricity",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "utility_bill",
+        "credit_note"
+      ]
+    },
+    "CIBC Costco World Mastercard": {
+      "category": "Credit Card",
+      "document_family": "credit_card",
+      "gl_account": "Credit Card Payable",
+      "tax_code": "NONE",
+      "preferred_doc_types": [
+        "credit_card_statement"
+      ]
+    },
+    "CompanyCam": {
+      "category": "Software",
+      "document_family": "subscription",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "Dell Canada Inc.": {
+      "category": "Office Equipment",
+      "document_family": "invoice",
+      "gl_account": "Computer and Equipment Expense",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "Amazon.com.ca ULC": {
+      "category": "Office Supplies",
+      "document_family": "invoice",
+      "gl_account": "Office Supplies",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "Microsoft Canada Inc.": {
+      "category": "Software",
+      "document_family": "subscription",
+      "gl_account": "Software Expense",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "Google": {
+      "category": "Software",
+      "document_family": "subscription",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "LastPass Technologies Canada ULC.": {
+      "category": "Software",
+      "document_family": "subscription",
+      "gl_account": "Software Expense",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    },
+    "OpenAI, LLC": {
+      "category": "Software",
+      "document_family": "subscription",
+      "gl_account": "Software Expense",
+      "tax_code": "GST_QST",
+      "preferred_doc_types": [
+        "invoice",
+        "receipt"
+      ]
+    }
+  },
+  "doc_type_defaults": {
+    "utility_bill": {
+      "category": "Utilities",
+      "gl_account": "Utilities Expense",
+      "tax_code": "GST_QST"
+    },
+    "credit_note": {
+      "category": "Credit Note",
+      "gl_account": "General Expense",
+      "tax_code": "GST_QST"
+    },
+    "credit_card_statement": {
+      "category": "Credit Card",
+      "gl_account": "Credit Card Payable",
+      "tax_code": "NONE"
+    },
+    "invoice": {
+      "category": "General Expense",
+      "gl_account": "General Expense",
+      "tax_code": "GST_QST"
+    },
+    "receipt": {
+      "category": "General Expense",
+      "gl_account": "General Expense",
+      "tax_code": "GST_QST"
+    }
+  },
+  "default": {
+    "category": "Uncategorized",
+    "gl_account": "Uncategorized Expense",
+    "tax_code": "GST_QST"
+  }
+}

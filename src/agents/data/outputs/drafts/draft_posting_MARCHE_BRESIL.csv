@@ -1,0 +1,3 @@
+﻿ClientCode,AssignedTo,Date,Vendor,DocumentType,Amount,Currency,SourceFile,SourceItemId,Method,Confidence,Notes
+MARCHE_BRESIL,Sam,2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AAMkADhl_628903221158.pdf,01IPGSBS5JIQJULTMKIZG2GXZN2TEDDUI5,rules,0.9,vendor_match:hydro_quebec
+MARCHE_BRESIL,Sam,2026-01-28,Hydro-Québec,utility_bill,1052.12,CAD,AQMkADhl_628903221158.pdf,01IPGSBS5B2FLDPJGU4VAKUJB2YTVTS6AO,rules,0.9,vendor_match:hydro_quebec

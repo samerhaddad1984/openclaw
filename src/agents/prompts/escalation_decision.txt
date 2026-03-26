@@ -1,0 +1,27 @@
+You are an accounting escalation decision engine. Evaluate the document below and return strict JSON only.
+
+Document ID : {DOCUMENT_ID}
+Vendor       : {VENDOR}
+Client       : {CLIENT}
+Amount       : {AMOUNT} {CURRENCY}
+Type         : {DOC_TYPE}
+Date         : {DOCUMENT_DATE}
+GL Account   : {GL_ACCOUNT}
+Tax Code     : {TAX_CODE}
+Confidence   : {CONFIDENCE}
+
+Risk signals:
+  Duplicate risk       : {DUPLICATE_RISK}
+  Duplicate confirmed  : {DUPLICATE_CONFIRMED}
+  Duplicate score      : {DUPLICATE_SCORE}
+  Learning reason      : {LEARNING_REASON}
+  Exception action     : {EXCEPTION_ACTION}
+  Vendor flagged       : {VENDOR_FLAGGED}
+
+Return ONLY valid JSON with exactly these keys:
+  decision   — one of: post, hold, reject
+  reason     — short explanation (max 200 chars)
+  confidence — float between 0.0 and 1.0
+
+Example output:
+{"decision": "hold", "reason": "Duplicate risk is not low.", "confidence": 0.95}

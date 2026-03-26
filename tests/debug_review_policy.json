@@ -1,0 +1,263 @@
+[
+  {
+    "file_name": "Amzaon invoice-$106.77-Samer.pdf",
+    "vendor": "Amazon.com.ca ULC",
+    "client_code": "SOUSSOL",
+    "amount": 106.77,
+    "doc_type": "invoice",
+    "document_date": null,
+    "routing_method": "rules",
+    "rules_confidence": 0.9,
+    "final_method_sent_to_review_policy": "rules",
+    "review_output": "ReviewDecision(status='NeedsReview', reason='missing_document_date', effective_confidence=0.9)",
+    "full_pipeline_status": "NeedsReview",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "Amazon.com.ca ULC",
+      "total": 106.77,
+      "document_date": null,
+      "currency": "CAD",
+      "notes": "vendor_match:amazon_ca_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Office Supplies",
+      "gl_account": "Office Supplies",
+      "tax_code": "GST_QST",
+      "source": "vendor:Amazon.com.ca ULC",
+      "document_family": "invoice"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 32,
+      "matched_signals": [
+        "address:2990 boulevard le corbusier",
+        "address:15 rue de rochebonne",
+        "client_name:basement systems quebec",
+        "client_name:basement systems",
+        "keyword:basement systems",
+        "keyword:basement systems quebec",
+        "keyword:amazon.com.ca ulc",
+        "keyword:2990 boulevard le corbusier",
+        "keyword:15 rue de rochebonne"
+      ],
+      "min_score_required": 4
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.8,
+      "reason": "The document mentions 'BASEMENT SYSTEMS QUEBEC' and 'Basement Systems Quebec' in the sold by and billing sections, which matches the known name 'Basement Systems Quebec' for SOUSSOL. The address '15 RUE DE ROCHEBONNE, BLAINVILLE, QUEBEC, J7B 1W8' is also listed in SOUSSOL's known addresses. However, the document includes variations like 'Michael Haydamous' and 'Samer Haddad' which are not explicitly in the registry, and the client name 'Systèmes Sous-sol Québec' does not appear directly, reducing confidence slightly."
+    }
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0084.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1212.01,
+    "doc_type": "invoice",
+    "document_date": null,
+    "routing_method": "rules",
+    "rules_confidence": 0.9,
+    "final_method_sent_to_review_policy": "rules",
+    "review_output": "ReviewDecision(status='NeedsReview', reason='missing_document_date', effective_confidence=0.9)",
+    "full_pipeline_status": "NeedsReview",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "CompanyCam",
+      "total": 1212.01,
+      "document_date": null,
+      "currency": "USD",
+      "notes": "vendor_match:companycam_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Software",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "source": "vendor:CompanyCam",
+      "document_family": "subscription"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 33,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "client_name:systèmes soussol québec",
+        "keyword:soussol",
+        "keyword:companycam",
+        "keyword:accounting@soussol.com"
+      ],
+      "min_score_required": 4
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.8,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches known names for SOUSSOL such as 'systemes sous-sol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'. However, no addresses or account numbers from the registry are present in the document, reducing confidence slightly."
+    }
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0085.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": "invoice",
+    "document_date": null,
+    "routing_method": "rules",
+    "rules_confidence": 0.9,
+    "final_method_sent_to_review_policy": "rules",
+    "review_output": "ReviewDecision(status='NeedsReview', reason='missing_document_date', effective_confidence=0.9)",
+    "full_pipeline_status": "NeedsReview",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "CompanyCam",
+      "total": 49.0,
+      "document_date": null,
+      "currency": "USD",
+      "notes": "vendor_match:companycam_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Software",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "source": "vendor:CompanyCam",
+      "document_family": "subscription"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 33,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "client_name:systèmes soussol québec",
+        "keyword:soussol",
+        "keyword:companycam",
+        "keyword:accounting@soussol.com"
+      ],
+      "min_score_required": 4
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches known names for SOUSSOL such as 'systemes sous-sol quebec' and 'systèmes sous-sol québec'. The email 'accounting@soussol.com' also aligns with the client code 'SOUSSOL'. No conflicting evidence from other registry entries was found."
+    }
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0086.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "doc_type": "invoice",
+    "document_date": null,
+    "routing_method": "rules",
+    "rules_confidence": 0.9,
+    "final_method_sent_to_review_policy": "rules",
+    "review_output": "ReviewDecision(status='NeedsReview', reason='missing_document_date', effective_confidence=0.9)",
+    "full_pipeline_status": "NeedsReview",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "CompanyCam",
+      "total": 49.0,
+      "document_date": null,
+      "currency": "USD",
+      "notes": "vendor_match:companycam_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Software",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "source": "vendor:CompanyCam",
+      "document_family": "subscription"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 33,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "client_name:systèmes soussol québec",
+        "keyword:soussol",
+        "keyword:companycam",
+        "keyword:accounting@soussol.com"
+      ],
+      "min_score_required": 4
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.95,
+      "reason": "Document 'Bill to' field contains 'Systemes Soussol Quebec', which is a close match to known name 'systemes soussol quebec' in the client registry for SOUSSOL. The email address 'accounting@soussol.com' also strongly suggests the client SOUSSOL."
+    }
+  },
+  {
+    "file_name": "Invoice-FBBD891C-0087.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 912.44,
+    "doc_type": "invoice",
+    "document_date": null,
+    "routing_method": "rules",
+    "rules_confidence": 0.9,
+    "final_method_sent_to_review_policy": "rules",
+    "review_output": "ReviewDecision(status='NeedsReview', reason='missing_document_date', effective_confidence=0.9)",
+    "full_pipeline_status": "NeedsReview",
+    "raw_rules_output": {
+      "doc_type": "invoice",
+      "confidence": 0.9,
+      "vendor_name": "CompanyCam",
+      "total": 912.44,
+      "document_date": null,
+      "currency": "USD",
+      "notes": "vendor_match:companycam_invoice"
+    },
+    "raw_vendor_output": {
+      "category": "Software",
+      "gl_account": "Software Expense",
+      "tax_code": "NONE",
+      "source": "vendor:CompanyCam",
+      "document_family": "subscription"
+    },
+    "raw_client_route": {
+      "client_code": "SOUSSOL",
+      "client_name": "Systèmes Sous-sol Québec",
+      "assigned_to": "IT",
+      "score": 33,
+      "matched_signals": [
+        "address:soussol",
+        "address:systemes soussol quebec",
+        "client_name:soussol",
+        "client_name:systemes soussol quebec",
+        "client_name:systèmes soussol québec",
+        "keyword:soussol",
+        "keyword:companycam",
+        "keyword:accounting@soussol.com"
+      ],
+      "min_score_required": 4
+    },
+    "raw_ai_client_route": {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "confidence": 0.9,
+      "reason": "The document's 'Bill to' field contains 'Systemes Soussol Quebec', which closely matches the known name 'systemes soussol quebec' in the registry for client_code SOUSSOL. The email 'accounting@soussol.com' also aligns with the client name. No conflicting evidence from other registry entries was found."
+    }
+  }
+]

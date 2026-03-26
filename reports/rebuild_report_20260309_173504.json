@@ -1,0 +1,46 @@
+{
+  "script": "rebuild_document_store.py",
+  "run_started_at_utc": "2026-03-09T21:35:04Z",
+  "source_folder": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real",
+  "database": "data\\ledgerlink_agent.db",
+  "table": "documents",
+  "ingest_script": "scripts\\ingest_folder_to_store.py",
+  "dry_run": false,
+  "status": "interrupted",
+  "steps": {
+    "schema": {
+      "columns": [
+        "document_id",
+        "file_name",
+        "file_path",
+        "client_code",
+        "vendor",
+        "doc_type",
+        "amount",
+        "document_date",
+        "gl_account",
+        "tax_code",
+        "category",
+        "review_status",
+        "confidence",
+        "raw_result",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "before_delete": {
+      "row_count": 4,
+      "duplicate_examples_preview": []
+    },
+    "delete": {
+      "rows_deleted": 4,
+      "row_count_after_delete": 0,
+      "vacuum_after_delete": true
+    }
+  },
+  "warnings": [],
+  "errors": [
+    "Run interrupted by user (Ctrl+C)."
+  ],
+  "run_finished_at_utc": "2026-03-09T21:38:47Z"
+}
