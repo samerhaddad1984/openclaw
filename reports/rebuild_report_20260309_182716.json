@@ -1,0 +1,221 @@
+{
+  "script": "rebuild_document_store.py",
+  "run_started_at_utc": "2026-03-09T22:27:16Z",
+  "source_folder": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real",
+  "database": "data\\ledgerlink_agent.db",
+  "table": "documents",
+  "ingest_script": "scripts\\ingest_folder_to_store.py",
+  "dry_run": false,
+  "status": "failed",
+  "steps": {
+    "schema": {
+      "columns": [
+        "document_id",
+        "file_name",
+        "file_path",
+        "client_code",
+        "vendor",
+        "doc_type",
+        "amount",
+        "document_date",
+        "gl_account",
+        "tax_code",
+        "category",
+        "review_status",
+        "confidence",
+        "raw_result",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "before_delete": {
+      "row_count": 44,
+      "duplicate_examples_preview": [
+        {
+          "logical_fingerprint": "unknown_vendor|unknown_date|unknown_amount|unknown_doc_type",
+          "fingerprint_hash": "82d907b7e5eb53d37ae6b4535437f26e9fce050fa90f1cf94ee26382ba0340f4",
+          "rowids": [
+            27,
+            46,
+            47,
+            48,
+            49
+          ],
+          "vendors": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "amounts": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "document_dates": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "doc_types": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "file_names": [
+            "recu_de_massotherapie (13).pdf",
+            "recu_de_massotherapie (14).pdf",
+            "recu_de_massotherapie (15).pdf",
+            "Scan_20251125_171239.pdf",
+            "Telus Alarm 2024 (2).pdf"
+          ]
+        },
+        {
+          "logical_fingerprint": "companycam|2025-10-06|1503.22|invoice",
+          "fingerprint_hash": "e2cead87092ac4488a49e3a723411ff94c1192a0e05d1d94364270189763046c",
+          "rowids": [
+            1,
+            44,
+            45
+          ],
+          "vendors": [
+            "CompanyCam",
+            "CompanyCam",
+            "CompanyCam"
+          ],
+          "amounts": [
+            1503.22,
+            1503.22,
+            1503.22
+          ],
+          "document_dates": [
+            "2025-10-06",
+            "2025-10-06",
+            "2025-10-06"
+          ],
+          "doc_types": [
+            "invoice",
+            "invoice",
+            "invoice"
+          ],
+          "file_names": [
+            "Invoice-FBBD891C-0073 (2).pdf",
+            "Invoice-FBBD891C-0073 (1).pdf",
+            "Invoice-FBBD891C-0073.pdf"
+          ]
+        },
+        {
+          "logical_fingerprint": "companycam|2025-08-01|2511.00|invoice",
+          "fingerprint_hash": "44116704738c074d57983967616ca430835c05046623dcd9e7bb30925c87c559",
+          "rowids": [
+            13,
+            43
+          ],
+          "vendors": [
+            "CompanyCam",
+            "CompanyCam"
+          ],
+          "amounts": [
+            2511.0,
+            2511.0
+          ],
+          "document_dates": [
+            "2025-08-01",
+            "2025-08-01"
+          ],
+          "doc_types": [
+            "invoice",
+            "invoice"
+          ],
+          "file_names": [
+            "cn invoice august 1.pdf",
+            "Invoice-54E917E7-0072.pdf"
+          ]
+        },
+        {
+          "logical_fingerprint": "hydro_quebec|2025-08-15|-43.05|credit_note",
+          "fingerprint_hash": "661678720a47e4838ecf7d1af3973ae0cc8c98105eabdb1e51bf837f913b133c",
+          "rowids": [
+            9,
+            41
+          ],
+          "vendors": [
+            "Hydro-Québec",
+            "Hydro-Québec"
+          ],
+          "amounts": [
+            -43.05,
+            -43.05
+          ],
+          "document_dates": [
+            "2025-08-15",
+            "2025-08-15"
+          ],
+          "doc_types": [
+            "credit_note",
+            "credit_note"
+          ],
+          "file_names": [
+            "700003808337 (1).pdf",
+            "700003808337.pdf"
+          ]
+        },
+        {
+          "logical_fingerprint": "microsoft_canada_inc|2025-11-09|1065.54|invoice",
+          "fingerprint_hash": "42576934cfbf952c9231de9000f33aed6f7cfa7c1abdf5df87a69970f9377cc0",
+          "rowids": [
+            23,
+            42
+          ],
+          "vendors": [
+            "Microsoft Canada Inc.",
+            "Microsoft Canada Inc."
+          ],
+          "amounts": [
+            1065.54,
+            1065.54
+          ],
+          "document_dates": [
+            "2025-11-09",
+            "2025-11-09"
+          ],
+          "doc_types": [
+            "invoice",
+            "invoice"
+          ],
+          "file_names": [
+            "G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf",
+            "G122707327_8a12d3e0dbc74b6189effb865bf27f36.pdf"
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "rows_deleted": 44,
+      "row_count_after_delete": 0,
+      "vacuum_after_delete": true
+    },
+    "ingestion": {
+      "cmd": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "scripts\\ingest_folder_to_store.py",
+        "tests\\documents_real"
+      ],
+      "returncode": 1,
+      "stdout": "Traceback (most recent call last):\n  File \"D:\\Agents\\LedgerLinkAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py)\n",
+      "stderr": ""
+    }
+  },
+  "warnings": [],
+  "errors": [
+    "Ingestion failed.\nCommand: C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe scripts\\ingest_folder_to_store.py tests\\documents_real\nCaptured output:\nTraceback (most recent call last):\n  File \"D:\\Agents\\LedgerLinkAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py)\n"
+  ],
+  "run_finished_at_utc": "2026-03-09T22:27:17Z"
+}

@@ -1,0 +1,26 @@
+{
+  "clients": [
+    {
+      "client_code": "MARCHE_BRESIL",
+      "assigned_to": "Sam",
+      "keywords": [
+        "marché brésil",
+        "marche bresil",
+        "marche brasil",
+        "marché brasil",
+        "729 rue saint-pierre",
+        "chambly qc j3l"
+      ]
+    },
+    {
+      "client_code": "SOUSSOL",
+      "assigned_to": "IT",
+      "keywords": [
+        "systèmes sous-sol",
+        "systemes sous-sol",
+        "soussol",
+        "basement systems"
+      ]
+    }
+  ]
+}

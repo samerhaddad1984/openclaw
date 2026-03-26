@@ -1,0 +1,60 @@
+{
+  "host": "0.0.0.0",
+  "port": 8787,
+  "network": {
+    "local_ip": "auto",
+    "local_port": 8787,
+    "bind_all_interfaces": true
+  },
+  "session_hours": 12,
+  "ai_router": {
+    "routine_provider": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "",
+      "model": "deepseek-chat"
+    },
+    "premium_provider": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "",
+      "model": "anthropic/claude-sonnet-4-6"
+    },
+    "routine_tasks": [
+      "classify_document",
+      "extract_vendor",
+      "suggest_gl"
+    ],
+    "complex_tasks": [
+      "explain_anomaly",
+      "escalation_decision",
+      "compliance_narrative",
+      "working_paper",
+      "substance_classification",
+      "related_party_check",
+      "mixed_tax_detection"
+    ]
+  },
+  "digest": {
+    "enabled": false,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "yourfirm@gmail.com",
+    "smtp_password": "your-app-password",
+    "from_address": "ledgerlink@yourfirm.com",
+    "from_name": "LedgerLink AI"
+  },
+  "security": {
+    "bcrypt_rounds": 12,
+    "audit_log": true,
+    "api_key_encryption": true
+  },
+  "client_portal": {
+    "enabled": true,
+    "port": 8788,
+    "max_upload_mb": 20
+  },
+  "ingest": {
+    "port": 8789,
+    "api_key": ""
+  },
+  "demo_mode": false
+}

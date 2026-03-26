@@ -1,0 +1,46 @@
+[
+  {
+    "document_id": "doc_8b98fb212919",
+    "file_name": "G122225655_Invoice.pdf",
+    "review_status": "NeedsReview",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "doc_type": "invoice",
+    "amount": 0.0,
+    "document_date": "2025-11-06",
+    "gl_account": "Software Expense",
+    "issues": [
+      "zero_amount"
+    ]
+  },
+  {
+    "document_id": "doc_1c70fe8ca3a7",
+    "file_name": "Scan_20251125_171239.pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": null,
+    "doc_type": null,
+    "amount": null,
+    "document_date": null,
+    "gl_account": null,
+    "issues": [
+      "missing_vendor",
+      "missing_doc_type"
+    ]
+  },
+  {
+    "document_id": "doc_ed6a689a5606",
+    "file_name": "Telus Alarm 2024 (2).pdf",
+    "review_status": "Exception",
+    "vendor": null,
+    "client_code": null,
+    "doc_type": null,
+    "amount": null,
+    "document_date": null,
+    "gl_account": null,
+    "issues": [
+      "missing_vendor",
+      "missing_doc_type"
+    ]
+  }
+]

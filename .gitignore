@@ -106,7 +106,8 @@ USER.md
 # local tooling
 .serena/
 
-# Agent credentials and memory (NEVER COMMIT)
+# Agent credentials, tokens, and memory (NEVER COMMIT)
+src/agents/data/tokens.json
 memory/
 .agent/*.json
 !.agent/workflows/
@@ -141,3 +142,26 @@ dist/protocol.schema.json
 node_modules/
 **/node_modules/
 package-lock.json
+
+# Database (too large for git, backed up separately)
+data/ledgerlink_agent.db
+data/client_uploads/
+data/incoming_documents/
+data/training/
+data/*.json
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+.hypothesis/
+
+# Environment
+.env
+*.env
+
+# OS
+Thumbs.db
+.DS_Store

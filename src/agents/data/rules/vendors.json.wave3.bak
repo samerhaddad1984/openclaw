@@ -1,0 +1,141 @@
+{
+  "vendors": [
+    {
+      "id": "hydro_quebec_credit_note",
+      "name": "Hydro-Québec",
+      "patterns": [
+        "annulation d’une facture",
+        "annulation d'une facture",
+        "note de crédit",
+        "facture annulée",
+        "coûts de l'électricité annulés",
+        "coûts de l’électricité annulés"
+      ],
+      "vendor_name": "Hydro-Québec",
+      "doc_type": "credit_note",
+      "currency": "CAD",
+      "country": "CA",
+      "province": "QC",
+      "min_confidence": 0.95,
+      "total_regex": "(?is)(montant de la facture annul[ée]e|total des coûts de l['’]électricité annul[ée]s)[^\\-\\d]{0,50}(-\\d{1,3}(?:[ ,][0-9]{3})*[,.]\\d{2})\\s*\\$",
+      "date_regex": "(?is)annulation d[’']une facture\\s*[–-]\\s*avis du\\s+(\\d{1,2}\\s+(?:janvier|janv|février|fevrier|févr|fevr|mars|avril|avr|mai|juin|juillet|juil|août|aout|septembre|sept|octobre|oct|novembre|nov|décembre|decembre|déc|dec)\\.?\\s+20\\d{2})"
+    },
+    {
+      "id": "hydro_quebec_bill",
+      "name": "Hydro-Québec",
+      "patterns": [
+        "hydro-quebec",
+        "hydro québec",
+        "hydroquebec",
+        "facture d’électricité",
+        "facture d'electricite",
+        "facture d electricite"
+      ],
+      "vendor_name": "Hydro-Québec",
+      "doc_type": "utility_bill",
+      "currency": "CAD",
+      "country": "CA",
+      "province": "QC",
+      "min_confidence": 0.9,
+      "total_regex": "(?is)(montant de la présente facture)[^0-9\\-]{0,50}([\\-]?[0-9 ]{1,3}(?:[ ,][0-9]{3})*[,.][0-9]{2})\\s*\\$",
+      "date_regex": "(?is)facture d[’'eé]lectricit[ée]\\s+du\\s+(\\d{1,2}\\s+(?:janvier|janv|février|fevrier|févr|fevr|mars|avril|avr|mai|juin|juillet|juil|août|aout|septembre|sept|octobre|oct|novembre|nov|décembre|decembre|déc|dec)\\.?\\s+20\\d{2})"
+    },
+    {
+      "id": "cibc_costco_mc",
+      "name": "CIBC Costco World Mastercard",
+      "patterns": [
+        "cibc costco world mastercard",
+        "costco world mastercard",
+        "cibc mastercard",
+        "cibc"
+      ],
+      "vendor_name": "CIBC Costco World Mastercard",
+      "doc_type": "credit_card_statement",
+      "currency": "CAD",
+      "min_confidence": 0.9,
+      "total_regex": "(?i)(new balance|amount due|solde|balance)[^0-9\\-]{0,50}([\\-]?\\d{1,3}(?:,\\d{3})*[\\.,]\\d{2})",
+      "date_regex": "(?i)(\\d{1,2}\\s+(?:janvier|janv|février|fevrier|févr|fevr|mars|avril|avr|mai|juin|juillet|juil|août|aout|septembre|sept|octobre|oct|novembre|nov|décembre|decembre|déc|dec)\\.?\\s+20\\d{2})"
+    },
+    {
+      "id": "dell_canada_invoice",
+      "name": "Dell Canada Inc.",
+      "patterns": [
+        "Dell Canada Inc.",
+        "Dell Canada Inc",
+        "Dell Online",
+        "www.dell.ca",
+        "INVOICE/FACTURE",
+        "No de facture",
+        "Invoice Date/Date de facture"
+      ],
+      "vendor_name": "Dell Canada Inc.",
+      "doc_type": "invoice",
+      "currency": "CAD",
+      "country": "CA",
+      "province": "QC",
+      "min_confidence": 0.9,
+      "total_regex": "(?is)(?:total(?:\\s+amount)?|montant\\s+total|total\\s+de\\s+la\\s+facture)[^\\d\\-]{0,50}(\\d{1,3}(?:[ ,]\\d{3})*[\\.,]\\d{2})\\s*\\$?",
+      "date_regex": "(?is)(?:invoice\\s+date/date\\s+de\\s+facture|date\\s+de\\s+facture)[^\\d]{0,30}(\\d{2}/\\d{2}/\\d{4})"
+    },
+    {
+      "id": "amazon_ca_invoice",
+      "name": "Amazon.com.ca ULC",
+      "patterns": [
+        "Amazon.com.ca ULC",
+        "www.amazon.ca/contact-us",
+        "Invoice / Facture",
+        "Total payable / Total à payer",
+        "Order # / Commande #",
+        "Shipment # / # d'expédition"
+      ],
+      "vendor_name": "Amazon.com.ca ULC",
+      "doc_type": "invoice",
+      "currency": "CAD",
+      "country": "CA",
+      "province": "QC",
+      "min_confidence": 0.9,
+      "total_regex": "(?is)(?:Total payable / Total à payer|Invoice subtotal / Total partiel de la\\s*facture)[^\\d]{0,40}\\$?(\\d{1,3}(?:[ ,]\\d{3})*[\\.,]\\d{2})",
+      "date_regex": "(?is)(?:Invoice date / Date de facturation)[^\\d]{0,40}(\\d{1,2}\\s+[A-Za-zéûôîÉÛÔÎ]+\\s+\\d{4})"
+    },
+    {
+      "id": "microsoft_canada_invoice",
+      "name": "Microsoft Canada Inc.",
+      "patterns": [
+        "Microsoft Canada Inc.",
+        "Questions on your bill? Visit https://aka.ms/invoice-billing",
+        "Invoice for activity on",
+        "Billing Summary",
+        "Power Automate per user plan",
+        "Tax Invoice Number"
+      ],
+      "vendor_name": "Microsoft Canada Inc.",
+      "doc_type": "invoice",
+      "currency": "CAD",
+      "country": "CA",
+      "province": "QC",
+      "min_confidence": 0.9,
+      "total_regex": "(?is)(?:Total\\s*\\(including\\s*Tax\\)\\s*\\n(?:\\s*\\(CAD\\)\\s*\\n)?\\s*(\\d{1,3}(?:[ ,]\\d{3})*[.,]\\d{2})|CAD\\s*(\\d{1,3}(?:[ ,]\\d{3})*[.,]\\d{2})\\s*(?:\\n|$))",
+      "date_regex": "(?is)(?:Document Date|Tax Invoice Date)[^\\d]{0,30}(\\d{2}/\\d{2}/\\d{4})"
+    },
+    {
+      "id": "companycam_invoice",
+      "name": "CompanyCam",
+      "patterns": [
+        "CompanyCam",
+        "support@companycam.com",
+        "Invoice number FBBD",
+        "Pay online",
+        "Bill to",
+        "Amount due"
+      ],
+      "vendor_name": "CompanyCam",
+      "doc_type": "invoice",
+      "currency": "USD",
+      "country": "US",
+      "province": null,
+      "min_confidence": 0.9,
+      "total_regex": "(?is)(?:Amount due\\s*\\n\\s*\\$?(\\d{1,3}(?:,\\d{3})*\\.\\d{2})|^\\s*\\$?(\\d{1,3}(?:,\\d{3})*\\.\\d{2})\\s*USD\\s+due\\b)",
+      "date_regex": "(?is)(?:Date of issue)[^\\w]{0,20}([A-Za-z]+\\s+\\d{1,2},\\s+\\d{4})"
+    }
+  ]
+}

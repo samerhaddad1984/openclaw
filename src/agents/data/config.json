@@ -1,0 +1,20 @@
+{
+  "mailbox": "shaddad@soussol.com",
+  "mail_source_folder": "ledger",
+  "include_read": true,
+
+  "sharepoint_site_url": "https://soussol.sharepoint.com/sites/IT",
+
+  "folders_inbox": "/AI/Inbox",
+  "folders_out": "/AI/For_Review",
+  "folders_done": "/AI/Completed",
+  "folders_err": "/AI/Exceptions",
+
+  "folders_approved": "/AI/Approved",
+  "folders_rejected": "/AI/Rejected",
+  "folders_posting": "/AI/Posting",
+
+  "posting_csv_name": "posting.csv",
+
+  "ai_enabled": true
+}

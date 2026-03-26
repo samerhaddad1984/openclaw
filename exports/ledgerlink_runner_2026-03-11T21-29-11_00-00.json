@@ -1,0 +1,126 @@
+{
+  "run_at": "2026-03-11T21:29:11+00:00",
+  "success": true,
+  "stages": [
+    {
+      "stage_name": "ingest_folder_to_store.py",
+      "success": true,
+      "started_at": "2026-03-11T21:29:10+00:00",
+      "finished_at": "2026-03-11T21:29:10+00:00",
+      "return_code": 0,
+      "command": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "D:\\Agents\\LedgerLinkAi\\scripts\\ingest_folder_to_store.py"
+      ],
+      "stdout": "Processing Invoice-FBBD891C-0086.pdf\nDuplicate logical document skipped.\n",
+      "stderr": "",
+      "summary": {
+        "return_code": 0,
+        "stderr_present": false,
+        "stored_documents": 0,
+        "duplicate_skipped": 1
+      }
+    },
+    {
+      "stage_name": "rebuild_document_store.py",
+      "success": true,
+      "started_at": "2026-03-11T21:29:10+00:00",
+      "finished_at": "2026-03-11T21:29:11+00:00",
+      "return_code": 0,
+      "command": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "D:\\Agents\\LedgerLinkAi\\scripts\\rebuild_document_store.py"
+      ],
+      "stdout": "[UPDATED]  -> no changes\n[UPDATED] doc_061cfc41e5e6 -> no changes\n[UPDATED] doc_0763be5675b1 -> no changes\n[UPDATED] doc_09e6db41d8c1 -> no changes\n[UPDATED] doc_0a8c2083910e -> no changes\n[UPDATED] doc_1be43e51b180 -> no changes\n[UPDATED] doc_22ebefead054 -> no changes\n[UPDATED] doc_269b982b68a6 -> no changes\n[UPDATED] doc_3861309e3616 -> no changes\n[UPDATED] doc_4249f19d638c -> no changes\n[UPDATED] doc_49d78467ea4e -> no changes\n[UPDATED] doc_4a279334bfc0 -> no changes\n[UPDATED] doc_4d203fa35233 -> no changes\n[UPDATED] doc_4d38bf0cde61 -> no changes\n[UPDATED] doc_5193465dbdeb -> no changes\n[UPDATED] doc_5639df5f12a0 -> no changes\n[UPDATED] doc_56be30823023 -> no changes\n[UPDATED] doc_5c4808858b9b -> no changes\n[UPDATED] doc_5dd33e021cf1 -> no changes\n[UPDATED] doc_65d20730cc63 -> no changes\n[UPDATED] doc_6cf1c5f880e5 -> no changes\n[UPDATED] doc_71a03899b59f -> no changes\n[UPDATED] doc_72f2fe34898f -> no changes\n[UPDATED] doc_78e3a071c9df -> no changes\n[UPDATED] doc_79677e193276 -> no changes\n[UPDATED] doc_84d33f82110b -> no changes\n[UPDATED] doc_8aefac7307e0 -> no changes\n[UPDATED] doc_8d34edd66af8 -> no changes\n[UPDATED] doc_9f8d9dc5a9a4 -> no changes\n[UPDATED] doc_b055435fb11e -> no changes\n[UPDATED] doc_b0df396eb8cc -> no changes\n[UPDATED] doc_b1269b3e87a8 -> no changes\n[UPDATED] doc_b4d4af587ea1 -> no changes\n[UPDATED] doc_b6ed55849c59 -> no changes\n[UPDATED] doc_b9298625b7f7 -> no changes\n[UPDATED] doc_bd258b1fb52f -> no changes\n[UPDATED] doc_c4a068c13832 -> no changes\n[UPDATED] doc_cd44ce9a5f78 -> no changes\n[UPDATED] doc_d2c5c33617af -> no changes\n[UPDATED] doc_d72c7257ee2a -> no changes\n[UPDATED] doc_d915301a259c -> no changes\n[UPDATED] doc_df9339a090ab -> no changes\n[UPDATED] doc_f052d90a91d6 -> no changes\n[UPDATED] doc_f35c898bf6b6 -> no changes\n[UPDATED] doc_f3a8b9c96528 -> no changes\n\nRebuild complete.\nDocuments scanned: 45\nDocuments updated: 45\n",
+      "stderr": "",
+      "summary": {
+        "return_code": 0,
+        "stderr_present": false,
+        "documents_scanned": 45,
+        "documents_updated": 45
+      }
+    },
+    {
+      "stage_name": "cleanup_bad_documents.py",
+      "success": true,
+      "started_at": "2026-03-11T21:29:11+00:00",
+      "finished_at": "2026-03-11T21:29:11+00:00",
+      "return_code": 0,
+      "command": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "D:\\Agents\\LedgerLinkAi\\scripts\\cleanup_bad_documents.py"
+      ],
+      "stdout": "[CLEANED] document_id=None file=Invoice-FBBD891C-0086.pdf reasons=missing_document_id;too_many_missing_fields:5\n[CLEANED] document_id=doc_5c4808858b9b file=Telus Alarm 2024 (2).pdf reasons=all_critical_fields_missing\n[CLEANED] document_id=doc_78e3a071c9df file=Scan_20251125_171239.pdf reasons=all_critical_fields_missing\n[CLEANED] document_id=doc_79677e193276 file=recu_de_massotherapie (14).pdf reasons=all_critical_fields_missing\n[CLEANED] document_id=doc_b6ed55849c59 file=recu_de_massotherapie (13).pdf reasons=all_critical_fields_missing\n[CLEANED] document_id=doc_cd44ce9a5f78 file=recu_de_massotherapie (15).pdf reasons=all_critical_fields_missing\n\nCleanup complete\nDocuments scanned: 45\nDocuments cleaned: 6\n",
+      "stderr": "",
+      "summary": {
+        "return_code": 0,
+        "stderr_present": false,
+        "documents_scanned": 45,
+        "documents_cleaned": 6
+      }
+    },
+    {
+      "stage_name": "run_auto_review_classifier.py",
+      "success": true,
+      "started_at": "2026-03-11T21:29:11+00:00",
+      "finished_at": "2026-03-11T21:29:11+00:00",
+      "return_code": 0,
+      "command": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "D:\\Agents\\LedgerLinkAi\\scripts\\run_auto_review_classifier.py"
+      ],
+      "stdout": "\nAuto review complete\nDocuments scanned: 45\nStatuses updated: 0\n",
+      "stderr": "",
+      "summary": {
+        "return_code": 0,
+        "stderr_present": false,
+        "documents_scanned": 45,
+        "statuses_updated": 0
+      }
+    },
+    {
+      "stage_name": "run_posting_queue.py",
+      "success": true,
+      "started_at": "2026-03-11T21:29:11+00:00",
+      "finished_at": "2026-03-11T21:29:11+00:00",
+      "return_code": 0,
+      "command": [
+        "C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "D:\\Agents\\LedgerLinkAi\\scripts\\run_posting_queue.py",
+        "--target-system",
+        "qbo"
+      ],
+      "stdout": "\nPOSTING QUEUE SUMMARY\n----------------------------------------------------------------------------------------------------\nRun at          : 2026-03-11T21:29:11+00:00\nTarget system   : qbo\nReady jobs      : 0\nPosted          : 0\nFailed          : 0\n\nSaved results to: D:\\Agents\\LedgerLinkAi\\exports\\posting_queue_run_qbo.json\n",
+      "stderr": "",
+      "summary": {
+        "return_code": 0,
+        "stderr_present": false,
+        "ready_jobs": 0,
+        "posted": 0,
+        "failed": 0
+      }
+    }
+  ],
+  "summary": {
+    "review_queue": {
+      "Ready": 37,
+      "NeedsReview": 2,
+      "Ignored": 6,
+      "Exception": 0,
+      "total": 45
+    },
+    "posting_queue": {
+      "draft": 0,
+      "ready_to_post": 0,
+      "posted": 3,
+      "post_failed": 0,
+      "approved_for_posting": 3,
+      "pending_human_approval": 0,
+      "rejected": 0,
+      "needs_review": 0,
+      "total": 3
+    },
+    "stage_count": 5,
+    "include_posting_queue": true
+  }
+}

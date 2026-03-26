@@ -1,0 +1,709 @@
+[
+  {
+    "document_id": "doc_05611bbf2636",
+    "file_name": "Receipt-2167-0997-5794.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 23.0,
+    "document_date": "2025-12-21",
+    "match_status": "matched",
+    "match_score": 0.91,
+    "transaction_id": "txn_001",
+    "transaction_description": "OPENAI CHATGPT",
+    "transaction_amount": 23.0,
+    "transaction_date": "2025-12-21",
+    "reasons": [
+      "same_client",
+      "same_amount",
+      "same_date",
+      "vendor_similarity_high",
+      "same_currency",
+      "doc_type:receipt"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_812e1ca3d1c9",
+    "file_name": "G117449472_Invoice.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1002.31,
+    "document_date": "2025-30-09",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_de78e2cc0418",
+    "file_name": "Invoice-FBBD891C-0083.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1139.54,
+    "document_date": "2026-01-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_178c0f2b7dc6",
+    "file_name": "627103180481 (4).pdf",
+    "vendor": "Hydro-Qu�bec",
+    "client_code": "MARCHE_BRESIL",
+    "amount": -49.49,
+    "document_date": "2025-07-26",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_7ae2b65a19ab",
+    "file_name": "628903221158.pdf",
+    "vendor": "Hydro-Qu�bec",
+    "client_code": "MARCHE_BRESIL",
+    "amount": 4814.81,
+    "document_date": "2025-11-25",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_22c42dd14d27",
+    "file_name": "638803173454 (1).pdf",
+    "vendor": "Hydro-Qu�bec",
+    "client_code": "MARCHE_BRESIL",
+    "amount": 3855.6,
+    "document_date": "2025-09-26",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_fda60f58f482",
+    "file_name": "700003808337 (1).pdf",
+    "vendor": "Hydro-Qu�bec",
+    "client_code": "MARCHE_BRESIL",
+    "amount": -43.05,
+    "document_date": "2025-08-15",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_96f8ca1b1ada",
+    "file_name": "700003808337.pdf",
+    "vendor": "Hydro-Qu�bec",
+    "client_code": "MARCHE_BRESIL",
+    "amount": -43.05,
+    "document_date": "2025-08-15",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_3fb7eb667530",
+    "file_name": "cn invoice august 1.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 2511.0,
+    "document_date": "2025-08-01",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_9cadf830f2e9",
+    "file_name": "G111640207_aa92003f290e4a19bd62c6e5b9b10cbd.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 869.04,
+    "document_date": "2025-31-08",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_5604815a9381",
+    "file_name": "G117449472_Invoice.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1002.31,
+    "document_date": "2025-30-09",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_cfea074d16ac",
+    "file_name": "G122025095_Invoice.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 205.59,
+    "document_date": "2025-03-12",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_e72c1809bb10",
+    "file_name": "G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1065.54,
+    "document_date": "2025-31-10",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_bba6cb20137a",
+    "file_name": "G122707327_8a12d3e0dbc74b6189effb865bf27f36.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 1065.54,
+    "document_date": "2025-31-10",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_a82f97d2abbe",
+    "file_name": "G125729392_Invoice.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 143.06,
+    "document_date": "2025-22-12",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_26334ea2094b",
+    "file_name": "G128573502_Invoice.pdf",
+    "vendor": "Microsoft Canada Inc.",
+    "client_code": "SOUSSOL",
+    "amount": 715.4,
+    "document_date": "2025-30-11",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_1509b1eaaff5",
+    "file_name": "Invoice-54E917E7-0072.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 2511.0,
+    "document_date": "2025-08-01",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_045578fe1581",
+    "file_name": "Invoice-6A920927-0012.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 20.0,
+    "document_date": "2025-09-21",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_56042d877391",
+    "file_name": "Invoice-6A920927-0013.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 20.0,
+    "document_date": "2025-10-21",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_aaba5d2fb80f",
+    "file_name": "Invoice-6A920927-0014.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 20.0,
+    "document_date": "2025-11-21",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_c001c3015e86",
+    "file_name": "Invoice-6A920927-0015.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 20.0,
+    "document_date": "2025-12-21",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_971f0ba81b90",
+    "file_name": "Invoice-FBBD891C-0068.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "document_date": "2025-08-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_d8e6503c2345",
+    "file_name": "Invoice-FBBD891C-0069.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1528.15,
+    "document_date": "2025-08-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_d87efd7df11e",
+    "file_name": "Invoice-FBBD891C-0070.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1293.5,
+    "document_date": "2025-09-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_b2ea909a217a",
+    "file_name": "Invoice-FBBD891C-0071.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "document_date": "2025-09-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_15b04a214232",
+    "file_name": "Invoice-FBBD891C-0072.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "document_date": "2025-10-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_47fec6ae111f",
+    "file_name": "Invoice-FBBD891C-0073 (1).pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1503.22,
+    "document_date": "2025-10-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_bad02a0b7e4c",
+    "file_name": "Invoice-FBBD891C-0073 (2).pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1503.22,
+    "document_date": "2025-10-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_d4cd9b148194",
+    "file_name": "Invoice-FBBD891C-0073.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1503.22,
+    "document_date": "2025-10-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_1b524126fce5",
+    "file_name": "Invoice-FBBD891C-0074.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 11.72,
+    "document_date": "2025-10-22",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_e83a26f6566a",
+    "file_name": "Invoice-FBBD891C-0075.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 11.74,
+    "document_date": "2025-10-22",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_a50f3738a69a",
+    "file_name": "Invoice-FBBD891C-0078.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 2.57,
+    "document_date": "2025-12-03",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_53d04f21ce64",
+    "file_name": "Invoice-FBBD891C-0079.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "document_date": "2025-12-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_3e3af30e1bfa",
+    "file_name": "Invoice-FBBD891C-0080.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1257.59,
+    "document_date": "2025-12-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_c5e4931bb02e",
+    "file_name": "Invoice-FBBD891C-0081.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 21.78,
+    "document_date": "2025-12-09",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_c8626bac3b92",
+    "file_name": "Invoice-FBBD891C-0082.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 49.0,
+    "document_date": "2026-01-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_ceb9e3a518b9",
+    "file_name": "Invoice-FBBD891C-0083.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1139.54,
+    "document_date": "2026-01-06",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_3317976b4ec6",
+    "file_name": "Receipt-2167-0997-5794.pdf",
+    "vendor": "OpenAI, LLC",
+    "client_code": "SOUSSOL",
+    "amount": 23.0,
+    "document_date": "2025-12-21",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  },
+  {
+    "document_id": "doc_09e6db41d8c1",
+    "file_name": "invoice_8922355.pdf",
+    "vendor": "CompanyCam",
+    "client_code": "SOUSSOL",
+    "amount": 1.0,
+    "document_date": "2026-01-24",
+    "match_status": "unmatched",
+    "match_score": 0.0,
+    "transaction_id": null,
+    "transaction_description": null,
+    "transaction_amount": null,
+    "transaction_date": null,
+    "reasons": [
+      "no_candidate_above_threshold"
+    ],
+    "decision_status": "pending"
+  }
+]

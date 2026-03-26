@@ -1,0 +1,4 @@
+Date,Vendor,Account,Amount,TaxCode,Description,Client
+2026-01-06,CompanyCam,Software Expense,1139.54,NONE,CompanyCam document,SOUSSOL
+2025-30-09,Microsoft Canada Inc.,Software Expense,1002.31,GST_QST,Microsoft Canada Inc. document,SOUSSOL
+2025-12-21,"OpenAI, LLC",Software Expense,23.0,GST_QST,"OpenAI, LLC document",SOUSSOL

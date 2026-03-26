@@ -1,0 +1,471 @@
+LedgerLink Stress Test Report
+======================================================================
+Database: C:\Users\shaddad\OneDrive - Basement Systems Quebec\Desktop\samer Haddad\LedgerLinkAi\data\ledgerlink_agent.db
+Generated: 2026-03-23T21:59:31.397026+00:00
+
+[PASS] Check 1 — Tax engine math
+{
+  "name": "Check 1 \u2014 Tax engine math",
+  "passed": true,
+  "checked": 35175,
+  "mismatches": 0,
+  "mismatch_rate": "0.00%",
+  "details": []
+}
+
+[PASS] Check 2 — Fraud engine coverage
+{
+  "name": "Check 2 \u2014 Fraud engine coverage",
+  "passed": true,
+  "sub_checks": {
+    "duplicate": {
+      "total": 5000,
+      "flagged": 5000,
+      "rate": "100%",
+      "passed": true
+    },
+    "weekend": {
+      "total": 2500,
+      "flagged": 2500,
+      "rate": "100%",
+      "passed": true
+    },
+    "new_vendor": {
+      "total": 2500,
+      "flagged": 2500,
+      "rate": "100%",
+      "passed": true
+    },
+    "round_number": {
+      "total": 2500,
+      "flagged": 2500,
+      "rate": "100%",
+      "passed": true
+    }
+  }
+}
+
+[PASS] Check 3 — Hallucination guard
+{
+  "name": "Check 3 \u2014 Hallucination guard",
+  "passed": true,
+  "low_confidence": {
+    "total": 2738,
+    "needs_review": 2738,
+    "rate": "100%",
+    "passed": true
+  },
+  "math_mismatch": {
+    "total": 2500,
+    "detected": 2500,
+    "rate": "100%",
+    "passed": true
+  }
+}
+
+[PASS] Check 4 — Learning memory suggestions
+{
+  "name": "Check 4 \u2014 Learning memory suggestions",
+  "passed": true,
+  "total_sampled": 500,
+  "with_suggestion": 475,
+  "rate": "95%",
+  "per_client": {
+    "MARCEL": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "BOLDUC": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "DENTAIRE": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "BOUTIQUE": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "TECHLAVAL": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "PLOMBERIE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "AVOCAT": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "IMMO": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "TRANSPORT": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "CLINIQUE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "EPICERIE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "MANUFACTURE": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "NETTOYAGE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "AGENCE": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "GARDERIE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "ELECTRICIEN": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "TRAITEUR": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "PHARMACIE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "TOITURE": {
+      "sampled": 20,
+      "with_suggestion": 17
+    },
+    "CONSULT": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "PAYSAGE": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "VETERINAIRE": {
+      "sampled": 20,
+      "with_suggestion": 18
+    },
+    "DEMENAGEMENT": {
+      "sampled": 20,
+      "with_suggestion": 19
+    },
+    "IMPRIMERIE": {
+      "sampled": 20,
+      "with_suggestion": 20
+    },
+    "SECURITE": {
+      "sampled": 20,
+      "with_suggestion": 20
+    }
+  }
+}
+
+[PASS] Check 5 — AI router cache
+{
+  "name": "Check 5 \u2014 AI router cache",
+  "passed": true,
+  "total_entries": 1011,
+  "vendor_entries": 1011,
+  "hit_rate": "N/A"
+}
+
+[PASS] Check 6 — Performance
+{
+  "name": "Check 6 \u2014 Performance",
+  "passed": true,
+  "documents_processed": 500,
+  "avg_ms": "183.9",
+  "min_ms": "109.0",
+  "max_ms": "282.0"
+}
+
+[PASS] Check 7 — Filing summary accuracy
+{
+  "name": "Check 7 \u2014 Filing summary accuracy",
+  "passed": true,
+  "clients": {
+    "MARCEL": {
+      "documents_posted": 0,
+      "documents_total": 2019,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "BOLDUC": {
+      "documents_posted": 0,
+      "documents_total": 2022,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "DENTAIRE": {
+      "documents_posted": 0,
+      "documents_total": 2021,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "BOUTIQUE": {
+      "documents_posted": 0,
+      "documents_total": 2021,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "TECHLAVAL": {
+      "documents_posted": 0,
+      "documents_total": 2016,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "PLOMBERIE": {
+      "documents_posted": 0,
+      "documents_total": 2021,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "AVOCAT": {
+      "documents_posted": 0,
+      "documents_total": 2016,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "IMMO": {
+      "documents_posted": 0,
+      "documents_total": 2014,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "TRANSPORT": {
+      "documents_posted": 0,
+      "documents_total": 2019,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "CLINIQUE": {
+      "documents_posted": 0,
+      "documents_total": 2026,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "EPICERIE": {
+      "documents_posted": 0,
+      "documents_total": 2026,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "MANUFACTURE": {
+      "documents_posted": 0,
+      "documents_total": 2019,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "NETTOYAGE": {
+      "documents_posted": 0,
+      "documents_total": 2018,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "AGENCE": {
+      "documents_posted": 0,
+      "documents_total": 2024,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "GARDERIE": {
+      "documents_posted": 0,
+      "documents_total": 2028,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "ELECTRICIEN": {
+      "documents_posted": 0,
+      "documents_total": 2018,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "TRAITEUR": {
+      "documents_posted": 0,
+      "documents_total": 2017,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "PHARMACIE": {
+      "documents_posted": 0,
+      "documents_total": 2016,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "TOITURE": {
+      "documents_posted": 0,
+      "documents_total": 2020,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "CONSULT": {
+      "documents_posted": 0,
+      "documents_total": 2018,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "PAYSAGE": {
+      "documents_posted": 0,
+      "documents_total": 2022,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "VETERINAIRE": {
+      "documents_posted": 0,
+      "documents_total": 2018,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "DEMENAGEMENT": {
+      "documents_posted": 0,
+      "documents_total": 2021,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "IMPRIMERIE": {
+      "documents_posted": 0,
+      "documents_total": 2021,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    },
+    "SECURITE": {
+      "documents_posted": 0,
+      "documents_total": 2019,
+      "itc_available": "0.00",
+      "itr_available": "0.00",
+      "totals_match": true,
+      "line_item_errors": 0,
+      "correct": true
+    }
+  }
+}
+
+[PASS] Check 8 — Cross-client fraud detection
+{
+  "name": "Check 8 \u2014 Cross-client fraud detection",
+  "passed": true,
+  "inserted_docs": 5,
+  "flagged": 5,
+  "suspicious_vendor": "Entreprise Fant\u00f4me 999 Inc",
+  "clients_with_vendor": {
+    "Entreprise Fant\u00f4me 999 Inc": [
+      "MARCEL",
+      "BOLDUC",
+      "DENTAIRE"
+    ]
+  },
+  "multi_client_detected": true
+}
+
+[PASS] Check 9 — Learning memory short-circuit
+{
+  "name": "Check 9 \u2014 Learning memory short-circuit",
+  "passed": true,
+  "total_checked": 100,
+  "shortcircuit_hits": 88,
+  "rate": "88%",
+  "avg_lookup_ms": "0.16",
+  "time_saved_estimate": "17600ms (vs ~200ms per AI call)"
+}
+
+[PASS] Check 10 — Scale performance (500 docs)
+{
+  "name": "Check 10 \u2014 Scale performance (500 docs)",
+  "passed": true,
+  "documents_processed": 500,
+  "avg_ms": "184.1",
+  "p95_ms": "203.0",
+  "min_ms": "125.0",
+  "max_ms": "312.0",
+  "total_time_s": "92.0"
+}
+
+======================================================================
+RESULTS: 10/10 checks passed
+System ready for production

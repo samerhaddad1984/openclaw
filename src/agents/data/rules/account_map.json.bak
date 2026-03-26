@@ -1,0 +1,29 @@
+{
+  "vendors": {
+    "Hydro-Québec": {
+      "expense_account": "Utilities - Electricity",
+      "tax_code": "GST_QST"
+    },
+    "CIBC Costco World Mastercard": {
+      "expense_account": "Credit Card Payable",
+      "tax_code": "NONE"
+    }
+  },
+
+  "doc_types": {
+    "utility_bill": {
+      "default_account": "Utilities - Electricity",
+      "tax_code": "GST_QST"
+    },
+
+    "credit_card_statement": {
+      "default_account": "Credit Card Payable",
+      "tax_code": "NONE"
+    },
+
+    "receipt": {
+      "default_account": "General Expenses",
+      "tax_code": "GST_QST"
+    }
+  }
+}
