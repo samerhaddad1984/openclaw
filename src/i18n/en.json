@@ -1165,5 +1165,7 @@
   "lbl_version":                     "14. Version check",
   "autofix_ver_ok":                  "Up to date — version {version}",
   "autofix_ver_update":              "Update available: {installed} → {remote}",
-  "autofix_ver_error":               "Could not check for updates: {error}"
+  "autofix_ver_error":               "Could not check for updates: {error}",
+
+  "training_nav_link":               "Training"
 }

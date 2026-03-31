@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LedgerLink AI — Staff Training System</title>
+<style>
+:root{--primary:#1e3a5f;--accent:#2563eb;--accent-light:#3b82f6;--green:#059669;--green-bg:#d1fae5;--green-text:#065f46;--yellow-bg:#fef3c7;--yellow-text:#92400e;--red-bg:#fee2e2;--red-text:#991b1b;--blue-bg:#eff6ff;--blue-text:#1e40af;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-500:#6b7280;--gray-700:#374151;--gray-900:#111827;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.1);--shadow-lg:0 4px 12px rgba(0,0,0,.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--gray-100);color:var(--gray-900);line-height:1.6;font-size:15px}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Header */
+.site-header{background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 50%,#2563eb 100%);color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.site-header h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.site-header h1 span{opacity:.7;font-weight:400;font-size:14px;margin-left:8px}
+.header-actions{display:flex;align-items:center;gap:12px}
+.lang-toggle{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;transition:background .2s}
+.lang-toggle:hover{background:rgba(255,255,255,.25)}
+.header-progress{font-size:13px;opacity:.85}
+
+/* Navigation sidebar + main layout */
+.layout{display:flex;min-height:calc(100vh - 60px)}
+.sidebar{width:280px;background:#fff;border-right:1px solid var(--gray-200);padding:16px 0;overflow-y:auto;position:sticky;top:60px;height:calc(100vh - 60px);flex-shrink:0}
+.sidebar-section{padding:8px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);letter-spacing:.5px;margin-top:8px}
+.sidebar a{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;color:var(--gray-700);transition:all .15s;border-left:3px solid transparent}
+.sidebar a:hover{background:var(--gray-50);text-decoration:none;color:var(--accent)}
+.sidebar a.active{background:var(--blue-bg);color:var(--accent);border-left-color:var(--accent);font-weight:600}
+.sidebar a .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sidebar a .status-dot.done{background:var(--green)}
+.sidebar a .status-dot.partial{background:#f59e0b}
+.sidebar a .status-dot.none{background:var(--gray-300)}
+.main-content{flex:1;padding:24px 32px;max-width:900px}
+
+/* Progress bar */
+.progress-overview{background:#fff;border-radius:var(--radius);padding:20px;margin-bottom:24px;box-shadow:var(--shadow)}
+.progress-overview h2{font-size:16px;margin-bottom:8px}
+.progress-bar-outer{background:var(--gray-200);height:10px;border-radius:5px;overflow:hidden;margin-bottom:8px}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:5px;transition:width .6s ease}
+.progress-stats{display:flex;justify-content:space-between;font-size:13px;color:var(--gray-500)}
+
+/* Module card */
+.module-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;transition:box-shadow .2s}
+.module-card:hover{box-shadow:var(--shadow-lg)}
+.module-header{padding:16px 20px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;gap:12px}
+.module-header h2{font-size:16px;font-weight:600;color:var(--primary);flex:1}
+.module-header .tags{display:flex;gap:6px;flex-shrink:0}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;white-space:nowrap}
+.badge-all{background:var(--green-bg);color:var(--green-text)}
+.badge-manager{background:var(--yellow-bg);color:var(--yellow-text)}
+.badge-owner{background:var(--red-bg);color:var(--red-text)}
+.badge-complete{background:var(--green-bg);color:var(--green-text)}
+.chevron{transition:transform .3s;font-size:18px;color:var(--gray-500);flex-shrink:0}
+.module-card.open .chevron{transform:rotate(180deg)}
+.module-body{display:none;padding:0 20px 20px;border-top:1px solid var(--gray-200)}
+.module-card.open .module-body{display:block}
+
+/* Content sections */
+.section{padding:16px 0;border-bottom:1px solid var(--gray-100)}
+.section:last-of-type{border-bottom:none}
+.section h3{font-size:15px;font-weight:600;color:var(--primary);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.section h3 .num{background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.section p,.section li{font-size:14px;color:var(--gray-700);margin-bottom:6px}
+.section ul,.section ol{padding-left:24px;margin-bottom:8px}
+.section li{margin-bottom:4px}
+.tip{background:var(--blue-bg);border-left:3px solid var(--accent);padding:10px 14px;margin:10px 0;font-size:13px;color:var(--blue-text);border-radius:0 8px 8px 0}
+.warning{background:var(--red-bg);border-left:3px solid #ef4444;padding:10px 14px;margin:10px 0;font-size:13px;color:var(--red-text);border-radius:0 8px 8px 0}
+.key-point{background:var(--yellow-bg);border-left:3px solid #f59e0b;padding:10px 14px;margin:10px 0;font-size:13px;color:var(--yellow-text);border-radius:0 8px 8px 0}
+table.info-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+table.info-table th{background:var(--gray-50);text-align:left;padding:8px 12px;border:1px solid var(--gray-200);font-weight:600}
+table.info-table td{padding:8px 12px;border:1px solid var(--gray-200)}
+
+/* Quiz */
+.quiz-section{background:#f0fdf4;border-radius:8px;padding:18px;margin-top:16px}
+.quiz-section h3{font-size:15px;font-weight:600;color:#166534;margin-bottom:12px}
+.quiz-q{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #bbf7d0}
+.quiz-q:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
+.quiz-q p.q-text{font-size:14px;font-weight:600;color:#166534;margin-bottom:8px}
+.quiz-q label{display:block;padding:6px 10px;font-size:13px;cursor:pointer;border-radius:6px;margin-bottom:3px;transition:background .15s}
+.quiz-q label:hover{background:#dcfce7}
+.quiz-q input[type="radio"]{margin-right:8px;accent-color:var(--green)}
+.quiz-feedback{display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500}
+.quiz-feedback.correct{display:block;background:#d1fae5;color:#065f46}
+.quiz-feedback.wrong{display:block;background:#fee2e2;color:#991b1b}
+.quiz-submit{background:var(--green);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;margin-top:10px;transition:background .2s}
+.quiz-submit:hover{background:#047857}
+.quiz-result{margin-top:12px;padding:12px;border-radius:8px;font-size:14px;font-weight:600;display:none}
+.quiz-result.pass{display:block;background:#d1fae5;color:#065f46}
+.quiz-result.fail{display:block;background:#fef3c7;color:#92400e}
+
+/* Certificate */
+.certificate-section{display:none;background:#fff;border:3px solid var(--accent);border-radius:var(--radius);padding:40px;text-align:center;margin:24px 0}
+.certificate-section.visible{display:block}
+.certificate-section h2{font-size:24px;color:var(--primary);margin-bottom:8px}
+.certificate-section .cert-line{font-size:14px;color:var(--gray-500);margin-bottom:4px}
+.certificate-section .cert-name{font-size:28px;font-weight:700;color:var(--accent);margin:16px 0}
+.certificate-section .cert-date{font-size:13px;color:var(--gray-500);margin-top:12px}
+.print-btn{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;margin-top:16px;transition:background .2s}
+.print-btn:hover{background:#1d4ed8}
+
+/* Home screen */
+.home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:16px}
+.home-card{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);cursor:pointer;transition:all .2s;border-left:4px solid var(--accent)}
+.home-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.home-card h3{font-size:14px;font-weight:600;color:var(--primary);margin-bottom:4px}
+.home-card p{font-size:12px;color:var(--gray-500)}
+.home-card .home-status{font-size:11px;font-weight:600;margin-top:8px;padding:3px 8px;border-radius:10px;display:inline-block}
+.home-card .home-status.done{background:var(--green-bg);color:var(--green-text)}
+.home-card .home-status.inprog{background:var(--yellow-bg);color:var(--yellow-text)}
+.home-card .home-status.todo{background:var(--gray-100);color:var(--gray-500)}
+
+/* Responsive */
+@media(max-width:768px){
+.sidebar{display:none}
+.main-content{padding:16px}
+.site-header{padding:12px 16px}
+.site-header h1{font-size:16px}
+.site-header h1 span{display:none}
+.module-header h2{font-size:14px}
+.certificate-section{padding:24px 16px}
+.home-grid{grid-template-columns:1fr}
+}
+.mobile-menu-btn{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
+@media(max-width:768px){
+.mobile-menu-btn{display:block}
+.sidebar.mobile-open{display:block;position:fixed;top:60px;left:0;z-index:99;width:280px;box-shadow:4px 0 12px rgba(0,0,0,.2)}
+}
+
+/* Print */
+@media print{
+.site-header,.sidebar,.progress-overview,.quiz-section,.print-btn,.header-actions,.mobile-menu-btn{display:none!important}
+.module-body{display:block!important}
+.certificate-section{display:block!important;border:2px solid #000;page-break-inside:avoid}
+.module-card{box-shadow:none;border:1px solid #ddd;page-break-inside:avoid}
+body{background:#fff}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="site-header">
+<h1>
+<button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')">&#9776;</button>
+LedgerLink AI<span data-i18n="header_sub"> &mdash; Staff Training System</span>
+</h1>
+<div class="header-actions">
+<span class="header-progress" id="headerProgress">0 / 25</span>
+<button class="lang-toggle" onclick="toggleLang()" id="langBtn">FR</button>
+</div>
+</header>
+
+<!-- ==================== LAYOUT ==================== -->
+<div class="layout">
+
+<!-- Sidebar Navigation -->
+<nav class="sidebar" id="sidebar">
+<div class="sidebar-section" data-i18n="nav_modules">MODULES</div>
+<a href="#home" class="active" onclick="showHome(event)"><span class="status-dot none"></span> <span data-i18n="nav_home">Home</span></a>
+</nav>
+
+<!-- Main Content -->
+<div class="main-content" id="mainContent">
+
+<!-- HOME SCREEN -->
+<div id="homeScreen">
+<div class="progress-overview">
+<h2 data-i18n="progress_title">Training Progress</h2>
+<div class="progress-bar-outer"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+<div class="progress-stats">
+<span id="progressText">0 / 25 <span data-i18n="modules_complete">modules complete</span></span>
+<span id="progressPct">0%</span>
+</div>
+</div>
+<div class="home-grid" id="homeGrid"></div>
+</div>
+
+<!-- MODULE CONTAINER (populated by JS) -->
+<div id="moduleContainer" style="display:none"></div>
+
+<!-- CERTIFICATE -->
+<div class="certificate-section" id="certificate">
+<p style="font-size:40px;margin-bottom:8px">&#127942;</p>
+<h2 data-i18n="cert_title">Certificate of Completion</h2>
+<p class="cert-line" data-i18n="cert_line1">This certifies that</p>
+<p class="cert-name" id="certName"></p>
+<p class="cert-line" data-i18n="cert_line2">has successfully completed all 25 modules of the</p>
+<p class="cert-line" style="font-weight:700;font-size:18px;color:var(--primary)">LedgerLink AI Staff Training Program</p>
+<p class="cert-date" id="certDate"></p>
+<button class="print-btn" onclick="window.print()" data-i18n="cert_print">Print Certificate</button>
+</div>
+
+</div><!-- /main-content -->
+</div><!-- /layout -->
+
+<!-- ==================== DATA + LOGIC ==================== -->
+<script>
+// ============================================================
+//  BILINGUAL STRINGS
+// ============================================================
+const I18N = {
+en: {
+  header_sub:" \u2014 Staff Training System",
+  nav_modules:"MODULES",nav_home:"Home",
+  progress_title:"Training Progress",modules_complete:"modules complete",
+  cert_title:"Certificate of Completion",cert_line1:"This certifies that",cert_line2:"has successfully completed all 25 modules of the",cert_print:"Print Certificate",
+  quiz_title:"Quiz",quiz_check:"Check Answers",quiz_pass:"Congratulations! You passed this module.",quiz_fail:"You need at least 80% to pass. Please review and try again.",quiz_correct:"Correct!",quiz_wrong:"Incorrect.",
+  status_done:"Complete",status_inprog:"In Progress",status_todo:"Not Started",
+  q_placeholder:"Enter your name for the certificate",btn_save_name:"Save",
+  all_staff:"All Staff",manager_plus:"Manager+",owner_only:"Owner Only",
+  tip_prefix:"Tip: ",warning_prefix:"Important: ",
+  next_module:"Next Module",prev_module:"Previous Module",back_home:"Back to Home"
+},
+fr: {
+  header_sub:" \u2014 Syst\u00e8me de formation du personnel",
+  nav_modules:"MODULES",nav_home:"Accueil",
+  progress_title:"Progr\u00e8s de la formation",modules_complete:"modules compl\u00e9t\u00e9s",
+  cert_title:"Certificat de r\u00e9ussite",cert_line1:"Ceci certifie que",cert_line2:"a compl\u00e9t\u00e9 avec succ\u00e8s les 25 modules du",cert_print:"Imprimer le certificat",
+  quiz_title:"Quiz",quiz_check:"V\u00e9rifier les r\u00e9ponses",quiz_pass:"F\u00e9licitations! Vous avez r\u00e9ussi ce module.",quiz_fail:"Vous devez obtenir au moins 80% pour r\u00e9ussir. Veuillez r\u00e9viser et r\u00e9essayer.",quiz_correct:"Correct!",quiz_wrong:"Incorrect.",
+  status_done:"Compl\u00e9t\u00e9",status_inprog:"En cours",status_todo:"Non commenc\u00e9",
+  q_placeholder:"Entrez votre nom pour le certificat",btn_save_name:"Enregistrer",
+  all_staff:"Tout le personnel",manager_plus:"Gestionnaire+",owner_only:"Propri\u00e9taire",
+  tip_prefix:"Conseil\u00a0: ",warning_prefix:"Important\u00a0: ",
+  next_module:"Module suivant",prev_module:"Module pr\u00e9c\u00e9dent",back_home:"Retour \u00e0 l\u2019accueil"
+}
+};
+
+// ============================================================
+//  25 TRAINING MODULES — FULL CONTENT
+// ============================================================
+const MODULES = [
+// ─────────────────── MODULE 1 ───────────────────
+{
+id:1,
+title:{en:"System Overview",fr:"Vue d\u2019ensemble du syst\u00e8me"},
+role:"all",
+sections:[
+{title:{en:"What LedgerLink Is",fr:"Qu\u2019est-ce que LedgerLink"},
+content:{
+en:"<p>LedgerLink AI is a complete bookkeeping automation platform built for Canadian accounting firms, especially those operating in Quebec. It receives invoices, receipts and bank statements through multiple channels (email, WhatsApp, Telegram, client portal, folder watcher), extracts data using AI-powered OCR, applies deterministic tax and fraud rules, and prepares entries for posting to QuickBooks Online.</p><p>The system is designed so that <strong>AI handles the repetitive work</strong> while <strong>humans make the final decisions</strong>. Every document passes through a review queue before it can be posted.</p>",
+fr:"<p>LedgerLink AI est une plateforme compl\u00e8te d\u2019automatisation de la tenue de livres con\u00e7ue pour les cabinets comptables canadiens, particuli\u00e8rement ceux op\u00e9rant au Qu\u00e9bec. Il re\u00e7oit les factures, re\u00e7us et relev\u00e9s bancaires par plusieurs canaux (courriel, WhatsApp, Telegram, portail client, surveillance de dossier), extrait les donn\u00e9es par OCR assist\u00e9 par IA, applique des r\u00e8gles d\u00e9terministes de taxes et de fraude, et pr\u00e9pare les \u00e9critures pour publication dans QuickBooks Online.</p><p>Le syst\u00e8me est con\u00e7u pour que <strong>l\u2019IA g\u00e8re le travail r\u00e9p\u00e9titif</strong> tandis que <strong>les humains prennent les d\u00e9cisions finales</strong>. Chaque document passe par une file de r\u00e9vision avant d\u2019\u00eatre publi\u00e9.</p>"}},
+{title:{en:"The 3-Layer Architecture",fr:"L\u2019architecture \u00e0 3 couches"},
+content:{
+en:"<p>LedgerLink uses a 3-layer architecture:</p><ul><li><strong>Layer 1 \u2014 Deterministic Engines:</strong> 19 rule-based engines handle tax calculation, fraud detection, bank parsing, reconciliation, substance classification, and more. These engines use exact decimal math and never guess \u2014 they follow Canadian tax law precisely.</li><li><strong>Layer 2 \u2014 AI Agents:</strong> Used for OCR text extraction, vendor identification, GL account suggestions, and client communications. AI is a <em>fallback</em>, not the primary decision-maker.</li><li><strong>Layer 3 \u2014 Human Review:</strong> Every document must be reviewed and approved by a human before posting. The system flags uncertainties and fraud risks for human judgment.</li></ul>",
+fr:"<p>LedgerLink utilise une architecture \u00e0 3 couches\u00a0:</p><ul><li><strong>Couche 1 \u2014 Moteurs d\u00e9terministes\u00a0:</strong> 19 moteurs bas\u00e9s sur des r\u00e8gles g\u00e8rent le calcul des taxes, la d\u00e9tection de fraude, l\u2019analyse bancaire, la r\u00e9conciliation, la classification de substance, et plus. Ces moteurs utilisent l\u2019arithm\u00e9tique d\u00e9cimale exacte et ne devinent jamais \u2014 ils suivent la loi fiscale canadienne pr\u00e9cis\u00e9ment.</li><li><strong>Couche 2 \u2014 Agents IA\u00a0:</strong> Utilis\u00e9s pour l\u2019extraction OCR, l\u2019identification de fournisseurs, les suggestions de comptes GL et les communications clients. L\u2019IA est un <em>recours</em>, pas le d\u00e9cideur principal.</li><li><strong>Couche 3 \u2014 R\u00e9vision humaine\u00a0:</strong> Chaque document doit \u00eatre r\u00e9vis\u00e9 et approuv\u00e9 par un humain avant publication. Le syst\u00e8me signale les incertitudes et risques de fraude pour le jugement humain.</li></ul>"}},
+{title:{en:"What AI Does vs What Humans Do",fr:"Ce que l\u2019IA fait vs ce que les humains font"},
+content:{
+en:"<table class='info-table'><tr><th>AI Does</th><th>Humans Do</th></tr><tr><td>Read and extract text from documents (OCR)</td><td>Verify extracted fields are correct</td></tr><tr><td>Suggest vendor name, GL account, tax code</td><td>Approve or correct suggestions</td></tr><tr><td>Calculate GST/QST/HST automatically</td><td>Confirm tax code is appropriate</td></tr><tr><td>Flag potential fraud (13 rules)</td><td>Investigate and override with justification</td></tr><tr><td>Match bank transactions to invoices</td><td>Confirm matches, handle exceptions</td></tr><tr><td>Track learning from corrections</td><td>Final approval before posting to QBO</td></tr></table>",
+fr:"<table class='info-table'><tr><th>L\u2019IA fait</th><th>Les humains font</th></tr><tr><td>Lire et extraire le texte des documents (OCR)</td><td>V\u00e9rifier que les champs extraits sont corrects</td></tr><tr><td>Sugg\u00e9rer le nom du fournisseur, compte GL, code de taxe</td><td>Approuver ou corriger les suggestions</td></tr><tr><td>Calculer TPS/TVQ/TVH automatiquement</td><td>Confirmer que le code de taxe est appropri\u00e9</td></tr><tr><td>Signaler la fraude potentielle (13 r\u00e8gles)</td><td>Enqu\u00eater et passer outre avec justification</td></tr><tr><td>Apparier les transactions bancaires aux factures</td><td>Confirmer les appariements, g\u00e9rer les exceptions</td></tr><tr><td>Apprendre des corrections</td><td>Approbation finale avant publication dans QBO</td></tr></table>"}},
+{title:{en:"Data Privacy and Law 25",fr:"Confidentialit\u00e9 des donn\u00e9es et Loi 25"},
+content:{
+en:"<p>LedgerLink is designed with Quebec\u2019s Law 25 (privacy legislation) in mind:</p><ul><li>All data stays on your local machine \u2014 documents are stored in <code>data/</code>, not in the cloud</li><li>AI API calls send only the minimum text needed for extraction; original files stay local</li><li>The database is SQLite, stored at <code>data/ledgerlink_agent.db</code></li><li>Session tokens expire after 12 hours</li><li>Passwords are hashed with bcrypt (12 rounds)</li><li>All user actions are logged to an audit trail</li><li>Rate limiting protects against brute-force attacks (5 failed logins per 15 minutes)</li></ul>",
+fr:"<p>LedgerLink est con\u00e7u en tenant compte de la Loi 25 du Qu\u00e9bec (l\u00e9gislation sur la vie priv\u00e9e)\u00a0:</p><ul><li>Toutes les donn\u00e9es restent sur votre machine locale \u2014 les documents sont stock\u00e9s dans <code>data/</code>, pas dans le nuage</li><li>Les appels API de l\u2019IA n\u2019envoient que le texte minimum n\u00e9cessaire \u00e0 l\u2019extraction; les fichiers originaux restent locaux</li><li>La base de donn\u00e9es est SQLite, stock\u00e9e \u00e0 <code>data/ledgerlink_agent.db</code></li><li>Les jetons de session expirent apr\u00e8s 12 heures</li><li>Les mots de passe sont hach\u00e9s avec bcrypt (12 tours)</li><li>Toutes les actions utilisateur sont enregistr\u00e9es dans une piste de v\u00e9rification</li><li>La limitation de d\u00e9bit prot\u00e8ge contre les attaques par force brute (5 \u00e9checs de connexion par 15 minutes)</li></ul>"}}
+],
+quiz:[
+{q:{en:"What is the primary purpose of LedgerLink AI?",fr:"Quel est l\u2019objectif principal de LedgerLink AI\u00a0?"},
+opts:{en:["A cloud-based tax filing service","A bookkeeping automation platform for Canadian firms","A banking application","A payroll system"],fr:["Un service de d\u00e9claration fiscale en nuage","Une plateforme d\u2019automatisation de la tenue de livres pour les cabinets canadiens","Une application bancaire","Un syst\u00e8me de paie"]},
+ans:1},
+{q:{en:"How many layers does LedgerLink\u2019s architecture have?",fr:"Combien de couches l\u2019architecture de LedgerLink a-t-elle\u00a0?"},
+opts:{en:["2","3","4","5"],fr:["2","3","4","5"]},ans:1},
+{q:{en:"Who makes the final decision to post a document to QuickBooks?",fr:"Qui prend la d\u00e9cision finale de publier un document dans QuickBooks\u00a0?"},
+opts:{en:["The AI automatically","The fraud engine","A human reviewer","The bank parser"],fr:["L\u2019IA automatiquement","Le moteur de fraude","Un r\u00e9viseur humain","L\u2019analyseur bancaire"]},ans:2},
+{q:{en:"Where is client data stored in LedgerLink?",fr:"O\u00f9 sont stock\u00e9es les donn\u00e9es des clients dans LedgerLink\u00a0?"},
+opts:{en:["On Amazon servers","On a local SQLite database","In Google Drive","In QuickBooks cloud"],fr:["Sur les serveurs Amazon","Dans une base de donn\u00e9es SQLite locale","Dans Google Drive","Dans le nuage QuickBooks"]},ans:1},
+{q:{en:"How many deterministic engines does LedgerLink have?",fr:"Combien de moteurs d\u00e9terministes LedgerLink poss\u00e8de-t-il\u00a0?"},
+opts:{en:["5","10","19","25"],fr:["5","10","19","25"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 2 ───────────────────
+{
+id:2,
+title:{en:"Logging In and Navigation",fr:"Connexion et navigation"},
+role:"all",
+sections:[
+{title:{en:"How to Log In",fr:"Comment se connecter"},
+content:{
+en:"<p>Open your web browser and go to <code>http://[your-server-ip]:8787</code>. You will see the login page.</p><ul><li>Enter your <strong>username</strong> and <strong>password</strong></li><li>Select your preferred language (FR/EN)</li><li>Click <strong>Log In</strong></li></ul><p>If you enter the wrong password 5 times within 15 minutes, your IP will be temporarily locked out (HTTP 429). Wait 15 minutes and try again.</p><div class='tip'>First-time users: your administrator created your account during setup. If you received a temporary password, you will be asked to change it on first login.</div>",
+fr:"<p>Ouvrez votre navigateur et allez \u00e0 <code>http://[ip-du-serveur]:8787</code>. Vous verrez la page de connexion.</p><ul><li>Entrez votre <strong>nom d\u2019utilisateur</strong> et <strong>mot de passe</strong></li><li>S\u00e9lectionnez votre langue pr\u00e9f\u00e9r\u00e9e (FR/EN)</li><li>Cliquez sur <strong>Connexion</strong></li></ul><p>Si vous entrez le mauvais mot de passe 5 fois en 15 minutes, votre IP sera temporairement bloqu\u00e9e (HTTP 429). Attendez 15 minutes et r\u00e9essayez.</p><div class='tip'>Nouveaux utilisateurs\u00a0: votre administrateur a cr\u00e9\u00e9 votre compte lors de la configuration. Si vous avez re\u00e7u un mot de passe temporaire, on vous demandera de le changer \u00e0 la premi\u00e8re connexion.</div>"}},
+{title:{en:"Dashboard Layout",fr:"Disposition du tableau de bord"},
+content:{
+en:"<p>After login, you see the main <strong>Accounting Queue</strong>. Here is every menu item:</p><table class='info-table'><tr><th>Menu Item</th><th>Description</th></tr><tr><td>Queue / File d\u2019attente</td><td>Main review queue \u2014 all documents awaiting action</td></tr><tr><td>Bank Import</td><td>Import bank statements (CSV/OFX) and match transactions</td></tr><tr><td>Reconciliation</td><td>Bank reconciliation by client and period</td></tr><tr><td>Filing Summary</td><td>GST/QST tax summary for filing periods</td></tr><tr><td>Revenu Qu\u00e9bec</td><td>Pre-fill forms for Revenu Qu\u00e9bec filings</td></tr><tr><td>Period Close</td><td>Month-end close checklist and period locking</td></tr><tr><td>Time Tracking</td><td>Start/stop timers, generate invoices</td></tr><tr><td>Calendar</td><td>Filing deadline tracker</td></tr><tr><td>Communications</td><td>AI-assisted client messaging</td></tr><tr><td>Working Papers</td><td>Audit lead sheets (CAS compliance)</td></tr><tr><td>Engagements</td><td>Compilation, review, and audit engagements</td></tr><tr><td>Portfolios</td><td>Client-to-staff assignments</td></tr><tr><td>Users</td><td>User management (owner only)</td></tr><tr><td>Troubleshoot</td><td>System health and diagnostics</td></tr><tr><td>QR Codes</td><td>Generate client upload QR codes</td></tr><tr><td>Analytics</td><td>Performance dashboards (owner only)</td></tr><tr><td>Journal Entries</td><td>Manual journal entries</td></tr><tr><td>Training</td><td>This training system</td></tr></table>",
+fr:"<p>Apr\u00e8s la connexion, vous voyez la <strong>File d\u2019attente comptable</strong>. Voici chaque \u00e9l\u00e9ment de menu\u00a0:</p><table class='info-table'><tr><th>\u00c9l\u00e9ment</th><th>Description</th></tr><tr><td>File d\u2019attente</td><td>File de r\u00e9vision principale \u2014 tous les documents en attente d\u2019action</td></tr><tr><td>Import bancaire</td><td>Importer des relev\u00e9s bancaires (CSV/OFX) et apparier les transactions</td></tr><tr><td>R\u00e9conciliation</td><td>R\u00e9conciliation bancaire par client et p\u00e9riode</td></tr><tr><td>Sommaire de production</td><td>Sommaire TPS/TVQ pour les p\u00e9riodes de production</td></tr><tr><td>Revenu Qu\u00e9bec</td><td>Formulaires pr\u00e9-remplis pour Revenu Qu\u00e9bec</td></tr><tr><td>Fermeture de p\u00e9riode</td><td>Liste de contr\u00f4le de fin de mois et verrouillage</td></tr><tr><td>Suivi du temps</td><td>D\u00e9marrer/arr\u00eater les minuteries, g\u00e9n\u00e9rer des factures</td></tr><tr><td>Calendrier</td><td>Suivi des \u00e9ch\u00e9ances de production</td></tr><tr><td>Communications</td><td>Messagerie client assist\u00e9e par IA</td></tr><tr><td>Dossiers de travail</td><td>Feuilles de travail (conformit\u00e9 NCA)</td></tr><tr><td>Mandats</td><td>Mandats de compilation, examen et audit</td></tr><tr><td>Portefeuilles</td><td>Affectation clients-personnel</td></tr><tr><td>Utilisateurs</td><td>Gestion des utilisateurs (propri\u00e9taire seulement)</td></tr><tr><td>D\u00e9pannage</td><td>Sant\u00e9 du syst\u00e8me et diagnostics</td></tr><tr><td>Codes QR</td><td>G\u00e9n\u00e9rer des codes QR pour le portail client</td></tr><tr><td>Analytique</td><td>Tableaux de bord de performance (propri\u00e9taire seulement)</td></tr><tr><td>\u00c9critures de journal</td><td>\u00c9critures de journal manuelles</td></tr><tr><td>Formation</td><td>Ce syst\u00e8me de formation</td></tr></table>"}},
+{title:{en:"Language Toggle and User Profile",fr:"Changement de langue et profil utilisateur"},
+content:{
+en:"<p>You can switch between French and English at any time using the language toggle in the header. Your preference is saved to your user profile and persists across sessions.</p><p>Your <strong>role</strong> determines what you can see and do:</p><table class='info-table'><tr><th>Role</th><th>Capabilities</th></tr><tr><td>Employee</td><td>View queue, review documents, claim tasks, basic editing</td></tr><tr><td>Manager</td><td>All employee features + bank import, reconciliation, filing, time tracking, engagements, period close</td></tr><tr><td>Owner</td><td>All features + user management, analytics, license, troubleshooting, system config</td></tr></table>",
+fr:"<p>Vous pouvez basculer entre le fran\u00e7ais et l\u2019anglais \u00e0 tout moment en utilisant le bouton de langue dans l\u2019en-t\u00eate. Votre pr\u00e9f\u00e9rence est enregistr\u00e9e dans votre profil et persiste entre les sessions.</p><p>Votre <strong>r\u00f4le</strong> d\u00e9termine ce que vous pouvez voir et faire\u00a0:</p><table class='info-table'><tr><th>R\u00f4le</th><th>Capacit\u00e9s</th></tr><tr><td>Employ\u00e9</td><td>Voir la file, r\u00e9viser les documents, r\u00e9clamer des t\u00e2ches, \u00e9dition de base</td></tr><tr><td>Gestionnaire</td><td>Toutes les fonctions employ\u00e9 + import bancaire, r\u00e9conciliation, production, suivi du temps, mandats, fermeture de p\u00e9riode</td></tr><tr><td>Propri\u00e9taire</td><td>Toutes les fonctions + gestion des utilisateurs, analytique, licence, d\u00e9pannage, configuration syst\u00e8me</td></tr></table>"}}
+],
+quiz:[
+{q:{en:"What is the default port for the LedgerLink dashboard?",fr:"Quel est le port par d\u00e9faut du tableau de bord LedgerLink\u00a0?"},
+opts:{en:["8080","8787","8788","3000"],fr:["8080","8787","8788","3000"]},ans:1},
+{q:{en:"What happens after 5 failed login attempts?",fr:"Que se passe-t-il apr\u00e8s 5 tentatives de connexion \u00e9chou\u00e9es\u00a0?"},
+opts:{en:["Account is deleted","IP is locked for 15 minutes","Password is reset","Nothing happens"],fr:["Le compte est supprim\u00e9","L\u2019IP est bloqu\u00e9e pour 15 minutes","Le mot de passe est r\u00e9initialis\u00e9","Rien ne se passe"]},ans:1},
+{q:{en:"Which role has access to ALL features?",fr:"Quel r\u00f4le a acc\u00e8s \u00e0 TOUTES les fonctionnalit\u00e9s\u00a0?"},
+opts:{en:["Employee","Manager","Owner","Client"],fr:["Employ\u00e9","Gestionnaire","Propri\u00e9taire","Client"]},ans:2},
+{q:{en:"Where do you change the display language?",fr:"O\u00f9 change-t-on la langue d\u2019affichage\u00a0?"},
+opts:{en:["In system settings","In the header toggle","In the database","You cannot change it"],fr:["Dans les param\u00e8tres syst\u00e8me","Dans le bouton de l\u2019en-t\u00eate","Dans la base de donn\u00e9es","On ne peut pas la changer"]},ans:1},
+{q:{en:"How long do session tokens last?",fr:"Combien de temps durent les jetons de session\u00a0?"},
+opts:{en:["1 hour","6 hours","12 hours","24 hours"],fr:["1 heure","6 heures","12 heures","24 heures"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 3 ───────────────────
+{id:3,title:{en:"Document Intake \u2014 Email",fr:"R\u00e9ception de documents \u2014 Courriel"},role:"all",
+sections:[
+{title:{en:"How Email Intake Works",fr:"Comment fonctionne la r\u00e9ception par courriel"},
+content:{en:"<p>LedgerLink runs an ingest service on port 8789 that receives documents via email. When a client or staff member sends an email with attachments, the system:</p><ol><li>Receives the email via the configured SMTP/webhook endpoint</li><li>Extracts all attachments</li><li>Detects file format using <strong>magic bytes</strong> (never by file extension)</li><li>Runs OCR to extract text, vendor, amounts, dates, and tax information</li><li>Creates a document record in the database with status <strong>New</strong></li><li>Places the document in the review queue</li></ol>",
+fr:"<p>LedgerLink ex\u00e9cute un service de r\u00e9ception sur le port 8789 qui re\u00e7oit les documents par courriel. Lorsqu\u2019un client ou un membre du personnel envoie un courriel avec des pi\u00e8ces jointes, le syst\u00e8me\u00a0:</p><ol><li>Re\u00e7oit le courriel via le point d\u2019acc\u00e8s SMTP/webhook configur\u00e9</li><li>Extrait toutes les pi\u00e8ces jointes</li><li>D\u00e9tecte le format du fichier par <strong>octets magiques</strong> (jamais par extension)</li><li>Ex\u00e9cute l\u2019OCR pour extraire le texte, le fournisseur, les montants, les dates et les informations fiscales</li><li>Cr\u00e9e un enregistrement de document dans la base de donn\u00e9es avec le statut <strong>Nouveau</strong></li><li>Place le document dans la file de r\u00e9vision</li></ol>"}},
+{title:{en:"Accepted File Formats",fr:"Formats de fichiers accept\u00e9s"},
+content:{en:"<p>The following formats are supported: <strong>PDF, PNG, JPEG, JPG, HEIC, HEIF, TIFF, WebP</strong></p><p>File type is detected by reading the first bytes of the file (magic bytes), not by file extension. This prevents spoofing.</p><div class='tip'>PDFs with extractable text are processed with pdfplumber. PDFs with less than 20 words of text are sent to AI Vision for image-based extraction.</div>",
+fr:"<p>Les formats suivants sont support\u00e9s\u00a0: <strong>PDF, PNG, JPEG, JPG, HEIC, HEIF, TIFF, WebP</strong></p><p>Le type de fichier est d\u00e9tect\u00e9 en lisant les premiers octets du fichier (octets magiques), pas par l\u2019extension. Cela emp\u00eache l\u2019usurpation.</p><div class='tip'>Les PDF avec du texte extractible sont trait\u00e9s par pdfplumber. Les PDF avec moins de 20 mots de texte sont envoy\u00e9s \u00e0 la Vision IA pour l\u2019extraction bas\u00e9e sur l\u2019image.</div>"}},
+{title:{en:"How to Check Receipt and Common Problems",fr:"Comment v\u00e9rifier la r\u00e9ception et probl\u00e8mes courants"},
+content:{en:"<p>To check if an email was received: go to the <strong>Queue</strong> and filter by the client code or search by vendor name. New documents appear with status <strong>New</strong>.</p><p><strong>Common problems:</strong></p><ul><li><strong>Email not received:</strong> Check the ingest service status in Troubleshoot. Verify SMTP configuration.</li><li><strong>Attachment not extracted:</strong> Ensure the file is in a supported format (not .doc, .xls, etc.)</li><li><strong>Low confidence extraction:</strong> Blurry images or handwritten documents may get low confidence scores and be flagged as NeedsReview</li><li><strong>Duplicate detection:</strong> If the same invoice is sent twice, the fraud engine may flag it as a duplicate</li></ul>",
+fr:"<p>Pour v\u00e9rifier si un courriel a \u00e9t\u00e9 re\u00e7u\u00a0: allez dans la <strong>File d\u2019attente</strong> et filtrez par code client ou recherchez par nom de fournisseur. Les nouveaux documents apparaissent avec le statut <strong>Nouveau</strong>.</p><p><strong>Probl\u00e8mes courants\u00a0:</strong></p><ul><li><strong>Courriel non re\u00e7u\u00a0:</strong> V\u00e9rifiez l\u2019\u00e9tat du service de r\u00e9ception dans D\u00e9pannage. V\u00e9rifiez la configuration SMTP.</li><li><strong>Pi\u00e8ce jointe non extraite\u00a0:</strong> Assurez-vous que le fichier est dans un format support\u00e9 (pas .doc, .xls, etc.)</li><li><strong>Extraction \u00e0 faible confiance\u00a0:</strong> Les images floues ou documents manuscrits peuvent obtenir des scores de confiance bas et \u00eatre marqu\u00e9s NeedsReview</li><li><strong>D\u00e9tection de duplicata\u00a0:</strong> Si la m\u00eame facture est envoy\u00e9e deux fois, le moteur de fraude peut la signaler comme duplicata</li></ul>"}}
+],
+quiz:[
+{q:{en:"How does LedgerLink detect file types?",fr:"Comment LedgerLink d\u00e9tecte-t-il les types de fichiers\u00a0?"},
+opts:{en:["By file extension","By file name","By magic bytes","By file size"],fr:["Par l\u2019extension du fichier","Par le nom du fichier","Par les octets magiques","Par la taille du fichier"]},ans:2},
+{q:{en:"What port does the ingest service run on?",fr:"Sur quel port s\u2019ex\u00e9cute le service de r\u00e9ception\u00a0?"},
+opts:{en:["8787","8788","8789","8790"],fr:["8787","8788","8789","8790"]},ans:2},
+{q:{en:"Which format is NOT supported for intake?",fr:"Quel format n\u2019est PAS support\u00e9 pour la r\u00e9ception\u00a0?"},
+opts:{en:["PDF","HEIC","DOCX","PNG"],fr:["PDF","HEIC","DOCX","PNG"]},ans:2},
+{q:{en:"What status does a new document receive?",fr:"Quel statut un nouveau document re\u00e7oit-il\u00a0?"},
+opts:{en:["Ready","Posted","New","NeedsReview"],fr:["Pr\u00eat","Publi\u00e9","Nouveau","N\u00e9cessiteR\u00e9vision"]},ans:2},
+{q:{en:"What happens to PDFs with less than 20 words?",fr:"Que se passe-t-il pour les PDF avec moins de 20 mots\u00a0?"},
+opts:{en:["They are rejected","They are sent to AI Vision","They are flagged as fraud","They are deleted"],fr:["Ils sont rejet\u00e9s","Ils sont envoy\u00e9s \u00e0 la Vision IA","Ils sont signal\u00e9s comme fraude","Ils sont supprim\u00e9s"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 4 ───────────────────
+{id:4,title:{en:"Document Intake \u2014 WhatsApp & Telegram",fr:"R\u00e9ception \u2014 WhatsApp et Telegram"},role:"all",
+sections:[
+{title:{en:"WhatsApp Intake via Twilio",fr:"R\u00e9ception WhatsApp via Twilio"},
+content:{en:"<p>Clients can send photos of invoices/receipts via WhatsApp. The process:</p><ol><li>Client sends a photo to your firm\u2019s WhatsApp Business number</li><li>Twilio receives the message and sends a webhook to LedgerLink</li><li>LedgerLink downloads the image from the Twilio URL</li><li>The image goes through OCR extraction</li><li>A document record is created in the review queue</li></ol><div class='tip'>WhatsApp is configured during setup (Step 7). You need a Twilio account with WhatsApp sandbox or a verified number.</div>",
+fr:"<p>Les clients peuvent envoyer des photos de factures/re\u00e7us via WhatsApp. Le processus\u00a0:</p><ol><li>Le client envoie une photo au num\u00e9ro WhatsApp Business de votre cabinet</li><li>Twilio re\u00e7oit le message et envoie un webhook \u00e0 LedgerLink</li><li>LedgerLink t\u00e9l\u00e9charge l\u2019image de l\u2019URL Twilio</li><li>L\u2019image passe par l\u2019extraction OCR</li><li>Un enregistrement de document est cr\u00e9\u00e9 dans la file de r\u00e9vision</li></ol><div class='tip'>WhatsApp est configur\u00e9 lors de la configuration initiale (\u00c9tape 7). Vous avez besoin d\u2019un compte Twilio avec un bac \u00e0 sable WhatsApp ou un num\u00e9ro v\u00e9rifi\u00e9.</div>"}},
+{title:{en:"Telegram Bot Intake",fr:"R\u00e9ception par bot Telegram"},
+content:{en:"<p>A Telegram bot receives documents from clients. Setup requires creating a bot via @BotFather and configuring the bot token in LedgerLink (Step 8 of setup).</p><p><strong>Quality requirements for photos:</strong></p><ul><li>Good lighting \u2014 no shadows across the text</li><li>Full document visible \u2014 no cut-off edges</li><li>Flat surface \u2014 no wrinkles or folds</li><li>Minimum resolution: readable text at normal zoom</li><li>One document per photo is ideal</li></ul>",
+fr:"<p>Un bot Telegram re\u00e7oit les documents des clients. La configuration n\u00e9cessite la cr\u00e9ation d\u2019un bot via @BotFather et la configuration du jeton du bot dans LedgerLink (\u00c9tape 8 de la configuration).</p><p><strong>Exigences de qualit\u00e9 pour les photos\u00a0:</strong></p><ul><li>Bon \u00e9clairage \u2014 pas d\u2019ombres sur le texte</li><li>Document complet visible \u2014 pas de bords coup\u00e9s</li><li>Surface plate \u2014 pas de plis ou de froissements</li><li>R\u00e9solution minimale\u00a0: texte lisible au zoom normal</li><li>Un document par photo est id\u00e9al</li></ul>"}}
+],
+quiz:[
+{q:{en:"What service handles WhatsApp message reception?",fr:"Quel service g\u00e8re la r\u00e9ception des messages WhatsApp\u00a0?"},
+opts:{en:["LedgerLink directly","Twilio webhook","Google API","Microsoft 365"],fr:["LedgerLink directement","Webhook Twilio","API Google","Microsoft 365"]},ans:1},
+{q:{en:"Where is Telegram bot setup done?",fr:"O\u00f9 se fait la configuration du bot Telegram\u00a0?"},
+opts:{en:["In QuickBooks","Via @BotFather","In Windows settings","In the browser"],fr:["Dans QuickBooks","Via @BotFather","Dans les param\u00e8tres Windows","Dans le navigateur"]},ans:1},
+{q:{en:"What is the ideal number of documents per photo?",fr:"Quel est le nombre id\u00e9al de documents par photo\u00a0?"},
+opts:{en:["As many as possible","Two","One","Three"],fr:["Autant que possible","Deux","Un","Trois"]},ans:2},
+{q:{en:"Which setup step configures WhatsApp?",fr:"Quelle \u00e9tape de configuration configure WhatsApp\u00a0?"},
+opts:{en:["Step 3","Step 5","Step 7","Step 10"],fr:["\u00c9tape 3","\u00c9tape 5","\u00c9tape 7","\u00c9tape 10"]},ans:2},
+{q:{en:"What should clients avoid when taking photos of documents?",fr:"Que doivent \u00e9viter les clients lorsqu\u2019ils prennent des photos de documents\u00a0?"},
+opts:{en:["Using a phone camera","Shadows across the text","Sending PDFs","Using color photos"],fr:["Utiliser un appareil photo","Des ombres sur le texte","Envoyer des PDF","Utiliser des photos couleur"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 5 ───────────────────
+{id:5,title:{en:"Document Intake \u2014 Client Portal",fr:"R\u00e9ception \u2014 Portail client"},role:"all",
+sections:[
+{title:{en:"How the Client Portal Works",fr:"Comment fonctionne le portail client"},
+content:{en:"<p>The client portal runs on port <strong>8788</strong> as a separate web application. Clients can:</p><ul><li>Upload documents (PDF, images) via drag-and-drop or file picker</li><li>Add optional notes to uploads</li><li>View their submission history with status tracking</li><li>Switch between French and English</li></ul><p>Clients can only see their own documents. They cannot see GL codes, tax codes, confidence scores, or internal review details.</p><p><strong>Limits:</strong> 20 uploads per client per day, 20 MB per file.</p>",
+fr:"<p>Le portail client fonctionne sur le port <strong>8788</strong> en tant qu\u2019application web s\u00e9par\u00e9e. Les clients peuvent\u00a0:</p><ul><li>T\u00e9l\u00e9verser des documents (PDF, images) par glisser-d\u00e9poser ou s\u00e9lecteur de fichiers</li><li>Ajouter des notes optionnelles aux t\u00e9l\u00e9versements</li><li>Voir leur historique de soumission avec suivi de statut</li><li>Basculer entre le fran\u00e7ais et l\u2019anglais</li></ul><p>Les clients ne peuvent voir que leurs propres documents. Ils ne peuvent pas voir les codes GL, codes de taxe, scores de confiance ou d\u00e9tails de r\u00e9vision internes.</p><p><strong>Limites\u00a0:</strong> 20 t\u00e9l\u00e9versements par client par jour, 20 Mo par fichier.</p>"}},
+{title:{en:"Creating Portal Accounts and QR Codes",fr:"Cr\u00e9ation de comptes portail et codes QR"},
+content:{en:"<p>Portal accounts are created in <strong>User Management</strong> (owner) or during onboarding (Step 17). Each client user has <code>role=client</code> and a <code>client_code</code> linking them to their data.</p><p>To send credentials: generate a QR code from the <strong>QR Codes</strong> page. Each client gets a unique QR code that links directly to the portal. You can download individual QR codes as PNG or all codes as a PDF to print and mail to clients.</p>",
+fr:"<p>Les comptes portail sont cr\u00e9\u00e9s dans la <strong>Gestion des utilisateurs</strong> (propri\u00e9taire) ou lors de l\u2019int\u00e9gration (\u00c9tape 17). Chaque utilisateur client a <code>role=client</code> et un <code>client_code</code> les liant \u00e0 leurs donn\u00e9es.</p><p>Pour envoyer les identifiants\u00a0: g\u00e9n\u00e9rez un code QR depuis la page <strong>Codes QR</strong>. Chaque client obtient un code QR unique qui lie directement au portail. Vous pouvez t\u00e9l\u00e9charger des codes QR individuels en PNG ou tous les codes en PDF pour imprimer et envoyer par courrier.</p>"}}
+],
+quiz:[
+{q:{en:"What port does the client portal run on?",fr:"Sur quel port fonctionne le portail client\u00a0?"},
+opts:{en:["8787","8788","8789","8790"],fr:["8787","8788","8789","8790"]},ans:1},
+{q:{en:"How many files can a client upload per day?",fr:"Combien de fichiers un client peut-il t\u00e9l\u00e9verser par jour\u00a0?"},
+opts:{en:["5","10","20","Unlimited"],fr:["5","10","20","Illimit\u00e9"]},ans:2},
+{q:{en:"Can clients see their GL account codes?",fr:"Les clients peuvent-ils voir leurs codes de comptes GL\u00a0?"},
+opts:{en:["Yes, always","Only managers can show them","No, clients see simplified status only","Only after posting"],fr:["Oui, toujours","Seuls les gestionnaires peuvent les montrer","Non, les clients voient un statut simplifi\u00e9 seulement","Seulement apr\u00e8s publication"]},ans:2},
+{q:{en:"What is the maximum file size for portal uploads?",fr:"Quelle est la taille maximale de fichier pour les t\u00e9l\u00e9versements du portail\u00a0?"},
+opts:{en:["5 MB","10 MB","20 MB","50 MB"],fr:["5 Mo","10 Mo","20 Mo","50 Mo"]},ans:2},
+{q:{en:"How do you send portal access to a client?",fr:"Comment envoyer l\u2019acc\u00e8s au portail \u00e0 un client\u00a0?"},
+opts:{en:["By phone only","Generate and send a QR code","They register themselves","Through QuickBooks"],fr:["Par t\u00e9l\u00e9phone seulement","G\u00e9n\u00e9rer et envoyer un code QR","Ils s\u2019inscrivent eux-m\u00eames","Par QuickBooks"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 6 ───────────────────
+{id:6,title:{en:"Document Intake \u2014 Folder Watcher",fr:"R\u00e9ception \u2014 Surveillance de dossier"},role:"all",
+sections:[
+{title:{en:"How the Folder Watcher Works",fr:"Comment fonctionne la surveillance de dossier"},
+content:{en:"<p>The folder watcher monitors a designated inbox folder for new files. When a file appears, it is automatically processed through the OCR pipeline and added to the review queue.</p><p>The inbox folder location is configured during setup (Step 11). Default path: <code>data/inbox</code></p><p><strong>Setting up a USB scanner:</strong> Configure your scanner to save directly to the inbox folder. Any PDF or image file dropped there will be automatically processed.</p><p><strong>Setting up OneDrive sync:</strong> Point your OneDrive sync folder to the inbox path. Documents synced from any device will be automatically ingested.</p><div class='tip'>The folder watcher status is visible on the Troubleshoot page. If it stops working, check the service status and restart if needed.</div>",
+fr:"<p>Le surveillant de dossier surveille un dossier de bo\u00eete de r\u00e9ception d\u00e9sign\u00e9 pour les nouveaux fichiers. Lorsqu\u2019un fichier appara\u00eet, il est automatiquement trait\u00e9 par le pipeline OCR et ajout\u00e9 \u00e0 la file de r\u00e9vision.</p><p>L\u2019emplacement du dossier est configur\u00e9 lors de la configuration (\u00c9tape 11). Chemin par d\u00e9faut\u00a0: <code>data/inbox</code></p><p><strong>Configuration d\u2019un scanneur USB\u00a0:</strong> Configurez votre scanneur pour enregistrer directement dans le dossier de r\u00e9ception. Tout fichier PDF ou image d\u00e9pos\u00e9 sera automatiquement trait\u00e9.</p><p><strong>Configuration de la synchronisation OneDrive\u00a0:</strong> Pointez votre dossier de synchronisation OneDrive vers le chemin de r\u00e9ception. Les documents synchronis\u00e9s depuis n\u2019importe quel appareil seront automatiquement int\u00e9gr\u00e9s.</p><div class='tip'>L\u2019\u00e9tat du surveillant de dossier est visible sur la page D\u00e9pannage. S\u2019il cesse de fonctionner, v\u00e9rifiez l\u2019\u00e9tat du service et red\u00e9marrez si n\u00e9cessaire.</div>"}}
+],
+quiz:[
+{q:{en:"What is the default inbox folder path?",fr:"Quel est le chemin par d\u00e9faut du dossier de r\u00e9ception\u00a0?"},
+opts:{en:["C:\\Documents","data/inbox","Desktop/LedgerLink","uploads/"],fr:["C:\\Documents","data/inbox","Bureau/LedgerLink","uploads/"]},ans:1},
+{q:{en:"Which setup step configures the folder watcher?",fr:"Quelle \u00e9tape configure le surveillant de dossier\u00a0?"},
+opts:{en:["Step 5","Step 8","Step 11","Step 15"],fr:["\u00c9tape 5","\u00c9tape 8","\u00c9tape 11","\u00c9tape 15"]},ans:2},
+{q:{en:"Where can you check folder watcher status?",fr:"O\u00f9 pouvez-vous v\u00e9rifier l\u2019\u00e9tat du surveillant de dossier\u00a0?"},
+opts:{en:["Analytics page","Troubleshoot page","Calendar page","Filing Summary"],fr:["Page Analytique","Page D\u00e9pannage","Page Calendrier","Sommaire de production"]},ans:1},
+{q:{en:"Can you sync OneDrive to the inbox folder?",fr:"Pouvez-vous synchroniser OneDrive avec le dossier de r\u00e9ception\u00a0?"},
+opts:{en:["No","Yes","Only on Mac","Only with premium license"],fr:["Non","Oui","Seulement sur Mac","Seulement avec la licence premium"]},ans:1},
+{q:{en:"What happens when a file is dropped in the inbox folder?",fr:"Que se passe-t-il quand un fichier est d\u00e9pos\u00e9 dans le dossier de r\u00e9ception\u00a0?"},
+opts:{en:["It is emailed to the client","It is auto-processed and added to queue","It is deleted","Nothing until manual trigger"],fr:["Il est envoy\u00e9 par courriel au client","Il est trait\u00e9 automatiquement et ajout\u00e9 \u00e0 la file","Il est supprim\u00e9","Rien jusqu\u2019au d\u00e9clenchement manuel"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 7 ───────────────────
+{id:7,title:{en:"Review Queue Basics",fr:"Base de la file de r\u00e9vision"},role:"all",
+sections:[
+{title:{en:"Queue Layout, Filters, and Statuses",fr:"Disposition de la file, filtres et statuts"},
+content:{en:"<p>The review queue is the heart of LedgerLink. It shows all documents that need attention.</p><p><strong>Status meanings:</strong></p><table class='info-table'><tr><th>Status</th><th>Meaning</th></tr><tr><td>New</td><td>Just received, not yet reviewed</td></tr><tr><td>NeedsReview</td><td>AI flagged uncertainties \u2014 human review required</td></tr><tr><td>OnHold</td><td>Placed on hold manually with a reason</td></tr><tr><td>Ready</td><td>All checks passed, ready for posting approval</td></tr><tr><td>Posted</td><td>Successfully posted to QuickBooks</td></tr><tr><td>Exception</td><td>Posting failed or blocked by validation</td></tr></table><p>You can filter by: status, client, vendor name, search text, and assigned staff member. The queue supports pagination for large volumes.</p>",
+fr:"<p>La file de r\u00e9vision est le c\u0153ur de LedgerLink. Elle affiche tous les documents n\u00e9cessitant une attention.</p><p><strong>Signification des statuts\u00a0:</strong></p><table class='info-table'><tr><th>Statut</th><th>Signification</th></tr><tr><td>Nouveau</td><td>Juste re\u00e7u, pas encore r\u00e9vis\u00e9</td></tr><tr><td>N\u00e9cessiteR\u00e9vision</td><td>L\u2019IA a signal\u00e9 des incertitudes \u2014 r\u00e9vision humaine requise</td></tr><tr><td>EnAttente</td><td>Mis en attente manuellement avec une raison</td></tr><tr><td>Pr\u00eat</td><td>Tous les contr\u00f4les pass\u00e9s, pr\u00eat pour approbation de publication</td></tr><tr><td>Publi\u00e9</td><td>Publi\u00e9 avec succ\u00e8s dans QuickBooks</td></tr><tr><td>Exception</td><td>Publication \u00e9chou\u00e9e ou bloqu\u00e9e par la validation</td></tr></table><p>Vous pouvez filtrer par\u00a0: statut, client, nom de fournisseur, texte de recherche et membre du personnel assign\u00e9. La file supporte la pagination pour les grands volumes.</p>"}},
+{title:{en:"Working with Documents",fr:"Travailler avec les documents"},
+content:{en:"<p>Click any document to open its <strong>detail page</strong>. There you can:</p><ul><li><strong>View the original</strong> \u2014 download the PDF/image to compare against extracted fields</li><li><strong>Verify extracted fields</strong> \u2014 vendor, amount, date, GL account, tax code, category</li><li><strong>See AI suggestions</strong> \u2014 based on vendor learning history</li><li><strong>See fraud flags</strong> \u2014 any active fraud or substance flags</li><li><strong>See posting readiness</strong> \u2014 what\u2019s blocking the document from posting</li><li><strong>Approve</strong> \u2014 mark as ready for posting</li><li><strong>Hold</strong> \u2014 place on hold with a reason (e.g., waiting for client info)</li><li><strong>Claim</strong> \u2014 assign the document to yourself</li></ul>",
+fr:"<p>Cliquez sur n\u2019importe quel document pour ouvrir sa <strong>page de d\u00e9tail</strong>. L\u00e0, vous pouvez\u00a0:</p><ul><li><strong>Voir l\u2019original</strong> \u2014 t\u00e9l\u00e9charger le PDF/image pour comparer avec les champs extraits</li><li><strong>V\u00e9rifier les champs extraits</strong> \u2014 fournisseur, montant, date, compte GL, code de taxe, cat\u00e9gorie</li><li><strong>Voir les suggestions IA</strong> \u2014 bas\u00e9es sur l\u2019historique d\u2019apprentissage du fournisseur</li><li><strong>Voir les drapeaux de fraude</strong> \u2014 tout drapeau de fraude ou de substance actif</li><li><strong>Voir la pr\u00e9paration \u00e0 la publication</strong> \u2014 ce qui bloque la publication du document</li><li><strong>Approuver</strong> \u2014 marquer comme pr\u00eat pour la publication</li><li><strong>Mettre en attente</strong> \u2014 placer en attente avec une raison</li><li><strong>R\u00e9clamer</strong> \u2014 s\u2019assigner le document</li></ul>"}}
+],
+quiz:[
+{q:{en:"What does 'NeedsReview' status mean?",fr:"Que signifie le statut 'N\u00e9cessiteR\u00e9vision'\u00a0?"},
+opts:{en:["Document was posted","AI flagged uncertainties requiring human review","Client requested a change","Document was deleted"],fr:["Le document a \u00e9t\u00e9 publi\u00e9","L\u2019IA a signal\u00e9 des incertitudes n\u00e9cessitant une r\u00e9vision humaine","Le client a demand\u00e9 un changement","Le document a \u00e9t\u00e9 supprim\u00e9"]},ans:1},
+{q:{en:"What must you do before a document can be posted?",fr:"Que devez-vous faire avant qu\u2019un document puisse \u00eatre publi\u00e9\u00a0?"},
+opts:{en:["Nothing, it posts automatically","Delete the original","Review and approve it","Send it to the client"],fr:["Rien, il se publie automatiquement","Supprimer l\u2019original","Le r\u00e9viser et l\u2019approuver","L\u2019envoyer au client"]},ans:2},
+{q:{en:"How do you assign a document to yourself?",fr:"Comment vous assigner un document\u00a0?"},
+opts:{en:["Email the admin","Click Claim","Edit the database","It is automatic"],fr:["Envoyer un courriel \u00e0 l\u2019admin","Cliquer R\u00e9clamer","\u00c9diter la base de donn\u00e9es","C\u2019est automatique"]},ans:1},
+{q:{en:"What does OnHold status indicate?",fr:"Que signifie le statut EnAttente\u00a0?"},
+opts:{en:["Document is lost","Placed on hold manually with a reason","Posting in progress","Fraud detected"],fr:["Le document est perdu","Mis en attente manuellement avec une raison","Publication en cours","Fraude d\u00e9tect\u00e9e"]},ans:1},
+{q:{en:"Where do you see why a document can\u2019t be posted?",fr:"O\u00f9 voyez-vous pourquoi un document ne peut pas \u00eatre publi\u00e9\u00a0?"},
+opts:{en:["In the email log","In the posting readiness section","In QuickBooks","In the calendar"],fr:["Dans le journal de courriels","Dans la section de pr\u00e9paration \u00e0 la publication","Dans QuickBooks","Dans le calendrier"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 8 ───────────────────
+{id:8,title:{en:"Fraud Flags",fr:"Drapeaux de fraude"},role:"all",
+sections:[
+{title:{en:"The 13 Fraud Detection Rules",fr:"Les 13 r\u00e8gles de d\u00e9tection de fraude"},
+content:{en:"<p>LedgerLink\u2019s fraud engine runs <strong>13 deterministic rules</strong> on every document:</p><table class='info-table'><tr><th>#</th><th>Rule</th><th>Severity</th></tr><tr><td>1</td><td><strong>Vendor Amount Anomaly</strong> \u2014 Amount is >2 standard deviations from vendor\u2019s average (needs \u22655 prior transactions)</td><td>MEDIUM</td></tr><tr><td>2</td><td><strong>Vendor Timing Anomaly</strong> \u2014 Invoice received 14+ days from vendor\u2019s normal pattern</td><td>LOW</td></tr><tr><td>3</td><td><strong>Duplicate Exact</strong> \u2014 Same amount + same vendor within 30 days</td><td>HIGH</td></tr><tr><td>4</td><td><strong>Duplicate Cross-Vendor</strong> \u2014 Same amount, different vendor, within 7 days</td><td>MEDIUM</td></tr><tr><td>5</td><td><strong>Weekend Transaction</strong> \u2014 Transaction on Saturday/Sunday, >$200</td><td>LOW</td></tr><tr><td>6</td><td><strong>Holiday Transaction</strong> \u2014 Transaction on Quebec statutory holiday, >$200</td><td>LOW</td></tr><tr><td>7</td><td><strong>Round Number</strong> \u2014 Suspicious round amount from an irregular vendor</td><td>LOW</td></tr><tr><td>8</td><td><strong>New Vendor Large Amount</strong> \u2014 First invoice from vendor exceeds $2,000</td><td>MEDIUM</td></tr><tr><td>9</td><td><strong>Bank Account Change</strong> \u2014 Vendor\u2019s bank details changed</td><td>CRITICAL</td></tr><tr><td>10</td><td><strong>Invoice After Payment</strong> \u2014 Invoice date is after the bank payment date</td><td>HIGH</td></tr><tr><td>11</td><td><strong>Tax Registration Contradiction</strong> \u2014 Vendor charges GST/QST but historically was unregistered</td><td>HIGH</td></tr><tr><td>12</td><td><strong>Vendor Category Shift</strong> \u2014 Category contradicts 80%+ of vendor\u2019s history</td><td>MEDIUM</td></tr><tr><td>13</td><td><strong>Vendor Payee Mismatch</strong> \u2014 Bank payee name differs from invoice vendor</td><td>HIGH</td></tr></table>",
+fr:"<p>Le moteur de fraude de LedgerLink ex\u00e9cute <strong>13 r\u00e8gles d\u00e9terministes</strong> sur chaque document\u00a0:</p><table class='info-table'><tr><th>#</th><th>R\u00e8gle</th><th>S\u00e9v\u00e9rit\u00e9</th></tr><tr><td>1</td><td><strong>Anomalie de montant fournisseur</strong> \u2014 Montant >2 \u00e9carts-types de la moyenne du fournisseur (\u22655 transactions pr\u00e9c\u00e9dentes requises)</td><td>MOYEN</td></tr><tr><td>2</td><td><strong>Anomalie de d\u00e9lai fournisseur</strong> \u2014 Facture re\u00e7ue 14+ jours du sch\u00e9ma normal</td><td>BAS</td></tr><tr><td>3</td><td><strong>Duplicata exact</strong> \u2014 M\u00eame montant + m\u00eame fournisseur dans les 30 jours</td><td>\u00c9LEV\u00c9</td></tr><tr><td>4</td><td><strong>Duplicata inter-fournisseurs</strong> \u2014 M\u00eame montant, fournisseur diff\u00e9rent, dans les 7 jours</td><td>MOYEN</td></tr><tr><td>5</td><td><strong>Transaction de fin de semaine</strong> \u2014 Transaction samedi/dimanche, >200$</td><td>BAS</td></tr><tr><td>6</td><td><strong>Transaction f\u00e9ri\u00e9e</strong> \u2014 Transaction un jour f\u00e9ri\u00e9 du Qu\u00e9bec, >200$</td><td>BAS</td></tr><tr><td>7</td><td><strong>Nombre rond</strong> \u2014 Montant rond suspect d\u2019un fournisseur irr\u00e9gulier</td><td>BAS</td></tr><tr><td>8</td><td><strong>Nouveau fournisseur gros montant</strong> \u2014 Premi\u00e8re facture du fournisseur >2\u00a0000$</td><td>MOYEN</td></tr><tr><td>9</td><td><strong>Changement de compte bancaire</strong> \u2014 Les d\u00e9tails bancaires du fournisseur ont chang\u00e9</td><td>CRITIQUE</td></tr><tr><td>10</td><td><strong>Facture apr\u00e8s paiement</strong> \u2014 Date de facture apr\u00e8s la date de paiement bancaire</td><td>\u00c9LEV\u00c9</td></tr><tr><td>11</td><td><strong>Contradiction d\u2019inscription fiscale</strong> \u2014 Fournisseur facture TPS/TVQ mais historiquement non inscrit</td><td>\u00c9LEV\u00c9</td></tr><tr><td>12</td><td><strong>Changement de cat\u00e9gorie fournisseur</strong> \u2014 Cat\u00e9gorie contredit 80%+ de l\u2019historique</td><td>MOYEN</td></tr><tr><td>13</td><td><strong>Discordance nom b\u00e9n\u00e9ficiaire</strong> \u2014 Nom du b\u00e9n\u00e9ficiaire bancaire diff\u00e8re du fournisseur de la facture</td><td>\u00c9LEV\u00c9</td></tr></table>"}},
+{title:{en:"Overriding Fraud Flags",fr:"Passer outre les drapeaux de fraude"},
+content:{en:"<p><strong>Severity levels:</strong> CRITICAL > HIGH > MEDIUM > LOW</p><p>CRITICAL and HIGH fraud flags <strong>block auto-approval</strong> and require a manager or owner to override with a detailed justification (minimum 10 characters). The override reason is permanently recorded in the audit log and cannot be changed after the fact (locked by database trigger).</p><div class='warning'>Never override a CRITICAL fraud flag without investigating. Bank account changes are the #1 indicator of payment fraud.</div>",
+fr:"<p><strong>Niveaux de s\u00e9v\u00e9rit\u00e9\u00a0:</strong> CRITIQUE > \u00c9LEV\u00c9 > MOYEN > BAS</p><p>Les drapeaux CRITIQUE et \u00c9LEV\u00c9 <strong>bloquent l\u2019approbation automatique</strong> et n\u00e9cessitent qu\u2019un gestionnaire ou propri\u00e9taire passe outre avec une justification d\u00e9taill\u00e9e (minimum 10 caract\u00e8res). La raison de d\u00e9rogation est enregistr\u00e9e de fa\u00e7on permanente dans le journal de v\u00e9rification et ne peut \u00eatre modifi\u00e9e apr\u00e8s le fait (verrouill\u00e9e par d\u00e9clencheur de base de donn\u00e9es).</p><div class='warning'>Ne passez jamais outre un drapeau CRITIQUE sans enqu\u00eater. Les changements de compte bancaire sont l\u2019indicateur #1 de fraude de paiement.</div>"}}
+],
+quiz:[
+{q:{en:"How many fraud detection rules does LedgerLink have?",fr:"Combien de r\u00e8gles de d\u00e9tection de fraude LedgerLink a-t-il\u00a0?"},
+opts:{en:["5","10","13","20"],fr:["5","10","13","20"]},ans:2},
+{q:{en:"Which fraud flag has CRITICAL severity?",fr:"Quel drapeau de fraude a une s\u00e9v\u00e9rit\u00e9 CRITIQUE\u00a0?"},
+opts:{en:["Duplicate exact","Bank account change","Weekend transaction","Round number"],fr:["Duplicata exact","Changement de compte bancaire","Transaction de fin de semaine","Nombre rond"]},ans:1},
+{q:{en:"What is the minimum justification length for overriding a fraud flag?",fr:"Quelle est la longueur minimale de justification pour passer outre un drapeau de fraude\u00a0?"},
+opts:{en:["5 characters","10 characters","20 characters","50 characters"],fr:["5 caract\u00e8res","10 caract\u00e8res","20 caract\u00e8res","50 caract\u00e8res"]},ans:1},
+{q:{en:"What happens to the fraud override reason after saving?",fr:"Que se passe-t-il avec la raison de d\u00e9rogation apr\u00e8s l\u2019enregistrement\u00a0?"},
+opts:{en:["It can be edited","It is deleted after 30 days","It is permanently locked","It is sent to the client"],fr:["Elle peut \u00eatre modifi\u00e9e","Elle est supprim\u00e9e apr\u00e8s 30 jours","Elle est verrouill\u00e9e de fa\u00e7on permanente","Elle est envoy\u00e9e au client"]},ans:2},
+{q:{en:"How many prior transactions are needed for the vendor amount anomaly rule?",fr:"Combien de transactions pr\u00e9c\u00e9dentes sont n\u00e9cessaires pour la r\u00e8gle d\u2019anomalie de montant\u00a0?"},
+opts:{en:["1","3","5","10"],fr:["1","3","5","10"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 9 ───────────────────
+{id:9,title:{en:"Substance Flags",fr:"Drapeaux de substance"},role:"all",
+sections:[
+{title:{en:"What Substance Classification Means",fr:"Ce que signifie la classification de substance"},
+content:{en:"<p>The substance engine classifies what an expense <em>really is</em> economically, not just what it looks like on paper. This prevents posting errors like booking a loan as revenue or a capital purchase as an operating expense.</p><p><strong>Key classifications:</strong></p><table class='info-table'><tr><th>Type</th><th>Example</th><th>Why It Matters</th></tr><tr><td>CapEx</td><td>$8,000 Dell server purchase</td><td>Must go to fixed assets (GL 1500), not expenses</td></tr><tr><td>Operating Expense</td><td>$200 office supplies</td><td>Normal expense, goes to appropriate expense GL</td></tr><tr><td>Loan Payment</td><td>$5,000 mortgage payment</td><td>Must go to liabilities (GL 2500), not expenses</td></tr><tr><td>Customer Deposit</td><td>$25,000 project deposit</td><td>Deferred revenue liability (GL 2400), not revenue</td></tr><tr><td>Intercompany</td><td>$50,000 transfer to holding company</td><td>Related party transaction (GL 1700)</td></tr><tr><td>Personal Expense</td><td>Groceries on business card</td><td>Must be flagged \u2014 not deductible</td></tr><tr><td>Tax Remittance</td><td>QST payment to Revenu Qu\u00e9bec</td><td>Goes to tax payable (GL 2210), not expenses</td></tr></table><div class='key-point'>When the substance engine flags a document, it sets <code>block_auto_approval=True</code>, forcing human review. You must confirm or override the classification before the document can be posted.</div>",
+fr:"<p>Le moteur de substance classifie ce qu\u2019une d\u00e9pense <em>est vraiment</em> \u00e9conomiquement, pas seulement ce qu\u2019elle semble sur papier. Cela pr\u00e9vient les erreurs comme comptabiliser un pr\u00eat comme un revenu ou un achat d\u2019immobilisation comme une d\u00e9pense d\u2019exploitation.</p><p><strong>Classifications cl\u00e9s\u00a0:</strong></p><table class='info-table'><tr><th>Type</th><th>Exemple</th><th>Pourquoi c\u2019est important</th></tr><tr><td>CapEx</td><td>Achat serveur Dell 8\u00a0000$</td><td>Doit aller aux immobilisations (GL 1500), pas aux d\u00e9penses</td></tr><tr><td>D\u00e9pense d\u2019exploitation</td><td>Fournitures de bureau 200$</td><td>D\u00e9pense normale, va au GL de d\u00e9pense appropri\u00e9</td></tr><tr><td>Paiement de pr\u00eat</td><td>Paiement hypoth\u00e9caire 5\u00a0000$</td><td>Doit aller aux passifs (GL 2500), pas aux d\u00e9penses</td></tr><tr><td>D\u00e9p\u00f4t client</td><td>D\u00e9p\u00f4t de projet 25\u00a0000$</td><td>Revenu diff\u00e9r\u00e9 passif (GL 2400), pas un revenu</td></tr><tr><td>Intercompagnie</td><td>Transfert de 50\u00a0000$ \u00e0 la soci\u00e9t\u00e9 de portefeuille</td><td>Transaction entre apparent\u00e9s (GL 1700)</td></tr><tr><td>D\u00e9pense personnelle</td><td>\u00c9picerie sur la carte d\u2019affaires</td><td>Doit \u00eatre signal\u00e9 \u2014 non d\u00e9ductible</td></tr><tr><td>Remise de taxes</td><td>Paiement TVQ \u00e0 Revenu Qu\u00e9bec</td><td>Va aux taxes \u00e0 payer (GL 2210), pas aux d\u00e9penses</td></tr></table><div class='key-point'>Quand le moteur de substance signale un document, il met <code>block_auto_approval=True</code>, for\u00e7ant la r\u00e9vision humaine. Vous devez confirmer ou passer outre la classification avant que le document puisse \u00eatre publi\u00e9.</div>"}}
+],
+quiz:[
+{q:{en:"What GL account should CapEx go to?",fr:"\u00c0 quel compte GL les immobilisations doivent-elles aller\u00a0?"},
+opts:{en:["5100 (Expenses)","1500 (Fixed Assets)","4100 (Revenue)","2210 (Tax Payable)"],fr:["5100 (D\u00e9penses)","1500 (Immobilisations)","4100 (Revenus)","2210 (Taxes \u00e0 payer)"]},ans:1},
+{q:{en:"A $25,000 customer deposit should be classified as:",fr:"Un d\u00e9p\u00f4t client de 25\u00a0000$ devrait \u00eatre class\u00e9 comme\u00a0:"},
+opts:{en:["Revenue","Operating expense","Deferred revenue liability","CapEx"],fr:["Revenu","D\u00e9pense d\u2019exploitation","Passif de revenu diff\u00e9r\u00e9","Immobilisation"]},ans:2},
+{q:{en:"What happens when the substance engine flags a document?",fr:"Que se passe-t-il quand le moteur de substance signale un document\u00a0?"},
+opts:{en:["It is auto-posted","It is deleted","Auto-approval is blocked","It is sent to the client"],fr:["Il est publi\u00e9 automatiquement","Il est supprim\u00e9","L\u2019approbation automatique est bloqu\u00e9e","Il est envoy\u00e9 au client"]},ans:2},
+{q:{en:"Where should QST remittance payments be posted?",fr:"O\u00f9 les paiements de remise de TVQ doivent-ils \u00eatre publi\u00e9s\u00a0?"},
+opts:{en:["GL 5100","GL 4100","GL 2210","GL 1500"],fr:["GL 5100","GL 4100","GL 2210","GL 1500"]},ans:2},
+{q:{en:"What is an intercompany transaction?",fr:"Qu\u2019est-ce qu\u2019une transaction intercompagnie\u00a0?"},
+opts:{en:["A payment to government","A transfer between related entities","A customer refund","An employee reimbursement"],fr:["Un paiement au gouvernement","Un transfert entre entit\u00e9s apparent\u00e9es","Un remboursement client","Un remboursement d\u2019employ\u00e9"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 10 ───────────────────
+{id:10,title:{en:"Uncertainty Flags",fr:"Drapeaux d\u2019incertitude"},role:"all",
+sections:[
+{title:{en:"Understanding Uncertainty in LedgerLink",fr:"Comprendre l\u2019incertitude dans LedgerLink"},
+content:{en:"<p>The uncertainty engine evaluates every document and produces one of three outcomes:</p><table class='info-table'><tr><th>Outcome</th><th>Confidence</th><th>Action</th></tr><tr><td>SAFE_TO_POST</td><td>\u226580%</td><td>Can be approved for posting</td></tr><tr><td>PARTIAL_POST</td><td>60\u201379%</td><td>Some fields may need correction</td></tr><tr><td>BLOCK_PENDING_REVIEW</td><td><60%</td><td>Must be fully reviewed before any posting</td></tr></table><p><strong>Common uncertainty reasons:</strong></p><ul><li><strong>VENDOR_PAYEE_MISMATCH</strong> \u2014 Invoice vendor name doesn\u2019t match bank payee. Verify the payee is correct.</li><li><strong>DATE_AMBIGUOUS</strong> \u2014 Date could be DD/MM or MM/DD (e.g., 03/04/2026). Check the original document. French documents default to DD/MM, English to MM/DD.</li><li><strong>ALLOCATION_GAP_UNEXPLAINED</strong> \u2014 Line item totals don\u2019t add up to the invoice total. Check for missing lines or tax-inclusive amounts.</li></ul><div class='tip'>When you see BLOCK_PENDING_REVIEW, you may need to call the client for more information. Use the Communications page to draft an AI-assisted message.</div>",
+fr:"<p>Le moteur d\u2019incertitude \u00e9value chaque document et produit l\u2019un de trois r\u00e9sultats\u00a0:</p><table class='info-table'><tr><th>R\u00e9sultat</th><th>Confiance</th><th>Action</th></tr><tr><td>S\u00dbR_DE_PUBLIER</td><td>\u226580%</td><td>Peut \u00eatre approuv\u00e9 pour publication</td></tr><tr><td>PUBLICATION_PARTIELLE</td><td>60\u201379%</td><td>Certains champs peuvent n\u00e9cessiter une correction</td></tr><tr><td>BLOQUER_EN_ATTENTE_R\u00c9VISION</td><td><60%</td><td>Doit \u00eatre enti\u00e8rement r\u00e9vis\u00e9 avant toute publication</td></tr></table><p><strong>Raisons d\u2019incertitude courantes\u00a0:</strong></p><ul><li><strong>DISCORDANCE_NOM_B\u00c9N\u00c9FICIAIRE</strong> \u2014 Le nom du fournisseur de la facture ne correspond pas au b\u00e9n\u00e9ficiaire bancaire.</li><li><strong>DATE_AMBIGU\u00cb</strong> \u2014 La date pourrait \u00eatre JJ/MM ou MM/JJ (ex. 03/04/2026). V\u00e9rifiez le document original. Les documents fran\u00e7ais utilisent JJ/MM par d\u00e9faut.</li><li><strong>\u00c9CART_ALLOCATION_INEXPLIQ\u00c9</strong> \u2014 Les totaux de lignes ne correspondent pas au total de la facture.</li></ul><div class='tip'>Quand vous voyez BLOQUER_EN_ATTENTE_R\u00c9VISION, vous devrez peut-\u00eatre appeler le client. Utilisez la page Communications pour r\u00e9diger un message assist\u00e9 par IA.</div>"}}
+],
+quiz:[
+{q:{en:"What confidence threshold means SAFE_TO_POST?",fr:"Quel seuil de confiance signifie S\u00dbR_DE_PUBLIER\u00a0?"},
+opts:{en:["\u226590%","\u226580%","\u226570%","\u226560%"],fr:["\u226590%","\u226580%","\u226570%","\u226560%"]},ans:1},
+{q:{en:"A confidence below 60% results in:",fr:"Une confiance inf\u00e9rieure \u00e0 60% entra\u00eene\u00a0:"},
+opts:{en:["Auto-posting","Partial post","Block pending review","Deletion"],fr:["Publication automatique","Publication partielle","Blocage en attente de r\u00e9vision","Suppression"]},ans:2},
+{q:{en:"For a French document, which date format is assumed?",fr:"Pour un document fran\u00e7ais, quel format de date est suppos\u00e9\u00a0?"},
+opts:{en:["MM/DD/YYYY","DD/MM/YYYY","YYYY-MM-DD","YYYY/DD/MM"],fr:["MM/JJ/AAAA","JJ/MM/AAAA","AAAA-MM-JJ","AAAA/JJ/MM"]},ans:1},
+{q:{en:"What does VENDOR_PAYEE_MISMATCH mean?",fr:"Que signifie DISCORDANCE_NOM_B\u00c9N\u00c9FICIAIRE\u00a0?"},
+opts:{en:["Vendor is new","Invoice vendor differs from bank payee","Tax code is wrong","Amount doesn\u2019t match"],fr:["Le fournisseur est nouveau","Le fournisseur de la facture diff\u00e8re du b\u00e9n\u00e9ficiaire bancaire","Le code de taxe est faux","Le montant ne correspond pas"]},ans:1},
+{q:{en:"Where can you draft a message to ask a client for clarification?",fr:"O\u00f9 pouvez-vous r\u00e9diger un message pour demander des pr\u00e9cisions au client\u00a0?"},
+opts:{en:["QuickBooks","Communications page","Filing Summary","Bank Import"],fr:["QuickBooks","Page Communications","Sommaire de production","Import bancaire"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 11 ───────────────────
+{id:11,title:{en:"Quebec Tax Codes",fr:"Codes de taxe du Qu\u00e9bec"},role:"all",
+sections:[
+{title:{en:"Complete Tax Code Reference",fr:"R\u00e9f\u00e9rence compl\u00e8te des codes de taxe"},
+content:{en:"<table class='info-table'><tr><th>Code</th><th>Description</th><th>GST</th><th>QST</th><th>ITC/ITR Recovery</th></tr><tr><td><strong>T</strong></td><td>Taxable \u2014 standard QC purchase</td><td>5%</td><td>9.975%</td><td>100% CTI + 100% RTI</td></tr><tr><td><strong>Z</strong></td><td>Zero-rated (basic groceries, prescriptions, exports)</td><td>0%</td><td>0%</td><td>0%</td></tr><tr><td><strong>E</strong></td><td>Exempt (insurance premiums, financial services, medical, daycare, long-term residential rent)</td><td>N/A</td><td>N/A</td><td>0%</td></tr><tr><td><strong>M</strong></td><td>Meals & entertainment \u2014 50% rule</td><td>5%</td><td>9.975%</td><td>50% CTI + 50% RTI</td></tr><tr><td><strong>I</strong></td><td>Insurance (Quebec special ~9% premium tax)</td><td>N/A</td><td>~9%</td><td>0% \u2014 not recoverable</td></tr><tr><td><strong>GST_ONLY</strong></td><td>Provinces with GST only (AB, BC, SK, MB, NT, NU, YT)</td><td>5%</td><td>N/A</td><td>100% CTI, no RTI</td></tr><tr><td><strong>HST</strong></td><td>Ontario (13%) or Atlantic (15%)</td><td colspan='2'>Combined HST</td><td>100% ITC</td></tr><tr><td><strong>VAT</strong></td><td>Foreign \u2014 not recoverable</td><td>N/A</td><td>N/A</td><td>0%</td></tr></table>",
+fr:"<table class='info-table'><tr><th>Code</th><th>Description</th><th>TPS</th><th>TVQ</th><th>R\u00e9cup\u00e9ration CTI/RTI</th></tr><tr><td><strong>T</strong></td><td>Taxable \u2014 achat standard QC</td><td>5%</td><td>9,975%</td><td>100% CTI + 100% RTI</td></tr><tr><td><strong>Z</strong></td><td>D\u00e9tax\u00e9 (\u00e9picerie de base, prescriptions, exportations)</td><td>0%</td><td>0%</td><td>0%</td></tr><tr><td><strong>E</strong></td><td>Exon\u00e9r\u00e9 (primes d\u2019assurance, services financiers, m\u00e9dical, garderie, loyer r\u00e9sidentiel long terme)</td><td>S/O</td><td>S/O</td><td>0%</td></tr><tr><td><strong>M</strong></td><td>Repas et divertissement \u2014 r\u00e8gle du 50%</td><td>5%</td><td>9,975%</td><td>50% CTI + 50% RTI</td></tr><tr><td><strong>I</strong></td><td>Assurance (taxe sp\u00e9ciale QC ~9%)</td><td>S/O</td><td>~9%</td><td>0% \u2014 non r\u00e9cup\u00e9rable</td></tr><tr><td><strong>GST_ONLY</strong></td><td>Provinces TPS seulement (AB, BC, SK, MB, NT, NU, YT)</td><td>5%</td><td>S/O</td><td>100% CTI, pas de RTI</td></tr><tr><td><strong>HST</strong></td><td>Ontario (13%) ou Atlantique (15%)</td><td colspan='2'>TVH combin\u00e9e</td><td>100% CTI</td></tr><tr><td><strong>VAT</strong></td><td>\u00c9tranger \u2014 non r\u00e9cup\u00e9rable</td><td>S/O</td><td>S/O</td><td>0%</td></tr></table>"}},
+{title:{en:"Real Examples",fr:"Exemples r\u00e9els"},
+content:{en:"<ol><li><strong>Office supplies from Staples (QC)</strong> \u2192 Code T (5% GST + 9.975% QST, full CTI/RTI)</li><li><strong>Client lunch at restaurant</strong> \u2192 Code M (full tax charged, only 50% recoverable)</li><li><strong>Car insurance premium</strong> \u2192 Code I (9% premium, not recoverable)</li><li><strong>Medical exam for employee</strong> \u2192 Code E (exempt, no tax)</li><li><strong>Basic groceries for office</strong> \u2192 Code Z (zero-rated)</li><li><strong>Equipment from Alberta vendor</strong> \u2192 Code GST_ONLY (5% GST only, no QST)</li><li><strong>Software from Ontario vendor</strong> \u2192 Code HST (13% HST)</li><li><strong>Foreign consulting service</strong> \u2192 Code VAT (not recoverable)</li><li><strong>Rent for commercial space</strong> \u2192 Code T (commercial rent is taxable)</li><li><strong>Daycare services</strong> \u2192 Code E (exempt)</li></ol><div class='warning'>A Quebec vendor should NEVER have HST. If you see a QC vendor charging 13% or 15% HST, that\u2019s an error \u2014 flag it. Similarly, an Alberta vendor should never have QST.</div>",
+fr:"<ol><li><strong>Fournitures de bureau de Staples (QC)</strong> \u2192 Code T (5% TPS + 9,975% TVQ, CTI/RTI complets)</li><li><strong>D\u00eener client au restaurant</strong> \u2192 Code M (taxe compl\u00e8te, seulement 50% r\u00e9cup\u00e9rable)</li><li><strong>Prime d\u2019assurance auto</strong> \u2192 Code I (9% prime, non r\u00e9cup\u00e9rable)</li><li><strong>Examen m\u00e9dical pour employ\u00e9</strong> \u2192 Code E (exon\u00e9r\u00e9, pas de taxe)</li><li><strong>\u00c9picerie de base pour le bureau</strong> \u2192 Code Z (d\u00e9tax\u00e9)</li><li><strong>\u00c9quipement d\u2019un fournisseur albertain</strong> \u2192 Code GST_ONLY (5% TPS seulement, pas de TVQ)</li><li><strong>Logiciel d\u2019un fournisseur ontarien</strong> \u2192 Code HST (13% TVH)</li><li><strong>Service de consultation \u00e9tranger</strong> \u2192 Code VAT (non r\u00e9cup\u00e9rable)</li><li><strong>Loyer commercial</strong> \u2192 Code T (le loyer commercial est taxable)</li><li><strong>Services de garderie</strong> \u2192 Code E (exon\u00e9r\u00e9)</li></ol><div class='warning'>Un fournisseur qu\u00e9b\u00e9cois ne devrait JAMAIS avoir de TVH. Si vous voyez un fournisseur QC facturant 13% ou 15% TVH, c\u2019est une erreur \u2014 signalez-le. De m\u00eame, un fournisseur albertain ne devrait jamais avoir de TVQ.</div>"}}
+],
+quiz:[
+{q:{en:"What is the GST rate in Quebec?",fr:"Quel est le taux de TPS au Qu\u00e9bec\u00a0?"},
+opts:{en:["9.975%","5%","13%","15%"],fr:["9,975%","5%","13%","15%"]},ans:1},
+{q:{en:"Code M (meals) allows recovery of:",fr:"Le code M (repas) permet la r\u00e9cup\u00e9ration de\u00a0:"},
+opts:{en:["100% CTI/RTI","75% CTI/RTI","50% CTI/RTI","0%"],fr:["100% CTI/RTI","75% CTI/RTI","50% CTI/RTI","0%"]},ans:2},
+{q:{en:"An Alberta vendor should use which tax code?",fr:"Un fournisseur albertain devrait utiliser quel code de taxe\u00a0?"},
+opts:{en:["T","HST","GST_ONLY","E"],fr:["T","HST","GST_ONLY","E"]},ans:2},
+{q:{en:"Insurance premiums in Quebec are:",fr:"Les primes d\u2019assurance au Qu\u00e9bec sont\u00a0:"},
+opts:{en:["Fully recoverable","50% recoverable","Not recoverable","Zero-rated"],fr:["Enti\u00e8rement r\u00e9cup\u00e9rables","50% r\u00e9cup\u00e9rables","Non r\u00e9cup\u00e9rables","D\u00e9tax\u00e9es"]},ans:2},
+{q:{en:"What HST rate applies in Ontario?",fr:"Quel taux de TVH s\u2019applique en Ontario\u00a0?"},
+opts:{en:["5%","9.975%","13%","15%"],fr:["5%","9,975%","13%","15%"]},ans:2},
+{q:{en:"Commercial rent in Quebec uses which code?",fr:"Le loyer commercial au Qu\u00e9bec utilise quel code\u00a0?"},
+opts:{en:["E (exempt)","T (taxable)","Z (zero-rated)","I (insurance)"],fr:["E (exon\u00e9r\u00e9)","T (taxable)","Z (d\u00e9tax\u00e9)","I (assurance)"]},ans:1},
+{q:{en:"Daycare services are classified as:",fr:"Les services de garderie sont class\u00e9s comme\u00a0:"},
+opts:{en:["Taxable","Zero-rated","Exempt","Mixed"],fr:["Taxable","D\u00e9tax\u00e9","Exon\u00e9r\u00e9","Mixte"]},ans:2},
+{q:{en:"A Quebec vendor charging 13% HST indicates:",fr:"Un fournisseur qu\u00e9b\u00e9cois facturant 13% TVH indique\u00a0:"},
+opts:{en:["Normal billing","An error to flag","Ontario tax rules","Federal override"],fr:["Facturation normale","Une erreur \u00e0 signaler","R\u00e8gles fiscales ontariennes","D\u00e9rogation f\u00e9d\u00e9rale"]},ans:1},
+{q:{en:"The QST rate in Quebec is:",fr:"Le taux de TVQ au Qu\u00e9bec est\u00a0:"},
+opts:{en:["5%","9%","9.975%","14.975%"],fr:["5%","9%","9,975%","14,975%"]},ans:2},
+{q:{en:"Foreign VAT paid is:",fr:"La TVA \u00e9trang\u00e8re pay\u00e9e est\u00a0:"},
+opts:{en:["Fully recoverable","50% recoverable","Not recoverable","Depends on the country"],fr:["Enti\u00e8rement r\u00e9cup\u00e9rable","50% r\u00e9cup\u00e9rable","Non r\u00e9cup\u00e9rable","D\u00e9pend du pays"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 12 ───────────────────
+{id:12,title:{en:"ITC and ITR",fr:"CTI et RTI"},role:"all",
+sections:[
+{title:{en:"Input Tax Credits (ITC/CTI) and Input Tax Refunds (ITR/RTI)",fr:"Cr\u00e9dits de taxe sur les intrants (CTI) et Remboursements de taxe sur les intrants (RTI)"},
+content:{en:"<p><strong>CTI (Credit de Taxe sur les Intrants)</strong> = recovery of GST paid on business purchases.<br><strong>RTI (Remboursement de Taxe sur les Intrants)</strong> = recovery of QST paid on business purchases.</p><p>LedgerLink calculates these automatically based on the tax code:</p><ul><li>Code T: 100% CTI on GST, 100% RTI on QST</li><li>Code M (meals): 50% CTI, 50% RTI</li><li>Code E/Z/I/VAT: 0% recovery</li><li>Code GST_ONLY: CTI on GST only (no QST was charged)</li></ul><p><strong>Restrictions:</strong></p><ul><li><strong>Unregistered supplier:</strong> If a vendor is not GST/QST registered, you cannot claim CTI/RTI even if they incorrectly charged tax</li><li><strong>Large business restrictions:</strong> Some large businesses face CTI restrictions on certain expense categories</li><li><strong>Personal use apportionment:</strong> If an expense is partially personal, only the business portion qualifies</li></ul><p>The <strong>Filing Summary</strong> page shows the calculated CTI/RTI totals for each period, ready for your Revenu Qu\u00e9bec filing.</p>",
+fr:"<p><strong>CTI (Cr\u00e9dit de Taxe sur les Intrants)</strong> = r\u00e9cup\u00e9ration de la TPS pay\u00e9e sur les achats d\u2019affaires.<br><strong>RTI (Remboursement de Taxe sur les Intrants)</strong> = r\u00e9cup\u00e9ration de la TVQ pay\u00e9e sur les achats d\u2019affaires.</p><p>LedgerLink les calcule automatiquement selon le code de taxe\u00a0:</p><ul><li>Code T\u00a0: 100% CTI sur la TPS, 100% RTI sur la TVQ</li><li>Code M (repas)\u00a0: 50% CTI, 50% RTI</li><li>Code E/Z/I/VAT\u00a0: 0% r\u00e9cup\u00e9ration</li><li>Code GST_ONLY\u00a0: CTI sur la TPS seulement (pas de TVQ factur\u00e9e)</li></ul><p><strong>Restrictions\u00a0:</strong></p><ul><li><strong>Fournisseur non inscrit\u00a0:</strong> Si un fournisseur n\u2019est pas inscrit TPS/TVQ, vous ne pouvez pas r\u00e9clamer de CTI/RTI m\u00eame s\u2019il a factur\u00e9 la taxe incorrectement</li><li><strong>Restrictions grandes entreprises\u00a0:</strong> Certaines grandes entreprises font face \u00e0 des restrictions de CTI</li><li><strong>R\u00e9partition usage personnel\u00a0:</strong> Si une d\u00e9pense est partiellement personnelle, seule la portion d\u2019affaires est admissible</li></ul><p>La page <strong>Sommaire de production</strong> affiche les totaux CTI/RTI calcul\u00e9s pour chaque p\u00e9riode.</p>"}}
+],
+quiz:[
+{q:{en:"CTI stands for:",fr:"CTI signifie\u00a0:"},
+opts:{en:["Credit de Taxe sur les Intrants","Canadian Tax Input","Corporate Tax Invoice","Client Tax Information"],fr:["Cr\u00e9dit de Taxe sur les Intrants","Intrant de Taxe Canadienne","Facture de Taxe Corporative","Information Fiscale Client"]},ans:0},
+{q:{en:"Meals (Code M) allow what % CTI/RTI recovery?",fr:"Les repas (Code M) permettent quel % de r\u00e9cup\u00e9ration CTI/RTI\u00a0?"},
+opts:{en:["0%","25%","50%","100%"],fr:["0%","25%","50%","100%"]},ans:2},
+{q:{en:"Can you claim CTI from an unregistered supplier?",fr:"Pouvez-vous r\u00e9clamer un CTI d\u2019un fournisseur non inscrit\u00a0?"},
+opts:{en:["Yes, always","Only if they charged tax","No, never","Only with manager approval"],fr:["Oui, toujours","Seulement s\u2019il a factur\u00e9 la taxe","Non, jamais","Seulement avec l\u2019approbation du gestionnaire"]},ans:2},
+{q:{en:"Where do you find the filing period CTI/RTI totals?",fr:"O\u00f9 trouvez-vous les totaux CTI/RTI de la p\u00e9riode de production\u00a0?"},
+opts:{en:["Bank Import","Filing Summary","Calendar","Engagements"],fr:["Import bancaire","Sommaire de production","Calendrier","Mandats"]},ans:1},
+{q:{en:"Code GST_ONLY recovers:",fr:"Le code GST_ONLY r\u00e9cup\u00e8re\u00a0:"},
+opts:{en:["CTI only (no RTI)","RTI only (no CTI)","Both CTI and RTI","Neither"],fr:["CTI seulement (pas de RTI)","RTI seulement (pas de CTI)","CTI et RTI","Aucun"]},ans:0}
+]
+},
+
+// ─────────────────── MODULE 13 ───────────────────
+{id:13,title:{en:"Bank Import and Matching",fr:"Import bancaire et appariement"},role:"all",
+sections:[
+{title:{en:"Supported Banks and Import Process",fr:"Banques support\u00e9es et processus d\u2019importation"},
+content:{en:"<p><strong>Supported banks:</strong> Desjardins, National Bank (BNC), BMO, TD, RBC</p><p><strong>Supported formats:</strong> CSV and OFX (detected by magic bytes, not extension)</p><p><strong>How to import:</strong></p><ol><li>Download your bank statement as CSV or OFX from your bank\u2019s website</li><li>Go to <strong>Bank Import</strong> in LedgerLink</li><li>Select the client and upload the file</li><li>LedgerLink auto-detects the bank from the file headers/content</li><li>Transactions are parsed and matched against existing documents</li></ol><p><strong>Understanding match scores:</strong> Smart matching uses vendor name similarity (\u226580%), amount within 2%, and date within 7 days. High-confidence matches are auto-suggested. Low-confidence matches require manual review.</p>",
+fr:"<p><strong>Banques support\u00e9es\u00a0:</strong> Desjardins, Banque Nationale (BNC), BMO, TD, RBC</p><p><strong>Formats support\u00e9s\u00a0:</strong> CSV et OFX (d\u00e9tect\u00e9s par octets magiques, pas l\u2019extension)</p><p><strong>Comment importer\u00a0:</strong></p><ol><li>T\u00e9l\u00e9chargez votre relev\u00e9 bancaire en CSV ou OFX depuis le site de votre banque</li><li>Allez \u00e0 <strong>Import bancaire</strong> dans LedgerLink</li><li>S\u00e9lectionnez le client et t\u00e9l\u00e9versez le fichier</li><li>LedgerLink d\u00e9tecte automatiquement la banque depuis les en-t\u00eates/contenu du fichier</li><li>Les transactions sont analys\u00e9es et appari\u00e9es avec les documents existants</li></ol><p><strong>Comprendre les scores d\u2019appariement\u00a0:</strong> L\u2019appariement intelligent utilise la similarit\u00e9 du nom de fournisseur (\u226580%), le montant \u00e0 2% pr\u00e8s, et la date dans les 7 jours. Les appariements \u00e0 haute confiance sont auto-sugg\u00e9r\u00e9s. Les appariements \u00e0 faible confiance n\u00e9cessitent une r\u00e9vision manuelle.</p>"}},
+{title:{en:"Split Payments and Cross-Currency",fr:"Paiements fractionn\u00e9s et multi-devises"},
+content:{en:"<p><strong>Split payment matching:</strong> When a single bank payment covers multiple invoices, LedgerLink groups them and lets you confirm the split allocation.</p><p><strong>Cross-currency matching (USD/CAD):</strong> For USD invoices paid from a CAD account, LedgerLink uses Bank of Canada exchange rates to verify the conversion is accurate (tolerance: 0.5%).</p><p><strong>Bank reversals:</strong> The system detects bank transaction reversals (e.g., NSF cheques) and flags them for review.</p>",
+fr:"<p><strong>Appariement de paiement fractionn\u00e9\u00a0:</strong> Quand un seul paiement bancaire couvre plusieurs factures, LedgerLink les regroupe et vous permet de confirmer la r\u00e9partition.</p><p><strong>Appariement multi-devises (USD/CAD)\u00a0:</strong> Pour les factures USD pay\u00e9es d\u2019un compte CAD, LedgerLink utilise les taux de change de la Banque du Canada pour v\u00e9rifier la conversion (tol\u00e9rance\u00a0: 0,5%).</p><p><strong>Contre-passations bancaires\u00a0:</strong> Le syst\u00e8me d\u00e9tecte les contre-passations de transactions bancaires (ex. ch\u00e8ques NSF) et les signale pour r\u00e9vision.</p>"}}
+],
+quiz:[
+{q:{en:"Which bank is NOT supported?",fr:"Quelle banque n\u2019est PAS support\u00e9e\u00a0?"},
+opts:{en:["Desjardins","HSBC","BMO","RBC"],fr:["Desjardins","HSBC","BMO","RBC"]},ans:1},
+{q:{en:"What vendor name similarity is needed for auto-match?",fr:"Quelle similarit\u00e9 de nom de fournisseur est n\u00e9cessaire pour l\u2019appariement automatique\u00a0?"},
+opts:{en:["\u226550%","\u226570%","\u226580%","\u226590%"],fr:["\u226550%","\u226570%","\u226580%","\u226590%"]},ans:2},
+{q:{en:"What tolerance is used for FX conversion verification?",fr:"Quelle tol\u00e9rance est utilis\u00e9e pour la v\u00e9rification de conversion de devises\u00a0?"},
+opts:{en:["0.1%","0.5%","1%","5%"],fr:["0,1%","0,5%","1%","5%"]},ans:1},
+{q:{en:"How are bank file types detected?",fr:"Comment les types de fichiers bancaires sont-ils d\u00e9tect\u00e9s\u00a0?"},
+opts:{en:["By file extension","By file name","By magic bytes","By file size"],fr:["Par l\u2019extension","Par le nom du fichier","Par les octets magiques","Par la taille du fichier"]},ans:2},
+{q:{en:"What date window is used for transaction matching?",fr:"Quelle fen\u00eatre de dates est utilis\u00e9e pour l\u2019appariement des transactions\u00a0?"},
+opts:{en:["1 day","3 days","7 days","30 days"],fr:["1 jour","3 jours","7 jours","30 jours"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 14 ───────────────────
+{id:14,title:{en:"Bank Reconciliation",fr:"R\u00e9conciliation bancaire"},role:"all",
+sections:[
+{title:{en:"How Bank Reconciliation Works",fr:"Comment fonctionne la r\u00e9conciliation bancaire"},
+content:{en:"<p>A bank reconciliation ensures your GL bank balance matches the actual bank statement balance.</p><p><strong>The formula:</strong></p><p style='background:#f3f4f6;padding:12px;border-radius:8px;font-family:monospace;font-size:13px'>GL Balance + Deposits in Transit - Outstanding Cheques \u00b1 Bank Errors \u00b1 Book Errors + Interest - Bank Charges = Statement Balance</p><p><strong>Steps:</strong></p><ol><li>Go to <strong>Reconciliation > New</strong></li><li>Select client and period</li><li>Enter the GL balance and statement balance</li><li>LedgerLink auto-populates outstanding items from unmatched bank transactions</li><li>Mark items as cleared as they appear on the statement</li><li>Add any missing items (bank charges, interest, errors)</li><li>When the difference is $0.00 (\u00b1$0.01), click <strong>Finalize</strong></li></ol><div class='warning'>Once finalized, a reconciliation cannot be modified. Items have amount validation: deposits must be positive, amounts over $10M are rejected as implausible, and duplicates within $0.01 are flagged.</div>",
+fr:"<p>Une r\u00e9conciliation bancaire garantit que votre solde GL bancaire correspond au solde r\u00e9el du relev\u00e9.</p><p><strong>La formule\u00a0:</strong></p><p style='background:#f3f4f6;padding:12px;border-radius:8px;font-family:monospace;font-size:13px'>Solde GL + D\u00e9p\u00f4ts en transit - Ch\u00e8ques en circulation \u00b1 Erreurs bancaires \u00b1 Erreurs comptables + Int\u00e9r\u00eats - Frais bancaires = Solde du relev\u00e9</p><p><strong>\u00c9tapes\u00a0:</strong></p><ol><li>Allez \u00e0 <strong>R\u00e9conciliation > Nouveau</strong></li><li>S\u00e9lectionnez le client et la p\u00e9riode</li><li>Entrez le solde GL et le solde du relev\u00e9</li><li>LedgerLink auto-remplit les \u00e9l\u00e9ments en circulation des transactions non appari\u00e9es</li><li>Marquez les \u00e9l\u00e9ments comme compens\u00e9s lorsqu\u2019ils apparaissent sur le relev\u00e9</li><li>Ajoutez les \u00e9l\u00e9ments manquants (frais bancaires, int\u00e9r\u00eats, erreurs)</li><li>Quand la diff\u00e9rence est 0,00$ (\u00b10,01$), cliquez sur <strong>Finaliser</strong></li></ol><div class='warning'>Une fois finalis\u00e9e, une r\u00e9conciliation ne peut pas \u00eatre modifi\u00e9e. Les montants sont valid\u00e9s\u00a0: les d\u00e9p\u00f4ts doivent \u00eatre positifs, les montants de plus de 10M$ sont rejet\u00e9s comme invraisemblables, et les doublons \u00e0 0,01$ pr\u00e8s sont signal\u00e9s.</div>"}}
+],
+quiz:[
+{q:{en:"What tolerance allows finalization?",fr:"Quelle tol\u00e9rance permet la finalisation\u00a0?"},
+opts:{en:["$0.00 exactly","$0.01","$1.00","$10.00"],fr:["0,00$ exactement","0,01$","1,00$","10,00$"]},ans:1},
+{q:{en:"Can a finalized reconciliation be modified?",fr:"Une r\u00e9conciliation finalis\u00e9e peut-elle \u00eatre modifi\u00e9e\u00a0?"},
+opts:{en:["Yes","No","Only by the owner","Only within 24 hours"],fr:["Oui","Non","Seulement par le propri\u00e9taire","Seulement dans les 24 heures"]},ans:1},
+{q:{en:"What amount is rejected as implausible?",fr:"Quel montant est rejet\u00e9 comme invraisemblable\u00a0?"},
+opts:{en:[">$100,000",">$1,000,000",">$10,000,000",">$100,000,000"],fr:[">100\u00a0000$",">1\u00a0000\u00a0000$",">10\u00a0000\u00a0000$",">100\u00a0000\u00a0000$"]},ans:2},
+{q:{en:"Deposits in transit must be:",fr:"Les d\u00e9p\u00f4ts en transit doivent \u00eatre\u00a0:"},
+opts:{en:["Negative","Zero","Positive","Any amount"],fr:["N\u00e9gatifs","Z\u00e9ro","Positifs","N\u2019importe quel montant"]},ans:2},
+{q:{en:"What auto-populates outstanding items?",fr:"Qu\u2019est-ce qui auto-remplit les \u00e9l\u00e9ments en circulation\u00a0?"},
+opts:{en:["Manual entry only","Unmatched bank transactions","QuickBooks data","Email records"],fr:["Saisie manuelle seulement","Transactions bancaires non appari\u00e9es","Donn\u00e9es QuickBooks","Registres de courriels"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 15 ───────────────────
+{id:15,title:{en:"Month-End Close",fr:"Fermeture de fin de mois"},role:"all",
+sections:[
+{title:{en:"Period Close Process",fr:"Processus de fermeture de p\u00e9riode"},
+content:{en:"<p>The period close page shows a <strong>7-item checklist</strong>. Each item must be completed or waived before the period can be locked.</p><p><strong>Checklist items include:</strong> All documents posted, bank reconciliation done, filing summary reviewed, adjusting entries made, client questions resolved, working papers updated, supervisor sign-off.</p><p><strong>Process:</strong></p><ol><li>Go to <strong>Period Close</strong>, select client and period</li><li>Work through each checklist item \u2014 mark as complete with notes</li><li>Items can be waived with documentation explaining why</li><li>When all items are checked, click <strong>Lock Period</strong></li></ol><p><strong>After locking:</strong> No new documents can be posted to that period. No existing documents can be modified. Only a manager or owner can unlock the period if corrections are needed.</p><p>Download the <strong>Period Close PDF</strong> for your files.</p>",
+fr:"<p>La page de fermeture de p\u00e9riode affiche une <strong>liste de contr\u00f4le de 7 \u00e9l\u00e9ments</strong>. Chaque \u00e9l\u00e9ment doit \u00eatre compl\u00e9t\u00e9 ou dispens\u00e9 avant que la p\u00e9riode puisse \u00eatre verrouill\u00e9e.</p><p><strong>\u00c9l\u00e9ments de la liste\u00a0:</strong> Tous les documents publi\u00e9s, r\u00e9conciliation bancaire faite, sommaire de production r\u00e9vis\u00e9, \u00e9critures d\u2019ajustement faites, questions clients r\u00e9solues, dossiers de travail mis \u00e0 jour, approbation du superviseur.</p><p><strong>Processus\u00a0:</strong></p><ol><li>Allez \u00e0 <strong>Fermeture de p\u00e9riode</strong>, s\u00e9lectionnez le client et la p\u00e9riode</li><li>Traitez chaque \u00e9l\u00e9ment \u2014 marquez comme compl\u00e9t\u00e9 avec des notes</li><li>Les \u00e9l\u00e9ments peuvent \u00eatre dispens\u00e9s avec documentation</li><li>Quand tous les \u00e9l\u00e9ments sont coch\u00e9s, cliquez <strong>Verrouiller la p\u00e9riode</strong></li></ol><p><strong>Apr\u00e8s le verrouillage\u00a0:</strong> Aucun nouveau document ne peut \u00eatre publi\u00e9 dans cette p\u00e9riode. Aucun document existant ne peut \u00eatre modifi\u00e9. Seul un gestionnaire ou propri\u00e9taire peut d\u00e9verrouiller.</p>"}}
+],
+quiz:[
+{q:{en:"How many items are on the period close checklist?",fr:"Combien d\u2019\u00e9l\u00e9ments sont sur la liste de fermeture\u00a0?"},
+opts:{en:["3","5","7","10"],fr:["3","5","7","10"]},ans:2},
+{q:{en:"Who can unlock a locked period?",fr:"Qui peut d\u00e9verrouiller une p\u00e9riode verrouill\u00e9e\u00a0?"},
+opts:{en:["Any employee","Manager or owner","Only the owner","No one"],fr:["N\u2019importe quel employ\u00e9","Gestionnaire ou propri\u00e9taire","Seulement le propri\u00e9taire","Personne"]},ans:1},
+{q:{en:"Can checklist items be waived?",fr:"Les \u00e9l\u00e9ments de la liste peuvent-ils \u00eatre dispens\u00e9s\u00a0?"},
+opts:{en:["No","Yes, with documentation","Yes, without any reason","Only by the system"],fr:["Non","Oui, avec documentation","Oui, sans raison","Seulement par le syst\u00e8me"]},ans:1},
+{q:{en:"What happens after a period is locked?",fr:"Que se passe-t-il apr\u00e8s le verrouillage d\u2019une p\u00e9riode\u00a0?"},
+opts:{en:["Documents can still be edited","No documents can be posted or modified","All documents are deleted","Period is archived"],fr:["Les documents peuvent encore \u00eatre \u00e9dit\u00e9s","Aucun document ne peut \u00eatre publi\u00e9 ou modifi\u00e9","Tous les documents sont supprim\u00e9s","La p\u00e9riode est archiv\u00e9e"]},ans:1},
+{q:{en:"What can you download after closing a period?",fr:"Que pouvez-vous t\u00e9l\u00e9charger apr\u00e8s la fermeture d\u2019une p\u00e9riode\u00a0?"},
+opts:{en:["Nothing","Period Close PDF","Bank statement","All original invoices"],fr:["Rien","PDF de fermeture de p\u00e9riode","Relev\u00e9 bancaire","Toutes les factures originales"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 16 ───────────────────
+{id:16,title:{en:"Time Tracking and Billing",fr:"Suivi du temps et facturation"},role:"manager",
+sections:[
+{title:{en:"Time Tracking Features",fr:"Fonctionnalit\u00e9s de suivi du temps"},
+content:{en:"<p>Available for <strong>Manager+</strong> roles.</p><ul><li><strong>Start/stop timer:</strong> Click Start on a client to begin tracking time. Click Stop when done. The duration is calculated automatically.</li><li><strong>Manual time entry:</strong> Add time entries retroactively with client, date, hours, and description.</li><li><strong>Generate invoice:</strong> Select a client and period, set an hourly rate, and LedgerLink generates a professional invoice PDF with GST/QST on professional fees.</li><li><strong>Export:</strong> Download invoices as PDF for sending to clients.</li></ul>",
+fr:"<p>Disponible pour les r\u00f4les <strong>Gestionnaire+</strong>.</p><ul><li><strong>D\u00e9marrer/arr\u00eater le minuteur\u00a0:</strong> Cliquez D\u00e9marrer sur un client pour commencer le suivi. Cliquez Arr\u00eater quand termin\u00e9.</li><li><strong>Saisie manuelle du temps\u00a0:</strong> Ajoutez des entr\u00e9es de temps r\u00e9troactivement avec client, date, heures et description.</li><li><strong>G\u00e9n\u00e9rer une facture\u00a0:</strong> S\u00e9lectionnez un client et une p\u00e9riode, d\u00e9finissez un taux horaire, et LedgerLink g\u00e9n\u00e8re une facture PDF professionnelle avec TPS/TVQ sur les honoraires professionnels.</li><li><strong>Exportation\u00a0:</strong> T\u00e9l\u00e9chargez les factures en PDF.</li></ul>"}}
+],
+quiz:[
+{q:{en:"Who can access time tracking?",fr:"Qui peut acc\u00e9der au suivi du temps\u00a0?"},
+opts:{en:["All staff","Manager+ only","Owner only","Clients"],fr:["Tout le personnel","Gestionnaire+ seulement","Propri\u00e9taire seulement","Clients"]},ans:1},
+{q:{en:"Are invoices generated with tax?",fr:"Les factures sont-elles g\u00e9n\u00e9r\u00e9es avec taxe\u00a0?"},
+opts:{en:["No tax","GST only","GST/QST","HST only"],fr:["Pas de taxe","TPS seulement","TPS/TVQ","TVH seulement"]},ans:2},
+{q:{en:"Can you add time entries retroactively?",fr:"Pouvez-vous ajouter des entr\u00e9es de temps r\u00e9troactivement\u00a0?"},
+opts:{en:["No","Yes, via manual entry","Only within 24 hours","Only if manager approves"],fr:["Non","Oui, via la saisie manuelle","Seulement dans les 24 heures","Seulement si le gestionnaire approuve"]},ans:1},
+{q:{en:"What format are invoices exported in?",fr:"Dans quel format les factures sont-elles export\u00e9es\u00a0?"},
+opts:{en:["Excel","PDF","Word","CSV"],fr:["Excel","PDF","Word","CSV"]},ans:1},
+{q:{en:"How is time duration calculated?",fr:"Comment la dur\u00e9e est-elle calcul\u00e9e\u00a0?"},
+opts:{en:["Manually entered always","Automatically from start/stop","Estimated by AI","Fixed at 1 hour blocks"],fr:["Saisie manuellement toujours","Automatiquement \u00e0 partir du d\u00e9marrage/arr\u00eat","Estim\u00e9e par l\u2019IA","Fix\u00e9e \u00e0 des blocs de 1 heure"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 17 ───────────────────
+{id:17,title:{en:"CPA Engagements",fr:"Mandats CPA"},role:"manager",
+sections:[
+{title:{en:"Engagement Types and Workflow",fr:"Types de mandats et processus"},
+content:{en:"<p>LedgerLink supports three CPA engagement types:</p><table class='info-table'><tr><th>Type</th><th>Assurance Level</th><th>Key CAS Standards</th></tr><tr><td>Compilation</td><td>None</td><td>CSRS 4200</td></tr><tr><td>Review</td><td>Limited</td><td>CSRE 2400</td></tr><tr><td>Audit</td><td>Reasonable</td><td>CAS 200-810</td></tr></table><p><strong>Creating an engagement:</strong> Go to Engagements > Create. Set the client, period, type, planned hours, budget, and team members.</p><p><strong>Engagement completion checklist:</strong> Each engagement has a checklist that must be completed before issuance. Items include working papers, evidence, materiality, risk assessment, management representation letter, and more.</p>",
+fr:"<p>LedgerLink supporte trois types de mandats CPA\u00a0:</p><table class='info-table'><tr><th>Type</th><th>Niveau d\u2019assurance</th><th>Normes NCA cl\u00e9s</th></tr><tr><td>Compilation</td><td>Aucun</td><td>NCSR 4200</td></tr><tr><td>Examen</td><td>Limit\u00e9</td><td>NCME 2400</td></tr><tr><td>Audit</td><td>Raisonnable</td><td>NCA 200-810</td></tr></table><p><strong>Cr\u00e9er un mandat\u00a0:</strong> Allez \u00e0 Mandats > Cr\u00e9er. D\u00e9finissez le client, la p\u00e9riode, le type, les heures pr\u00e9vues, le budget et les membres de l\u2019\u00e9quipe.</p><p><strong>Liste de contr\u00f4le d\u2019ach\u00e8vement\u00a0:</strong> Chaque mandat a une liste qui doit \u00eatre compl\u00e9t\u00e9e avant l\u2019\u00e9mission. Les \u00e9l\u00e9ments incluent les dossiers de travail, les preuves, la mat\u00e9rialit\u00e9, l\u2019\u00e9valuation des risques, la lettre de repr\u00e9sentation de la direction, et plus.</p>"}},
+{title:{en:"Key CAS Standards in LedgerLink",fr:"Normes NCA cl\u00e9s dans LedgerLink"},
+content:{en:"<ul><li><strong>CAS 320 \u2014 Materiality:</strong> Calculate materiality based on revenue, profit, or total assets. LedgerLink applies percentage thresholds and suggests performance materiality.</li><li><strong>CAS 315 \u2014 Risk Assessment:</strong> Risk matrix with inherent and control risk ratings by account. Auto-generates from chart of accounts.</li><li><strong>CAS 570 \u2014 Going Concern:</strong> Auto-detects indicators (losses, negative equity, loan defaults) when creating/updating engagements.</li><li><strong>CAS 560 \u2014 Subsequent Events:</strong> Auto-runs checks for events after year-end that may require disclosure.</li><li><strong>CAS 580 \u2014 Management Representation Letter:</strong> Bilingual template generated automatically. Requires client signature before engagement issuance.</li><li><strong>CAS 550 \u2014 Related Parties:</strong> Track related parties with ownership percentages. Generate disclosure text.</li><li><strong>CAS 700 \u2014 Audit Opinion:</strong> The engagement issuance process validates that all CAS requirements are met before generating the final report.</li></ul>",
+fr:"<ul><li><strong>NCA 320 \u2014 Importance relative\u00a0:</strong> Calcul bas\u00e9 sur les revenus, le b\u00e9n\u00e9fice ou l\u2019actif total. LedgerLink applique des seuils en pourcentage et sugg\u00e8re l\u2019importance relative de r\u00e9f\u00e9rence.</li><li><strong>NCA 315 \u2014 \u00c9valuation des risques\u00a0:</strong> Matrice de risques avec risques inh\u00e9rents et de contr\u00f4le par compte.</li><li><strong>NCA 570 \u2014 Continuit\u00e9 d\u2019exploitation\u00a0:</strong> D\u00e9tection automatique des indicateurs (pertes, capitaux propres n\u00e9gatifs, d\u00e9fauts de pr\u00eat).</li><li><strong>NCA 560 \u2014 \u00c9v\u00e9nements post\u00e9rieurs\u00a0:</strong> V\u00e9rifications automatiques des \u00e9v\u00e9nements apr\u00e8s la fin d\u2019exercice.</li><li><strong>NCA 580 \u2014 Lettre de repr\u00e9sentation\u00a0:</strong> Mod\u00e8le bilingue g\u00e9n\u00e9r\u00e9 automatiquement. Signature du client requise.</li><li><strong>NCA 550 \u2014 Apparent\u00e9s\u00a0:</strong> Suivi des apparent\u00e9s avec pourcentages de propri\u00e9t\u00e9. G\u00e9n\u00e9ration de texte de divulgation.</li><li><strong>NCA 700 \u2014 Opinion d\u2019audit\u00a0:</strong> Le processus d\u2019\u00e9mission valide que toutes les exigences NCA sont satisfaites.</li></ul>"}}
+],
+quiz:[
+{q:{en:"How many engagement types does LedgerLink support?",fr:"Combien de types de mandats LedgerLink supporte-t-il\u00a0?"},
+opts:{en:["1","2","3","5"],fr:["1","2","3","5"]},ans:2},
+{q:{en:"CAS 320 relates to:",fr:"NCA 320 concerne\u00a0:"},
+opts:{en:["Going concern","Materiality","Subsequent events","Related parties"],fr:["Continuit\u00e9 d\u2019exploitation","Importance relative","\u00c9v\u00e9nements post\u00e9rieurs","Apparent\u00e9s"]},ans:1},
+{q:{en:"What must be signed before engagement issuance?",fr:"Que doit \u00eatre sign\u00e9 avant l\u2019\u00e9mission du mandat\u00a0?"},
+opts:{en:["Tax return","Management representation letter","Bank statement","Invoice"],fr:["D\u00e9claration fiscale","Lettre de repr\u00e9sentation de la direction","Relev\u00e9 bancaire","Facture"]},ans:1},
+{q:{en:"CAS 570 auto-detects:",fr:"NCA 570 d\u00e9tecte automatiquement\u00a0:"},
+opts:{en:["Tax errors","Fraud","Going concern indicators","Duplicate invoices"],fr:["Erreurs fiscales","Fraude","Indicateurs de continuit\u00e9 d\u2019exploitation","Factures dupliqu\u00e9es"]},ans:2},
+{q:{en:"A compilation engagement provides what level of assurance?",fr:"Un mandat de compilation fournit quel niveau d\u2019assurance\u00a0?"},
+opts:{en:["Reasonable","Limited","None","High"],fr:["Raisonnable","Limit\u00e9","Aucun","\u00c9lev\u00e9"]},ans:2},
+{q:{en:"CAS 550 covers:",fr:"NCA 550 couvre\u00a0:"},
+opts:{en:["Bank reconciliation","Related parties","Tax filing","Payroll"],fr:["R\u00e9conciliation bancaire","Apparent\u00e9s","Production fiscale","Paie"]},ans:1},
+{q:{en:"The risk matrix evaluates:",fr:"La matrice de risques \u00e9value\u00a0:"},
+opts:{en:["Tax rates","Inherent and control risk by account","Employee performance","Client satisfaction"],fr:["Les taux d\u2019imposition","Le risque inh\u00e9rent et de contr\u00f4le par compte","La performance des employ\u00e9s","La satisfaction client"]},ans:1},
+{q:{en:"CAS 560 relates to:",fr:"NCA 560 concerne\u00a0:"},
+opts:{en:["Materiality","Going concern","Subsequent events","Sampling"],fr:["Importance relative","Continuit\u00e9 d\u2019exploitation","\u00c9v\u00e9nements post\u00e9rieurs","\u00c9chantillonnage"]},ans:2},
+{q:{en:"Management representation letters are:",fr:"Les lettres de repr\u00e9sentation de la direction sont\u00a0:"},
+opts:{en:["English only","Bilingual FR/EN","French only","Not generated by LedgerLink"],fr:["Anglais seulement","Bilingues FR/EN","Fran\u00e7ais seulement","Non g\u00e9n\u00e9r\u00e9es par LedgerLink"]},ans:1},
+{q:{en:"What validates all requirements before issuing an engagement?",fr:"Qu\u2019est-ce qui valide toutes les exigences avant l\u2019\u00e9mission d\u2019un mandat\u00a0?"},
+opts:{en:["The client","The engagement completion checklist","The bank","QuickBooks"],fr:["Le client","La liste de contr\u00f4le d\u2019ach\u00e8vement du mandat","La banque","QuickBooks"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 18 ───────────────────
+{id:18,title:{en:"Quality Control",fr:"Contr\u00f4le de qualit\u00e9"},role:"manager",
+sections:[
+{title:{en:"Quality Control in LedgerLink",fr:"Contr\u00f4le de qualit\u00e9 dans LedgerLink"},
+content:{en:"<p>Quality control is built into every layer of LedgerLink:</p><ul><li><strong>Automated controls:</strong> Fraud engine (13 rules), substance engine, tax validation, math verification, duplicate detection</li><li><strong>Concurrency controls:</strong> Optimistic locking prevents stale approvals. If a document changes after you load it, the system blocks your approval and forces a re-review.</li><li><strong>Manual journal collision detection:</strong> If someone creates a manual journal entry that duplicates an automated posting, LedgerLink quarantines the manual entry.</li><li><strong>Audit trail:</strong> Every action is logged \u2014 who did what, when, and why. Fraud override reasons are permanently locked.</li><li><strong>Working paper sign-off:</strong> Once a working paper is signed off, it becomes immutable (enforced by database trigger).</li><li><strong>Period locking:</strong> Prevents retroactive changes to closed periods.</li></ul><div class='tip'>The Analytics page (owner only) shows staff productivity metrics, client complexity scores, fraud flag statistics, and filing deadlines at risk.</div>",
+fr:"<p>Le contr\u00f4le de qualit\u00e9 est int\u00e9gr\u00e9 dans chaque couche de LedgerLink\u00a0:</p><ul><li><strong>Contr\u00f4les automatis\u00e9s\u00a0:</strong> Moteur de fraude (13 r\u00e8gles), moteur de substance, validation fiscale, v\u00e9rification math\u00e9matique, d\u00e9tection de doublons</li><li><strong>Contr\u00f4les de concurrence\u00a0:</strong> Le verrouillage optimiste emp\u00eache les approbations p\u00e9rim\u00e9es. Si un document change apr\u00e8s le chargement, le syst\u00e8me bloque votre approbation.</li><li><strong>D\u00e9tection de collision d\u2019\u00e9critures manuelles\u00a0:</strong> Si quelqu\u2019un cr\u00e9e une \u00e9criture manuelle qui duplique une publication automatis\u00e9e, LedgerLink met en quarantaine l\u2019\u00e9criture manuelle.</li><li><strong>Piste de v\u00e9rification\u00a0:</strong> Chaque action est enregistr\u00e9e. Les raisons de d\u00e9rogation de fraude sont verrouill\u00e9es de fa\u00e7on permanente.</li><li><strong>Approbation des dossiers de travail\u00a0:</strong> Une fois approuv\u00e9, un dossier de travail devient immuable.</li><li><strong>Verrouillage de p\u00e9riode\u00a0:</strong> Emp\u00eache les changements r\u00e9troactifs aux p\u00e9riodes ferm\u00e9es.</li></ul>"}}
+],
+quiz:[
+{q:{en:"What prevents approving a document that changed since you loaded it?",fr:"Qu\u2019est-ce qui emp\u00eache d\u2019approuver un document qui a chang\u00e9 depuis le chargement\u00a0?"},
+opts:{en:["Nothing","Optimistic locking","The client","Email notification"],fr:["Rien","Le verrouillage optimiste","Le client","Notification par courriel"]},ans:1},
+{q:{en:"What happens to a manual journal that duplicates an automated posting?",fr:"Que se passe-t-il pour une \u00e9criture manuelle qui duplique une publication automatis\u00e9e\u00a0?"},
+opts:{en:["It is auto-posted","It is deleted","It is quarantined","It replaces the automated posting"],fr:["Elle est publi\u00e9e automatiquement","Elle est supprim\u00e9e","Elle est mise en quarantaine","Elle remplace la publication automatis\u00e9e"]},ans:2},
+{q:{en:"Once a working paper is signed off, it becomes:",fr:"Une fois approuv\u00e9, un dossier de travail devient\u00a0:"},
+opts:{en:["Editable","Deletable","Immutable","Archived"],fr:["\u00c9ditable","Supprimable","Immuable","Archiv\u00e9"]},ans:2},
+{q:{en:"Who can see the Analytics dashboard?",fr:"Qui peut voir le tableau de bord Analytique\u00a0?"},
+opts:{en:["All staff","Managers","Owner only","Clients"],fr:["Tout le personnel","Gestionnaires","Propri\u00e9taire seulement","Clients"]},ans:2},
+{q:{en:"How many fraud rules run automatically?",fr:"Combien de r\u00e8gles de fraude s\u2019ex\u00e9cutent automatiquement\u00a0?"},
+opts:{en:["5","10","13","20"],fr:["5","10","13","20"]},ans:2}
+]
+},
+
+// ─────────────────── MODULE 19 ───────────────────
+{id:19,title:{en:"Filing Calendar",fr:"Calendrier de production"},role:"manager",
+sections:[
+{title:{en:"Managing Filing Deadlines",fr:"G\u00e9rer les \u00e9ch\u00e9ances de production"},
+content:{en:"<p>The Filing Calendar tracks all recurring tax filing deadlines for every client. Configure each client\u2019s filing frequency (monthly, quarterly, annually), GST/QST registration status, and fiscal year end.</p><p><strong>Features:</strong></p><ul><li>View upcoming deadlines sorted by date</li><li>Mark filings as completed with the actual filing date</li><li>Analytics shows \u201cdeadlines at risk\u201d \u2014 filings approaching their due date without being marked complete</li><li>Color-coded: green = filed, yellow = approaching, red = overdue</li></ul>",
+fr:"<p>Le calendrier de production suit toutes les \u00e9ch\u00e9ances r\u00e9currentes de production fiscale pour chaque client. Configurez la fr\u00e9quence de production (mensuelle, trimestrielle, annuelle), le statut d\u2019inscription TPS/TVQ et la fin d\u2019exercice.</p><p><strong>Fonctionnalit\u00e9s\u00a0:</strong></p><ul><li>Voir les \u00e9ch\u00e9ances \u00e0 venir tri\u00e9es par date</li><li>Marquer les productions comme compl\u00e9t\u00e9es avec la date r\u00e9elle</li><li>L\u2019analytique montre les \u00ab\u00a0\u00e9ch\u00e9ances \u00e0 risque\u00a0\u00bb</li><li>Code couleur\u00a0: vert = produit, jaune = approche, rouge = en retard</li></ul>"}}
+],
+quiz:[
+{q:{en:"What filing frequencies are supported?",fr:"Quelles fr\u00e9quences de production sont support\u00e9es\u00a0?"},
+opts:{en:["Monthly only","Monthly and quarterly","Monthly, quarterly, and annually","Weekly and monthly"],fr:["Mensuelle seulement","Mensuelle et trimestrielle","Mensuelle, trimestrielle et annuelle","Hebdomadaire et mensuelle"]},ans:2},
+{q:{en:"Red color on the calendar means:",fr:"La couleur rouge sur le calendrier signifie\u00a0:"},
+opts:{en:["Filed on time","Approaching deadline","Overdue","Cancelled"],fr:["Produit \u00e0 temps","\u00c9ch\u00e9ance approche","En retard","Annul\u00e9"]},ans:2},
+{q:{en:"Where do you configure a client\u2019s filing frequency?",fr:"O\u00f9 configurez-vous la fr\u00e9quence de production d\u2019un client\u00a0?"},
+opts:{en:["In QuickBooks","In the calendar settings","In the bank import","In the portal"],fr:["Dans QuickBooks","Dans les param\u00e8tres du calendrier","Dans l\u2019import bancaire","Dans le portail"]},ans:1},
+{q:{en:"What does \u2018deadlines at risk\u2019 show?",fr:"Que montre \u2018\u00e9ch\u00e9ances \u00e0 risque\u2019\u00a0?"},
+opts:{en:["Filed items","Filings approaching due date without completion","Cancelled clients","Past deadlines"],fr:["\u00c9l\u00e9ments produits","Productions approchant l\u2019\u00e9ch\u00e9ance sans \u00eatre compl\u00e9t\u00e9es","Clients annul\u00e9s","Anciennes \u00e9ch\u00e9ances"]},ans:1},
+{q:{en:"Which role accesses the filing calendar?",fr:"Quel r\u00f4le acc\u00e8de au calendrier de production\u00a0?"},
+opts:{en:["All staff","Manager+","Owner only","Clients"],fr:["Tout le personnel","Gestionnaire+","Propri\u00e9taire seulement","Clients"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 20 ───────────────────
+{id:20,title:{en:"Client Communications",fr:"Communications clients"},role:"manager",
+sections:[
+{title:{en:"AI-Assisted Client Messaging",fr:"Messagerie client assist\u00e9e par IA"},
+content:{en:"<p>The Communications page lets you draft and send messages to clients, with AI assistance for composing professional messages in the client\u2019s preferred language.</p><p><strong>Workflow:</strong></p><ol><li>Select the client</li><li>Describe what you need to communicate</li><li>LedgerLink\u2019s AI drafts a professional message</li><li>Review and edit the draft</li><li>Send via email (SMTP)</li></ol><p>All communications are logged. You can filter by client and view history of messages sent.</p>",
+fr:"<p>La page Communications vous permet de r\u00e9diger et d\u2019envoyer des messages aux clients, avec assistance IA pour composer des messages professionnels dans la langue pr\u00e9f\u00e9r\u00e9e du client.</p><p><strong>Processus\u00a0:</strong></p><ol><li>S\u00e9lectionnez le client</li><li>D\u00e9crivez ce que vous devez communiquer</li><li>L\u2019IA de LedgerLink r\u00e9dige un message professionnel</li><li>R\u00e9visez et modifiez le brouillon</li><li>Envoyez par courriel (SMTP)</li></ol><p>Toutes les communications sont enregistr\u00e9es. Vous pouvez filtrer par client et voir l\u2019historique des messages envoy\u00e9s.</p>"}}
+],
+quiz:[
+{q:{en:"How does LedgerLink help draft client messages?",fr:"Comment LedgerLink aide-t-il \u00e0 r\u00e9diger des messages clients\u00a0?"},
+opts:{en:["It doesn\u2019t","AI generates a professional draft","Auto-sends without review","Copies from templates only"],fr:["Il n\u2019aide pas","L\u2019IA g\u00e9n\u00e8re un brouillon professionnel","Envoi automatique sans r\u00e9vision","Copie de mod\u00e8les seulement"]},ans:1},
+{q:{en:"Messages are sent via:",fr:"Les messages sont envoy\u00e9s via\u00a0:"},
+opts:{en:["WhatsApp only","Email (SMTP)","Fax","Postal mail"],fr:["WhatsApp seulement","Courriel (SMTP)","Fax","Courrier postal"]},ans:1},
+{q:{en:"Are client communications logged?",fr:"Les communications clients sont-elles enregistr\u00e9es\u00a0?"},
+opts:{en:["No","Yes, all are logged","Only errors","Only sent messages"],fr:["Non","Oui, toutes sont enregistr\u00e9es","Seulement les erreurs","Seulement les messages envoy\u00e9s"]},ans:1},
+{q:{en:"In what language are messages composed?",fr:"Dans quelle langue les messages sont-ils compos\u00e9s\u00a0?"},
+opts:{en:["English only","French only","Client\u2019s preferred language","Manager\u2019s language"],fr:["Anglais seulement","Fran\u00e7ais seulement","Langue pr\u00e9f\u00e9r\u00e9e du client","Langue du gestionnaire"]},ans:2},
+{q:{en:"Must you review AI-drafted messages before sending?",fr:"Devez-vous r\u00e9viser les messages r\u00e9dig\u00e9s par l\u2019IA avant l\u2019envoi\u00a0?"},
+opts:{en:["No, they auto-send","Yes, always review and edit","Only for new clients","Only in French"],fr:["Non, ils s\u2019envoient automatiquement","Oui, toujours r\u00e9viser et \u00e9diter","Seulement pour les nouveaux clients","Seulement en fran\u00e7ais"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 21 ───────────────────
+{id:21,title:{en:"Vendor Aliases and Learning",fr:"Alias de fournisseurs et apprentissage"},role:"all",
+sections:[
+{title:{en:"How Vendor Learning Works",fr:"Comment fonctionne l\u2019apprentissage des fournisseurs"},
+content:{en:"<p>LedgerLink learns from your corrections. When you change a vendor\u2019s GL account, tax code, or category, the system remembers this pattern with a confidence score. Next time the same vendor appears, LedgerLink suggests the learned values.</p><p><strong>Vendor aliases:</strong> Vendors may appear under different names (e.g., \u201cTELUS\u201d, \u201cTELUS Communications\u201d, \u201cTelus Mobility\u201d). The Vendor Aliases page (owner only) lets you create synonyms so all variations map to a canonical name.</p><p><strong>Learning history:</strong> Every document\u2019s detail page shows its learning history \u2014 what was changed, by whom, and when. This creates a full audit trail of corrections.</p><div class='warning'>Vendor memory is per-client. Corrections for Client A do not affect Client B\u2019s vendor suggestions. This protects CPA independence.</div>",
+fr:"<p>LedgerLink apprend de vos corrections. Quand vous changez le compte GL, le code de taxe ou la cat\u00e9gorie d\u2019un fournisseur, le syst\u00e8me m\u00e9morise ce sch\u00e9ma avec un score de confiance. La prochaine fois que le m\u00eame fournisseur appara\u00eet, LedgerLink sugg\u00e8re les valeurs apprises.</p><p><strong>Alias de fournisseurs\u00a0:</strong> Les fournisseurs peuvent appara\u00eetre sous diff\u00e9rents noms (ex. \u00ab\u00a0TELUS\u00a0\u00bb, \u00ab\u00a0TELUS Communications\u00a0\u00bb, \u00ab\u00a0Telus Mobilit\u00e9\u00a0\u00bb). La page Alias de fournisseurs (propri\u00e9taire seulement) permet de cr\u00e9er des synonymes pour que toutes les variations correspondent \u00e0 un nom canonique.</p><p><strong>Historique d\u2019apprentissage\u00a0:</strong> La page de d\u00e9tail de chaque document montre son historique d\u2019apprentissage \u2014 ce qui a \u00e9t\u00e9 chang\u00e9, par qui et quand.</p><div class='warning'>La m\u00e9moire fournisseur est par client. Les corrections pour le Client A n\u2019affectent pas les suggestions du Client B. Cela prot\u00e8ge l\u2019ind\u00e9pendance CPA.</div>"}}
+],
+quiz:[
+{q:{en:"Vendor learning is scoped to:",fr:"L\u2019apprentissage fournisseur est limit\u00e9 \u00e0\u00a0:"},
+opts:{en:["All clients","Per client","Per user","Per document"],fr:["Tous les clients","Par client","Par utilisateur","Par document"]},ans:1},
+{q:{en:"Who can manage vendor aliases?",fr:"Qui peut g\u00e9rer les alias de fournisseurs\u00a0?"},
+opts:{en:["All staff","Managers","Owner only","Clients"],fr:["Tout le personnel","Gestionnaires","Propri\u00e9taire seulement","Clients"]},ans:2},
+{q:{en:"What does vendor learning track?",fr:"Que suit l\u2019apprentissage fournisseur\u00a0?"},
+opts:{en:["GL account, tax code, and category corrections","Only amounts","Only dates","Client preferences"],fr:["Corrections de compte GL, code de taxe et cat\u00e9gorie","Seulement les montants","Seulement les dates","Pr\u00e9f\u00e9rences client"]},ans:0},
+{q:{en:"Why is vendor memory per-client?",fr:"Pourquoi la m\u00e9moire fournisseur est-elle par client\u00a0?"},
+opts:{en:["Technical limitation","CPA independence protection","Storage savings","No particular reason"],fr:["Limitation technique","Protection de l\u2019ind\u00e9pendance CPA","\u00c9conomie de stockage","Pas de raison particuli\u00e8re"]},ans:1},
+{q:{en:"Where do you see a document\u2019s correction history?",fr:"O\u00f9 voyez-vous l\u2019historique de correction d\u2019un document\u00a0?"},
+opts:{en:["Filing Summary","Document detail page","Calendar","Bank Import"],fr:["Sommaire de production","Page de d\u00e9tail du document","Calendrier","Import bancaire"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 22 ───────────────────
+{id:22,title:{en:"Manual Journal Entries",fr:"\u00c9critures de journal manuelles"},role:"manager",
+sections:[
+{title:{en:"Creating and Managing Journal Entries",fr:"Cr\u00e9er et g\u00e9rer les \u00e9critures de journal"},
+content:{en:"<p>Manual journal entries (MJEs) are used for adjustments that don\u2019t come from document processing \u2014 accruals, reclassifications, corrections, etc.</p><p><strong>Workflow:</strong></p><ol><li>Go to <strong>Journal Entries</strong></li><li>Select client, date, and description</li><li>Enter debit and credit accounts with amounts</li><li>Save as <strong>Draft</strong></li><li>Post when ready \u2014 status changes to <strong>Posted</strong></li><li>If needed, reverse \u2014 status changes to <strong>Reversed</strong></li></ol><p><strong>Safety features:</strong></p><ul><li><strong>Conflict detection:</strong> If the same account has a pending automated posting, the MJE is blocked to prevent double-posting</li><li><strong>Phantom tax detection:</strong> If you post to an ITC/ITR account but the client is not GST/QST registered, the entry is blocked</li></ul>",
+fr:"<p>Les \u00e9critures de journal manuelles (EJM) sont utilis\u00e9es pour les ajustements qui ne proviennent pas du traitement de documents \u2014 r\u00e9gularisations, reclassements, corrections, etc.</p><p><strong>Processus\u00a0:</strong></p><ol><li>Allez \u00e0 <strong>\u00c9critures de journal</strong></li><li>S\u00e9lectionnez le client, la date et la description</li><li>Entrez les comptes d\u00e9bit et cr\u00e9dit avec les montants</li><li>Enregistrez comme <strong>Brouillon</strong></li><li>Publiez quand pr\u00eat \u2014 le statut change \u00e0 <strong>Publi\u00e9</strong></li><li>Si n\u00e9cessaire, contrepassez \u2014 le statut change \u00e0 <strong>Contrepass\u00e9</strong></li></ol><p><strong>Fonctions de s\u00e9curit\u00e9\u00a0:</strong></p><ul><li><strong>D\u00e9tection de conflit\u00a0:</strong> Si le m\u00eame compte a une publication automatis\u00e9e en attente, l\u2019EJM est bloqu\u00e9e</li><li><strong>D\u00e9tection de taxe fant\u00f4me\u00a0:</strong> Si vous publiez vers un compte CTI/RTI mais le client n\u2019est pas inscrit TPS/TVQ, l\u2019\u00e9criture est bloqu\u00e9e</li></ul>"}}
+],
+quiz:[
+{q:{en:"MJE stands for:",fr:"EJM signifie\u00a0:"},
+opts:{en:["Manual Journal Entry","Monthly Journal Export","Main Journal Edit","Manager Journal Entry"],fr:["\u00c9criture de Journal Manuelle","Exportation Journali\u00e8re Mensuelle","\u00c9dition de Journal Principale","\u00c9criture de Journal du Gestionnaire"]},ans:0},
+{q:{en:"What blocks an MJE if the same account has a pending automated posting?",fr:"Qu\u2019est-ce qui bloque une EJM si le m\u00eame compte a une publication automatis\u00e9e en attente\u00a0?"},
+opts:{en:["Nothing","Conflict detection","The client","Time limit"],fr:["Rien","La d\u00e9tection de conflit","Le client","La limite de temps"]},ans:1},
+{q:{en:"What are the 3 MJE statuses?",fr:"Quels sont les 3 statuts d\u2019EJM\u00a0?"},
+opts:{en:["New, Posted, Deleted","Draft, Posted, Reversed","Open, Closed, Archived","Pending, Active, Inactive"],fr:["Nouveau, Publi\u00e9, Supprim\u00e9","Brouillon, Publi\u00e9, Contrepass\u00e9","Ouvert, Ferm\u00e9, Archiv\u00e9","En attente, Actif, Inactif"]},ans:1},
+{q:{en:"Phantom tax detection blocks entries when:",fr:"La d\u00e9tection de taxe fant\u00f4me bloque les \u00e9critures quand\u00a0:"},
+opts:{en:["Amount is too large","Client is not GST/QST registered but posting to ITC/ITR","It\u2019s a weekend","The account is new"],fr:["Le montant est trop grand","Le client n\u2019est pas inscrit TPS/TVQ mais publie vers CTI/RTI","C\u2019est la fin de semaine","Le compte est nouveau"]},ans:1},
+{q:{en:"Who can create manual journal entries?",fr:"Qui peut cr\u00e9er des \u00e9critures de journal manuelles\u00a0?"},
+opts:{en:["All staff","Manager+","Owner only","Clients"],fr:["Tout le personnel","Gestionnaire+","Propri\u00e9taire seulement","Clients"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 23 ───────────────────
+{id:23,title:{en:"System Administration",fr:"Administration du syst\u00e8me"},role:"owner",
+sections:[
+{title:{en:"Owner Administration Tools",fr:"Outils d\u2019administration du propri\u00e9taire"},
+content:{en:"<p>Owner-only administration features:</p><ul><li><strong>User Management (/users):</strong> Create, deactivate, and reset passwords for staff accounts. Assign roles (employee, manager, owner).</li><li><strong>Troubleshoot (/troubleshoot):</strong> View system health \u2014 folder watcher status, OpenClaw bridge status, Cloudflare tunnel status. Download database backup. Restart services.</li><li><strong>Cache Management (/admin/cache):</strong> View AI response cache statistics. Clear cache when needed.</li><li><strong>Updates (/admin/updates):</strong> Check for new software versions. Install updates.</li><li><strong>Remote Management (/admin/remote):</strong> Restart the service, create backups, trigger updates, run diagnostics/autofix remotely.</li><li><strong>License (/license):</strong> Activate and manage license key. View tier (Essentiel, Professionnel, Cabinet, Entreprise) and limits. Register machines (max 3 per license).</li></ul>",
+fr:"<p>Fonctionnalit\u00e9s d\u2019administration r\u00e9serv\u00e9es au propri\u00e9taire\u00a0:</p><ul><li><strong>Gestion des utilisateurs (/users)\u00a0:</strong> Cr\u00e9er, d\u00e9sactiver et r\u00e9initialiser les mots de passe des comptes du personnel. Attribuer des r\u00f4les.</li><li><strong>D\u00e9pannage (/troubleshoot)\u00a0:</strong> Voir la sant\u00e9 du syst\u00e8me. T\u00e9l\u00e9charger la sauvegarde de la base de donn\u00e9es. Red\u00e9marrer les services.</li><li><strong>Gestion du cache (/admin/cache)\u00a0:</strong> Voir les statistiques du cache de r\u00e9ponse IA. Vider le cache.</li><li><strong>Mises \u00e0 jour (/admin/updates)\u00a0:</strong> V\u00e9rifier les nouvelles versions. Installer les mises \u00e0 jour.</li><li><strong>Gestion \u00e0 distance (/admin/remote)\u00a0:</strong> Red\u00e9marrer le service, cr\u00e9er des sauvegardes, d\u00e9clencher des mises \u00e0 jour, ex\u00e9cuter des diagnostics.</li><li><strong>Licence (/license)\u00a0:</strong> Activer et g\u00e9rer la cl\u00e9 de licence. Voir le niveau et les limites. Enregistrer les machines (max 3 par licence).</li></ul>"}}
+],
+quiz:[
+{q:{en:"How many machines can be registered per license?",fr:"Combien de machines peuvent \u00eatre enregistr\u00e9es par licence\u00a0?"},
+opts:{en:["1","2","3","Unlimited"],fr:["1","2","3","Illimit\u00e9"]},ans:2},
+{q:{en:"Where do you download a database backup?",fr:"O\u00f9 t\u00e9l\u00e9chargez-vous une sauvegarde de la base de donn\u00e9es\u00a0?"},
+opts:{en:["Filing Summary","Troubleshoot page","Calendar","Bank Import"],fr:["Sommaire de production","Page D\u00e9pannage","Calendrier","Import bancaire"]},ans:1},
+{q:{en:"Which license tier supports audit features?",fr:"Quel niveau de licence supporte les fonctions d\u2019audit\u00a0?"},
+opts:{en:["Essentiel","Professionnel","Cabinet","Entreprise"],fr:["Essentiel","Professionnel","Cabinet","Entreprise"]},ans:3},
+{q:{en:"Who can manage user accounts?",fr:"Qui peut g\u00e9rer les comptes utilisateurs\u00a0?"},
+opts:{en:["All staff","Managers","Owner only","Anyone with the URL"],fr:["Tout le personnel","Gestionnaires","Propri\u00e9taire seulement","Toute personne avec l\u2019URL"]},ans:2},
+{q:{en:"What does the autofix feature do?",fr:"Que fait la fonctionnalit\u00e9 de r\u00e9paration automatique\u00a0?"},
+opts:{en:["Fixes tax codes","Runs diagnostics and repairs","Deletes old documents","Updates QuickBooks"],fr:["Corrige les codes de taxe","Ex\u00e9cute des diagnostics et des r\u00e9parations","Supprime les anciens documents","Met \u00e0 jour QuickBooks"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 24 ───────────────────
+{id:24,title:{en:"Security Best Practices",fr:"Bonnes pratiques de s\u00e9curit\u00e9"},role:"all",
+sections:[
+{title:{en:"Security Features and Best Practices",fr:"Fonctionnalit\u00e9s de s\u00e9curit\u00e9 et bonnes pratiques"},
+content:{en:"<p>LedgerLink has multiple security layers. Follow these best practices:</p><ul><li><strong>Passwords:</strong> Use strong passwords (8+ characters, uppercase, digit). Never share passwords. Change temporary passwords immediately.</li><li><strong>Sessions:</strong> Sessions expire after 12 hours. Always log out when leaving your workstation.</li><li><strong>Rate limiting:</strong> 5 failed login attempts lock the IP for 15 minutes. Don\u2019t share login attempts across colleagues.</li><li><strong>Role-based access:</strong> Employees cannot access admin, financial, or audit features. Request role upgrades from the owner.</li><li><strong>Audit trail:</strong> Everything is logged. Fraud overrides are permanently locked. Working paper sign-offs are immutable.</li><li><strong>Data backup:</strong> Regular backups are configured in setup (daily/weekly). The owner can download manual backups from Troubleshoot.</li><li><strong>HTTPS:</strong> When accessing over the network, ensure HTTPS is enabled (configured in security settings). Cookies are marked Secure and HttpOnly.</li><li><strong>API keys:</strong> Never share AI provider API keys. They are stored in the config file, not in the database.</li></ul><div class='warning'>If you suspect unauthorized access, immediately notify the system owner. Check the login attempt log in the database for suspicious activity.</div>",
+fr:"<p>LedgerLink a plusieurs couches de s\u00e9curit\u00e9. Suivez ces bonnes pratiques\u00a0:</p><ul><li><strong>Mots de passe\u00a0:</strong> Utilisez des mots de passe forts (8+ caract\u00e8res, majuscule, chiffre). Ne partagez jamais les mots de passe.</li><li><strong>Sessions\u00a0:</strong> Les sessions expirent apr\u00e8s 12 heures. D\u00e9connectez-vous toujours en quittant votre poste.</li><li><strong>Limitation de d\u00e9bit\u00a0:</strong> 5 tentatives \u00e9chou\u00e9es bloquent l\u2019IP pour 15 minutes.</li><li><strong>Acc\u00e8s bas\u00e9 sur les r\u00f4les\u00a0:</strong> Les employ\u00e9s n\u2019ont pas acc\u00e8s aux fonctions admin, financi\u00e8res ou d\u2019audit.</li><li><strong>Piste de v\u00e9rification\u00a0:</strong> Tout est enregistr\u00e9. Les d\u00e9rogations de fraude sont verrouill\u00e9es. Les approbations de dossiers de travail sont immuables.</li><li><strong>Sauvegarde\u00a0:</strong> Les sauvegardes r\u00e9guli\u00e8res sont configur\u00e9es (quotidienne/hebdomadaire).</li><li><strong>HTTPS\u00a0:</strong> Assurez-vous que HTTPS est activ\u00e9 lors de l\u2019acc\u00e8s r\u00e9seau. Les cookies sont marqu\u00e9s Secure et HttpOnly.</li><li><strong>Cl\u00e9s API\u00a0:</strong> Ne partagez jamais les cl\u00e9s API des fournisseurs IA.</li></ul>"}}
+],
+quiz:[
+{q:{en:"What is the minimum password requirement?",fr:"Quelle est l\u2019exigence minimale de mot de passe\u00a0?"},
+opts:{en:["4 characters","6 characters","8 characters with uppercase and digit","Any length"],fr:["4 caract\u00e8res","6 caract\u00e8res","8 caract\u00e8res avec majuscule et chiffre","N\u2019importe quelle longueur"]},ans:2},
+{q:{en:"Sessions expire after:",fr:"Les sessions expirent apr\u00e8s\u00a0:"},
+opts:{en:["1 hour","6 hours","12 hours","Never"],fr:["1 heure","6 heures","12 heures","Jamais"]},ans:2},
+{q:{en:"Where are AI API keys stored?",fr:"O\u00f9 sont stock\u00e9es les cl\u00e9s API de l\u2019IA\u00a0?"},
+opts:{en:["In the database","In the config file","In the browser","In QuickBooks"],fr:["Dans la base de donn\u00e9es","Dans le fichier de configuration","Dans le navigateur","Dans QuickBooks"]},ans:1},
+{q:{en:"Are fraud override reasons editable after saving?",fr:"Les raisons de d\u00e9rogation de fraude sont-elles modifiables apr\u00e8s enregistrement\u00a0?"},
+opts:{en:["Yes","No, permanently locked","Only by owner","Within 24 hours"],fr:["Oui","Non, verrouill\u00e9es de fa\u00e7on permanente","Seulement par le propri\u00e9taire","Dans les 24 heures"]},ans:1},
+{q:{en:"What should you do if you suspect unauthorized access?",fr:"Que devez-vous faire si vous suspectez un acc\u00e8s non autoris\u00e9\u00a0?"},
+opts:{en:["Ignore it","Notify the system owner immediately","Change your password only","Delete your account"],fr:["L\u2019ignorer","Notifier le propri\u00e9taire du syst\u00e8me imm\u00e9diatement","Changer seulement votre mot de passe","Supprimer votre compte"]},ans:1}
+]
+},
+
+// ─────────────────── MODULE 25 ───────────────────
+{id:25,title:{en:"Posting to QuickBooks Online",fr:"Publication dans QuickBooks Online"},role:"all",
+sections:[
+{title:{en:"The Posting Workflow",fr:"Le processus de publication"},
+content:{en:"<p>The full posting workflow has 4 steps:</p><ol><li><strong>Build (/qbo/build):</strong> Creates a posting job with the entry structure (expense, bill, invoice, etc.)</li><li><strong>Approve (/qbo/approve):</strong> Validates everything before posting:<ul><li>Fraud flags checked \u2014 CRITICAL/HIGH require override with justification</li><li>Tax code validated against vendor province</li><li>Math verified (subtotal + taxes = total)</li><li>Period lock checked</li></ul></li><li><strong>Post (/qbo/post):</strong> Sends the approved transaction to QuickBooks Online</li><li><strong>Retry (/qbo/retry):</strong> If posting fails, retry (re-checks fraud flags before retry)</li></ol><p><strong>Entry types inferred:</strong> Expense, Bill, Invoice, Check, Journal Entry, Credit Memo \u2014 based on the document type and amount.</p><div class='warning'>The posting path re-checks fraud flags at every step. You cannot bypass fraud detection by retrying a blocked posting.</div>",
+fr:"<p>Le processus complet de publication comporte 4 \u00e9tapes\u00a0:</p><ol><li><strong>Construire (/qbo/build)\u00a0:</strong> Cr\u00e9e un travail de publication avec la structure d\u2019\u00e9criture</li><li><strong>Approuver (/qbo/approve)\u00a0:</strong> Valide tout avant la publication\u00a0:<ul><li>Drapeaux de fraude v\u00e9rifi\u00e9s \u2014 CRITIQUE/\u00c9LEV\u00c9 n\u00e9cessitent une d\u00e9rogation</li><li>Code de taxe valid\u00e9 selon la province du fournisseur</li><li>Math\u00e9matique v\u00e9rifi\u00e9e</li><li>Verrouillage de p\u00e9riode v\u00e9rifi\u00e9</li></ul></li><li><strong>Publier (/qbo/post)\u00a0:</strong> Envoie la transaction approuv\u00e9e \u00e0 QuickBooks Online</li><li><strong>R\u00e9essayer (/qbo/retry)\u00a0:</strong> Si la publication \u00e9choue, r\u00e9essayez (rev\u00e9rifie les drapeaux de fraude)</li></ol><p><strong>Types d\u2019\u00e9criture inf\u00e9r\u00e9s\u00a0:</strong> D\u00e9pense, Facture fournisseur, Facture client, Ch\u00e8que, \u00c9criture de journal, Note de cr\u00e9dit.</p><div class='warning'>Le chemin de publication rev\u00e9rifie les drapeaux de fraude \u00e0 chaque \u00e9tape. Vous ne pouvez pas contourner la d\u00e9tection de fraude en r\u00e9essayant une publication bloqu\u00e9e.</div>"}}
+],
+quiz:[
+{q:{en:"How many steps in the posting workflow?",fr:"Combien d\u2019\u00e9tapes dans le processus de publication\u00a0?"},
+opts:{en:["2","3","4","5"],fr:["2","3","4","5"]},ans:2},
+{q:{en:"What is checked during the Approve step?",fr:"Qu\u2019est-ce qui est v\u00e9rifi\u00e9 lors de l\u2019\u00e9tape Approuver\u00a0?"},
+opts:{en:["Only the amount","Fraud flags, tax code, math, and period lock","Nothing \u2014 it\u2019s automatic","Only the vendor name"],fr:["Seulement le montant","Drapeaux de fraude, code de taxe, math et verrouillage de p\u00e9riode","Rien \u2014 c\u2019est automatique","Seulement le nom du fournisseur"]},ans:1},
+{q:{en:"Does the retry path re-check fraud flags?",fr:"Le chemin de r\u00e9essai rev\u00e9rifie-t-il les drapeaux de fraude\u00a0?"},
+opts:{en:["No","Yes","Only for CRITICAL","Only on weekends"],fr:["Non","Oui","Seulement pour CRITIQUE","Seulement les fins de semaine"]},ans:1},
+{q:{en:"Can you post to a locked period?",fr:"Pouvez-vous publier dans une p\u00e9riode verrouill\u00e9e\u00a0?"},
+opts:{en:["Yes","No \u2014 period lock is checked","Only with owner permission","Only for corrections"],fr:["Oui","Non \u2014 le verrouillage est v\u00e9rifi\u00e9","Seulement avec la permission du propri\u00e9taire","Seulement pour les corrections"]},ans:1},
+{q:{en:"What determines the entry type (expense, bill, etc.)?",fr:"Qu\u2019est-ce qui d\u00e9termine le type d\u2019\u00e9criture\u00a0?"},
+opts:{en:["User chooses manually","Document type and amount","Random assignment","QuickBooks decides"],fr:["L\u2019utilisateur choisit manuellement","Le type de document et le montant","Attribution al\u00e9atoire","QuickBooks d\u00e9cide"]},ans:1}
+]
+}
+];
+
+// ============================================================
+//  APPLICATION STATE & PERSISTENCE
+// ============================================================
+const STORAGE_KEY = 'ledgerlink_training_v2';
+let state = loadState();
+
+function loadState(){
+  try{
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if(s && s.version === 2) return s;
+  }catch(e){}
+  return {version:2,lang:'en',completed:{},quizScores:{},userName:''};
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+function t(key){return I18N[state.lang][key]||key;}
+
+// ============================================================
+//  LANGUAGE TOGGLE
+// ============================================================
+function toggleLang(){
+  state.lang = state.lang === 'en' ? 'fr' : 'en';
+  saveState();
+  document.documentElement.lang = state.lang;
+  document.documentElement.setAttribute('data-lang', state.lang);
+  document.getElementById('langBtn').textContent = state.lang === 'en' ? 'FR' : 'EN';
+  // Re-render
+  renderSidebar();
+  const active = document.querySelector('.sidebar a.active');
+  const mid = active ? active.getAttribute('data-module') : null;
+  if(mid && mid !== 'home'){
+    showModule(parseInt(mid));
+  } else {
+    renderHome();
+  }
+  updateHeaderProgress();
+  updateI18nElements();
+}
+
+function updateI18nElements(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(I18N[state.lang][key]) el.textContent = I18N[state.lang][key];
+  });
+}
+
+// ============================================================
+//  PROGRESS
+// ============================================================
+function getCompletedCount(){ return Object.keys(state.completed).length; }
+
+function updateHeaderProgress(){
+  const c = getCompletedCount();
+  document.getElementById('headerProgress').textContent = c + ' / 25';
+  const pct = Math.round(c/25*100);
+  document.getElementById('progressFill').style.width = pct+'%';
+  document.getElementById('progressPct').textContent = pct+'%';
+  document.getElementById('progressText').innerHTML = c + ' / 25 ' + t('modules_complete');
+  // Certificate check
+  if(c === 25 && state.userName){
+    showCertificate();
+  }
+}
+
+function showCertificate(){
+  const cert = document.getElementById('certificate');
+  cert.classList.add('visible');
+  document.getElementById('certName').textContent = state.userName;
+  document.getElementById('certDate').textContent = new Date().toLocaleDateString(state.lang === 'fr' ? 'fr-CA' : 'en-CA',{year:'numeric',month:'long',day:'numeric'});
+}
+
+// ============================================================
+//  SIDEBAR
+// ============================================================
+function renderSidebar(){
+  const sb = document.getElementById('sidebar');
+  let html = '<div class="sidebar-section">' + t('nav_modules') + '</div>';
+  html += '<a href="#home" data-module="home" onclick="showHome(event)" class="active"><span class="status-dot none"></span> ' + t('nav_home') + '</a>';
+  MODULES.forEach(m=>{
+    const done = state.completed[m.id];
+    const cls = done ? 'done' : (state.quizScores[m.id] !== undefined ? 'partial' : 'none');
+    html += '<a href="#m'+m.id+'" data-module="'+m.id+'" onclick="showModule('+m.id+',event)"><span class="status-dot '+cls+'"></span> '+m.id+'. '+(m.title[state.lang]||m.title.en)+'</a>';
+  });
+  // Certificate link
+  html += '<div class="sidebar-section" style="margin-top:16px">' + (state.lang==='fr'?'CERTIFICAT':'CERTIFICATE') + '</div>';
+  html += '<a href="#cert" onclick="scrollToCert(event)"><span class="status-dot '+(getCompletedCount()===25?'done':'none')+'"></span> '+(state.lang==='fr'?'Voir le certificat':'View Certificate')+'</a>';
+  sb.innerHTML = html;
+}
+
+function setActiveSidebar(mid){
+  document.querySelectorAll('.sidebar a').forEach(a=>{
+    a.classList.toggle('active', a.getAttribute('data-module') == mid);
+  });
+}
+
+// ============================================================
+//  HOME SCREEN
+// ============================================================
+function renderHome(){
+  document.getElementById('homeScreen').style.display = 'block';
+  document.getElementById('moduleContainer').style.display = 'none';
+  setActiveSidebar('home');
+  const grid = document.getElementById('homeGrid');
+  let html = '';
+  // Name input
+  html += '<div style="grid-column:1/-1;background:#fff;border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);margin-bottom:8px"><label style="font-size:13px;font-weight:600;color:var(--gray-700)">'+(state.lang==='fr'?'Votre nom (pour le certificat)':'Your name (for certificate)')+'</label><div style="display:flex;gap:8px;margin-top:6px"><input type="text" id="nameInput" value="'+(state.userName||'')+'" placeholder="'+t('q_placeholder')+'" style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px"><button onclick="saveName()" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">'+t('btn_save_name')+'</button></div></div>';
+  MODULES.forEach(m=>{
+    const done = state.completed[m.id];
+    const partial = !done && state.quizScores[m.id] !== undefined;
+    const statusCls = done ? 'done' : (partial ? 'inprog' : 'todo');
+    const statusText = done ? t('status_done') : (partial ? t('status_inprog') : t('status_todo'));
+    const roleLabel = m.role === 'all' ? t('all_staff') : (m.role === 'manager' ? t('manager_plus') : t('owner_only'));
+    html += '<div class="home-card" onclick="showModule('+m.id+')"><h3>'+m.id+'. '+(m.title[state.lang]||m.title.en)+'</h3><p>'+roleLabel+'</p><span class="home-status '+statusCls+'">'+statusText+'</span></div>';
+  });
+  grid.innerHTML = html;
+}
+
+function saveName(){
+  state.userName = document.getElementById('nameInput').value.trim();
+  saveState();
+  if(getCompletedCount() === 25 && state.userName) showCertificate();
+}
+
+function showHome(e){
+  if(e) e.preventDefault();
+  renderHome();
+  window.scrollTo(0,0);
+}
+
+// ============================================================
+//  MODULE RENDERING
+// ============================================================
+function showModule(id, e){
+  if(e) e.preventDefault();
+  document.getElementById('homeScreen').style.display = 'none';
+  document.getElementById('moduleContainer').style.display = 'block';
+  setActiveSidebar(id);
+  // Close mobile menu
+  document.querySelector('.sidebar').classList.remove('mobile-open');
+
+  const m = MODULES.find(x=>x.id===id);
+  if(!m) return;
+
+  const roleLabel = m.role === 'all' ? t('all_staff') : (m.role === 'manager' ? t('manager_plus') : t('owner_only'));
+  const roleCls = m.role === 'all' ? 'badge-all' : (m.role === 'manager' ? 'badge-manager' : 'badge-owner');
+
+  let html = '<div class="module-card open">';
+  html += '<div class="module-header"><h2>'+t('nav_modules')+' '+m.id+': '+(m.title[state.lang]||m.title.en)+'</h2><div class="tags"><span class="badge '+roleCls+'">'+roleLabel+'</span>';
+  if(state.completed[m.id]) html += '<span class="badge badge-complete">'+t('status_done')+'</span>';
+  html += '</div></div>';
+  html += '<div class="module-body" style="display:block">';
+
+  // Sections
+  m.sections.forEach((s,i)=>{
+    html += '<div class="section"><h3><span class="num">'+(i+1)+'</span> '+(s.title[state.lang]||s.title.en)+'</h3>';
+    html += (s.content[state.lang]||s.content.en);
+    html += '</div>';
+  });
+
+  // Quiz
+  if(m.quiz && m.quiz.length){
+    html += '<div class="quiz-section" id="quiz-'+m.id+'">';
+    html += '<h3>'+t('quiz_title')+' \u2014 '+(m.title[state.lang]||m.title.en)+'</h3>';
+    m.quiz.forEach((q,qi)=>{
+      html += '<div class="quiz-q" id="qq-'+m.id+'-'+qi+'">';
+      html += '<p class="q-text">'+(qi+1)+'. '+(q.q[state.lang]||q.q.en)+'</p>';
+      const opts = q.opts[state.lang]||q.opts.en;
+      opts.forEach((o,oi)=>{
+        html += '<label><input type="radio" name="q'+m.id+'_'+qi+'" value="'+oi+'"> '+o+'</label>';
+      });
+      html += '<div class="quiz-feedback" id="qf-'+m.id+'-'+qi+'"></div>';
+      html += '</div>';
+    });
+    html += '<button class="quiz-submit" onclick="checkQuiz('+m.id+')">'+t('quiz_check')+'</button>';
+    html += '<div class="quiz-result" id="qr-'+m.id+'"></div>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
+
+  // Navigation
+  html += '<div style="display:flex;justify-content:space-between;margin-top:16px;flex-wrap:wrap;gap:8px">';
+  if(m.id > 1){
+    html += '<button onclick="showModule('+(m.id-1)+')" style="background:var(--gray-200);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">&larr; '+t('prev_module')+'</button>';
+  } else {
+    html += '<span></span>';
+  }
+  html += '<button onclick="showHome()" style="background:var(--gray-200);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">'+t('back_home')+'</button>';
+  if(m.id < 25){
+    html += '<button onclick="showModule('+(m.id+1)+')" style="background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">'+t('next_module')+' &rarr;</button>';
+  } else {
+    html += '<span></span>';
+  }
+  html += '</div>';
+
+  document.getElementById('moduleContainer').innerHTML = html;
+  window.scrollTo(0,0);
+}
+
+// ============================================================
+//  QUIZ CHECKING
+// ============================================================
+function checkQuiz(mid){
+  const m = MODULES.find(x=>x.id===mid);
+  if(!m || !m.quiz) return;
+  let correct = 0;
+  const total = m.quiz.length;
+
+  m.quiz.forEach((q,qi)=>{
+    const selected = document.querySelector('input[name="q'+mid+'_'+qi+'"]:checked');
+    const fb = document.getElementById('qf-'+mid+'-'+qi);
+    if(!selected){
+      fb.className = 'quiz-feedback wrong';
+      fb.style.display = 'block';
+      fb.textContent = t('quiz_wrong') + ' ' + (state.lang==='fr'?'Veuillez s\u00e9lectionner une r\u00e9ponse.':'Please select an answer.');
+      return;
+    }
+    const val = parseInt(selected.value);
+    if(val === q.ans){
+      correct++;
+      fb.className = 'quiz-feedback correct';
+      fb.style.display = 'block';
+      fb.textContent = t('quiz_correct');
+    } else {
+      fb.className = 'quiz-feedback wrong';
+      fb.style.display = 'block';
+      fb.textContent = t('quiz_wrong');
+    }
+  });
+
+  const pct = Math.round(correct/total*100);
+  state.quizScores[mid] = pct;
+  const result = document.getElementById('qr-'+mid);
+
+  if(pct >= 80){
+    state.completed[mid] = true;
+    result.className = 'quiz-result pass';
+    result.style.display = 'block';
+    result.textContent = t('quiz_pass') + ' (' + correct + '/' + total + ' = ' + pct + '%)';
+  } else {
+    delete state.completed[mid];
+    result.className = 'quiz-result fail';
+    result.style.display = 'block';
+    result.textContent = t('quiz_fail') + ' (' + correct + '/' + total + ' = ' + pct + '%)';
+  }
+  saveState();
+  updateHeaderProgress();
+  renderSidebar();
+  setActiveSidebar(mid);
+}
+
+// ============================================================
+//  CERTIFICATE SCROLL
+// ============================================================
+function scrollToCert(e){
+  if(e) e.preventDefault();
+  if(getCompletedCount() === 25){
+    if(!state.userName){
+      showHome();
+      setTimeout(()=>document.getElementById('nameInput')?.focus(), 200);
+      return;
+    }
+    showCertificate();
+    document.getElementById('homeScreen').style.display = 'block';
+    document.getElementById('moduleContainer').style.display = 'none';
+    setTimeout(()=>document.getElementById('certificate').scrollIntoView({behavior:'smooth'}), 100);
+  } else {
+    showHome();
+  }
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+document.documentElement.lang = state.lang;
+document.documentElement.setAttribute('data-lang', state.lang);
+document.getElementById('langBtn').textContent = state.lang === 'en' ? 'FR' : 'EN';
+renderSidebar();
+renderHome();
+updateHeaderProgress();
+updateI18nElements();
+</script>
+
+</body>
+</html>
