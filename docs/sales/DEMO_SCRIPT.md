@@ -1,7 +1,7 @@
-# LedgerLink AI --- 15-Minute Live Demo Script
+# OtoCPA --- 15-Minute Live Demo Script
 
 **Audience:** CPA firm owner/partner + potentially their team
-**Pre-requisites:** LedgerLink installed with demo data loaded
+**Pre-requisites:** OtoCPA installed with demo data loaded
 **Browser:** Open to `http://127.0.0.1:8787/login`
 
 ---
@@ -10,7 +10,7 @@
 
 ### 1. Enable demo mode
 
-Edit `ledgerlink.config.json` and set:
+Edit `otocpa.config.json` and set:
 
 ```json
 {
@@ -36,8 +36,8 @@ Each client has 10 documents including: normal invoices, fraud-flagged items, lo
 ### 3. Restart the dashboard
 
 ```
-sc stop LedgerLinkAI
-sc start LedgerLinkAI
+sc stop OtoCPA
+sc start OtoCPA
 ```
 
 Or manually:
@@ -71,7 +71,7 @@ python scripts/review_dashboard.py
 
 *Wait for their answer. Write it down.*
 
-> "OK, [X] heures. A 150 dollars de l'heure, c'est [math] par semaine de capacite non facturee. Par mois, ca fait [math]. C'est exactement ce que LedgerLink elimine."
+> "OK, [X] heures. A 150 dollars de l'heure, c'est [math] par semaine de capacite non facturee. Par mois, ca fait [math]. C'est exactement ce que OtoCPA elimine."
 
 > "Ce que je vais vous montrer en 15 minutes:"
 >
@@ -187,7 +187,7 @@ Show the login page. Log in. The dashboard loads with the document queue visible
 
 ### Key talking point:
 
-> "Ce resume, a la main, ca prend combien de temps? 45 minutes? Une heure? Avec LedgerLink, c'est instantane. Et c'est toujours juste, parce que c'est du math, pas une estimation."
+> "Ce resume, a la main, ca prend combien de temps? 45 minutes? Une heure? Avec OtoCPA, c'est instantane. Et c'est toujours juste, parce que c'est du math, pas une estimation."
 
 ---
 
@@ -238,11 +238,11 @@ Show the login page. Log in. The dashboard loads with the document queue visible
 
 ### Narration:
 
-> "Voila ce que LedgerLink fait en 15 minutes de demo. Imaginez ce que ca fait sur un mois entier de production."
+> "Voila ce que OtoCPA fait en 15 minutes de demo. Imaginez ce que ca fait sur un mois entier de production."
 
 *Pause. Let it sink in.*
 
-> "Pour [NomDuCabinet] avec [X] clients, on estime [Y] heures economisees par mois. A 150 dollars de l'heure, c'est [Z] dollars de capacite recuperee. LedgerLink [forfait] coute [prix] par mois."
+> "Pour [NomDuCabinet] avec [X] clients, on estime [Y] heures economisees par mois. A 150 dollars de l'heure, c'est [Z] dollars de capacite recuperee. OtoCPA [forfait] coute [prix] par mois."
 
 *Pause again.*
 

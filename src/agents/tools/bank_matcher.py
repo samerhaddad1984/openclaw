@@ -31,7 +31,12 @@ class BankMatcher:
             return ""
 
         import unicodedata as _ud
+        from src.agents.tools.fingerprint_utils import detect_mixed_scripts, normalize_confusables
         s = value.lower().strip()
+        # FIX: Mixed-script attack prevention — only normalize confusables
+        # for non-mixed-script text to preserve detection of homoglyph attacks
+        if not detect_mixed_scripts(s)["is_mixed"]:
+            s = normalize_confusables(s)
         # FIX P1-2: Strip accents so "société" becomes "societe" not "soci t"
         s = _ud.normalize("NFKD", s).encode("ascii", errors="ignore").decode("ascii")
         s = s.replace("&", " and ")
@@ -53,6 +58,10 @@ class BankMatcher:
         return " ".join(parts)
 
     def text_similarity(self, a: Optional[str], b: Optional[str]) -> float:
+        from src.agents.tools.fingerprint_utils import detect_mixed_scripts
+        mixed_a = detect_mixed_scripts(a or "")
+        mixed_b = detect_mixed_scripts(b or "")
+
         na = self.normalize_text(a)
         nb = self.normalize_text(b)
 
@@ -60,12 +69,17 @@ class BankMatcher:
             return 0.0
 
         if na == nb:
-            return 1.0
+            sim = 1.0
+        elif na in nb or nb in na:
+            sim = 0.92
+        else:
+            sim = SequenceMatcher(None, na, nb).ratio()
 
-        if na in nb or nb in na:
-            return 0.92
+        # Cap similarity for mixed-script attacks (homoglyph detection)
+        if mixed_a["is_mixed"] or mixed_b["is_mixed"]:
+            sim = min(sim, 0.40)
 
-        return SequenceMatcher(None, na, nb).ratio()
+        return sim
 
     # ------------------------------------------------------------------
     # FIX 2: Vendor DBA alias resolution
@@ -81,7 +95,12 @@ class BankMatcher:
         if not vendor_name or not conn:
             return vendor_name or ""
         import unicodedata as _ud
+        from src.agents.tools.fingerprint_utils import detect_mixed_scripts, normalize_confusables
+        # Block mixed-script vendor names from alias resolution
+        if detect_mixed_scripts(vendor_name)["is_mixed"]:
+            return vendor_name
         alias_key = vendor_name.strip().lower()
+        alias_key = normalize_confusables(alias_key)
         alias_key = _ud.normalize("NFKD", alias_key).encode("ascii", errors="ignore").decode("ascii")
         try:
             # 1. Exact full-text lookup
@@ -590,11 +609,37 @@ class BankMatcher:
         if document.doc_type:
             reasons.append(f"doc_type:{document.doc_type}")
 
+        # --- Mixed-script attack detection ---
+        from src.agents.tools.fingerprint_utils import detect_mixed_scripts
+        _txn_desc = " ".join([transaction.description or "", transaction.memo or ""]).strip()
+        mixed_doc = detect_mixed_scripts(document.vendor or "")
+        mixed_txn = detect_mixed_scripts(_txn_desc)
+        if mixed_doc["is_mixed"] or mixed_txn["is_mixed"]:
+            score = min(score, 0.40)
+            reasons.append("mixed_script_vendor_name")
+            logger.warning(
+                "mixed_script_attack_detected vendor_doc=%s vendor_txn=%s scripts=%s",
+                document.vendor, _txn_desc,
+                mixed_doc["scripts_found"] or mixed_txn["scripts_found"],
+            )
+
         # --- Vendor/payee mismatch detection ---
         # When the bank payee clearly differs from the invoice vendor,
         # flag as possible related-party redirection.
         fraud_flags: list[dict] = []
         review_notes: list[str] = []
+        if mixed_doc["is_mixed"] or mixed_txn["is_mixed"]:
+            fraud_flags.append({
+                "rule": "mixed_script_vendor_name",
+                "severity": "HIGH",
+            })
+            review_notes.append(
+                "Nom de fournisseur contient des caractères de scripts mixtes "
+                "(possible attaque homoglyphe) / "
+                "Vendor name contains mixed-script characters "
+                "(possible homoglyph attack)"
+            )
+
         vendor_mismatch = False
         if vendor_similarity is not None and vendor_similarity < 0.70:
             vendor_mismatch = True

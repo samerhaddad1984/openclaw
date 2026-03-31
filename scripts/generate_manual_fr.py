@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Générer le Manuel d'utilisation LedgerLink (Français) en PDF avec ReportLab."""
+"""Générer le Manuel d'utilisation OtoCPA (Français) en PDF avec ReportLab."""
 
 import os
 import sys
@@ -27,7 +27,7 @@ WHITE = white
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "docs"
-OUT_PATH = OUT_DIR / "LedgerLink_Manuel_Utilisateur_FR.pdf"
+OUT_PATH = OUT_DIR / "OtoCPA_Manuel_Utilisateur_FR.pdf"
 
 
 # ── Styles personnalisés ─────────────────────────────────────
@@ -164,7 +164,7 @@ def sp():
 def build_cover_page(story, styles):
     """Page couverture avec titre, sous-titre et version."""
     story.append(Spacer(1, 2.5 * inch))
-    story.append(Paragraph("LedgerLink AI", styles["Title"]))
+    story.append(Paragraph("OtoCPA", styles["Title"]))
     story.append(Spacer(1, 8))
     story.append(Paragraph("Manuel d'utilisation", ParagraphStyle(
         "CoverManual", parent=styles["Title"], fontSize=22, leading=28,
@@ -222,13 +222,13 @@ def build_toc(story, styles):
 
 # ── Section 1 : Introduction ─────────────────────────────────
 def build_section_1_introduction(story, styles):
-    """Section 1 — Presentation de LedgerLink, architecture, configuration."""
+    """Section 1 — Presentation de OtoCPA, architecture, configuration."""
     story.append(Paragraph("1. Introduction", styles["H1"]))
     story.append(sp())
 
-    story.append(Paragraph("1.1 Qu'est-ce que LedgerLink AI?", styles["H2"]))
+    story.append(Paragraph("1.1 Qu'est-ce que OtoCPA?", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink AI est une plateforme d'automatisation comptable intelligente "
+        "OtoCPA est une plateforme d'automatisation comptable intelligente "
         "concue pour les cabinets CPA canadiens, avec une specialisation "
         "approfondie en fiscalite quebecoise (TPS/TVQ), un fonctionnement "
         "bilingue francais/anglais et un soutien complet aux missions de "
@@ -272,7 +272,7 @@ def _build_section_1_architecture(story, styles):
     """Sous-section : architecture a 3 couches."""
     story.append(Paragraph("1.3 Architecture a trois couches", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink utilise un pipeline de traitement a trois couches pour "
+        "OtoCPA utilise un pipeline de traitement a trois couches pour "
         "maximiser la precision tout en minimisant les couts d'IA :",
         styles["Body"],
     ))
@@ -327,7 +327,7 @@ def _build_section_1_ai_providers(story, styles):
     """Sous-section : fournisseurs IA."""
     story.append(Paragraph("1.5 Fournisseurs IA", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink utilise deux niveaux de fournisseurs IA configures lors "
+        "OtoCPA utilise deux niveaux de fournisseurs IA configures lors "
         "de l'installation :",
         styles["Body"],
     ))
@@ -364,7 +364,7 @@ def _build_section_1_ai_providers(story, styles):
 
     story.append(Paragraph("1.6 Formats de documents pris en charge", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink traite les documents dans plusieurs formats via son moteur "
+        "OtoCPA traite les documents dans plusieurs formats via son moteur "
         "OCR. La detection du format utilise les octets magiques (signature "
         "du fichier), et non l'extension, pour une identification fiable.",
         styles["Body"],
@@ -393,7 +393,7 @@ def _build_section_1_ai_providers(story, styles):
 
     story.append(Paragraph("1.7 Prise en charge de l'ecriture manuscrite", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink detecte automatiquement les documents manuscrits a l'aide "
+        "OtoCPA detecte automatiquement les documents manuscrits a l'aide "
         "de plusieurs heuristiques et les achemine vers un modele IA specialise "
         "pour une precision amelioree :",
         styles["Body"],
@@ -418,7 +418,7 @@ def _build_section_1_ai_providers(story, styles):
     story.append(sp())
     story.append(Paragraph("1.8 Architecture de securite", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink met en oeuvre plusieurs couches de securite pour proteger "
+        "OtoCPA met en oeuvre plusieurs couches de securite pour proteger "
         "les donnees financieres sensibles :",
         styles["Body"],
     ))
@@ -447,8 +447,8 @@ def _build_section_1_ai_providers(story, styles):
     ], styles))
     story.append(sp())
     story.append(Paragraph(
-        "LedgerLink stocke toutes les donnees localement sur votre serveur. "
-        "Aucune donnee client n'est envoyee aux serveurs de LedgerLink. Les "
+        "OtoCPA stocke toutes les donnees localement sur votre serveur. "
+        "Aucune donnee client n'est envoyee aux serveurs de OtoCPA. Les "
         "fournisseurs IA ne recoivent que le contenu du document necessaire "
         "a l'extraction &mdash; jamais les noms des clients, numeros de compte "
         "ou autres informations d'identification au-dela de ce qui apparait "
@@ -492,11 +492,11 @@ def _build_section_2_install_bat(story, styles):
         "<b>Migration de la base de donnees</b> &mdash; Cree la base de "
         "donnees SQLite et toutes les tables requises via "
         "<font face='Courier'>migrate_db.py</font>.",
-        "<b>Installation du service Windows</b> &mdash; Enregistre LedgerLink "
+        "<b>Installation du service Windows</b> &mdash; Enregistre OtoCPA "
         "comme service d'arriere-plan persistant.",
         "<b>Demarrage du service</b> &mdash; Lance le service immediatement.",
         "<b>Creation des raccourcis de bureau</b> &mdash; Cree les raccourcis "
-        "\"LedgerLink AI\" (tableau de bord) et \"LedgerLink Setup\" (assistant).",
+        "\"OtoCPA\" (tableau de bord) et \"OtoCPA Setup\" (assistant).",
         "<b>Lancement de l'assistant</b> &mdash; Ouvre l'assistant de "
         "configuration en 20 etapes dans votre navigateur a l'adresse "
         "<font face='Courier'>http://127.0.0.1:8790/</font>.",
@@ -504,7 +504,7 @@ def _build_section_2_install_bat(story, styles):
     story.append(sp())
     story.append(tip_box(
         "L'installation complete prend habituellement de 3 a 5 minutes. Un "
-        "fichier journal est enregistre dans C:\\LedgerLink\\install.log pour "
+        "fichier journal est enregistre dans C:\\OtoCPA\\install.log pour "
         "le depannage.",
         styles,
     ))
@@ -513,7 +513,7 @@ def _build_section_2_install_bat(story, styles):
     story.append(Paragraph("2.1.1 Installation macOS", styles["H3"]))
     story.append(Paragraph(
         "Sur macOS, ouvrez le Terminal et executez : <font face='Courier'>"
-        "cd ~/Desktop/LedgerLink &amp;&amp; bash INSTALL_MAC.sh</font>. "
+        "cd ~/Desktop/OtoCPA &amp;&amp; bash INSTALL_MAC.sh</font>. "
         "Le script installe les dependances, cree un service launchd et "
         "ouvre l'assistant.",
         styles["Body"],
@@ -523,17 +523,17 @@ def _build_section_2_install_bat(story, styles):
     story.append(Paragraph("2.1.2 Installation sur un second poste", styles["H3"]))
     story.append(Paragraph(
         "Pour installer sur des postes de travail supplementaires, copiez "
-        "votre fichier <font face='Courier'>ledgerlink.config.json</font> "
+        "votre fichier <font face='Courier'>otocpa.config.json</font> "
         "sur une cle USB et executez :",
         styles["Body"],
     ))
     story.append(Paragraph(
-        "python scripts/install_second_machine.py --config \"E:\\ledgerlink.config.json\"",
+        "python scripts/install_second_machine.py --config \"E:\\otocpa.config.json\"",
         styles["Code"],
     ))
     story.append(Paragraph(
         "La configuration multi-postes recommandee est l'option B : executez "
-        "LedgerLink sur un seul serveur avec <font face='Courier'>"
+        "OtoCPA sur un seul serveur avec <font face='Courier'>"
         "host: 0.0.0.0</font>, puis accedez-y depuis les autres postes "
         "via navigateur a l'adresse IP du serveur.",
         styles["Body"],
@@ -577,7 +577,7 @@ def _build_section_2_wizard(story, styles):
         ["10", "QuickBooks en ligne", "ID du domaine, ID client, secret client "
          "pour l'inscription des transactions et la synchronisation des fournisseurs"],
         ["11", "Surveillance de dossier", "Definir le chemin du dossier de "
-         "reception (defaut : C:/LedgerLink/Inbox/) pour numeriseur USB ou "
+         "reception (defaut : C:/OtoCPA/Inbox/) pour numeriseur USB ou "
          "synchronisation infonuagique"],
         ["12", "Resume quotidien", "Configurer les resumes par courriel : "
          "heure d'envoi, destinataires, langue (FR/EN)"],
@@ -642,7 +642,7 @@ def _build_section_2_config(story, styles):
     story.append(Paragraph("2.4 Reference du fichier de configuration", styles["H2"]))
     story.append(Paragraph(
         "Tous les parametres sont stockes dans <font face='Courier'>"
-        "ledgerlink.config.json</font> a la racine du projet. Sections "
+        "otocpa.config.json</font> a la racine du projet. Sections "
         "principales :",
         styles["Body"],
     ))
@@ -675,17 +675,17 @@ def _build_section_2_config(story, styles):
 
     story.append(Paragraph("2.5 Options de deploiement multi-postes", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink prend en charge trois modeles de deploiement pour les "
+        "OtoCPA prend en charge trois modeles de deploiement pour les "
         "cabinets disposant de plusieurs postes de travail :",
         styles["Body"],
     ))
     story.append(sp())
     deploy_rows = [
         ["Option A\nLecteur reseau\npartage", "Placer le fichier .db sur un\n"
-         "partage reseau. Configurer\ndatabase_path vers\n\\\\SERVEUR\\partage\\ledgerlink.db",
+         "partage reseau. Configurer\ndatabase_path vers\n\\\\SERVEUR\\partage\\otocpa.db",
          "Installation simple", "SQLite ne prend en charge\n"
          "qu'un seul ecrivain a la fois"],
-        ["Option B\nServeur + Navigateur\n(Recommande)", "Executer LedgerLink sur un\n"
+        ["Option B\nServeur + Navigateur\n(Recommande)", "Executer OtoCPA sur un\n"
          "serveur avec host: 0.0.0.0.\nLes autres postes accedent\nvia le navigateur.",
          "Base de donnees unique,\naucun probleme de\nsynchronisation, zero\n"
          "installation client", "Le serveur doit rester\nen ligne"],
@@ -711,11 +711,11 @@ def _build_section_2_config(story, styles):
     story.append(Paragraph("2.6 Transfert de licence entre postes", styles["H2"]))
     story.extend(numbered_list([
         "Sur l'ancien poste : allez dans Parametres &gt; Licence &gt; Desactiver.",
-        "Copiez <font face='Courier'>ledgerlink.config.json</font> sur le "
+        "Copiez <font face='Courier'>otocpa.config.json</font> sur le "
         "nouveau poste via cle USB ou partage reseau.",
         "Sur le nouveau poste : la licence s'active automatiquement au "
         "premier demarrage.",
-        "En cas de probleme persistant, contactez support@ledgerlink.ca pour "
+        "En cas de probleme persistant, contactez support@otocpa.com pour "
         "une reinitialisation cote serveur de l'activation de la machine.",
     ], styles))
     story.append(sp())
@@ -759,7 +759,7 @@ def _build_section_3_roles(story, styles):
     """Tableau des roles."""
     story.append(Paragraph("3.1 Roles et permissions", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink utilise quatre roles avec des permissions hierarchiques. "
+        "OtoCPA utilise quatre roles avec des permissions hierarchiques. "
         "Chaque utilisateur se voit attribuer exactement un role lors de "
         "sa creation.",
         styles["Body"],
@@ -903,7 +903,7 @@ def _build_section_4_intake(story, styles):
     """Methodes de reception des documents."""
     story.append(Paragraph("4.1 Methodes de reception des documents", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink accepte les documents provenant de six canaux. Tous les "
+        "OtoCPA accepte les documents provenant de six canaux. Tous les "
         "canaux alimentent le meme pipeline de traitement : extraction OCR, "
         "detection de fraude, classification de substance et placement dans "
         "la file de revision.",
@@ -924,7 +924,7 @@ def _build_section_4_intake(story, styles):
          "reception. Les pieces jointes MIME sont\n"
          "extraites automatiquement. Le service\nfonctionne sur le port 8789."],
         ["Surveillance de dossier", "Deposez les fichiers dans le dossier de\n"
-         "reception surveille (defaut : C:/LedgerLink/\n"
+         "reception surveille (defaut : C:/OtoCPA/\n"
          "Inbox/). Ideal pour les numeriseurs USB\net les dossiers synchronises."],
         ["Telechargement\nmanuel", "Telechargez directement depuis la file\n"
          "de documents du tableau de bord.\nGlisser-deposer pris en charge."],
@@ -937,7 +937,7 @@ def _build_section_4_intake(story, styles):
     story.append(sp())
     story.append(tip_box(
         "Pour les numeriseurs de documents USB, pointez le dossier de sortie "
-        "du numeriseur vers le dossier de reception LedgerLink. Les documents "
+        "du numeriseur vers le dossier de reception OtoCPA. Les documents "
         "sont pris en charge automatiquement en quelques secondes.",
         styles,
     ))
@@ -1028,7 +1028,7 @@ def _build_section_4_fraud(story, styles):
     """Regles de detection de fraude."""
     story.append(Paragraph("4.3 Detection de fraude", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink execute 13 regles deterministes de fraude sur chaque "
+        "OtoCPA execute 13 regles deterministes de fraude sur chaque "
         "document. Aucune IA n'est utilisee pour la detection &mdash; l'IA "
         "n'explique que les elements signales. Chaque regle produit un "
         "indicateur avec un niveau de severite.",
@@ -1138,7 +1138,7 @@ def _build_section_4_uncertainty(story, styles):
     """Raisons d'incertitude."""
     story.append(Paragraph("4.5 Suivi de l'incertitude", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink suit plus de 21 modes de defaillance avec des raisons "
+        "OtoCPA suit plus de 21 modes de defaillance avec des raisons "
         "d'incertitude structurees. Chaque raison comprend des descriptions "
         "bilingues et des exigences de preuve. Les decisions d'inscription "
         "sont basees sur la confiance :",
@@ -1195,7 +1195,7 @@ def _build_section_4_bank(story, styles):
     """Importation bancaire et rapprochement."""
     story.append(Paragraph("4.7 Importation bancaire et appariement", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink importe les releves bancaires en formats CSV et PDF des "
+        "OtoCPA importe les releves bancaires en formats CSV et PDF des "
         "principales banques quebecoises : Desjardins, Banque Nationale, "
         "BMO, TD et RBC. La detection de la banque est automatique.",
         styles["Body"],
@@ -1282,7 +1282,7 @@ def _build_section_4_journal(story, styles):
 
     story.append(Paragraph("4.9 Apprentissage et memoire fournisseur", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink apprend continuellement des corrections des reviseurs "
+        "OtoCPA apprend continuellement des corrections des reviseurs "
         "pour ameliorer la precision future. Le systeme d'apprentissage "
         "comporte trois composantes :",
         styles["Body"],
@@ -1438,7 +1438,7 @@ def _build_section_5_rates(story, styles):
     """Taux TPS/TVQ/TVH par province."""
     story.append(Paragraph("5.1 Taux de taxe par province", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink calcule les taxes en utilisant l'arithmetique Decimal "
+        "OtoCPA calcule les taxes en utilisant l'arithmetique Decimal "
         "exacte (ROUND_HALF_UP a 0,01 $). Tous les taux sont deterministes "
         "sans aucune intervention de l'IA.",
         styles["Body"],
@@ -1546,7 +1546,7 @@ def _build_section_5_itc_itr(story, styles):
     ], styles))
     story.append(sp())
     story.append(Paragraph(
-        "LedgerLink suit les montants de CTI/RTI par document et les "
+        "OtoCPA suit les montants de CTI/RTI par document et les "
         "totalise dans le sommaire de production pour les declarations "
         "de TPS/TVQ.",
         styles["Body"],
@@ -1579,7 +1579,7 @@ def _build_section_5_revenu_quebec(story, styles):
     """Preremplissage Revenu Quebec."""
     story.append(Paragraph("5.5 Preremplissage FPZ-500 de Revenu Quebec", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink genere des donnees de preremplissage pour le FPZ-500 "
+        "OtoCPA genere des donnees de preremplissage pour le FPZ-500 "
         "(declaration de TPS/TVQ du Quebec) a partir des documents inscrits "
         "pour la periode. Naviguez vers <b>Revenu Quebec</b> dans la barre "
         "laterale (Gestionnaire/Proprietaire).",
@@ -1600,7 +1600,7 @@ def _build_section_5_quick_method(story, styles):
     story.append(Paragraph(
         "Les petites entreprises peuvent opter pour la methode rapide, qui "
         "simplifie la remise de TPS/TVQ a un pourcentage des ventes taxables "
-        "(taxes incluses). LedgerLink prend en charge la configuration de "
+        "(taxes incluses). OtoCPA prend en charge la configuration de "
         "la methode rapide par client.",
         styles["Body"],
     ))
@@ -1724,7 +1724,7 @@ def _build_section_5_payroll(story, styles):
     story.append(Paragraph("5.8.4 Rapprochement RL-1 / T4", styles["H3"]))
     story.append(Paragraph(
         "Les employeurs quebecois doivent produire a la fois le RL-1 "
-        "(provincial) et le T4 (federal). LedgerLink valide la "
+        "(provincial) et le T4 (federal). OtoCPA valide la "
         "correspondance entre les cases :",
         styles["Body"],
     ))
@@ -1776,7 +1776,7 @@ def _build_section_5_customs(story, styles):
 
     story.append(Paragraph("5.9.3 Validation du taux de change", styles["H3"]))
     story.append(Paragraph(
-        "LedgerLink valide les taux de change par rapport aux taux quotidiens "
+        "OtoCPA valide les taux de change par rapport aux taux quotidiens "
         "de la Banque du Canada. Les taux manuels s'ecartant de plus de 1 % "
         "du taux de la BdC sont signales pour revision.",
         styles["Body"],
@@ -1878,7 +1878,7 @@ def _build_section_5_mixed(story, styles):
 
     story.append(Paragraph("5.13 Exemples de calcul de taxe", styles["H2"]))
     story.append(Paragraph(
-        "Les exemples suivants illustrent comment LedgerLink calcule les "
+        "Les exemples suivants illustrent comment OtoCPA calcule les "
         "taxes pour les scenarios courants :",
         styles["Body"],
     ))
@@ -1970,7 +1970,7 @@ def _build_section_6_overview(story, styles):
     story.append(Paragraph(
         "Le portail client fonctionne sur le port 8788 et offre une interface "
         "de telechargement simple pour que les clients soumettent leurs "
-        "documents. Les clients n'ont pas besoin d'installer LedgerLink "
+        "documents. Les clients n'ont pas besoin d'installer OtoCPA "
         "&mdash; ils accedent au portail via leur navigateur.",
         styles["Body"],
     ))
@@ -2039,12 +2039,12 @@ def _build_section_6_cloudflare(story, styles):
     story.extend(numbered_list([
         "Creez un compte Cloudflare gratuit sur cloudflare.com",
         "Ajoutez votre domaine au DNS Cloudflare",
-        "Installez cloudflared sur le serveur LedgerLink",
+        "Installez cloudflared sur le serveur OtoCPA",
         "Creez un tunnel : <font face='Courier'>cloudflared tunnel create "
-        "ledgerlink</font>",
+        "otocpa</font>",
         "Configurez le tunnel pour pointer vers localhost:8788",
         "Demarrez le tunnel : <font face='Courier'>cloudflared tunnel run "
-        "ledgerlink</font>",
+        "otocpa</font>",
         "Mettez a jour le DNS pour pointer votre sous-domaine vers le tunnel",
     ], styles))
     story.append(sp())
@@ -2052,7 +2052,7 @@ def _build_section_6_cloudflare(story, styles):
         "Les tunnels Cloudflare sont gratuits et fournissent le chiffrement "
         "HTTPS, la protection DDoS et le CDN mondial. Aucune redirection "
         "de port ni adresse IP statique n'est requise. Lorsque HTTPS est "
-        "actif, LedgerLink active automatiquement les temoins securises.",
+        "actif, OtoCPA active automatiquement les temoins securises.",
         styles,
     ))
     story.append(sp())
@@ -2103,7 +2103,7 @@ def _build_section_6_messaging(story, styles):
 
     story.append(Paragraph("6.7 Integration Microsoft 365", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink s'integre a Microsoft 365 pour l'automatisation du "
+        "OtoCPA s'integre a Microsoft 365 pour l'automatisation du "
         "courriel et du calendrier. Configurez a l'etape 9 de l'assistant.",
         styles["Body"],
     ))
@@ -2126,7 +2126,7 @@ def _build_section_6_messaging(story, styles):
     story.append(Paragraph("Configuration Azure AD :", styles["BodyBold"]))
     story.extend(numbered_list([
         "Allez dans Azure Active Directory &gt; Inscriptions d'applications",
-        "Creez une nouvelle inscription pour LedgerLink",
+        "Creez une nouvelle inscription pour OtoCPA",
         "Accordez les permissions Mail.Read, Mail.ReadWrite et Calendars.ReadWrite",
         "Creez un secret client (note : les secrets expirent ; definissez un rappel)",
         "Saisissez l'ID du locataire, l'ID client et le secret client a l'etape 9",
@@ -2144,7 +2144,7 @@ def _build_section_6_messaging(story, styles):
 
     story.append(Paragraph("6.8 Integration QuickBooks en ligne", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink inscrit les transactions approuvees dans QuickBooks en "
+        "OtoCPA inscrit les transactions approuvees dans QuickBooks en "
         "ligne. Configurez a l'etape 10 de l'assistant.",
         styles["Body"],
     ))
@@ -2154,7 +2154,7 @@ def _build_section_6_messaging(story, styles):
         "<b>Inscrire les transactions :</b> Les documents approuves creent "
         "des factures a payer, des depenses ou des ecritures de journal dans QBO.",
         "<b>Synchroniser les fournisseurs :</b> Les donnees maitresses des "
-        "fournisseurs sont synchronisees entre LedgerLink et QBO.",
+        "fournisseurs sont synchronisees entre OtoCPA et QBO.",
         "<b>Mettre a jour les comptes :</b> Le plan comptable est synchronise "
         "depuis QBO pour un appariement precis au grand livre.",
         "<b>Verifier les inscriptions :</b> L'outil de verification QBO "
@@ -2164,14 +2164,14 @@ def _build_section_6_messaging(story, styles):
     story.append(Paragraph("Configuration :", styles["BodyBold"]))
     story.extend(numbered_list([
         "Allez sur developer.intuit.com et creez une application",
-        "Definissez l'URI de redirection vers votre URL LedgerLink",
+        "Definissez l'URI de redirection vers votre URL OtoCPA",
         "Notez l'ID de domaine (ID d'entreprise) depuis QBO",
         "Saisissez l'ID de domaine, l'ID client et le secret client a l'etape 10",
         "Autorisez la connexion via le flux OAuth",
     ], styles))
     story.append(sp())
     story.append(tip_box(
-        "Les jetons QBO expirent periodiquement. LedgerLink rafraichit "
+        "Les jetons QBO expirent periodiquement. OtoCPA rafraichit "
         "automatiquement les jetons, mais si l'inscription echoue avec une "
         "erreur d'authentification, reauthorisez depuis l'assistant.",
         styles,
@@ -2518,7 +2518,7 @@ def _build_section_8_controls(story, styles):
     """Tests des controles (NCA 330)."""
     story.append(Paragraph("8.5 Tests des controles (NCA 330)", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink comprend une bibliotheque de 15 controles standard pour "
+        "OtoCPA comprend une bibliotheque de 15 controles standard pour "
         "les cabinets CPA du Quebec :",
         styles["Body"],
     ))
@@ -2736,7 +2736,7 @@ def _build_section_8_quality(story, styles):
     """Controle qualite (NCCQ 1)."""
     story.append(Paragraph("8.13 Controle qualite (NCCQ 1)", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink soutient le controle qualite a travers plusieurs "
+        "OtoCPA soutient le controle qualite a travers plusieurs "
         "mecanismes alignes sur les exigences de la NCCQ 1 :",
         styles["Body"],
     ))
@@ -2784,7 +2784,7 @@ def _build_section_8_quality(story, styles):
 
     story.append(Paragraph("8.15 Plan comptable", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink comprend un plan comptable precharge de 200+ comptes "
+        "OtoCPA comprend un plan comptable precharge de 200+ comptes "
         "suivant le plan comptable standard du Quebec. Plages de comptes "
         "principales :",
         styles["Body"],
@@ -2847,7 +2847,7 @@ def _build_section_8_quality(story, styles):
     story.append(Paragraph("8.17 Chaine de corrections et suivi des modifications",
                            styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink maintient un graphe de chaine de corrections qui suit "
+        "OtoCPA maintient un graphe de chaine de corrections qui suit "
         "toutes les corrections de documents, les decompositions de notes "
         "de credit et les regroupements de doublons. Cela garantit qu'un "
         "evenement economique produit exactement une correction.",
@@ -2913,7 +2913,7 @@ def _build_section_9_license(story, styles):
     """Niveaux de licence."""
     story.append(Paragraph("9.1 Niveaux de licence", styles["H2"]))
     story.append(Paragraph(
-        "Les licences LedgerLink sont signees avec HMAC-SHA256 et encodees "
+        "Les licences OtoCPA sont signees avec HMAC-SHA256 et encodees "
         "au format de cle LLAI-. Quatre niveaux sont disponibles :",
         styles["Body"],
     ))
@@ -2993,7 +2993,7 @@ def _build_section_9_backups(story, styles):
         styles["Body"],
     ))
     story.extend(bullet_list([
-        "<b>Dossier de sauvegarde :</b> Defaut C:/LedgerLink/Backups/",
+        "<b>Dossier de sauvegarde :</b> Defaut C:/OtoCPA/Backups/",
         "<b>Frequence :</b> Quotidienne, Hebdomadaire ou A chaque connexion",
         "<b>Retention :</b> Nombre de copies de sauvegarde a conserver",
         "<b>Synchronisation OneDrive :</b> Sauvegarde infonuagique optionnelle",
@@ -3015,7 +3015,7 @@ def _build_section_9_vendor_memory(story, styles):
     """Gestion de la memoire fournisseur."""
     story.append(Paragraph("9.5 Memoire fournisseur et alias", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink apprend des corrections pour constituer la memoire "
+        "OtoCPA apprend des corrections pour constituer la memoire "
         "fournisseur &mdash; une base de donnees de patrons qui ameliore "
         "la precision au fil du temps.",
         styles["Body"],
@@ -3073,11 +3073,11 @@ def _build_section_9_remote(story, styles):
     story.append(Paragraph(
         "Pour les deploiements multi-postes, utilisez la page de gestion "
         "a distance (Proprietaire uniquement) pour gerer les instances "
-        "LedgerLink distantes :",
+        "OtoCPA distantes :",
         styles["Body"],
     ))
     story.extend(bullet_list([
-        "<b>Redemarrer :</b> Redemarrer le service LedgerLink distant",
+        "<b>Redemarrer :</b> Redemarrer le service OtoCPA distant",
         "<b>Sauvegarder :</b> Declencher une sauvegarde de base de donnees distante",
         "<b>Mettre a jour :</b> Pousser une mise a jour logicielle vers l'instance distante",
         "<b>Reparation auto :</b> Executer le script de reparation automatique a distance",
@@ -3172,7 +3172,7 @@ def _build_section_9_remote(story, styles):
         "Archiver les periodes completees en exportant les donnees et en creant "
         "une nouvelle base de donnees pour le nouvel exercice",
         "Executer VACUUM periodiquement : <font face='Courier'>sqlite3 "
-        "data/ledgerlink_agent.db \"VACUUM;\"</font>",
+        "data/otocpa_agent.db \"VACUUM;\"</font>",
         "Assurer un espace disque adequat (minimum 500 Mo libres recommande)",
         "SQLite prend en charge des bases de donnees jusqu'a 281 To ; en "
         "pratique, les performances peuvent se degrader au-dela de 1-2 Go "
@@ -3228,7 +3228,7 @@ def build_section_10_troubleshooting(story, styles):
             ("Symptome", "Le portail client est inaccessible depuis l'exterieur du reseau."),
             ("Cause", "Service cloudflared arrete ou mauvaise configuration DNS."),
             ("Correctif", "Redemarrez cloudflared : <font face='Courier'>cloudflared "
-             "tunnel run ledgerlink</font>. Verifiez que le DNS pointe vers le tunnel. "
+             "tunnel run otocpa</font>. Verifiez que le DNS pointe vers le tunnel. "
              "Verifiez le tableau de bord Cloudflare pour l'etat du tunnel."),
         ]),
         ("10.7 Indicateurs de substance incorrects", [
@@ -3273,7 +3273,7 @@ def build_section_10_troubleshooting(story, styles):
 
     story.append(Paragraph("10.11 Reference des codes d'erreur", styles["H2"]))
     story.append(Paragraph(
-        "Codes d'erreur HTTP courants retournes par LedgerLink et leur "
+        "Codes d'erreur HTTP courants retournes par OtoCPA et leur "
         "signification :",
         styles["Body"],
     ))
@@ -3308,11 +3308,11 @@ def build_section_10_troubleshooting(story, styles):
         styles["Body"],
     ))
     story.extend(numbered_list([
-        "Arretez le service LedgerLink.",
-        "Localisez la derniere sauvegarde dans C:/LedgerLink/Backups/ (ou "
+        "Arretez le service OtoCPA.",
+        "Localisez la derniere sauvegarde dans C:/OtoCPA/Backups/ (ou "
         "votre dossier de sauvegarde configure).",
         "Copiez le fichier de sauvegarde vers <font face='Courier'>"
-        "data/ledgerlink_agent.db</font>, en remplacant le fichier corrompu.",
+        "data/otocpa_agent.db</font>, en remplacant le fichier corrompu.",
         "Executez <font face='Courier'>python scripts/migrate_db.py</font> "
         "pour appliquer toute migration en attente.",
         "Executez <font face='Courier'>python scripts/autofix.py</font> "
@@ -3331,7 +3331,7 @@ def build_section_10_troubleshooting(story, styles):
 
     story.append(Paragraph("10.13 Conflits de port", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink utilise trois ports par defaut. Si un port est deja "
+        "OtoCPA utilise trois ports par defaut. Si un port est deja "
         "utilise par une autre application :",
         styles["Body"],
     ))
@@ -3350,7 +3350,7 @@ def build_section_10_troubleshooting(story, styles):
     story.append(Paragraph(
         "Sous Windows, verifiez l'utilisation des ports avec : "
         "<font face='Courier'>netstat -ano | findstr :8787</font>. "
-        "Terminez le processus en conflit ou modifiez le port LedgerLink "
+        "Terminez le processus en conflit ou modifiez le port OtoCPA "
         "dans le fichier de configuration.",
         styles["Body"],
     ))
@@ -3358,13 +3358,13 @@ def build_section_10_troubleshooting(story, styles):
 
     story.append(Paragraph("10.14 Mise a niveau de Python", styles["H2"]))
     story.append(Paragraph(
-        "LedgerLink necessite Python 3.11 ou superieur. Pour mettre a niveau :",
+        "OtoCPA necessite Python 3.11 ou superieur. Pour mettre a niveau :",
         styles["Body"],
     ))
     story.extend(numbered_list([
         "Telechargez le dernier Python 3.11+ depuis python.org.",
         "Installez avec \"Add Python to PATH\" coche.",
-        "Arretez le service LedgerLink.",
+        "Arretez le service OtoCPA.",
         "Executez : <font face='Courier'>pip install -r requirements.txt</font>",
         "Redemarrez le service.",
         "Verifiez : <font face='Courier'>python --version</font>",
@@ -3380,7 +3380,7 @@ def build_section_11_glossary(story, styles):
     story.append(Paragraph("11. Glossaire", styles["H1"]))
     story.append(sp())
     story.append(Paragraph(
-        "LedgerLink est entierement bilingue. Ce glossaire fournit les "
+        "OtoCPA est entierement bilingue. Ce glossaire fournit les "
         "equivalents francais et anglais des termes cles utilises dans "
         "l'ensemble de l'application.",
         styles["Body"],
@@ -3597,7 +3597,7 @@ def _build_glossary_payroll(story, styles):
     story.append(sp())
 
     story.append(Paragraph(
-        "Ce glossaire couvre les principaux termes utilises dans LedgerLink. "
+        "Ce glossaire couvre les principaux termes utilises dans OtoCPA. "
         "L'interface de l'application affiche tous les termes dans les deux "
         "langues et peut etre basculee en un clic depuis n'importe quelle page.",
         styles["Body"],
@@ -3610,7 +3610,7 @@ def _build_glossary_payroll(story, styles):
     story.append(sp())
     story.append(Paragraph(
         "Cette carte de reference rapide resume les operations les plus "
-        "courantes dans LedgerLink pour une utilisation quotidienne.",
+        "courantes dans OtoCPA pour une utilisation quotidienne.",
         styles["Body"],
     ))
     story.append(sp())
@@ -3725,7 +3725,7 @@ def _build_glossary_payroll(story, styles):
         ["NCCQ 1", "Controle qualite", "Affectation d'equipe, revision, immutabilite"],
     ]
     story.append(make_table(
-        ["Norme", "Sujet", "Implementation LedgerLink"],
+        ["Norme", "Sujet", "Implementation OtoCPA"],
         cas_quick,
         col_widths=[0.9 * inch, 1.5 * inch, 3.5 * inch],
     ))
@@ -3819,7 +3819,7 @@ def _build_glossary_payroll(story, styles):
         styles["Body"],
     ))
     story.extend(bullet_list([
-        "<b>Soutien par courriel :</b> support@ledgerlink.ca",
+        "<b>Soutien par courriel :</b> support@otocpa.com",
         "<b>Guide d'installation :</b> docs/README_INSTALL.txt (inclus dans "
         "le paquet d'installation)",
         "<b>Guide du second poste :</b> docs/SECOND_MACHINE_INSTALL.md",
@@ -3828,7 +3828,7 @@ def _build_glossary_payroll(story, styles):
         "diagnostic et une reparation automatiques",
         "<b>Page de depannage :</b> Accedez depuis la barre laterale "
         "d'administration pour l'etat du systeme en temps reel",
-        "<b>Problemes de licence :</b> Contactez support@ledgerlink.ca pour "
+        "<b>Problemes de licence :</b> Contactez support@otocpa.com pour "
         "les transferts de licence et les reinitialisations d'activation",
     ], styles))
     story.append(sp())
@@ -3836,13 +3836,13 @@ def _build_glossary_payroll(story, styles):
         "Lorsque vous contactez le soutien, veuillez inclure : votre niveau "
         "de licence, le message d'erreur ou la capture d'ecran, les etapes "
         "pour reproduire le probleme et le contenu de "
-        "C:\\LedgerLink\\install.log le cas echeant.",
+        "C:\\OtoCPA\\install.log le cas echeant.",
         styles["Body"],
     ))
     story.append(sp())
 
     story.append(Paragraph(
-        "&mdash; Fin du Manuel d'utilisation LedgerLink AI &mdash;",
+        "&mdash; Fin du Manuel d'utilisation OtoCPA &mdash;",
         ParagraphStyle("EndMark", parent=styles["Body"],
                        alignment=TA_CENTER, textColor=BLUE,
                        fontSize=11, spaceBefore=24),
@@ -3866,7 +3866,7 @@ def _on_page(canvas, doc):
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(BLUE)
     canvas.drawString(0.75 * inch, letter[1] - 0.55 * inch,
-                      "LedgerLink AI - Manuel d'utilisation")
+                      "OtoCPA - Manuel d'utilisation")
     # Numero de page
     canvas.setFillColor(DARK_GREY)
     canvas.drawCentredString(
@@ -3892,8 +3892,8 @@ def main():
         bottomMargin=0.85 * inch,
         leftMargin=0.75 * inch,
         rightMargin=0.75 * inch,
-        title="LedgerLink AI - Manuel d'utilisation",
-        author="LedgerLink AI",
+        title="OtoCPA - Manuel d'utilisation",
+        author="OtoCPA",
     )
 
     story = []

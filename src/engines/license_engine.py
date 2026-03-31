@@ -1,5 +1,5 @@
 """
-src/engines/license_engine.py — LedgerLink license key validation engine.
+src/engines/license_engine.py — OtoCPA license key validation engine.
 
 License key format: LLAI-<base64url_payload>
 where payload is JSON: {"tier": "...", "firm_name": "...", "max_clients": N,
@@ -165,29 +165,29 @@ def load_license(key: str, secret: str) -> dict:
 
 
 def get_signing_secret() -> str:
-    """Read LEDGERLINK_SIGNING_SECRET from .env file or environment variable."""
+    """Read OTOCPA_SIGNING_SECRET from .env file or environment variable."""
     env_file = ROOT_DIR / ".env"
     if env_file.exists():
         try:
             for line in env_file.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
-                if line.startswith("LEDGERLINK_SIGNING_SECRET"):
+                if line.startswith("OTOCPA_SIGNING_SECRET"):
                     _, _, value = line.partition("=")
                     return value.strip().strip('"').strip("'")
         except Exception:
             pass
-    return os.environ.get("LEDGERLINK_SIGNING_SECRET", "")
+    return os.environ.get("OTOCPA_SIGNING_SECRET", "")
 
 
 def get_license_status() -> dict:
-    """Read license from ledgerlink.config.json and return status dict."""
-    config_path = ROOT_DIR / "ledgerlink.config.json"
+    """Read license from otocpa.config.json and return status dict."""
+    config_path = ROOT_DIR / "otocpa.config.json"
     defaults = dict(_EMPTY_STATUS)
 
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
     except Exception:
-        defaults["error"] = "Could not read ledgerlink.config.json"
+        defaults["error"] = "Could not read otocpa.config.json"
         return defaults
 
     lic_cfg = cfg.get("license")
@@ -274,10 +274,10 @@ def check_limits(conn: sqlite3.Connection) -> dict:
 
 
 def save_license_to_config(key: str, secret: str) -> dict:
-    """Validate the key then save to ledgerlink.config.json. Return payload."""
+    """Validate the key then save to otocpa.config.json. Return payload."""
     payload = load_license(key, secret)
 
-    config_path = ROOT_DIR / "ledgerlink.config.json"
+    config_path = ROOT_DIR / "otocpa.config.json"
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
     except Exception:
@@ -405,7 +405,7 @@ def register_machine(conn: sqlite3.Connection) -> dict:
         return result
 
     # Get license key hash for grouping
-    config_path = ROOT_DIR / "ledgerlink.config.json"
+    config_path = ROOT_DIR / "otocpa.config.json"
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
         lic_key = cfg.get("license", {}).get("key", "")
@@ -447,7 +447,7 @@ def get_licensed_machines(conn: sqlite3.Connection) -> list[dict]:
     """Return all machines activated for the current license."""
     _ensure_license_machines_table(conn)
 
-    config_path = ROOT_DIR / "ledgerlink.config.json"
+    config_path = ROOT_DIR / "otocpa.config.json"
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
         lic_key = cfg.get("license", {}).get("key", "")

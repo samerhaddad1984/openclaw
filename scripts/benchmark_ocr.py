@@ -239,7 +239,7 @@ def run_benchmark() -> str:
     # --- Build report ---
     lines: list[str] = []
     lines.append("=" * 70)
-    lines.append("  LedgerLink OCR Benchmark Report")
+    lines.append("  OtoCPA OCR Benchmark Report")
     lines.append("=" * 70)
     lines.append(f"\nTotal images evaluated: {len(ground_truths)}")
     lines.append("")

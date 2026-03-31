@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.agents.core.openclaw_case_orchestrator import OpenClawCaseOrchestrator
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def open_db() -> sqlite3.Connection:
@@ -286,7 +286,7 @@ def run_queue(
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run LedgerLink OpenClaw queue")
+    parser = argparse.ArgumentParser(description="Run OtoCPA OpenClaw queue")
     parser.add_argument(
         "--status",
         action="append",

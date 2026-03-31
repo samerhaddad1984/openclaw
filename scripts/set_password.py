@@ -2,7 +2,7 @@ import hashlib
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "ledgerlink_agent.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "otocpa_agent.db"
 
 users = [
     ("sam",       "SamOwner123!"),

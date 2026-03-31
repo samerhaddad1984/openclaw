@@ -1,7 +1,7 @@
 """
 src/engines/reconciliation_engine.py
 =====================================
-Bank reconciliation engine for LedgerLink.
+Bank reconciliation engine for OtoCPA.
 
 Provides functions to create, populate, calculate, and finalize bank
 reconciliations.  Generates professional bilingual PDF reports.
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # Tolerance for balanced check ($0.01)
 BALANCE_TOLERANCE = 0.01

@@ -1,4 +1,4 @@
-"""Build all LedgerLink AI sales PPTX presentations."""
+"""Build all OtoCPA sales PPTX presentations."""
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -42,7 +42,7 @@ def add_logo(slide):
     tf = txBox.text_frame
     tf.word_wrap = False
     p = tf.paragraphs[0]
-    r1 = p.add_run(); r1.text = "LedgerLink"; r1.font.size = Pt(14); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
+    r1 = p.add_run(); r1.text = "OtoCPA"; r1.font.size = Pt(14); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
     r2 = p.add_run(); r2.text = " AI"; r2.font.size = Pt(14); r2.font.bold = True; r2.font.color.rgb = GOLD; r2.font.name = "Segoe UI"
 
 
@@ -94,7 +94,7 @@ def title_slide(prs, main_title, subtitle_text, notes_text):
     add_bg(slide)
     txBox = slide.shapes.add_textbox(Inches(1), Inches(1.8), Inches(11), Inches(1.5))
     tf = txBox.text_frame; p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
-    r1 = p.add_run(); r1.text = "LedgerLink"; r1.font.size = Pt(56); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
+    r1 = p.add_run(); r1.text = "OtoCPA"; r1.font.size = Pt(56); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
     r2 = p.add_run(); r2.text = " AI"; r2.font.size = Pt(56); r2.font.bold = True; r2.font.color.rgb = GOLD; r2.font.name = "Segoe UI"
     s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(5), Inches(3.2), Inches(3), Pt(3))
     s.fill.solid(); s.fill.fore_color.rgb = GOLD; s.line.fill.background()
@@ -206,7 +206,7 @@ def build_sales_script():
     add_accent_line(slide)
     add_box(slide, Inches(0.7), Inches(2.3), Inches(11.9), Inches(2.2), MID_BLUE, [
         ("Script FR:", True),
-        ('"Bonjour [prenom], c\'est [votre nom] de LedgerLink. Je ne vous derangerai', False),
+        ('"Bonjour [prenom], c\'est [votre nom] de OtoCPA. Je ne vous derangerai', False),
         ('pas longtemps. On aide les cabinets CPA du Quebec a eliminer la saisie', False),
         ('manuelle avec l\'IA. Est-ce que la saisie de factures prend beaucoup', False),
         ('de temps dans votre cabinet?"', False),
@@ -226,7 +226,7 @@ def build_sales_script():
     add_accent_line(slide)
     add_box(slide, Inches(0.7), Inches(2.3), Inches(11.9), Inches(1.8), MID_BLUE, [
         ("Script FR:", True),
-        ('"Bonjour [prenom], c\'est [votre nom] de LedgerLink. On aide les cabinets CPA', False),
+        ('"Bonjour [prenom], c\'est [votre nom] de OtoCPA. On aide les cabinets CPA', False),
         ('a eliminer la saisie manuelle --- un de vos collegues economise 160 heures/mois.', False),
         ('Je vous envoie un courriel avec les details. Bonne journee."', False),
     ])
@@ -291,7 +291,7 @@ def build_sales_script():
     # Slide 6 - Transition to Demo
     quote_slide(prs,
         "Merci, c'est tres utile. Vous avez mentionne [repeter leur probleme dans LEURS mots]. "
-        "C'est exactement ce que LedgerLink regle. Est-ce que je peux vous montrer en 15 minutes?",
+        "C'est exactement ce que OtoCPA regle. Est-ce que je peux vous montrer en 15 minutes?",
         notes="Repetez LEURS mots, pas les votres. Demandez la permission de montrer la demo. "
               "Fixez l'attente de temps: 15 minutes.",
         title_text="5. Transition vers la demo")
@@ -477,16 +477,16 @@ def build_objections():
         ("On utilise deja TaxDome / Karbon / CaseWare",
          "Ils ont deja investi du temps et de l'argent ailleurs.",
          '"Comment ca se passe avec [leur outil]? Est-ce que la saisie est vraiment automatisee?"',
-         "LedgerLink ne remplace pas [outil]. Il s'ajoute en amont.\n[Outil] gere le flux de travail. LedgerLink elimine la saisie.\nLes deux peuvent coexister.",
+         "OtoCPA ne remplace pas [outil]. Il s'ajoute en amont.\n[Outil] gere le flux de travail. OtoCPA elimine la saisie.\nLes deux peuvent coexister.",
          '"Ca vaudrait la peine de voir comment les deux fonctionnent ensemble?"'),
         ("C'est trop cher",
          "Ils ne voient pas assez de valeur. Ou doivent justifier a un associe.",
          '"Je comprends. Regardons les chiffres ensemble."',
-         "[X] clients x [Y]h de saisie = [Z]h/mois\nA 150$/h = [$$] de capacite\nLedgerLink = 249$/mois = 1.7% du temps recupere\n= Rentable en moins de 2 heures",
+         "[X] clients x [Y]h de saisie = [Z]h/mois\nA 150$/h = [$$] de capacite\nOtoCPA = 249$/mois = 1.7% du temps recupere\n= Rentable en moins de 2 heures",
          '"On offre un pilote de 30 jours gratuit. Vous testez, vous mesurez, vous decidez."'),
         ("On n'a pas le temps d'implanter",
          "Ils sont deja submerges. Un logiciel de plus les effraie.",
-         '"C\'est justement pour ca que LedgerLink existe."',
+         '"C\'est justement pour ca que OtoCPA existe."',
          "Installation: 30 minutes a distance. VOUS faites tout.\nInterface simple: file d'attente, un clic pour approuver.\nAucune formation complexe requise.",
          '"30 minutes cette semaine, ca serait faisable?"'),
         ("Nos clients ne l'utiliseront pas",
@@ -496,8 +496,8 @@ def build_objections():
          '"Avez-vous des clients technos pour le pilote?"'),
         ("Et si vous fermez?",
          "Mefiance envers les startups.",
-         '"C\'est l\'avantage principal de LedgerLink."',
-         "Vos donnees = sur VOTRE serveur. SQLite lisible partout.\nSi LedgerLink disparait, vos donnees restent.\nComparez: TaxDome/Karbon = serveurs Amazon aux USA.",
+         '"C\'est l\'avantage principal de OtoCPA."',
+         "Vos donnees = sur VOTRE serveur. SQLite lisible partout.\nSi OtoCPA disparait, vos donnees restent.\nComparez: TaxDome/Karbon = serveurs Amazon aux USA.",
          '"La question des donnees est votre principale preoccupation?"'),
         ("On va y penser",
          "Pas prets a decider. Veulent eviter de dire non en face.",
@@ -553,7 +553,7 @@ def build_objections():
         ("L'Ordre n'approuve AUCUN logiciel.", False),
         ("Ni QBO, ni CaseWare, ni aucun autre.", False),
         ("Exigence: jugement pro + piste d'audit.", False),
-        ("LedgerLink = revue humaine + audit complet.", False),
+        ("OtoCPA = revue humaine + audit complet.", False),
     ], title_color=ORANGE)
     add_box(slide, Inches(6.6), Inches(2.3), Inches(6.1), Inches(1), MID_BLUE, [
         ('"On est trop petit" (<10 clients)', True),
@@ -565,7 +565,7 @@ def build_objections():
     ], title_color=ORANGE)
     add_box(slide, Inches(0.7), Inches(4.8), Inches(11.9), Inches(1.2), MID_BLUE, [
         ('"On vient de renouveler avec [concurrent]"', True),
-        ("LedgerLink s'ajoute en amont, ne remplace pas. Notez la date de fin.", False),
+        ("OtoCPA s'ajoute en amont, ne remplace pas. Notez la date de fin.", False),
         ("Offrez le pilote gratuit maintenant --- ca ne touche pas leur contrat.", False),
     ], title_color=ORANGE)
     add_notes(slide, "L'Ordre n'approuve aucun logiciel. Trop petit = Essentiel 99$. "
@@ -586,7 +586,7 @@ def build_one_pager():
     title_slide(prs,
         "La comptabilite intelligente pour les cabinets CPA du Quebec",
         "Fiche-resume | One-Pager",
-        "LedgerLink elimine la saisie manuelle de factures. Vos clients envoient une photo. "
+        "OtoCPA elimine la saisie manuelle de factures. Vos clients envoient une photo. "
         "L'IA extrait les donnees. Votre equipe approuve en un clic. Les taxes sont calculees automatiquement.")
 
     # 3 Key Advantages
@@ -679,26 +679,26 @@ def build_one_pager():
         "Piste d'audit complete (qui, quoi, quand)",
         "Sauvegardes automatiques quotidiennes",
         "Acces distant securise via Cloudflare Tunnel (HTTPS)",
-        "Aucun acces de LedgerLink a vos donnees clients",
+        "Aucun acces de OtoCPA a vos donnees clients",
     ]
     for i, item in enumerate(security_items):
         txBox = slide.shapes.add_textbox(Inches(1.5), Inches(2.3 + i * 0.7), Inches(10), Inches(0.6))
         tf = txBox.text_frame; tf.word_wrap = True; p = tf.paragraphs[0]
         r1 = p.add_run(); r1.text = "  "; r1.font.size = Pt(20); r1.font.color.rgb = GREEN; r1.font.name = "Segoe UI"
         r2 = p.add_run(); r2.text = item; r2.font.size = Pt(22); r2.font.color.rgb = WHITE; r2.font.name = "Segoe UI"
-    add_notes(slide, "Securite: serveur local, bcrypt, audit complet, sauvegardes auto, Cloudflare, zero acces LedgerLink.")
+    add_notes(slide, "Securite: serveur local, bcrypt, audit complet, sauvegardes auto, Cloudflare, zero acces OtoCPA.")
 
     # Contact / CTA
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     add_bg(slide)
     txBox = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(11), Inches(1))
     tf = txBox.text_frame; p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
-    r1 = p.add_run(); r1.text = "LedgerLink"; r1.font.size = Pt(52); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
+    r1 = p.add_run(); r1.text = "OtoCPA"; r1.font.size = Pt(52); r1.font.bold = True; r1.font.color.rgb = WHITE; r1.font.name = "Segoe UI"
     r2 = p.add_run(); r2.text = " AI"; r2.font.size = Pt(52); r2.font.bold = True; r2.font.color.rgb = GOLD; r2.font.name = "Segoe UI"
     s = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(5), Inches(2.8), Inches(3), Pt(3)); s.fill.solid(); s.fill.fore_color.rgb = GOLD; s.line.fill.background()
-    add_body(slide, "support@ledgerlink.ca\nledgerlink.ca\n\nReservez une demo de 15 minutes\nOn vous montre le logiciel avec vos vrais documents.",
+    add_body(slide, "support@otocpa.com\notocpa.com\n\nReservez une demo de 15 minutes\nOn vous montre le logiciel avec vos vrais documents.",
              y=Inches(3.2), font_size=Pt(24), color=WHITE)
-    add_notes(slide, "Coordonnees: support@ledgerlink.ca, ledgerlink.ca. Demo de 15 minutes avec vrais documents.")
+    add_notes(slide, "Coordonnees: support@otocpa.com, otocpa.com. Demo de 15 minutes avec vrais documents.")
 
     out = os.path.join(OUT_DIR, "ONE_PAGER_FR.pptx")
     prs.save(out)
@@ -752,7 +752,7 @@ def build_email_templates():
          [
             "Bonjour [Prenom],",
             "",
-            "Je m'appelle [votre nom], je travaille chez LedgerLink.",
+            "Je m'appelle [votre nom], je travaille chez OtoCPA.",
             "",
             "On aide les cabinets CPA du Quebec a eliminer la saisie",
             "manuelle de factures avec l'IA. Le calcul TPS/TVQ est",
@@ -772,7 +772,7 @@ def build_email_templates():
             "",
             "Je voulais m'assurer que mon courriel s'est bien rendu.",
             "",
-            "En un mot: LedgerLink automatise la saisie comptable.",
+            "En un mot: OtoCPA automatise la saisie comptable.",
             "Photo de facture -> extraction auto -> clic pour approuver.",
             "",
             "15 minutes pour voir --- ca vous dit?",
@@ -813,7 +813,7 @@ def build_email_templates():
          "Envoyez dans les 2 heures. Incluez LEURS chiffres specifiques."),
 
         ("5. Proposition avec prix",
-         "Objet: 'Proposition LedgerLink pour [NomDuCabinet]'",
+         "Objet: 'Proposition OtoCPA pour [NomDuCabinet]'",
          [
             "Suite a notre conversation, voici notre proposition.",
             "",
@@ -830,7 +830,7 @@ def build_email_templates():
          "Email formel de proposition. Resumez tout clairement. Un seul CTA: commencer le pilote."),
 
         ("6. Renouvellement (30 jours avant)",
-         "Objet: 'Renouvellement LedgerLink --- expire le [date]'",
+         "Objet: 'Renouvellement OtoCPA --- expire le [date]'",
          [
             "Votre licence [forfait] expire le [date].",
             "",
@@ -903,7 +903,7 @@ def build_demo_script():
         "Script de demo en direct --- 15 minutes",
         "Guide pas a pas pour le presentateur",
         "Public: Proprietaire/associe de cabinet CPA + potentiellement leur equipe.\n"
-        "Pre-requis: LedgerLink installe avec demo data. Navigateur ouvert sur 127.0.0.1:8787/login.")
+        "Pre-requis: OtoCPA installe avec demo data. Navigateur ouvert sur 127.0.0.1:8787/login.")
 
     # Pre-Demo Setup
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -912,9 +912,9 @@ def build_demo_script():
     add_title(slide, "Preparation pre-demo (10 min avant)")
     add_accent_line(slide)
     setup_steps = [
-        ("1. Demo mode", 'ledgerlink.config.json: "demo_mode": true'),
+        ("1. Demo mode", 'otocpa.config.json: "demo_mode": true'),
         ("2. Charger donnees", "python scripts/load_demo_data.py (50 docs, 5 clients)"),
-        ("3. Redemarrer", "sc stop/start LedgerLinkAI ou python review_dashboard.py"),
+        ("3. Redemarrer", "sc stop/start OtoCPA ou python review_dashboard.py"),
         ("4. Navigateur", "127.0.0.1:8787/login, connecte, FR, onglet filing summary pret"),
         ("5. Nettoyer", "Fermer email, Slack, notifications. Bureau propre."),
     ]
@@ -1053,7 +1053,7 @@ def build_demo_script():
         r2 = p.add_run(); r2.text = desc; r2.font.size = Pt(18); r2.font.color.rgb = WHITE; r2.font.name = "Segoe UI"
     add_body(slide, "Inclut: repas 50% | assurance 9% non recuperable | exemptions\nMontrez le PDF telechargeable | Si methode rapide: montrez le toggle par client",
              y=Inches(5.8), font_size=Pt(18), color=LIGHT_BLUE)
-    add_body(slide, '"Ce resume, a la main, ca prend combien de temps? Avec LedgerLink, c\'est instantane."',
+    add_body(slide, '"Ce resume, a la main, ca prend combien de temps? Avec OtoCPA, c\'est instantane."',
              y=Inches(6.6), font_size=Pt(20), color=GOLD, bold=True)
     add_notes(slide, "Naviguez a /filing_summary. Montrez les lignes FPZ-500 pre-remplies. "
               "Repas 50%, assurance non recuperable. PDF telechargeable. "
@@ -1097,13 +1097,13 @@ def build_demo_script():
     add_title(slide, "14:00-15:00 --- Cloture")
     add_accent_line(slide)
     add_box(slide, Inches(0.7), Inches(2.3), Inches(11.9), Inches(2.5), MID_BLUE, [
-        ('"Voila ce que LedgerLink fait en 15 minutes de demo."', True),
+        ('"Voila ce que OtoCPA fait en 15 minutes de demo."', True),
         ('"Imaginez ce que ca fait sur un mois entier de production."', True),
         ("", False),
         ("PAUSE --- laissez le message s'installer", True),
         ("", False),
         ('"Pour [NomDuCabinet] avec [X] clients: [Y]h economisees/mois.', False),
-        ('A 150$/h = [Z]$/mois. LedgerLink [forfait] coute [prix]$/mois."', False),
+        ('A 150$/h = [Z]$/mois. OtoCPA [forfait] coute [prix]$/mois."', False),
         ("", False),
         ("PAUSE --- laissez les chiffres parler", True),
     ], title_color=WHITE, body_color=LIGHT_BLUE, title_size=Pt(19), body_size=Pt(18))

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agents.core.openclaw_ledgerlink_skill import summarize_bridge_result
+from src.agents.core.openclaw_otocpa_skill import summarize_bridge_result
 
 
 def test_skill_summary_for_posted_document() -> None:

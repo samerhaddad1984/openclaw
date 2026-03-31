@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-LedgerLink AI — Client Portal
+OtoCPA — Client Portal
 ==============================
 Run standalone on a different port (8788) or mount alongside the main dashboard.
 
@@ -42,7 +42,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH     = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
 UPLOAD_DIR  = ROOT_DIR / "data" / "client_uploads"
 HOST        = "127.0.0.1"
 PORT        = 8788
@@ -544,14 +544,14 @@ def render_login(lang: str = "fr", error: str = "") -> str:
 <html lang="{lang}">
 <head>
 <meta charset="utf-8">
-<title>{t('login_title', lang)} — LedgerLink</title>
+<title>{t('login_title', lang)} — OtoCPA</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>{CSS}</style>
 </head>
 <body>
 <div class="login-wrap">
     <div class="login-box">
-        <h2>LedgerLink</h2>
+        <h2>OtoCPA</h2>
         {err_html}
         <form method="POST" action="/login">
             <input type="hidden" name="lang" value="{lang}">
@@ -939,7 +939,7 @@ class ClientPortalHandler(BaseHTTPRequestHandler):
 def main() -> int:
     bootstrap_schema()
     print()
-    print("LEDGERLINK CLIENT PORTAL")
+    print("OTOCPA CLIENT PORTAL")
     print("=" * 60)
     print(f"Database    : {DB_PATH}")
     print(f"Upload dir  : {UPLOAD_DIR}")

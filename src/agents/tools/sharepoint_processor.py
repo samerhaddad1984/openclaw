@@ -38,8 +38,8 @@ STATE_DIR = DATA_DIR / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_STATE_FILE = STATE_DIR / "processed_sharepoint_items.json"
 
-QUEUE_LIST_NAME = "LedgerLink Queue"
-CLIENTS_LIST_NAME = "LedgerLink Clients"
+QUEUE_LIST_NAME = "OtoCPA Queue"
+CLIENTS_LIST_NAME = "OtoCPA Clients"
 
 
 def now_iso() -> str:
@@ -285,7 +285,7 @@ def process_sharepoint_once(max_files: int = 10) -> dict:
                     route.score = max(route.score, 7)
                     route.matched_signals.append(f"ai_route:{ar.reason}")
 
-            # CENTRAL SOURCE OF TRUTH: LedgerLink Clients
+            # CENTRAL SOURCE OF TRUTH: OtoCPA Clients
             registry_entry = client_registry.get(route.client_code)
             if registry_entry:
                 route.client_name = registry_entry.client_name

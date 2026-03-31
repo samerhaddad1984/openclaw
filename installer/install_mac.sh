@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================
-# LedgerLink AI — One-Line macOS Installer
+# OtoCPA — One-Line macOS Installer
 # ============================================================
 # Usage:
-#   curl -fsSL https://install.ledgerlink.ca/install.sh | bash
+#   curl -fsSL https://install.otocpa.com/install.sh | bash
 #
 # With license key:
-#   LEDGERLINK_KEY="LLAI-XXXX" curl -fsSL https://install.ledgerlink.ca/install.sh | bash
+#   OTOCPA_KEY="LLAI-XXXX" curl -fsSL https://install.otocpa.com/install.sh | bash
 # ============================================================
 
 set -euo pipefail
 
-INSTALL_DIR="$HOME/LedgerLink"
-RELEASE_URL="https://releases.ledgerlink.ai/latest/ledgerlink-latest.tar.gz"
-RELEASE_MIRROR1="https://cdn.ledgerlink.ai/releases/ledgerlink-latest.tar.gz"
-RELEASE_MIRROR2="https://github.com/ledgerlink/releases/releases/latest/download/ledgerlink-latest.tar.gz"
-PLIST_LABEL="ca.ledgerlink.dashboard"
+INSTALL_DIR="$HOME/OtoCPA"
+RELEASE_URL="https://releases.otocpa.ai/latest/otocpa-latest.tar.gz"
+RELEASE_MIRROR1="https://cdn.otocpa.ai/releases/otocpa-latest.tar.gz"
+RELEASE_MIRROR2="https://github.com/otocpa/releases/releases/latest/download/otocpa-latest.tar.gz"
+PLIST_LABEL="ca.otocpa.dashboard"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 DASH_PORT=8787
 
@@ -25,7 +25,7 @@ DASH_PORT=8787
 echo ""
 echo "  +======================================================"
 echo "  |"
-echo "  |   LedgerLink AI — macOS Installer"
+echo "  |   OtoCPA — macOS Installer"
 echo "  |   Installation automatique / Auto Install"
 echo "  |"
 echo "  +======================================================"
@@ -66,12 +66,12 @@ PYTHON="$(command -v python3.11 || command -v python3)"
 echo "         Using: $PYTHON"
 
 # ============================================================
-# Step 3: Download and extract LedgerLink
+# Step 3: Download and extract OtoCPA
 # ============================================================
-echo "  [3/8] Downloading LedgerLink..."
+echo "  [3/8] Downloading OtoCPA..."
 
 mkdir -p "$INSTALL_DIR"
-ARCHIVE="$INSTALL_DIR/ledgerlink-latest.tar.gz"
+ARCHIVE="$INSTALL_DIR/otocpa-latest.tar.gz"
 
 downloaded=false
 for url in "$RELEASE_URL" "$RELEASE_MIRROR1" "$RELEASE_MIRROR2"; do
@@ -88,9 +88,9 @@ for url in "$RELEASE_URL" "$RELEASE_MIRROR1" "$RELEASE_MIRROR2"; do
 done
 
 if [ "$downloaded" = false ]; then
-    echo "  ERROR: Could not download LedgerLink."
+    echo "  ERROR: Could not download OtoCPA."
     echo "  Check your internet connection and try again."
-    echo "  Contact: support@ledgerlink.ca"
+    echo "  Contact: support@otocpa.com"
     exit 1
 fi
 
@@ -189,15 +189,15 @@ fi
 echo "  [8/8] Finishing up..."
 
 # Save license key if provided
-if [ -n "${LEDGERLINK_KEY:-}" ]; then
-    echo "         License key detected: $LEDGERLINK_KEY"
-    CONFIG_FILE="$INSTALL_DIR/ledgerlink.config.json"
+if [ -n "${OTOCPA_KEY:-}" ]; then
+    echo "         License key detected: $OTOCPA_KEY"
+    CONFIG_FILE="$INSTALL_DIR/otocpa.config.json"
     if [ -f "$CONFIG_FILE" ] && command -v python3 &>/dev/null; then
         python3 -c "
 import json
 try:
     cfg = json.loads(open('$CONFIG_FILE').read())
-    cfg['license_key'] = '$LEDGERLINK_KEY'
+    cfg['license_key'] = '$OTOCPA_KEY'
     open('$CONFIG_FILE', 'w').write(json.dumps(cfg, indent=2))
     print('         License key saved to config')
 except Exception as e:
@@ -222,7 +222,7 @@ echo "  |"
 echo "  |   Installation complete / Installation terminee"
 echo "  |"
 echo "  |   Dashboard: http://localhost:${DASH_PORT}"
-echo "  |   Support:   support@ledgerlink.ca"
+echo "  |   Support:   support@otocpa.com"
 echo "  |"
 echo "  +======================================================"
 echo ""

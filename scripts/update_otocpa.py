@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-scripts/update_ledgerlink.py — LedgerLink Remote Update Mechanism
+scripts/update_otocpa.py — OtoCPA Remote Update Mechanism
 ==================================================================
 Allows remote updates without visiting the client machine.
 
 Usage:
-    python update_ledgerlink.py --check       # Just check for updates
-    python update_ledgerlink.py --install     # Download and install update
-    python update_ledgerlink.py --rollback    # Roll back to previous backup
+    python update_otocpa.py --check       # Just check for updates
+    python update_otocpa.py --install     # Download and install update
+    python update_otocpa.py --rollback    # Roll back to previous backup
 """
 from __future__ import annotations
 
@@ -31,13 +31,13 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "version.json"
 DATA_DIR = ROOT / "data"
 BACKUP_DIR = DATA_DIR / "backups"
-DB_PATH = DATA_DIR / "ledgerlink_agent.db"
+DB_PATH = DATA_DIR / "otocpa_agent.db"
 MIGRATE_SCRIPT = ROOT / "scripts" / "migrate_db.py"
-CONFIG_PATH = ROOT / "ledgerlink.config.json"
+CONFIG_PATH = ROOT / "otocpa.config.json"
 
-SERVICE_NAME = "LedgerLinkAI"
+SERVICE_NAME = "OtoCPA"
 DASHBOARD_PORT = 8787
-DEFAULT_UPDATE_URL = "https://releases.ledgerlink.ai/latest/version.json"
+DEFAULT_UPDATE_URL = "https://releases.otocpa.ai/latest/version.json"
 
 # ---------------------------------------------------------------------------
 # Version helpers
@@ -65,7 +65,7 @@ def _fetch_remote_version(update_url: str) -> dict | None:
     try:
         req = urllib.request.Request(
             update_url,
-            headers={"User-Agent": "LedgerLink-Updater/1.0"},
+            headers={"User-Agent": "OtoCPA-Updater/1.0"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -87,8 +87,8 @@ def _version_tuple(version_str: str) -> tuple[int, ...]:
 # ---------------------------------------------------------------------------
 
 def _stop_service() -> bool:
-    """Stop the LedgerLink Windows Service."""
-    print("  Stopping LedgerLink service ...")
+    """Stop the OtoCPA Windows Service."""
+    print("  Stopping OtoCPA service ...")
     try:
         subprocess.run(["sc", "stop", SERVICE_NAME], capture_output=True, timeout=30)
         time.sleep(3)
@@ -109,8 +109,8 @@ def _stop_service() -> bool:
 
 
 def _start_service() -> bool:
-    """Start the LedgerLink Windows Service."""
-    print("  Starting LedgerLink service ...")
+    """Start the OtoCPA Windows Service."""
+    print("  Starting OtoCPA service ...")
     try:
         subprocess.run(["sc", "start", SERVICE_NAME], capture_output=True, timeout=30)
         time.sleep(3)
@@ -140,7 +140,7 @@ def _backup_database() -> Path | None:
 
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = BACKUP_DIR / f"ledgerlink_agent_{ts}.db"
+    backup_path = BACKUP_DIR / f"otocpa_agent_{ts}.db"
     shutil.copy2(str(DB_PATH), str(backup_path))
     size_mb = backup_path.stat().st_size / (1024 * 1024)
     print(f"  Database backed up: {backup_path.name} ({size_mb:.2f} MB)")
@@ -155,7 +155,7 @@ def _backup_application(install_dir: Path) -> Path | None:
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     # Back up scripts and src directories
-    for subdir in ["scripts", "src", "version.json", "ledgerlink.config.json"]:
+    for subdir in ["scripts", "src", "version.json", "otocpa.config.json"]:
         src = install_dir / subdir
         if src.is_file():
             shutil.copy2(str(src), str(backup_dir / subdir))
@@ -173,10 +173,10 @@ def _backup_application(install_dir: Path) -> Path | None:
 def _download_update(download_url: str) -> Path:
     """Download the update package."""
     print(f"  Downloading update ...")
-    dest = Path(tempfile.gettempdir()) / "ledgerlink-update.zip"
+    dest = Path(tempfile.gettempdir()) / "otocpa-update.zip"
     req = urllib.request.Request(
         download_url,
-        headers={"User-Agent": "LedgerLink-Updater/1.0"},
+        headers={"User-Agent": "OtoCPA-Updater/1.0"},
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         data = resp.read()
@@ -231,7 +231,7 @@ def _verify_dashboard() -> bool:
     time.sleep(3)
     try:
         url = f"http://127.0.0.1:{DASHBOARD_PORT}/login"
-        req = urllib.request.Request(url, headers={"User-Agent": "LedgerLink-Updater/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "OtoCPA-Updater/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status == 200:
                 print("  Dashboard is responding (HTTP 200)")
@@ -277,7 +277,7 @@ def cmd_check() -> int:
     update_url = _get_update_url()
 
     print()
-    print("LedgerLink Update Check")
+    print("OtoCPA Update Check")
     print("=" * 50)
     print(f"  Installed version : {installed['version']}")
     print(f"  Release date      : {installed.get('release_date', 'unknown')}")
@@ -297,7 +297,7 @@ def cmd_check() -> int:
         print(f"  Release date : {remote.get('release_date', 'unknown')}")
         print(f"  Changelog    : {remote.get('changelog', 'N/A')}")
         print()
-        print(f"  Run: python update_ledgerlink.py --install")
+        print(f"  Run: python update_otocpa.py --install")
         return 0
     else:
         print(f"  You are running the latest version ({installed_ver})")
@@ -310,7 +310,7 @@ def cmd_install() -> int:
     update_url = _get_update_url()
 
     print()
-    print("LedgerLink Update Installer")
+    print("OtoCPA Update Installer")
     print("=" * 50)
     print(f"  Current version: {installed['version']}")
 
@@ -391,7 +391,7 @@ def cmd_install() -> int:
 def cmd_rollback() -> int:
     """Roll back to the most recent backup."""
     print()
-    print("LedgerLink Rollback")
+    print("OtoCPA Rollback")
     print("=" * 50)
 
     if not BACKUP_DIR.exists():
@@ -404,7 +404,7 @@ def cmd_rollback() -> int:
         reverse=True,
     )
     db_backups = sorted(
-        [f for f in BACKUP_DIR.iterdir() if f.is_file() and f.name.startswith("ledgerlink_agent_")],
+        [f for f in BACKUP_DIR.iterdir() if f.is_file() and f.name.startswith("otocpa_agent_")],
         reverse=True,
     )
 
@@ -478,7 +478,7 @@ def install_update_background() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="LedgerLink AI — Update Manager",
+        description="OtoCPA — Update Manager",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group = parser.add_mutually_exclusive_group(required=True)

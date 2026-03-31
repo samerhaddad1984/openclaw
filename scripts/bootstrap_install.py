@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-scripts/bootstrap_install.py — LedgerLink Bootstrap Installer
+scripts/bootstrap_install.py — OtoCPA Bootstrap Installer
 ==============================================================
 A single Python script that can be run on any clean Windows 10/11 machine
-to install LedgerLink AI from scratch.
+to install OtoCPA from scratch.
 
 Usage:
     python bootstrap_install.py --license-key LLAI-XXXX --firm-name "Tremblay CPA"
 
 Optional flags:
     --release-url   URL to download the latest release archive (default: from config)
-    --install-dir   Installation directory (default: C:\\Program Files\\LedgerLink)
+    --install-dir   Installation directory (default: C:\\Program Files\\OtoCPA)
     --skip-python   Skip Python installation check
 """
 from __future__ import annotations
@@ -35,14 +35,14 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DEFAULT_INSTALL_DIR = Path(r"C:\Program Files\LedgerLink")
-LOG_DIR = Path(r"C:\LedgerLink")
+DEFAULT_INSTALL_DIR = Path(r"C:\Program Files\OtoCPA")
+LOG_DIR = Path(r"C:\OtoCPA")
 LOG_FILE = LOG_DIR / "install.log"
 MIN_PYTHON = (3, 11)
-SERVICE_NAME = "LedgerLinkAI"
+SERVICE_NAME = "OtoCPA"
 DASHBOARD_PORT = 8787
 WIZARD_PORT = 8790
-DEFAULT_RELEASE_URL = "https://releases.ledgerlink.ai/latest/ledgerlink-latest.zip"
+DEFAULT_RELEASE_URL = "https://releases.otocpa.ai/latest/otocpa-latest.zip"
 PYTHON_DOWNLOAD_URL = "https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
 
 # ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ def _download(url: str, dest: Path, label: str = "") -> None:
     """Download a file with progress indication."""
     _log_info(f"Downloading {label or url} ...")
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "LedgerLink-Installer/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "OtoCPA-Installer/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = resp.read()
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -232,10 +232,10 @@ def step_install_requirements(python: str, install_dir: Path) -> None:
 # Step 4: Download latest release
 # ---------------------------------------------------------------------------
 def step_download_release(release_url: str, install_dir: Path) -> None:
-    """Download the latest LedgerLink release archive."""
-    _log_info("Step 4: Downloading latest LedgerLink release ...")
-    archive = Path(tempfile.gettempdir()) / "ledgerlink-release.zip"
-    _download(release_url, archive, "LedgerLink release")
+    """Download the latest OtoCPA release archive."""
+    _log_info("Step 4: Downloading latest OtoCPA release ...")
+    archive = Path(tempfile.gettempdir()) / "otocpa-release.zip"
+    _download(release_url, archive, "OtoCPA release")
 
     _log_info(f"Extracting to {install_dir} ...")
     install_dir.mkdir(parents=True, exist_ok=True)
@@ -272,7 +272,7 @@ def step_migrate_db(python: str, install_dir: Path) -> None:
 # Step 7: Register Windows Service
 # ---------------------------------------------------------------------------
 def step_register_service(python: str, install_dir: Path) -> None:
-    """Register LedgerLink as a Windows Service."""
+    """Register OtoCPA as a Windows Service."""
     _log_info("Step 7: Registering Windows Service ...")
 
     service_wrapper = install_dir / "installer" / "service_wrapper.py"
@@ -301,9 +301,9 @@ def step_register_service(python: str, install_dir: Path) -> None:
             str(nssm), "install", SERVICE_NAME,
             python, str(dashboard_script),
         ])
-        _run([str(nssm), "set", SERVICE_NAME, "DisplayName", "LedgerLink AI Accounting"])
+        _run([str(nssm), "set", SERVICE_NAME, "DisplayName", "OtoCPA Accounting"])
         _run([str(nssm), "set", SERVICE_NAME, "Description",
-              "LedgerLink AI — Intelligent Accounting Document Queue"])
+              "OtoCPA — Intelligent Accounting Document Queue"])
         _run([str(nssm), "set", SERVICE_NAME, "Start", "SERVICE_AUTO_START"])
         _run([str(nssm), "set", SERVICE_NAME, "AppDirectory", str(install_dir)])
     else:
@@ -317,7 +317,7 @@ def step_register_service(python: str, install_dir: Path) -> None:
             "sc", "create", SERVICE_NAME,
             f"binPath={bin_path}",
             "start=auto",
-            f"DisplayName=LedgerLink AI Accounting",
+            f"DisplayName=OtoCPA Accounting",
         ])
 
     # Start the service
@@ -345,7 +345,7 @@ def step_create_shortcuts(install_dir: Path) -> None:
         return
 
     # Dashboard shortcut (.url file — works without COM dependencies)
-    dash_shortcut = desktop / "LedgerLink Dashboard.url"
+    dash_shortcut = desktop / "OtoCPA Dashboard.url"
     dash_shortcut.write_text(
         f"[InternetShortcut]\r\n"
         f"URL=http://127.0.0.1:{DASHBOARD_PORT}/\r\n"
@@ -354,7 +354,7 @@ def step_create_shortcuts(install_dir: Path) -> None:
     )
 
     # Setup wizard shortcut
-    wizard_shortcut = desktop / "LedgerLink Setup.url"
+    wizard_shortcut = desktop / "OtoCPA Setup.url"
     wizard_shortcut.write_text(
         f"[InternetShortcut]\r\n"
         f"URL=http://127.0.0.1:{WIZARD_PORT}/\r\n"
@@ -387,7 +387,7 @@ def step_open_wizard() -> None:
 def step_save_license(install_dir: Path, license_key: str, firm_name: str) -> None:
     """Save the license key and firm name to config."""
     _log_info("Step 10: Saving license and firm configuration ...")
-    config_path = install_dir / "ledgerlink.config.json"
+    config_path = install_dir / "otocpa.config.json"
 
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
@@ -416,7 +416,7 @@ def main() -> int:
     global log
 
     parser = argparse.ArgumentParser(
-        description="LedgerLink AI — Bootstrap Installer",
+        description="OtoCPA — Bootstrap Installer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Example:\n  python bootstrap_install.py --license-key LLAI-XXXX --firm-name \"Tremblay CPA\"",
     )
@@ -434,7 +434,7 @@ def main() -> int:
     log = _setup_logging()
 
     _log_info("=" * 60)
-    _log_info("LedgerLink AI — Bootstrap Installer")
+    _log_info("OtoCPA — Bootstrap Installer")
     _log_info(f"Date      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     _log_info(f"Platform  : {platform.platform()}")
     _log_info(f"Install to: {install_dir}")

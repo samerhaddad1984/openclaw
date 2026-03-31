@@ -1,7 +1,7 @@
 """
 src/engines/substance_engine.py
 ===============================
-Economic substance classifier for LedgerLink.
+Economic substance classifier for OtoCPA.
 
 Detects CapEx, prepaids, loans, tax remittances, and shareholder/personal
 expenses from vendor name, memo, doc_type, and amount.  Runs deterministically
@@ -749,7 +749,7 @@ def propagate_gl_change_suggestions(
     from pathlib import Path
 
     if not db_path:
-        db_path_obj = Path(__file__).resolve().parent.parent.parent / "data" / "ledgerlink_agent.db"
+        db_path_obj = Path(__file__).resolve().parent.parent.parent / "data" / "otocpa_agent.db"
     else:
         db_path_obj = Path(db_path)
 

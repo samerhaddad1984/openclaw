@@ -1,13 +1,13 @@
 """
 src/integrations/qr_generator.py
 ==================================
-QR code generation for LedgerLink client portal upload links.
+QR code generation for OtoCPA client portal upload links.
 
 Functions
 ---------
 generate_client_qr_png(client_code, client_name, portal_url) -> bytes
     Generates a QR code PNG. QR encodes the direct upload URL for that
-    client. Client name printed below the code in LedgerLink brand blue.
+    client. Client name printed below the code in OtoCPA brand blue.
 
 generate_all_qr_pdf(clients_list, portal_base_url) -> bytes
     Generates a single PDF with one QR code per page — header, client name,
@@ -26,7 +26,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas as rl_canvas
 
-# LedgerLink brand blue
+# OtoCPA brand blue
 _BLUE_HEX = "#1F3864"
 _BLUE_RGB = (31, 56, 100)
 
@@ -61,7 +61,7 @@ def generate_client_qr_png(
     Generate a QR code PNG for a single client.
 
     The QR encodes *portal_url* (the direct upload URL for that client).
-    The client name is printed below the QR in LedgerLink brand blue
+    The client name is printed below the QR in OtoCPA brand blue
     (#1F3864). Returns raw PNG bytes.
     """
     qr = qrcode.QRCode(
@@ -105,7 +105,7 @@ def generate_all_qr_pdf(
     Generate a single PDF with one QR code per page.
 
     Each page contains:
-      - LedgerLink AI header (brand blue)
+      - OtoCPA header (brand blue)
       - Client name (large, centred)
       - QR code (centred)
       - Portal URL printed below the QR
@@ -131,7 +131,7 @@ def generate_all_qr_pdf(
         # ---- Header -------------------------------------------------------
         c.setFillColorRGB(blue_r, blue_g, blue_b)
         c.setFont("Helvetica-Bold", 22)
-        c.drawCentredString(page_w / 2, page_h - 0.75 * inch, "LedgerLink AI")
+        c.drawCentredString(page_w / 2, page_h - 0.75 * inch, "OtoCPA")
 
         c.setFont("Helvetica", 11)
         c.setFillColorRGB(0.4, 0.4, 0.4)

@@ -62,7 +62,7 @@ def test_sync_posting_payload_keeps_row_and_payload_consistent(tmp_path: Path) -
         (
             "doc_1",
             "invoice.pdf",
-            r"D:\Agents\LedgerLinkAi\tests\documents_real\invoice.pdf",
+            r"D:\Agents\OtoCPAAi\tests\documents_real\invoice.pdf",
             "SOUSSOL Quebec",
             "CompanyCam",
             "2025-10-22",

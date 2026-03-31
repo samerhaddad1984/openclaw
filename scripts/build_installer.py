@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-scripts/build_installer.py -- Package LedgerLink into a distributable ZIP.
+scripts/build_installer.py -- Package OtoCPA into a distributable ZIP.
 
 Usage:
     python scripts/build_installer.py
 
-Creates dist/LedgerLink_v{version}_Windows.zip ready for client delivery.
+Creates dist/OtoCPA_v{version}_Windows.zip ready for client delivery.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ EXCLUDE_DIRS = {
     ".git", "node_modules", "__pycache__", "tests", "dist",
     ".venv", "venv", ".mypy_cache", ".pytest_cache", ".tox",
 }
-EXCLUDE_FILES = {".env", "ledgerlink_agent.db"}
+EXCLUDE_FILES = {".env", "otocpa_agent.db"}
 
 # Directories that must appear in the ZIP (even if empty on disk)
 REQUIRED_EMPTY_DIRS = [
@@ -56,8 +56,8 @@ def _should_skip_file(name: str) -> bool:
 
 
 def _make_template_config() -> str:
-    """Return ledgerlink.config.json with API keys blanked out."""
-    cfg_path = ROOT / "ledgerlink.config.json"
+    """Return otocpa.config.json with API keys blanked out."""
+    cfg_path = ROOT / "otocpa.config.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
 
     # Blank out secrets
@@ -68,7 +68,7 @@ def _make_template_config() -> str:
     if "digest" in cfg:
         cfg["digest"]["smtp_password"] = "your-app-password"
         cfg["digest"]["smtp_user"] = "yourfirm@gmail.com"
-        cfg["digest"]["from_address"] = "ledgerlink@yourfirm.com"
+        cfg["digest"]["from_address"] = "otocpa@yourfirm.com"
     if "ingest" in cfg:
         cfg["ingest"]["api_key"] = ""
     # Remove license if present
@@ -78,7 +78,7 @@ def _make_template_config() -> str:
 
 def build() -> Path:
     version = _read_version()
-    zip_name = f"LedgerLink_v{version}_Windows.zip"
+    zip_name = f"OtoCPA_v{version}_Windows.zip"
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = DIST_DIR / zip_name
 
@@ -86,7 +86,7 @@ def build() -> Path:
     if zip_path.exists():
         zip_path.unlink()
 
-    prefix = "LedgerLink"
+    prefix = "OtoCPA"
     included_top_dirs = {"src", "scripts", "installer"}
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -116,7 +116,7 @@ def build() -> Path:
 
         # 3. Template config (secrets blanked)
         zf.writestr(
-            f"{prefix}/ledgerlink.config.json",
+            f"{prefix}/otocpa.config.json",
             _make_template_config(),
         )
 
@@ -133,7 +133,7 @@ def build() -> Path:
 
 
 def main() -> None:
-    print("Building LedgerLink installer ZIP ...")
+    print("Building OtoCPA installer ZIP ...")
     zip_path = build()
     size_mb = zip_path.stat().st_size / (1024 * 1024)
     print(f"\nZIP created: {zip_path}")

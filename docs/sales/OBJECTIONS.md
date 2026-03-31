@@ -1,4 +1,4 @@
-# LedgerLink AI --- Objection Handling Guide
+# OtoCPA --- Objection Handling Guide
 
 **Rule #1:** Every objection is a question in disguise. Find the question. Answer it.
 **Rule #2:** Never argue. Acknowledge, reframe, respond.
@@ -19,13 +19,13 @@
 
 > "C'est ce qu'on entend souvent. [TaxDome/Karbon/CaseWare] est bon pour la gestion de projet et la communication. Mais aucun d'entre eux ne fait l'extraction automatique de factures, le calcul TPS/TVQ parallele, ou le pre-remplissage FPZ-500."
 >
-> "LedgerLink ne remplace pas [leur outil]. Il s'ajoute en amont. [Leur outil] gere le flux de travail. LedgerLink elimine la saisie. Les deux peuvent coexister."
+> "OtoCPA ne remplace pas [leur outil]. Il s'ajoute en amont. [Leur outil] gere le flux de travail. OtoCPA elimine la saisie. Les deux peuvent coexister."
 >
 > "Est-ce que ca vaudrait la peine de voir comment les deux fonctionnent ensemble?"
 
 ### Key differentiators to mention:
 
-| Feature | TaxDome | Karbon | CaseWare | LedgerLink |
+| Feature | TaxDome | Karbon | CaseWare | OtoCPA |
 |---|---|---|---|---|
 | Extraction automatique IA | Non | Non | Non | Oui |
 | Calcul TPS/TVQ parallele | Non | Non | Partiel | Oui |
@@ -52,7 +52,7 @@
 >
 > "OK. 25 clients fois 4 heures, c'est 100 heures par mois de saisie. A 150 dollars de l'heure --- meme si c'est du temps non facture, c'est la capacite que ca represente --- c'est 15 000 dollars par mois."
 >
-> "LedgerLink Professionnel coute 249 dollars par mois. Ca represente 1,7% du temps que vous recuperez."
+> "OtoCPA Professionnel coute 249 dollars par mois. Ca represente 1,7% du temps que vous recuperez."
 >
 > "Autrement dit: est-ce que le logiciel va vous faire economiser plus de 2 heures par mois? Si oui, il est deja rentable."
 
@@ -71,7 +71,7 @@
 
 ### Response:
 
-> "C'est justement pour ca que LedgerLink existe --- pour vous redonner du temps, pas vous en enlever."
+> "C'est justement pour ca que OtoCPA existe --- pour vous redonner du temps, pas vous en enlever."
 >
 > "L'installation prend 30 minutes. On fait tout a distance --- on installe sur votre serveur, on configure vos 5 premiers clients, et votre equipe peut commencer a l'utiliser le jour meme."
 >
@@ -95,7 +95,7 @@ Frame the implementation as something **you** do, not something **they** do. Min
 >
 > "On genere un code QR par client. Le client scanne le code avec son telephone, prend une photo, et c'est envoye. Pas d'application a installer. Pas de mot de passe a retenir."
 >
-> "Et pour les clients qui ne veulent vraiment pas changer: pas de probleme. Ils continuent a envoyer par courriel ou par la poste. LedgerLink traite les courriels et les PDF de la meme facon."
+> "Et pour les clients qui ne veulent vraiment pas changer: pas de probleme. Ils continuent a envoyer par courriel ou par la poste. OtoCPA traite les courriels et les PDF de la meme facon."
 >
 > "Est-ce que vous avez des clients plus technos qui pourraient etre de bons candidats pour le pilote?"
 
@@ -108,9 +108,9 @@ Frame the implementation as something **you** do, not something **they** do. Min
 
 ### Response:
 
-> "Excellente question. C'est l'avantage principal de LedgerLink par rapport aux solutions cloud."
+> "Excellente question. C'est l'avantage principal de OtoCPA par rapport aux solutions cloud."
 >
-> "Toutes vos donnees sont sur votre serveur. Votre base de donnees SQLite, vos documents, votre configuration --- tout est dans un dossier sur votre machine. Si LedgerLink disparait demain, vos donnees sont toujours la. Vous pouvez les lire avec n'importe quel outil SQLite gratuit."
+> "Toutes vos donnees sont sur votre serveur. Votre base de donnees SQLite, vos documents, votre configuration --- tout est dans un dossier sur votre machine. Si OtoCPA disparait demain, vos donnees sont toujours la. Vous pouvez les lire avec n'importe quel outil SQLite gratuit."
 >
 > "Comparez ca a TaxDome ou Karbon. Si eux ferment, vos donnees sont sur leurs serveurs Amazon. Bonne chance pour les recuperer."
 >
@@ -185,7 +185,7 @@ Frame the implementation as something **you** do, not something **they** do. Min
 
 ### Response:
 
-> "C'est la bonne question, et c'est pour ca qu'on a construit LedgerLink en trois couches."
+> "C'est la bonne question, et c'est pour ca qu'on a construit OtoCPA en trois couches."
 >
 > "Les taxes --- TPS, TVQ, TVH --- ne sont jamais calculees par l'IA. C'est du math pur, base sur des regles. On utilise la librairie Decimal de Python --- zero erreur d'arrondi. Un red team independant a teste 98 scenarios de taxes. Zero erreur."
 >
@@ -206,7 +206,7 @@ Frame the implementation as something **you** do, not something **they** do. Min
 
 > "L'Ordre des CPA n'approuve pas de logiciels specifiques --- ni QuickBooks, ni CaseWare, ni aucun autre. Ce qu'ils exigent, c'est que le CPA exerce son jugement professionnel et maintienne une piste d'audit adequate."
 >
-> "LedgerLink est concu exactement pour ca. Chaque transaction est revue par un humain. Chaque modification est enregistree dans une piste d'audit complete --- qui a fait quoi, quand. Les taxes sont calculees de facon deterministe, pas par IA."
+> "OtoCPA est concu exactement pour ca. Chaque transaction est revue par un humain. Chaque modification est enregistree dans une piste d'audit complete --- qui a fait quoi, quand. Les taxes sont calculees de facon deterministe, pas par IA."
 >
 > "C'est comme utiliser une calculatrice --- l'outil fait le calcul, le CPA valide le resultat. L'Ordre n'a rien a redire la-dessus."
 >
@@ -243,7 +243,7 @@ Frame the implementation as something **you** do, not something **they** do. Min
 
 ### Response:
 
-> "Pas de probleme. LedgerLink ne remplace pas [concurrent] --- il s'ajoute en amont pour automatiser la saisie."
+> "Pas de probleme. OtoCPA ne remplace pas [concurrent] --- il s'ajoute en amont pour automatiser la saisie."
 >
 > "Mais si vous voulez attendre la fin de votre contrat, quand est-ce qu'il se termine?"
 

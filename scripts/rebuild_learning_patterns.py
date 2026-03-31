@@ -5,7 +5,7 @@ from pathlib import Path
 from collections import defaultdict
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def open_db():

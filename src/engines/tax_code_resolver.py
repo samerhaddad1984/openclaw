@@ -1,7 +1,7 @@
 """
 src/engines/tax_code_resolver.py
 ================================
-Mixed taxable/exempt invoice detection for LedgerLink.
+Mixed taxable/exempt invoice detection for OtoCPA.
 
 Detects invoices that contain both taxable and tax-exempt line items,
 which require manual tax allocation.  Uses keyword detection first;

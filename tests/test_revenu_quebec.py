@@ -37,7 +37,7 @@ def _in_memory_db() -> sqlite3.Connection:
 
 
 def _make_full_db(path: Path) -> None:
-    """Create a minimal ledgerlink_agent.db with documents + posting_jobs for tests."""
+    """Create a minimal otocpa_agent.db with documents + posting_jobs for tests."""
     conn = sqlite3.connect(str(path))
     conn.executescript("""
         CREATE TABLE documents (
@@ -191,8 +191,8 @@ class TestComputePrefillRegular:
     def test_line_101_is_zero(self, tmp_path):
         """Revenue is not tracked — line 101 must always be zero."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -201,8 +201,8 @@ class TestComputePrefillRegular:
     def test_line_103_is_zero(self, tmp_path):
         """GST collected on sales is not tracked."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -211,8 +211,8 @@ class TestComputePrefillRegular:
     def test_line_106_positive_for_posted_doc(self, tmp_path):
         """ITC (line 106) > 0 when there is a posted doc with tax code T."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -223,8 +223,8 @@ class TestComputePrefillRegular:
     def test_line_108_equals_103_minus_106(self, tmp_path):
         """Net GST = line 103 − line 106."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -233,8 +233,8 @@ class TestComputePrefillRegular:
     def test_line_209_equals_205_minus_207(self, tmp_path):
         """Net QST = line 205 − line 207."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -242,8 +242,8 @@ class TestComputePrefillRegular:
 
     def test_quick_method_false_by_default(self, tmp_path):
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -252,9 +252,9 @@ class TestComputePrefillRegular:
     def test_pending_doc_not_counted_in_itc(self, tmp_path):
         """Unposted documents must not contribute to ITC."""
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
+        _make_full_db(tmp_path / "otocpa_agent.db")
         # DOC-002 has no posting_job → pending
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -262,8 +262,8 @@ class TestComputePrefillRegular:
 
     def test_documents_posted_count(self, tmp_path):
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()
@@ -277,8 +277,8 @@ class TestComputePrefillRegular:
 class TestComputePrefillQuickMethod:
     def _db_with_config(self, tmp_path, qm_type):
         from src.agents.core.revenu_quebec import set_client_config
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         set_client_config(conn, "ACME", True, qm_type, "2025-01-01")
         return conn
@@ -325,8 +325,8 @@ class TestComputePrefillQuickMethod:
 
     def test_regular_method_rates_none(self, tmp_path):
         from src.agents.core.revenu_quebec import compute_prefill
-        _make_full_db(tmp_path / "ledgerlink_agent.db")
-        conn = sqlite3.connect(str(tmp_path / "ledgerlink_agent.db"))
+        _make_full_db(tmp_path / "otocpa_agent.db")
+        conn = sqlite3.connect(str(tmp_path / "otocpa_agent.db"))
         conn.row_factory = sqlite3.Row
         result = compute_prefill("ACME", "2025-01-01", "2025-03-31", conn)
         conn.close()

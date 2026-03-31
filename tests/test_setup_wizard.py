@@ -1,4 +1,4 @@
-"""Tests for scripts/setup_wizard.py -- LedgerLink Professional Setup Wizard"""
+"""Tests for scripts/setup_wizard.py -- OtoCPA Professional Setup Wizard"""
 import pytest
 import json
 import tempfile

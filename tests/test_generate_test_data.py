@@ -16,11 +16,11 @@ import pytest
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # Skip entire module if the DB does not contain test data
 pytestmark = pytest.mark.skipif(
-    not DB_PATH.exists(), reason="ledgerlink_agent.db not found"
+    not DB_PATH.exists(), reason="otocpa_agent.db not found"
 )
 
 

@@ -1,5 +1,5 @@
 """
-src/engines/cas_engine.py — CAS-compliant audit extension for LedgerLink.
+src/engines/cas_engine.py — CAS-compliant audit extension for OtoCPA.
 
 Extends the existing audit module (audit_engine.py) with:
   - Materiality assessment (CAS 320)
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 CENT = Decimal("0.01")
 _ZERO = Decimal("0")
@@ -335,16 +335,192 @@ def _is_significant(inherent: str, control: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Account-type risk profiles (CAS 315)
+# Maps account code prefix ranges to inherent/control risk defaults,
+# relevant assertions, and whether the account is always significant.
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_RISK_PROFILES: dict[str, dict[str, Any]] = {
+    # Cash (1000-1099)
+    "cash": {
+        "inherent_risk": "low",
+        "control_risk": "medium",
+        "assertions": ["existence", "completeness", "accuracy"],
+        "always_significant": True,
+        "significant_risk": False,
+    },
+    # Accounts receivable (1100-1199)
+    "receivable": {
+        "inherent_risk": "medium",
+        "control_risk": "medium",
+        "assertions": ["existence", "cutoff", "rights_obligations"],
+        "always_significant": False,  # significant if balance > 0
+        "significant_risk": False,
+    },
+    # Inventory (1200-1299)
+    "inventory": {
+        "inherent_risk": "high",
+        "control_risk": "high",
+        "assertions": ["existence", "completeness", "rights_obligations"],
+        "always_significant": False,
+        "significant_risk": True,
+    },
+    # Fixed assets (1500-1599)
+    "fixed_assets": {
+        "inherent_risk": "low",
+        "control_risk": "low",
+        "assertions": ["existence", "rights_obligations", "accuracy"],
+        "always_significant": False,
+        "significant_risk": False,
+    },
+    # Accounts payable (2000-2099)
+    "payable": {
+        "inherent_risk": "medium",
+        "control_risk": "medium",
+        "assertions": ["completeness", "existence"],
+        "always_significant": False,  # significant if balance > 0
+        "significant_risk": False,
+    },
+    # Long-term debt (2500-2599)
+    "long_term_debt": {
+        "inherent_risk": "low",
+        "control_risk": "low",
+        "assertions": ["completeness", "existence", "accuracy"],
+        "always_significant": False,  # significant if balance > 0
+        "significant_risk": False,
+    },
+    # Revenue (4000-4999)
+    "revenue": {
+        "inherent_risk": "high",
+        "control_risk": "medium",
+        "assertions": ["completeness", "cutoff", "accuracy"],
+        "always_significant": True,
+        "significant_risk": False,
+    },
+    # Related party
+    "related_party": {
+        "inherent_risk": "high",
+        "control_risk": "high",
+        "assertions": ["existence", "completeness", "presentation"],
+        "always_significant": True,
+        "significant_risk": True,
+    },
+    # Default fallback for other accounts
+    "default": {
+        "inherent_risk": "medium",
+        "control_risk": "medium",
+        "assertions": ["completeness", "accuracy", "existence"],
+        "always_significant": False,
+        "significant_risk": False,
+    },
+}
+
+
+def _get_account_risk_profile(account_code: str, account_name: str) -> dict[str, Any]:
+    """Return the risk profile for an account based on its code range and name."""
+    code = account_code.strip()
+    name_lower = (account_name or "").lower()
+
+    # Related party detection (by name keywords)
+    related_kw = ("apparenté", "related party", "actionnaire", "shareholder",
+                  "dirigeant", "administrateur", "loan to officer")
+    if any(kw in name_lower for kw in related_kw):
+        return _ACCOUNT_RISK_PROFILES["related_party"]
+
+    if code.isdigit():
+        c = int(code)
+        if 1000 <= c <= 1099:
+            return _ACCOUNT_RISK_PROFILES["cash"]
+        if 1100 <= c <= 1199:
+            return _ACCOUNT_RISK_PROFILES["receivable"]
+        if 1200 <= c <= 1299:
+            return _ACCOUNT_RISK_PROFILES["inventory"]
+        if 1500 <= c <= 1599:
+            return _ACCOUNT_RISK_PROFILES["fixed_assets"]
+        if 2000 <= c <= 2099:
+            return _ACCOUNT_RISK_PROFILES["payable"]
+        if 2500 <= c <= 2599:
+            return _ACCOUNT_RISK_PROFILES["long_term_debt"]
+        if 4000 <= c <= 4999:
+            return _ACCOUNT_RISK_PROFILES["revenue"]
+
+    return _ACCOUNT_RISK_PROFILES["default"]
+
+
+def account_is_significant(
+    account_code: str,
+    account_name: str,
+    engagement_id: str,
+    conn: sqlite3.Connection,
+) -> bool:
+    """Determine if an account is significant enough to include in the risk matrix.
+
+    An account is significant if it is:
+    - Always significant by account type (cash, revenue, related party), OR
+    - Has a balance > $0 for account types that require it (AR, AP, LTD), OR
+    - Has a balance exceeding performance materiality for other accounts.
+    """
+    profile = _get_account_risk_profile(account_code, account_name)
+
+    if profile["always_significant"] or profile["significant_risk"]:
+        return True
+
+    # Look up balance from working papers
+    from src.engines.audit_engine import get_engagement
+    eng = get_engagement(conn, engagement_id)
+    if not eng:
+        return False
+
+    wp_row = conn.execute(
+        """SELECT net_balance FROM working_papers
+           WHERE LOWER(client_code) = LOWER(?) AND period = ?
+             AND account_code = ?""",
+        (eng["client_code"], eng["period"], account_code),
+    ).fetchone()
+    balance = abs(float(wp_row["net_balance"])) if wp_row else 0.0
+
+    code = account_code.strip()
+    if code.isdigit():
+        c = int(code)
+        # AR, AP, LTD: significant if balance > 0
+        if c in range(1100, 1200) or c in range(2000, 2100) or c in range(2500, 2600):
+            return balance > 0.0
+
+    # Other accounts: only if balance > performance materiality
+    mat = get_materiality(conn, engagement_id)
+    if mat:
+        perf_mat = float(mat["performance_materiality"])
+        if balance > perf_mat:
+            return True
+
+    return False
+
+
+def delete_risk_matrix(
+    conn: sqlite3.Connection,
+    engagement_id: str,
+) -> int:
+    """Delete all risk assessment rows for an engagement. Returns count deleted."""
+    ensure_cas_tables(conn)
+    cursor = conn.execute(
+        "DELETE FROM risk_assessments WHERE engagement_id = ?",
+        (engagement_id,),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
 def create_risk_matrix(
     conn: sqlite3.Connection,
     engagement_id: str,
     accounts_list: list[dict[str, str]],
     assessed_by: str = "",
 ) -> list[dict[str, Any]]:
-    """Create risk assessment rows for a list of accounts across all assertions.
+    """Create risk assessment rows for significant accounts with realistic defaults.
 
-    accounts_list: list of dicts with keys 'account_code' and 'account_name'.
-    Returns the created risk assessment rows.
+    Only creates rows for accounts that are material or inherently risky.
+    Each account gets only the 2-3 most relevant assertions for its type.
     """
     ensure_cas_tables(conn)
     from src.engines.audit_engine import get_engagement
@@ -357,7 +533,19 @@ def create_risk_matrix(
     for acct in accounts_list:
         code = acct.get("account_code", "")
         name = acct.get("account_name", code)
-        for assertion in sorted(VALID_ASSERTIONS):
+
+        # FIX 1: Only include significant accounts
+        if not account_is_significant(code, name, engagement_id, conn):
+            continue
+
+        # FIX 2 & 3: Get realistic risk profile with relevant assertions
+        profile = _get_account_risk_profile(code, name)
+        inherent = profile["inherent_risk"]
+        control = profile["control_risk"]
+        combined = _combine_risk(inherent, control)
+        sig = 1 if (profile["significant_risk"] or _is_significant(inherent, control)) else 0
+
+        for assertion in profile["assertions"]:
             # Check if already exists
             existing = conn.execute(
                 """SELECT risk_id FROM risk_assessments
@@ -376,8 +564,8 @@ def create_risk_matrix(
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     risk_id, engagement_id, code, name,
-                    assertion, "medium", "medium", "medium",
-                    0, assessed_by, now,
+                    assertion, inherent, control, combined,
+                    sig, assessed_by, now,
                 ),
             )
             results.append({
@@ -386,10 +574,10 @@ def create_risk_matrix(
                 "account_code": code,
                 "account_name": name,
                 "assertion": assertion,
-                "inherent_risk": "medium",
-                "control_risk": "medium",
-                "combined_risk": "medium",
-                "significant_risk": False,
+                "inherent_risk": inherent,
+                "control_risk": control,
+                "combined_risk": combined,
+                "significant_risk": bool(sig),
                 "assessed_by": assessed_by,
                 "assessed_at": now,
             })
@@ -562,7 +750,7 @@ def generate_management_rep_letter(
     if language == "fr":
         letter = (
             f"Lettre de déclaration de la direction\n\n"
-            f"À l'attention de : LedgerLink CPA\n"
+            f"À l'attention de : OtoCPA CPA\n"
             f"Client : {client}\n"
             f"Période se terminant le : {period}\n"
             f"Type de mission : {eng_type}\n\n"
@@ -588,7 +776,7 @@ def generate_management_rep_letter(
     else:
         letter = (
             f"Management Representation Letter\n\n"
-            f"To: LedgerLink CPA\n"
+            f"To: OtoCPA CPA\n"
             f"Client: {client}\n"
             f"Period ending: {period}\n"
             f"Engagement type: {eng_type}\n\n"

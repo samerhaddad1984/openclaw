@@ -42,7 +42,7 @@ D = Decimal  # short alias
 
 
 def _make_db(path: Path) -> None:
-    """Create a minimal ledgerlink_agent.db for filing summary tests."""
+    """Create a minimal otocpa_agent.db for filing summary tests."""
     conn = sqlite3.connect(path)
     conn.executescript("""
         CREATE TABLE documents (

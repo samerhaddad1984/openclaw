@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-LedgerLink AI — Daily Email Digest
+OtoCPA — Daily Email Digest
 ====================================
 Sends a bilingual (FR/EN) morning summary email to owner and manager users.
 
@@ -9,12 +9,12 @@ Run manually:
     python scripts/daily_digest.py
 
 Schedule via Windows Task Scheduler (runs at 7:30 AM daily):
-    schtasks /create /tn "LedgerLink Daily Digest" /tr "python C:\\path\\scripts\\daily_digest.py" /sc daily /st 07:30
+    schtasks /create /tn "OtoCPA Daily Digest" /tr "python C:\\path\\scripts\\daily_digest.py" /sc daily /st 07:30
 
 Schedule via cron (macOS/Linux):
     30 7 * * 1-5 /usr/bin/python3 /path/scripts/daily_digest.py
 
-SMTP config comes from ledgerlink.config.json:
+SMTP config comes from otocpa.config.json:
     {
       "digest": {
         "enabled": true,
@@ -22,8 +22,8 @@ SMTP config comes from ledgerlink.config.json:
         "smtp_port": 587,
         "smtp_user": "your@email.com",
         "smtp_password": "your-app-password",
-        "from_address": "ledgerlink@yourfirm.com",
-        "from_name": "LedgerLink AI"
+        "from_address": "otocpa@yourfirm.com",
+        "from_name": "OtoCPA"
       }
     }
 """
@@ -39,8 +39,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR    = Path(__file__).resolve().parent.parent
-DB_PATH     = ROOT_DIR / "data" / "ledgerlink_agent.db"
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
+DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
@@ -255,8 +255,8 @@ def get_filing_deadlines_14_days() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 SUBJECT = {
-    "fr": "Résumé quotidien LedgerLink — {date}",
-    "en": "LedgerLink Daily Summary — {date}",
+    "fr": "Résumé quotidien OtoCPA — {date}",
+    "en": "OtoCPA Daily Summary — {date}",
 }
 
 def _pluralize_fr(count: int, singular: str, plural: str) -> str:
@@ -282,7 +282,7 @@ def build_plain_text(
         lines = [
             f"Bonjour {recipient_name},",
             "",
-            f"Voici votre résumé LedgerLink pour le {today}.",
+            f"Voici votre résumé OtoCPA pour le {today}.",
             "",
             "══════════════════════════════",
             "   TABLEAU DE BORD DU JOUR",
@@ -329,14 +329,14 @@ def build_plain_text(
             "Accédez au tableau de bord : http://127.0.0.1:8787/",
             "",
             "──────────────────────────────",
-            "LedgerLink AI — Plateforme de révision comptable",
+            "OtoCPA — Plateforme de révision comptable",
             "Ce courriel est envoyé automatiquement. Ne pas répondre.",
         ]
     else:
         lines = [
             f"Hello {recipient_name},",
             "",
-            f"Here is your LedgerLink summary for {today}.",
+            f"Here is your OtoCPA summary for {today}.",
             "",
             "══════════════════════════════",
             "   TODAY'S DASHBOARD",
@@ -383,7 +383,7 @@ def build_plain_text(
             "Open dashboard: http://127.0.0.1:8787/",
             "",
             "──────────────────────────────",
-            "LedgerLink AI — Accounting Review Platform",
+            "OtoCPA — Accounting Review Platform",
             "This email is sent automatically. Please do not reply.",
         ]
 
@@ -406,7 +406,7 @@ def build_html_body(
 
     if lang == "fr":
         greeting    = f"Bonjour {recipient_name},"
-        subtitle    = f"Votre résumé LedgerLink pour le {today}"
+        subtitle    = f"Votre résumé OtoCPA pour le {today}"
         labels      = ["En attente de révision", "En attente", "Prêts à publier", "Publiés aujourd'hui"]
         all_clear   = "✓ Tout est à jour. Bonne journée !"
         active_lbl  = "Documents actifs"
@@ -415,7 +415,7 @@ def build_html_body(
         footer_note = "Ce courriel est envoyé automatiquement. Ne pas répondre."
     else:
         greeting    = f"Hello {recipient_name},"
-        subtitle    = f"Your LedgerLink summary for {today}"
+        subtitle    = f"Your OtoCPA summary for {today}"
         labels      = ["Needs Review", "On Hold", "Ready to Post", "Posted Today"]
         all_clear   = "✓ Everything is up to date. Have a great day!"
         active_lbl  = "Active documents"
@@ -523,7 +523,7 @@ def build_html_body(
 
             <!-- Header -->
             <tr><td style="background:#1F3864;padding:20px 32px;">
-                <div style="color:white;font-size:20px;font-weight:700;">LedgerLink AI</div>
+                <div style="color:white;font-size:20px;font-weight:700;">OtoCPA</div>
                 <div style="color:#93c5fd;font-size:13px;margin-top:2px;">{subtitle}</div>
             </td></tr>
 
@@ -583,10 +583,10 @@ def send_digest(config: dict[str, Any]) -> dict[str, Any]:
     smtp_user = dc.get("smtp_user", "")
     smtp_pass = dc.get("smtp_password", "")
     from_addr = dc.get("from_address", smtp_user)
-    from_name = dc.get("from_name", "LedgerLink AI")
+    from_name = dc.get("from_name", "OtoCPA")
 
     if not smtp_host or not smtp_user:
-        return {"status": "error", "error": "SMTP not configured in ledgerlink.config.json"}
+        return {"status": "error", "error": "SMTP not configured in otocpa.config.json"}
 
     summary          = get_queue_summary()
     recipients       = get_recipients()
@@ -647,7 +647,7 @@ def main() -> int:
     config = load_config()
 
     print()
-    print("LEDGERLINK DAILY DIGEST")
+    print("OTOCPA DAILY DIGEST")
     print("=" * 50)
     print(f"Database : {DB_PATH}")
     print(f"Config   : {CONFIG_PATH}")
@@ -655,7 +655,7 @@ def main() -> int:
 
     dc = get_digest_config(config)
     if not dc.get("enabled", False):
-        print("Digest is DISABLED in ledgerlink.config.json")
+        print("Digest is DISABLED in otocpa.config.json")
         print("Set 'digest.enabled' to true to enable.")
         print()
         # Show a preview anyway

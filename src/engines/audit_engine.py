@@ -1,5 +1,5 @@
 """
-src/engines/audit_engine.py — CPA audit support module for LedgerLink.
+src/engines/audit_engine.py — CPA audit support module for OtoCPA.
 
 Provides:
   - Working papers (dossiers de travail) with lead sheet PDF
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 CENT = Decimal("0.01")
 _ZERO = Decimal("0")
@@ -814,7 +814,7 @@ def generate_lead_sheet_pdf(
     engagement_type: str,
     prepared_by: str = "",
     reviewed_by_firm: str = "",
-    firm_name: str = "LedgerLink CPA",
+    firm_name: str = "OtoCPA CPA",
     lang: str = "fr",
 ) -> bytes:
     from src.i18n import t
@@ -1353,7 +1353,7 @@ def generate_financial_statements_pdf(
     conn: sqlite3.Connection,
     client_code: str,
     period: str,
-    firm_name: str = "LedgerLink CPA",
+    firm_name: str = "OtoCPA CPA",
     lang: str = "fr",
 ) -> bytes:
     from src.i18n import t
@@ -1632,7 +1632,7 @@ def generate_analytical_report_pdf(
     conn: sqlite3.Connection,
     client_code: str,
     period: str,
-    firm_name: str = "LedgerLink CPA",
+    firm_name: str = "OtoCPA CPA",
     lang: str = "fr",
 ) -> bytes:
     from src.i18n import t
@@ -1899,7 +1899,7 @@ def issue_engagement(
     conn: sqlite3.Connection,
     engagement_id: str,
     issued_by: str,
-    firm_name: str = "LedgerLink CPA",
+    firm_name: str = "OtoCPA CPA",
     lang: str = "fr",
 ) -> bytes:
     eng = get_engagement(conn, engagement_id)
@@ -1912,7 +1912,7 @@ def issue_engagement(
 def generate_engagement_pdf(
     conn: sqlite3.Connection,
     engagement_id: str,
-    firm_name: str = "LedgerLink CPA",
+    firm_name: str = "OtoCPA CPA",
     lang: str = "fr",
 ) -> bytes:
     from src.i18n import t

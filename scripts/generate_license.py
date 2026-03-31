@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_license.py — LedgerLink license key generator.
+generate_license.py — OtoCPA license key generator.
 
 Usage:
     python scripts/generate_license.py --tier professionnel --firm "Tremblay CPA" --months 12
@@ -28,23 +28,23 @@ from src.engines.license_engine import (
 
 
 def _load_env_secret() -> str:
-    """Read LEDGERLINK_SIGNING_SECRET from .env or environment."""
+    """Read OTOCPA_SIGNING_SECRET from .env or environment."""
     env_file = ROOT / ".env"
     if env_file.exists():
         try:
             for line in env_file.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
-                if line.startswith("LEDGERLINK_SIGNING_SECRET"):
+                if line.startswith("OTOCPA_SIGNING_SECRET"):
                     _, _, value = line.partition("=")
                     return value.strip().strip('"').strip("'")
         except Exception:
             pass
-    return os.environ.get("LEDGERLINK_SIGNING_SECRET", "")
+    return os.environ.get("OTOCPA_SIGNING_SECRET", "")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate a LedgerLink license key",
+        description="Generate a OtoCPA license key",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -90,7 +90,7 @@ def main() -> None:
     if not secret:
         print(
             "ERROR: No signing secret provided.\n"
-            "  Set LEDGERLINK_SIGNING_SECRET in .env or pass --secret SECRET",
+            "  Set OTOCPA_SIGNING_SECRET in .env or pass --secret SECRET",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -125,7 +125,7 @@ def main() -> None:
     divider = "─" * 72
     print()
     print(divider)
-    print("  LedgerLink License Key")
+    print("  OtoCPA License Key")
     print(divider)
     print(f"  Firm        : {args.firm}")
     print(f"  Tier        : {args.tier}")
@@ -142,7 +142,7 @@ def main() -> None:
     print(divider)
     print()
     print("  To activate, paste the key into the License Management page")
-    print("  in the LedgerLink review dashboard (/license), or run:")
+    print("  in the OtoCPA review dashboard (/license), or run:")
     print()
     print("  python scripts/manage_clients.py  (if CLI activation is added)")
     print()

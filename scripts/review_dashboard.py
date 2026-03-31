@@ -43,6 +43,18 @@ from src.agents.core.period_close import (
     update_checklist_item,
 )
 from src.engines.tax_engine import calculate_gst_qst, generate_filing_summary, validate_tax_code
+from src.engines.export_engine import (
+    fetch_posted_documents as _export_fetch,
+    generate_csv as _export_csv,
+    generate_sage50 as _export_sage50,
+    generate_acomba as _export_acomba,
+    generate_qbd_iif as _export_qbd,
+    generate_xero as _export_xero,
+    generate_wave as _export_wave,
+    generate_excel as _export_excel,
+    generate_annual_zip as _export_annual_zip,
+    _period_dates as _export_period_dates,
+)
 from src.agents.core.time_tracker import (
     ensure_time_tables,
     get_time_summary,
@@ -85,6 +97,10 @@ from src.agents.core.filing_calendar import (
 )
 import src.engines.audit_engine as _audit
 import src.engines.cas_engine as _cas
+import src.engines.fixed_assets_engine as _fa
+import src.engines.aging_engine as _aging
+import src.engines.cashflow_engine as _cashflow
+import src.engines.t2_engine as _t2
 from src.engines.license_engine import (
     get_license_status, save_license_to_config, check_limits,
     get_signing_secret, TIER_DEFAULTS,
@@ -95,11 +111,11 @@ from src.agents.core.ai_router import get_cache_stats as _get_cache_stats, _clea
 from src.integrations.qr_generator import generate_client_qr_png, generate_all_qr_pdf, _build_upload_url
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
-LOG_PATH = ROOT_DIR / "data" / "ledgerlink.log"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
+LOG_PATH = ROOT_DIR / "data" / "otocpa.log"
 # Read bind address from config; default to 0.0.0.0 for LAN access
 try:
-    _boot_cfg = json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+    _boot_cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
     _net = _boot_cfg.get("network", {})
     if _net.get("bind_all_interfaces", False):
         HOST = "0.0.0.0"
@@ -427,6 +443,12 @@ def bootstrap_schema() -> None:
 
         # Reconciliation tables
         _ensure_recon_tables(conn)
+
+        # Fixed assets table
+        _fa.ensure_fixed_assets_table(conn)
+
+        # AR invoices table
+        _aging.ensure_ar_invoices_table(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -1911,7 +1933,7 @@ def _render_cloudflare_tunnel_status(lang: str = "fr") -> str:
     # Public URL from config
     public_url = ""
     try:
-        cfg_path = ROOT_DIR / "ledgerlink.config.json"
+        cfg_path = ROOT_DIR / "otocpa.config.json"
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
         public_url = cfg.get("public_portal_url", "")
     except Exception:
@@ -1969,7 +1991,7 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
     routine_url = ""
     premium_url = ""
     try:
-        cfg_path = ROOT_DIR / "ledgerlink.config.json"
+        cfg_path = ROOT_DIR / "otocpa.config.json"
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
         routine_url = cfg.get("ai_router", {}).get("routine_provider", {}).get("base_url", "")
         premium_url = cfg.get("ai_router", {}).get("premium_provider", {}).get("base_url", "")
@@ -2789,8 +2811,811 @@ def _analytics_deadlines_at_risk(conn: sqlite3.Connection) -> list[dict[str, Any
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Fixed Assets pages
+# ---------------------------------------------------------------------------
+
+def render_fixed_assets_list(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+    filter_client: str = "",
+) -> str:
+    """List all fixed assets with UCC balances."""
+    with open_db() as conn:
+        _fa.ensure_fixed_assets_table(conn)
+        if filter_client:
+            assets = _fa.list_assets(filter_client, conn)
+        else:
+            assets = conn.execute(
+                "SELECT * FROM fixed_assets ORDER BY cca_class, asset_name"
+            ).fetchall()
+            assets = [dict(r) if not isinstance(r, dict) else r for r in assets]
+
+    # Client list for filter
+    clients: list[str] = []
+    try:
+        with open_db() as conn:
+            rows = conn.execute("SELECT DISTINCT client_code FROM documents WHERE client_code IS NOT NULL ORDER BY client_code").fetchall()
+            clients = [dict(r)["client_code"] for r in rows if dict(r).get("client_code")]
+    except Exception:
+        pass
+
+    client_opts = "".join(
+        f'<option value="{esc(c)}" {"selected" if c == filter_client else ""}>{esc(c)}</option>'
+        for c in clients
+    )
+
+    # CCA class options
+    cca_opts = "".join(
+        f'<option value="{k}">{esc(_fa.cca_class_display(k))} — {esc(v["description"])} ({int(v["rate"]*100) if v["rate"] else "S/L"}%)</option>'
+        for k, v in sorted(_fa.CCA_CLASSES.items())
+    )
+
+    status_badges = {
+        "active": f'<span style="color:#16a34a;font-weight:600;">{esc(t("fa_status_active", lang))}</span>',
+        "disposed": f'<span style="color:#9ca3af;font-weight:600;">{esc(t("fa_status_disposed", lang))}</span>',
+        "draft": f'<span style="color:#f59e0b;font-weight:600;">{esc(t("fa_status_draft", lang))}</span>',
+    }
+
+    rows_html = ""
+    for a in assets:
+        cost = float(a.get("cost") or 0)
+        ucc = float(a.get("current_ucc") or 0)
+        warn = ""
+        if cost > 50000:
+            warn = f' <span style="color:#f59e0b;font-size:11px;" title="{esc(t("fa_material_warning", lang))}">&#9888;</span>'
+        status = a.get("status", "active")
+        badge = status_badges.get(status, status)
+
+        actions = ""
+        if status == "active":
+            actions = (
+                f'<form method="POST" action="/fixed_assets/dispose" style="display:inline;">'
+                f'<input type="hidden" name="asset_id" value="{esc(a["asset_id"])}">'
+                f'<input type="date" name="disposal_date" required style="width:120px;font-size:11px;">'
+                f'<input type="number" name="proceeds" step="0.01" placeholder="$" required style="width:80px;font-size:11px;">'
+                f'<button class="btn-secondary" style="font-size:11px;padding:3px 8px;">{esc(t("fa_dispose", lang))}</button>'
+                f'</form>'
+            )
+        elif status == "draft":
+            actions = (
+                f'<form method="POST" action="/fixed_assets/confirm" style="display:inline;">'
+                f'<input type="hidden" name="asset_id" value="{esc(a["asset_id"])}">'
+                f'<button class="btn-primary" style="font-size:11px;padding:3px 8px;">{esc(t("fa_confirm_asset", lang))}</button>'
+                f'</form>'
+            )
+
+        rows_html += f"""<tr>
+            <td>{esc(a.get("asset_name",""))}{warn}</td>
+            <td>{esc(_fa.cca_class_display(int(a.get("cca_class",0))))}</td>
+            <td>{esc(str(a.get("acquisition_date",""))[:10])}</td>
+            <td style="text-align:right;">${cost:,.2f}</td>
+            <td style="text-align:right;">${ucc:,.2f}</td>
+            <td style="text-align:right;">${float(a.get("accumulated_cca",0)):,.2f}</td>
+            <td>{badge}</td>
+            <td>{actions}</td>
+        </tr>"""
+
+    if not assets:
+        rows_html = f'<tr><td colspan="8" style="text-align:center;color:#9ca3af;">{esc(t("fa_no_assets", lang))}</td></tr>'
+
+    body = f"""
+    <div class="card">
+        <h2>{esc(t("fa_title", lang))}</h2>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+            <form method="GET" action="/fixed_assets" style="display:flex;gap:8px;align-items:center;">
+                <select name="client_code" style="padding:6px;"><option value="">— {esc(t("field_client_code", lang))} —</option>{client_opts}</select>
+                <button class="btn-primary" style="padding:6px 12px;">{esc(t("btn_filter", lang))}</button>
+            </form>
+            <a href="/fixed_assets/schedule8?client_code={urlquote(filter_client)}" class="btn-secondary" style="padding:6px 12px;text-decoration:none;">{esc(t("fa_schedule8", lang))}</a>
+        </div>
+
+        <details style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:600;">{esc(t("fa_add_asset", lang))}</summary>
+        <form method="POST" action="/fixed_assets/add" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <input type="text" name="client_code" value="{esc(filter_client)}" placeholder="{esc(t("field_client_code", lang))}" required style="width:100px;">
+            <input type="text" name="asset_name" placeholder="{esc(t("fa_asset_name", lang))}" required style="width:200px;">
+            <input type="date" name="acquisition_date" required>
+            <input type="number" name="cost" step="0.01" placeholder="{esc(t("fa_cost", lang))}" required style="width:120px;">
+            <select name="cca_class" required>{cca_opts}</select>
+            <button class="btn-primary" style="padding:6px 12px;">{esc(t("fa_add_asset", lang))}</button>
+        </form>
+        </details>
+
+        <details style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:600;">{esc(t("fa_calculate_cca", lang))}</summary>
+        <form method="POST" action="/fixed_assets/calculate_cca" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <input type="text" name="client_code" value="{esc(filter_client)}" placeholder="{esc(t("field_client_code", lang))}" required style="width:100px;">
+            <input type="date" name="fiscal_year_end" required>
+            <button class="btn-primary" style="padding:6px 12px;">{esc(t("fa_calculate_cca", lang))}</button>
+        </form>
+        </details>
+
+        <table class="queue-table">
+        <thead><tr>
+            <th>{esc(t("fa_col_asset", lang))}</th>
+            <th>{esc(t("fa_col_class", lang))}</th>
+            <th>{esc(t("fa_col_acq_date", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_cost", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_ucc", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_accum_cca", lang))}</th>
+            <th>{esc(t("fa_col_status", lang))}</th>
+            <th>{esc(t("fa_col_actions", lang))}</th>
+        </tr></thead>
+        <tbody>{rows_html}</tbody>
+        </table>
+    </div>"""
+
+    return page_layout(t("fa_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_schedule_8(
+    client_code: str,
+    user: dict[str, Any],
+    lang: str = "fr",
+) -> str:
+    """Render T2 Schedule 8 page."""
+    with open_db() as conn:
+        data = _fa.generate_schedule_8(client_code, "2026", conn)
+
+    rows_html = ""
+    for cls in data.get("classes", []):
+        rate_str = f'{cls["rate"]*100:.0f}%' if cls.get("rate") is not None else "S/L"
+        rows_html += f"""<tr>
+            <td>{esc(cls["cca_class_display"])}</td>
+            <td>{esc(cls["description"])}</td>
+            <td>{esc(rate_str)}</td>
+            <td style="text-align:right;">${cls["opening_ucc"]:,.2f}</td>
+            <td style="text-align:right;">${cls["additions"]:,.2f}</td>
+            <td style="text-align:right;">${cls["disposals"]:,.2f}</td>
+            <td style="text-align:right;">${cls["cca_claimed"]:,.2f}</td>
+            <td style="text-align:right;">${cls["closing_ucc"]:,.2f}</td>
+        </tr>"""
+
+    totals = data.get("totals", {})
+    rows_html += f"""<tr style="font-weight:700;border-top:2px solid #111;">
+        <td colspan="3">{esc(t("fa_total", lang))}</td>
+        <td style="text-align:right;">${totals.get("opening_ucc",0):,.2f}</td>
+        <td style="text-align:right;">${totals.get("additions",0):,.2f}</td>
+        <td style="text-align:right;">${totals.get("disposals",0):,.2f}</td>
+        <td style="text-align:right;">${totals.get("cca_claimed",0):,.2f}</td>
+        <td style="text-align:right;">${totals.get("closing_ucc",0):,.2f}</td>
+    </tr>"""
+
+    body = f"""
+    <div class="card">
+        <h2>{esc(t("fa_schedule8_title", lang))}</h2>
+        <p><strong>{esc(t("field_client_code", lang))}:</strong> {esc(client_code)}</p>
+        <table class="queue-table">
+        <thead><tr>
+            <th>{esc(t("fa_col_class", lang))}</th>
+            <th>{esc(t("fa_col_asset", lang))}</th>
+            <th>{esc(t("fa_col_rate", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_opening_ucc", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_additions", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_disposals", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_cca_claimed", lang))}</th>
+            <th style="text-align:right;">{esc(t("fa_col_closing_ucc", lang))}</th>
+        </tr></thead>
+        <tbody>{rows_html}</tbody>
+        </table>
+        <p style="margin-top:12px;"><a href="/fixed_assets?client_code={urlquote(client_code)}">&larr; {esc(t("btn_back_to_queue", lang))}</a></p>
+    </div>"""
+
+    return page_layout(t("fa_schedule8_title", lang), body, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Aging Report pages
+# ---------------------------------------------------------------------------
+
+def _aging_table_html(
+    rows: list[dict[str, Any]],
+    name_key: str,
+    name_col_label: str,
+    lang: str,
+) -> str:
+    """Render an aging table (AP or AR)."""
+    if not rows:
+        return f'<p style="color:#9ca3af;">{esc(t("aging_no_data", lang))}</p>'
+
+    hdr = f"""<table class="queue-table">
+    <thead><tr>
+        <th>{esc(name_col_label)}</th>
+        <th style="text-align:center;">{esc(t("aging_col_count", lang))}</th>
+        <th style="text-align:right;background:#dcfce7;">{esc(t("aging_col_current", lang))}</th>
+        <th style="text-align:right;background:#fef9c3;">{esc(t("aging_col_31_60", lang))}</th>
+        <th style="text-align:right;background:#fed7aa;">{esc(t("aging_col_61_90", lang))}</th>
+        <th style="text-align:right;background:#fecaca;">{esc(t("aging_col_91_120", lang))}</th>
+        <th style="text-align:right;background:#fca5a5;">{esc(t("aging_col_over_120", lang))}</th>
+        <th style="text-align:right;font-weight:700;">{esc(t("aging_col_total", lang))}</th>
+    </tr></thead><tbody>"""
+
+    body = ""
+    t_current = t_31 = t_61 = t_91 = t_120 = t_total = 0.0
+    for r in rows:
+        body += f"""<tr>
+            <td>{esc(r.get(name_key,""))}</td>
+            <td style="text-align:center;">{r.get("invoice_count",0)}</td>
+            <td style="text-align:right;">${r.get("current",0):,.2f}</td>
+            <td style="text-align:right;">${r.get("days_31_60",0):,.2f}</td>
+            <td style="text-align:right;">${r.get("days_61_90",0):,.2f}</td>
+            <td style="text-align:right;">${r.get("days_91_120",0):,.2f}</td>
+            <td style="text-align:right;">${r.get("over_120",0):,.2f}</td>
+            <td style="text-align:right;font-weight:600;">${r.get("total",0):,.2f}</td>
+        </tr>"""
+        t_current += r.get("current", 0)
+        t_31 += r.get("days_31_60", 0)
+        t_61 += r.get("days_61_90", 0)
+        t_91 += r.get("days_91_120", 0)
+        t_120 += r.get("over_120", 0)
+        t_total += r.get("total", 0)
+
+    body += f"""<tr style="font-weight:700;border-top:2px solid #111;">
+        <td>{esc(t("aging_total_row", lang))}</td>
+        <td></td>
+        <td style="text-align:right;">${t_current:,.2f}</td>
+        <td style="text-align:right;">${t_31:,.2f}</td>
+        <td style="text-align:right;">${t_61:,.2f}</td>
+        <td style="text-align:right;">${t_91:,.2f}</td>
+        <td style="text-align:right;">${t_120:,.2f}</td>
+        <td style="text-align:right;">${t_total:,.2f}</td>
+    </tr>"""
+
+    return hdr + body + "</tbody></table>"
+
+
+def render_aging_report(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+    filter_client: str = "",
+    as_of: str = "",
+) -> str:
+    """Render AP/AR aging report page."""
+    if not as_of:
+        as_of = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    clients: list[str] = []
+    try:
+        with open_db() as conn:
+            rows = conn.execute("SELECT DISTINCT client_code FROM documents WHERE client_code IS NOT NULL ORDER BY client_code").fetchall()
+            clients = [dict(r)["client_code"] for r in rows if dict(r).get("client_code")]
+    except Exception:
+        pass
+
+    client_opts = "".join(
+        f'<option value="{esc(c)}" {"selected" if c == filter_client else ""}>{esc(c)}</option>'
+        for c in clients
+    )
+
+    ap_data: list[dict] = []
+    ar_data: list[dict] = []
+    summary: dict = {}
+    if filter_client:
+        with open_db() as conn:
+            ap_data = _aging.calculate_ap_aging(filter_client, as_of, conn)
+            ar_data = _aging.calculate_ar_aging(filter_client, as_of, conn)
+            summary = _aging.get_aging_summary(filter_client, as_of, conn)
+
+    # Summary cards
+    def _card(label_key: str, value: float, color: str = "#111") -> str:
+        return (
+            f'<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
+            f'padding:12px 16px;min-width:150px;">'
+            f'<div style="font-size:12px;color:#6b7280;">{esc(t(label_key, lang))}</div>'
+            f'<div style="font-size:20px;font-weight:700;color:{color};">${value:,.2f}</div></div>'
+        )
+
+    cards_html = ""
+    if filter_client and summary:
+        cards_html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
+        cards_html += _card("aging_ap_total", summary.get("ap_total", 0))
+        cards_html += _card("aging_ap_over_60", summary.get("ap_over_60", 0),
+                           "#f59e0b" if summary.get("ap_over_60", 0) > 0 else "#111")
+        cards_html += _card("aging_ap_over_90", summary.get("ap_over_90", 0),
+                           "#dc2626" if summary.get("ap_over_90", 0) > 0 else "#111")
+        cards_html += _card("aging_ar_total", summary.get("ar_total", 0))
+        cards_html += _card("aging_ar_over_60", summary.get("ar_over_60", 0),
+                           "#f59e0b" if summary.get("ar_over_60", 0) > 0 else "#111")
+        cards_html += "</div>"
+
+    ap_table = _aging_table_html(ap_data, "vendor", t("aging_col_vendor", lang), lang)
+    ar_table = _aging_table_html(ar_data, "customer", t("aging_col_customer", lang), lang)
+
+    export_btns = ""
+    if filter_client:
+        export_btns = (
+            f'<div style="margin-top:12px;display:flex;gap:8px;">'
+            f'<a href="/aging/csv?client_code={urlquote(filter_client)}&as_of={urlquote(as_of)}" '
+            f'class="btn-secondary" style="text-decoration:none;padding:6px 12px;">{esc(t("aging_download_csv", lang))}</a>'
+            f'<button onclick="window.print()" class="btn-secondary" style="padding:6px 12px;">{esc(t("aging_btn_print", lang))}</button>'
+            f'</div>'
+        )
+
+    body = f"""
+    <div class="card">
+        <h2>{esc(t("aging_title", lang))}</h2>
+        <form method="GET" action="/aging" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+            <select name="client_code" style="padding:6px;"><option value="">— {esc(t("field_client_code", lang))} —</option>{client_opts}</select>
+            <label>{esc(t("aging_as_of", lang))}:</label>
+            <input type="date" name="as_of" value="{esc(as_of)}">
+            <button class="btn-primary" style="padding:6px 12px;">{esc(t("btn_generate", lang))}</button>
+        </form>
+        {cards_html}
+        <h3>{esc(t("aging_ap_title", lang))}</h3>
+        {ap_table}
+        <h3 style="margin-top:24px;">{esc(t("aging_ar_title", lang))}</h3>
+        {ar_table}
+        {export_btns}
+    </div>"""
+
+    return page_layout(t("aging_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Accounts Receivable pages
+# ---------------------------------------------------------------------------
+
+def render_ar_list(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+    filter_client: str = "",
+) -> str:
+    """List AR invoices."""
+    invoices: list[dict] = []
+    if filter_client:
+        with open_db() as conn:
+            invoices = _aging.list_ar_invoices(filter_client, conn)
+
+    clients: list[str] = []
+    try:
+        with open_db() as conn:
+            rows = conn.execute("SELECT DISTINCT client_code FROM documents WHERE client_code IS NOT NULL ORDER BY client_code").fetchall()
+            clients = [dict(r)["client_code"] for r in rows if dict(r).get("client_code")]
+    except Exception:
+        pass
+
+    client_opts = "".join(
+        f'<option value="{esc(c)}" {"selected" if c == filter_client else ""}>{esc(c)}</option>'
+        for c in clients
+    )
+
+    status_colors = {
+        "draft": "#6b7280",
+        "sent": "#2563eb",
+        "paid": "#16a34a",
+        "overdue": "#dc2626",
+        "partial": "#f59e0b",
+    }
+    status_keys = {
+        "draft": "ar_status_draft",
+        "sent": "ar_status_sent",
+        "paid": "ar_status_paid",
+        "overdue": "ar_status_overdue",
+        "partial": "ar_status_partial",
+    }
+
+    rows_html = ""
+    for inv in invoices:
+        st = inv.get("status", "draft")
+        color = status_colors.get(st, "#6b7280")
+        badge = f'<span style="color:{color};font-weight:600;">{esc(t(status_keys.get(st, st), lang))}</span>'
+        tr_style = ' style="background:#fef2f2;"' if st == "overdue" else ""
+
+        actions = ""
+        if st in ("draft", "sent", "overdue", "partial"):
+            if st != "paid":
+                actions += (
+                    f'<form method="POST" action="/ar/mark_paid" style="display:inline;">'
+                    f'<input type="hidden" name="invoice_id" value="{esc(inv["invoice_id"])}">'
+                    f'<input type="hidden" name="client_code" value="{esc(filter_client)}">'
+                    f'<input type="date" name="payment_date" required style="width:120px;font-size:11px;">'
+                    f'<button class="btn-secondary" style="font-size:11px;padding:3px 8px;">{esc(t("ar_mark_paid", lang))}</button>'
+                    f'</form> '
+                )
+            if st == "draft":
+                actions += (
+                    f'<form method="POST" action="/ar/send" style="display:inline;">'
+                    f'<input type="hidden" name="invoice_id" value="{esc(inv["invoice_id"])}">'
+                    f'<input type="hidden" name="client_code" value="{esc(filter_client)}">'
+                    f'<button class="btn-secondary" style="font-size:11px;padding:3px 8px;">{esc(t("ar_send_invoice", lang))}</button>'
+                    f'</form> '
+                )
+
+        rows_html += f"""<tr{tr_style}>
+            <td>{esc(inv.get("invoice_number",""))}</td>
+            <td>{esc(inv.get("customer_name",""))}</td>
+            <td>{esc(str(inv.get("invoice_date",""))[:10])}</td>
+            <td>{esc(str(inv.get("due_date",""))[:10])}</td>
+            <td style="text-align:right;">${float(inv.get("total_amount",0)):,.2f}</td>
+            <td style="text-align:right;">${float(inv.get("amount_paid",0)):,.2f}</td>
+            <td>{badge}</td>
+            <td>{actions}</td>
+        </tr>"""
+
+    if not invoices:
+        rows_html = f'<tr><td colspan="8" style="text-align:center;color:#9ca3af;">{esc(t("ar_no_invoices", lang))}</td></tr>'
+
+    body = f"""
+    <div class="card">
+        <h2>{esc(t("ar_title", lang))}</h2>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+            <form method="GET" action="/ar" style="display:flex;gap:8px;align-items:center;">
+                <select name="client_code" style="padding:6px;"><option value="">— {esc(t("field_client_code", lang))} —</option>{client_opts}</select>
+                <button class="btn-primary" style="padding:6px 12px;">{esc(t("btn_filter", lang))}</button>
+            </form>
+            <a href="/ar/new?client_code={urlquote(filter_client)}" class="btn-primary" style="text-decoration:none;padding:6px 12px;">{esc(t("ar_new_invoice", lang))}</a>
+        </div>
+
+        <table class="queue-table">
+        <thead><tr>
+            <th>{esc(t("ar_col_invoice", lang))}</th>
+            <th>{esc(t("ar_col_customer", lang))}</th>
+            <th>{esc(t("ar_col_date", lang))}</th>
+            <th>{esc(t("ar_col_due_date", lang))}</th>
+            <th style="text-align:right;">{esc(t("ar_col_amount", lang))}</th>
+            <th style="text-align:right;">{esc(t("ar_col_paid", lang))}</th>
+            <th>{esc(t("ar_col_status", lang))}</th>
+            <th>{esc(t("ar_col_actions", lang))}</th>
+        </tr></thead>
+        <tbody>{rows_html}</tbody>
+        </table>
+    </div>"""
+
+    return page_layout(t("ar_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_ar_new(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+    client_code: str = "",
+) -> str:
+    """New AR invoice form."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Net 30 default
+    from datetime import timedelta as _td
+    due_default = (datetime.now(timezone.utc) + _td(days=30)).strftime("%Y-%m-%d")
+
+    body = f"""
+    <div class="card">
+        <h2>{esc(t("ar_new_title", lang))}</h2>
+        <form method="POST" action="/ar/create" style="max-width:500px;">
+            <input type="hidden" name="client_code" value="{esc(client_code)}">
+            <div class="field"><label>{esc(t("ar_customer_name", lang))}</label>
+                <input type="text" name="customer_name" required></div>
+            <div class="field"><label>{esc(t("ar_customer_email", lang))}</label>
+                <input type="email" name="customer_email"></div>
+            <div class="field"><label>{esc(t("ar_invoice_date", lang))}</label>
+                <input type="date" name="invoice_date" value="{today}" required></div>
+            <div class="field"><label>{esc(t("ar_due_date", lang))}</label>
+                <input type="date" name="due_date" value="{due_default}" required></div>
+            <div class="field"><label>{esc(t("ar_description", lang))}</label>
+                <input type="text" name="description"></div>
+            <div class="field"><label>{esc(t("ar_amount_ht", lang))}</label>
+                <input type="number" name="amount_ht" step="0.01" required></div>
+            <div class="field"><label>{esc(t("ar_gst", lang))}</label>
+                <input type="number" name="gst_amount" step="0.01" value="0"></div>
+            <div class="field"><label>{esc(t("ar_qst", lang))}</label>
+                <input type="number" name="qst_amount" step="0.01" value="0"></div>
+            <button class="btn-primary" type="submit" style="margin-top:12px;padding:10px 20px;">{esc(t("ar_create_btn", lang))}</button>
+        </form>
+        <p style="margin-top:12px;"><a href="/ar?client_code={urlquote(client_code)}">&larr; {esc(t("btn_back_to_queue", lang))}</a></p>
+    </div>"""
+
+    return page_layout(t("ar_new_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # Bank Reconciliation pages
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Cash Flow Statement
+# ---------------------------------------------------------------------------
+
+def render_cashflow(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    lang: str = "fr",
+    client_code: str = "",
+    period_start: str = "",
+    period_end: str = "",
+) -> str:
+    """Render cash flow statement page."""
+    if not client_code or not period_start or not period_end:
+        body = f"""
+        <div class="card">
+        <h2>{esc(t("cashflow_title", lang))}</h2>
+        <form method="GET" action="/cashflow" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+          <label>{esc(t("client_code_label", lang))}<br>
+            <input type="text" name="client_code" value="{esc(client_code)}" required></label>
+          <label>{esc(t("period_start_label", lang))}<br>
+            <input type="date" name="period_start" value="{esc(period_start)}" required></label>
+          <label>{esc(t("period_end_label", lang))}<br>
+            <input type="date" name="period_end" value="{esc(period_end)}" required></label>
+          <button type="submit" class="btn-primary">{esc(t("btn_generate", lang))}</button>
+        </form>
+        </div>"""
+        return page_layout(t("cashflow_title", lang), body, user=user, lang=lang)
+
+    with open_db() as conn:
+        data = _cashflow.generate_cash_flow_statement(client_code, period_start, period_end, conn)
+
+    op = data["operating_activities"]
+    inv = data["investing_activities"]
+    fin = data["financing_activities"]
+    labels = data["labels"].get(lang, data["labels"]["en"])
+
+    def _amt(v: float) -> str:
+        color = "color:#16a34a;" if v >= 0 else "color:#dc2626;"
+        return f'<span style="{color}font-weight:600;">${v:,.2f}</span>'
+
+    wc = op["working_capital_changes"]
+
+    recon = data["bank_reconciliation"]
+    recon_color = "#16a34a" if recon["reconciled"] else "#dc2626"
+    recon_icon = "&#10004;" if recon["reconciled"] else "&#9888;"
+    warning_html = ""
+    if not recon["reconciled"]:
+        warning_html = f'<div class="flash error">{esc(t("cashflow_recon_warning", lang))} ${recon["difference"]:,.2f}</div>'
+
+    body = f"""
+    <div class="card">
+    <h2>{esc(t("cashflow_title", lang))}: {esc(client_code)}</h2>
+    <p class="muted">{esc(period_start)} — {esc(period_end)}</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <a href="/cashflow/pdf?client_code={urlquote(client_code)}&period_start={urlquote(period_start)}&period_end={urlquote(period_end)}" class="btn-secondary button-link">PDF</a>
+      <a href="/cashflow/excel?client_code={urlquote(client_code)}&period_start={urlquote(period_start)}&period_end={urlquote(period_end)}" class="btn-secondary button-link">Excel</a>
+    </div>
+    {warning_html}
+
+    <h3 style="margin-top:16px;">{esc(labels["operating"])}</h3>
+    <table>
+    <tr><td>{esc(t("cashflow_net_income", lang))}</td><td style="text-align:right;">{_amt(op["net_income"])}</td></tr>
+    <tr><td>{esc(t("cashflow_depreciation", lang))}</td><td style="text-align:right;">{_amt(op["depreciation_amortization"])}</td></tr>
+    <tr><td>{esc(t("cashflow_loss_disposal", lang))}</td><td style="text-align:right;">{_amt(op["loss_on_disposal"])}</td></tr>
+    <tr><td>{esc(t("cashflow_gain_disposal", lang))}</td><td style="text-align:right;">{_amt(-op["gain_on_disposal"])}</td></tr>
+    <tr><td>{esc(t("cashflow_ar_change", lang))}</td><td style="text-align:right;">{_amt(wc["accounts_receivable_change"])}</td></tr>
+    <tr><td>{esc(t("cashflow_ap_change", lang))}</td><td style="text-align:right;">{_amt(wc["accounts_payable_change"])}</td></tr>
+    <tr><td>{esc(t("cashflow_prepaid_change", lang))}</td><td style="text-align:right;">{_amt(wc["prepaid_expenses_change"])}</td></tr>
+    <tr><td>{esc(t("cashflow_inv_change", lang))}</td><td style="text-align:right;">{_amt(wc["inventory_change"])}</td></tr>
+    <tr style="font-weight:700;border-top:2px solid #374151;"><td>{esc(t("cashflow_net_operating", lang))}</td><td style="text-align:right;">{_amt(op["net_cash_from_operating"])}</td></tr>
+    </table>
+
+    <h3 style="margin-top:16px;">{esc(labels["investing"])}</h3>
+    <table>
+    <tr><td>{esc(t("cashflow_purchase_assets", lang))}</td><td style="text-align:right;">{_amt(-inv["purchase_of_capital_assets"])}</td></tr>
+    <tr><td>{esc(t("cashflow_disposal_proceeds", lang))}</td><td style="text-align:right;">{_amt(inv["proceeds_from_disposal"])}</td></tr>
+    <tr><td>{esc(t("cashflow_purchase_investments", lang))}</td><td style="text-align:right;">{_amt(-inv["purchase_of_investments"])}</td></tr>
+    <tr style="font-weight:700;border-top:2px solid #374151;"><td>{esc(t("cashflow_net_investing", lang))}</td><td style="text-align:right;">{_amt(inv["net_investing_activities"])}</td></tr>
+    </table>
+
+    <h3 style="margin-top:16px;">{esc(labels["financing"])}</h3>
+    <table>
+    <tr><td>{esc(t("cashflow_debt_proceeds", lang))}</td><td style="text-align:right;">{_amt(fin["proceeds_from_long_term_debt"])}</td></tr>
+    <tr><td>{esc(t("cashflow_debt_repayment", lang))}</td><td style="text-align:right;">{_amt(-fin["repayment_of_long_term_debt"])}</td></tr>
+    <tr><td>{esc(t("cashflow_share_issuance", lang))}</td><td style="text-align:right;">{_amt(fin["proceeds_from_share_issuance"])}</td></tr>
+    <tr><td>{esc(t("cashflow_dividends", lang))}</td><td style="text-align:right;">{_amt(-fin["payment_of_dividends"])}</td></tr>
+    <tr style="font-weight:700;border-top:2px solid #374151;"><td>{esc(t("cashflow_net_financing", lang))}</td><td style="text-align:right;">{_amt(fin["net_financing_activities"])}</td></tr>
+    </table>
+
+    <div style="margin-top:20px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;">
+    <table style="width:100%;">
+    <tr style="font-weight:700;font-size:1.1em;"><td>{esc(labels["net_change"])}</td><td style="text-align:right;">{_amt(data["net_change_in_cash"])}</td></tr>
+    <tr><td>{esc(labels["opening"])}</td><td style="text-align:right;">${data["opening_cash_balance"]:,.2f}</td></tr>
+    <tr style="font-weight:700;font-size:1.1em;border-top:2px solid #374151;"><td>{esc(labels["closing"])}</td><td style="text-align:right;">{_amt(data["closing_cash_balance"])}</td></tr>
+    </table>
+    </div>
+
+    <div style="margin-top:12px;padding:12px;border-radius:8px;border:1px solid {'#bbf7d0' if recon['reconciled'] else '#fecaca'};background:{'#f0fdf4' if recon['reconciled'] else '#fef2f2'};">
+    <strong style="color:{recon_color};">{recon_icon} {esc(t("cashflow_bank_recon", lang))}</strong>
+    <span style="margin-left:8px;">{esc(t("cashflow_bank_balance", lang))}: ${recon["bank_balance"]:,.2f} | {esc(t("cashflow_difference", lang))}: ${recon["difference"]:,.2f}</span>
+    </div>
+    </div>"""
+
+    return page_layout(t("cashflow_title", lang), body, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# T2 Corporate Tax Pre-fill
+# ---------------------------------------------------------------------------
+
+def render_t2(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    lang: str = "fr",
+    client_code: str = "",
+    fiscal_year: str = "",
+) -> str:
+    """Render T2 pre-fill page with tabbed schedules."""
+    if not client_code or not fiscal_year:
+        body = f"""
+        <div class="card">
+        <h2>{esc(t("t2_title", lang))}</h2>
+        <form method="GET" action="/t2" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+          <label>{esc(t("client_code_label", lang))}<br>
+            <input type="text" name="client_code" value="{esc(client_code)}" required></label>
+          <label>{esc(t("t2_fiscal_year", lang))}<br>
+            <input type="text" name="fiscal_year" value="{esc(fiscal_year)}" placeholder="2026" required></label>
+          <button type="submit" class="btn-primary">{esc(t("btn_generate", lang))}</button>
+        </form>
+        </div>"""
+        return page_layout(t("t2_title", lang), body, user=user, lang=lang)
+
+    fiscal_year_end = f"{fiscal_year}-12-31"
+    with open_db() as conn:
+        data = _t2.generate_t2_prefill(client_code, fiscal_year_end, conn)
+
+    def _schedule_table(sched: dict, title: str) -> str:
+        lines = sched.get("lines", [])
+        if not lines:
+            return f'<p class="muted">{esc(t("t2_no_data", lang))}</p>'
+        rows = ""
+        for ln in lines:
+            conf_color = "#16a34a" if ln.get("confidence") == "high" else "#f59e0b"
+            gl_text = ", ".join(ln.get("gl_accounts", [])[:3]) or "—"
+            rows += (
+                f"<tr>"
+                f"<td><strong>{esc(ln['line'])}</strong></td>"
+                f"<td>{esc(ln['description'])}</td>"
+                f"<td style='text-align:right;font-weight:600;'>${ln['amount']:,.2f}</td>"
+                f"<td style='font-size:11px;color:#6b7280;'>{esc(gl_text)}</td>"
+                f"<td><span style='color:{conf_color};'>&#9679;</span></td>"
+                f"</tr>\n"
+            )
+        return (
+            f'<table><thead><tr>'
+            f'<th>{esc(t("t2_line", lang))}</th>'
+            f'<th>{esc(t("t2_description", lang))}</th>'
+            f'<th style="text-align:right;">{esc(t("t2_amount", lang))}</th>'
+            f'<th>{esc(t("t2_gl_accounts", lang))}</th>'
+            f'<th>{esc(t("t2_confidence", lang))}</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table>'
+        )
+
+    # Build tabs
+    tabs = [
+        ("sched1", t("t2_sched1_tab", lang), _schedule_table(data["schedule_1"], "Schedule 1")),
+        ("sched8", t("t2_sched8_tab", lang), _render_sched8_tab(data["schedule_8"], lang)),
+        ("sched100", t("t2_sched100_tab", lang), _schedule_table(data["schedule_100"], "Schedule 100")),
+        ("sched125", t("t2_sched125_tab", lang), _schedule_table(data["schedule_125"], "Schedule 125")),
+        ("sched50", t("t2_sched50_tab", lang), _render_sched50_tab(data["schedule_50"], lang)),
+        ("co17", t("t2_co17_tab", lang), _render_co17_tab(data["co17"], lang)),
+    ]
+
+    tab_btns = ""
+    tab_panels = ""
+    for i, (tid, label, content) in enumerate(tabs):
+        active_cls = " active" if i == 0 else ""
+        display = "block" if i == 0 else "none"
+        tab_btns += f'<button class="tab-btn{active_cls}" onclick="showT2Tab(\'{tid}\')" id="btn-{tid}">{esc(label)}</button>'
+        tab_panels += f'<div id="panel-{tid}" style="display:{display};">{content}</div>'
+
+    disclaimer = data["disclaimer"].get(lang, data["disclaimer"]["en"])
+
+    body = f"""
+    <div class="card">
+    <h2>{esc(t("t2_title", lang))}: {esc(client_code)} — {esc(fiscal_year)}</h2>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <a href="/t2/pdf?client_code={urlquote(client_code)}&fiscal_year={urlquote(fiscal_year)}" class="btn-secondary button-link">PDF</a>
+      <a href="/t2/excel?client_code={urlquote(client_code)}&fiscal_year={urlquote(fiscal_year)}" class="btn-secondary button-link">Excel</a>
+    </div>
+    <div style="padding:12px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;margin-bottom:16px;font-size:13px;">
+      {esc(disclaimer)}
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;">
+      {tab_btns}
+    </div>
+    {tab_panels}
+    </div>
+    <script>
+    function showT2Tab(id) {{
+      document.querySelectorAll('[id^="panel-sched"], [id^="panel-co17"]').forEach(p => p.style.display = 'none');
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + id).style.display = 'block';
+      document.getElementById('btn-' + id).classList.add('active');
+    }}
+    </script>"""
+
+    return page_layout(t("t2_title", lang), body, user=user, lang=lang)
+
+
+def _render_sched8_tab(sched8: dict, lang: str) -> str:
+    """Render Schedule 8 CCA tab content."""
+    classes = sched8.get("classes", [])
+    if not classes:
+        return f'<p class="muted">{esc(t("t2_no_data", lang))}</p>'
+    rows = ""
+    for c in classes:
+        rows += (
+            f"<tr>"
+            f"<td>{esc(c.get('cca_class_display', c.get('cca_class', '')))}</td>"
+            f"<td>{esc(c.get('description', ''))}</td>"
+            f"<td style='text-align:right;'>${c.get('opening_ucc', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${c.get('cca_claimed', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${c.get('closing_ucc', 0):,.2f}</td>"
+            f"</tr>\n"
+        )
+    totals = sched8.get("totals", {})
+    rows += (
+        f"<tr style='font-weight:700;border-top:2px solid #374151;'>"
+        f"<td colspan='2'>{esc(t('t2_total', lang))}</td>"
+        f"<td style='text-align:right;'>${totals.get('opening_ucc', 0):,.2f}</td>"
+        f"<td style='text-align:right;'>${totals.get('cca_claimed', 0):,.2f}</td>"
+        f"<td style='text-align:right;'>${totals.get('closing_ucc', 0):,.2f}</td>"
+        f"</tr>"
+    )
+    return (
+        f'<table><thead><tr>'
+        f'<th>{esc(t("fa_class", lang))}</th>'
+        f'<th>{esc(t("t2_description", lang))}</th>'
+        f'<th style="text-align:right;">{esc(t("fa_opening_ucc", lang))}</th>'
+        f'<th style="text-align:right;">CCA</th>'
+        f'<th style="text-align:right;">{esc(t("fa_closing_ucc", lang))}</th>'
+        f'</tr></thead><tbody>{rows}</tbody></table>'
+    )
+
+
+def _render_sched50_tab(sched50: dict, lang: str) -> str:
+    """Render Schedule 50 shareholders tab."""
+    shareholders = sched50.get("shareholders", [])
+    if not shareholders:
+        return f'<p class="muted">{esc(t("t2_no_shareholders", lang))}</p>'
+    rows = ""
+    for sh in shareholders:
+        rows += (
+            f"<tr>"
+            f"<td>{esc(sh.get('name', ''))}</td>"
+            f"<td style='text-align:right;'>{sh.get('ownership_pct', 0):.1f}%</td>"
+            f"<td style='text-align:right;'>${sh.get('dividends_paid', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${sh.get('salary_paid', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${sh.get('loans_to_shareholder', 0):,.2f}</td>"
+            f"</tr>\n"
+        )
+    return (
+        f'<table><thead><tr>'
+        f'<th>{esc(t("t2_shareholder_name", lang))}</th>'
+        f'<th style="text-align:right;">%</th>'
+        f'<th style="text-align:right;">{esc(t("t2_dividends", lang))}</th>'
+        f'<th style="text-align:right;">{esc(t("t2_salary", lang))}</th>'
+        f'<th style="text-align:right;">{esc(t("t2_loans", lang))}</th>'
+        f'</tr></thead><tbody>{rows}</tbody></table>'
+    )
+
+
+def _render_co17_tab(co17: dict, lang: str) -> str:
+    """Render CO-17 Quebec mapping tab."""
+    lines = co17.get("lines", [])
+    if not lines:
+        return f'<p class="muted">{esc(t("t2_no_data", lang))}</p>'
+    rows = ""
+    for ln in lines:
+        rows += (
+            f"<tr>"
+            f"<td>{esc(ln.get('t2_line', ''))}</td>"
+            f"<td>{esc(ln.get('co17_line', ''))}</td>"
+            f"<td>{esc(ln.get('description', ''))}</td>"
+            f"<td style='text-align:right;font-weight:600;'>${ln.get('amount', 0):,.2f}</td>"
+            f"</tr>\n"
+        )
+    return (
+        f'<table><thead><tr>'
+        f'<th>T2</th>'
+        f'<th>CO-17</th>'
+        f'<th>{esc(t("t2_description", lang))}</th>'
+        f'<th style="text-align:right;">{esc(t("t2_amount", lang))}</th>'
+        f'</tr></thead><tbody>{rows}</tbody></table>'
+    )
+
 
 def render_reconciliation_list(
     ctx: dict[str, Any],
@@ -5362,7 +6187,7 @@ def render_risk_assessment(
         f'</form></div>\n'
     )
 
-    # Generate matrix button
+    # Generate matrix button + Reset & Regenerate button
     gen_form = ""
     if engagement_id:
         gen_form = (
@@ -5372,7 +6197,13 @@ def render_risk_assessment(
             f'<button type="submit" class="btn-primary" style="padding:7px 16px;">'
             f'{esc(t("cas_risk_generate", lang))}</button>'
             f'</form>'
-            f'<p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Generates risk rows for all chart-of-accounts entries across all CAS assertions.</p>'
+            f' <form method="POST" action="/audit/risk/reset" style="display:inline;margin-left:8px;"'
+            f' onsubmit="return confirm(\'Delete all existing risk rows and regenerate from scratch?\');">'
+            f'<input type="hidden" name="engagement_id" value="{esc(engagement_id)}">'
+            f'<button type="submit" class="btn-secondary" style="padding:7px 16px;border:1px solid #dc2626;color:#dc2626;">'
+            f'\u21bb Reset &amp; Regenerate</button>'
+            f'</form>'
+            f'<p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Generates risk rows for significant accounts only, with realistic risk levels per account type.</p>'
             f'</div>\n'
         )
 
@@ -5498,7 +6329,7 @@ def _get_qr_clients() -> list[dict[str, Any]]:
 def _get_portal_base_url() -> str:
     """Return the client portal base URL from config or fall back to localhost."""
     try:
-        cfg = json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+        cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
         public_url = cfg.get("public_portal_url", "").strip()
         if public_url:
             return public_url
@@ -5990,6 +6821,122 @@ def render_admin_remote(
     return page_layout(t("remote_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+def render_export_page(ctx: dict[str, Any], user: dict[str, Any],
+                       lang: str = "fr") -> str:
+    """Render the export page with format buttons and client/period selectors."""
+    clients: list[str] = []
+    try:
+        with open_db() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT client_code FROM documents "
+                "WHERE client_code IS NOT NULL AND client_code != '' ORDER BY client_code"
+            ).fetchall()
+            clients = [r["client_code"] for r in rows]
+    except Exception:
+        pass
+
+    # Build month options for the last 24 months
+    from datetime import date
+    today = date.today()
+    months: list[str] = []
+    for i in range(24):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(f"{y:04d}-{m:02d}")
+
+    client_options = "".join(
+        f'<option value="{esc(c)}">{esc(c)}</option>' for c in clients
+    )
+    month_options = "".join(
+        f'<option value="{m}">{m}</option>' for m in months
+    )
+    year_options = "".join(
+        f'<option value="{y}">{y}</option>' for y in range(today.year, today.year - 5, -1)
+    )
+
+    body = f"""
+    <div class="card">
+      <h2>{esc(t("export_title", lang))}</h2>
+
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
+        <div>
+          <label style="font-weight:600;">{esc(t("export_select_client", lang))}</label><br>
+          <select id="export-client" style="padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;min-width:200px;">
+            {client_options}
+          </select>
+        </div>
+        <div>
+          <label style="font-weight:600;">{esc(t("export_select_period", lang))}</label><br>
+          <select id="export-period" style="padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;min-width:160px;">
+            {month_options}
+          </select>
+        </div>
+      </div>
+
+      <div id="export-count" style="margin-bottom:16px;font-size:14px;color:#475569;"></div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
+        <button class="btn-primary" onclick="doExport('csv')">{esc(t("export_btn_csv", lang))}</button>
+        <button class="btn-primary" onclick="doExport('sage50')">{esc(t("export_btn_sage50", lang))}</button>
+        <button class="btn-primary" onclick="doExport('acomba')">{esc(t("export_btn_acomba", lang))}</button>
+        <button class="btn-primary" onclick="doExport('qbd')">{esc(t("export_btn_qbd", lang))}</button>
+        <button class="btn-primary" onclick="doExport('xero')">{esc(t("export_btn_xero", lang))}</button>
+        <button class="btn-primary" onclick="doExport('wave')">{esc(t("export_btn_wave", lang))}</button>
+        <button class="btn-primary" onclick="doExport('excel')">{esc(t("export_btn_excel", lang))}</button>
+      </div>
+
+      <hr style="margin:20px 0;border-color:#e2e8f0;">
+
+      <h3>{esc(t("export_year_label", lang))}</h3>
+      <div style="display:flex;gap:20px;align-items:end;flex-wrap:wrap;">
+        <div>
+          <select id="export-year" style="padding:8px 12px;border-radius:6px;border:1px solid #cbd5e1;min-width:120px;">
+            {year_options}
+          </select>
+        </div>
+        <button class="btn-primary" onclick="doBulkExport()">{esc(t("export_btn_bulk", lang))}</button>
+      </div>
+    </div>
+
+    <script>
+    function doExport(fmt) {{
+      var client = document.getElementById('export-client').value;
+      var period = document.getElementById('export-period').value;
+      if (!client) {{ alert('Select a client'); return; }}
+      window.location.href = '/export/' + fmt + '?client_code=' + encodeURIComponent(client) + '&period=' + encodeURIComponent(period);
+    }}
+    function doBulkExport() {{
+      var client = document.getElementById('export-client').value;
+      var year = document.getElementById('export-year').value;
+      if (!client) {{ alert('Select a client'); return; }}
+      window.location.href = '/export/all?client_code=' + encodeURIComponent(client) + '&year=' + encodeURIComponent(year);
+    }}
+    function updateCount() {{
+      var client = document.getElementById('export-client').value;
+      var period = document.getElementById('export-period').value;
+      if (!client || !period) return;
+      fetch('/export/count?client_code=' + encodeURIComponent(client) + '&period=' + encodeURIComponent(period))
+        .then(r => r.json())
+        .then(d => {{
+          var el = document.getElementById('export-count');
+          if (d.count > 0) {{
+            el.innerHTML = '<strong>' + d.count + '</strong> {esc(t("export_count_msg", lang)).replace("{count}", "").strip()}';
+          }} else {{
+            el.innerHTML = '{esc(t("export_no_data", lang))}';
+          }}
+        }});
+    }}
+    document.getElementById('export-client').addEventListener('change', updateCount);
+    document.getElementById('export-period').addEventListener('change', updateCount);
+    updateCount();
+    </script>
+    """
+    return page_layout(t("export_title", lang), body, user=user, lang=lang)
+
+
 def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
                 flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
     flash_html = ""
@@ -6068,6 +7015,12 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + _anav("/audit/controls", "cas_ctrl_nav")
             + _anav("/audit/related_parties", "cas_rp_nav")
             + _anav("/reconciliation", "recon_nav_link")
+            + _anav("/fixed_assets", "fa_nav_link")
+            + _anav("/aging", "aging_nav_link")
+            + _anav("/ar", "ar_nav_link")
+            + _anav("/cashflow", "cashflow_nav_link")
+            + _anav("/t2", "t2_nav_link")
+            + _anav("/export", "export_nav_link")
             + _anav("/qr", "qr_nav_link")
             + _lic_link
             + (_anav("/license/machines", "lic_machines_nav") if user.get("role") == "owner" else "")
@@ -6095,7 +7048,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
     {body_html}
 </main>
 <footer style="text-align:center;padding:12px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:24px;">
-    LedgerLink AI v{_get_app_version()}
+    OtoCPA v{_get_app_version()}
 </footer>
 </body>
 </html>"""
@@ -6120,7 +7073,7 @@ def render_login(flash_error: str = "", lang: str = "fr") -> str:
 <body>
 <div class="login-wrap">
     <div class="login-box">
-        <h2 style="margin-bottom:1.5rem;">LedgerLink</h2>
+        <h2 style="margin-bottom:1.5rem;">OtoCPA</h2>
         {err}
         <form method="POST" action="/login">
             <input type="hidden" name="lang" value="{lang}">
@@ -7616,7 +8569,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_html(page_layout("Error", '<div class="card"><h2>Database not found</h2></div>'), status=404)
             return
         data = DB_PATH.read_bytes()
-        filename = f"ledgerlink_backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db"
+        filename = f"otocpa_backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db"
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
@@ -8392,7 +9345,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
                 self.send_header("Content-Length", str(len(pdf_bytes)))
-                self.send_header("Content-Disposition", 'attachment; filename="ledgerlink_qr_codes.pdf"')
+                self.send_header("Content-Disposition", 'attachment; filename="otocpa_qr_codes.pdf"')
                 self.end_headers()
                 self.wfile.write(pdf_bytes)
                 return
@@ -8549,6 +9502,409 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     '<p>Your progress is tracked automatically via the training portal.</p>'
                     f'<p><a href="/training">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
                     user=user, lang=lang))
+                return
+
+            # ------------------------------------------------------------------
+            # Export page and download endpoints
+            # ------------------------------------------------------------------
+            if path == "/export":
+                self._send_html(render_export_page(ctx, user, lang=lang))
+                return
+
+            if path == "/export/count":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                count = 0
+                if client_code and period:
+                    try:
+                        start, end = _export_period_dates(period)
+                        docs = _export_fetch(client_code, start, end)
+                        count = len(docs)
+                    except Exception:
+                        pass
+                self._send_json({"count": count})
+                return
+
+            if path == "/export/csv":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_csv(docs)
+                fname = f"OtoCPA_Export_{client_code}_{period}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/sage50":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_sage50(docs)
+                fname = f"Sage50_Import_{client_code}_{period}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/acomba":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_acomba(docs)
+                fname = f"Acomba_Import_{client_code}_{period}.txt"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/tab-separated-values; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/qbd":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_qbd(docs)
+                fname = f"QBD_Import_{client_code}_{period}.iif"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/xero":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_xero(docs)
+                fname = f"Xero_Import_{client_code}_{period}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/wave":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_wave(docs)
+                fname = f"Wave_Import_{client_code}_{period}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/excel":
+                client_code = qs.get("client_code", [""])[0]
+                period = qs.get("period", [""])[0]
+                start, end = _export_period_dates(period)
+                docs = _export_fetch(client_code, start, end)
+                data = _export_excel(docs, client_code, period)
+                fname = f"OtoCPA_{client_code}_{period}.xlsx"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if path == "/export/all":
+                client_code = qs.get("client_code", [""])[0]
+                year = int(qs.get("year", ["2026"])[0])
+                data = _export_annual_zip(client_code, year)
+                fname = f"OtoCPA_{client_code}_{year}_All.zip"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            # --- Fixed Assets ---
+            if path == "/fixed_assets":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_fixed_assets_list(ctx, user, flash, flash_error, lang=lang, filter_client=fc))
+                return
+
+            if path == "/fixed_assets/schedule8":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_schedule_8(fc, user, lang=lang))
+                return
+
+            # --- Aging Reports ---
+            if path == "/aging":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                as_of = qs.get("as_of", [""])[0].strip()
+                self._send_html(render_aging_report(ctx, user, flash, flash_error, lang=lang, filter_client=fc, as_of=as_of))
+                return
+
+            if path == "/aging/csv":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                as_of = qs.get("as_of", [""])[0].strip() or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                import csv as _csv_mod
+                import io as _io_mod
+                with open_db() as conn:
+                    ap_data = _aging.calculate_ap_aging(fc, as_of, conn)
+                    ar_data = _aging.calculate_ar_aging(fc, as_of, conn)
+                buf = _io_mod.StringIO()
+                w = _csv_mod.writer(buf)
+                w.writerow(["Section", "Name", "Count", "Current", "31-60", "61-90", "91-120", "120+", "Total"])
+                for r in ap_data:
+                    w.writerow(["AP", r["vendor"], r["invoice_count"], r["current"], r["days_31_60"], r["days_61_90"], r["days_91_120"], r["over_120"], r["total"]])
+                for r in ar_data:
+                    w.writerow(["AR", r["customer"], r["invoice_count"], r["current"], r["days_31_60"], r["days_61_90"], r["days_91_120"], r["over_120"], r["total"]])
+                csv_bytes = buf.getvalue().encode("utf-8-sig")
+                fname = f"aging_{fc}_{as_of}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(csv_bytes)))
+                self.end_headers()
+                self.wfile.write(csv_bytes)
+                return
+
+            # --- Accounts Receivable ---
+            if path == "/ar":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_ar_list(ctx, user, flash, flash_error, lang=lang, filter_client=fc))
+                return
+
+            if path == "/ar/new":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_ar_new(ctx, user, flash, flash_error, lang=lang, client_code=fc))
+                return
+
+            # --- Cash Flow Statement ---
+            if path == "/cashflow":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                ps = qs.get("period_start", [""])[0].strip()
+                pe = qs.get("period_end", [""])[0].strip()
+                self._send_html(render_cashflow(ctx, user, lang=lang, client_code=fc, period_start=ps, period_end=pe))
+                return
+
+            if path == "/cashflow/pdf":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                ps = qs.get("period_start", [""])[0].strip()
+                pe = qs.get("period_end", [""])[0].strip()
+                with open_db() as conn:
+                    data = _cashflow.generate_cash_flow_statement(fc, ps, pe, conn)
+                import io as _io_m
+                buf = _io_m.StringIO()
+                buf.write(f"Cash Flow Statement — {fc}\n")
+                buf.write(f"Period: {ps} to {pe}\n\n")
+                buf.write(f"Net income: ${data['operating_activities']['net_income']:,.2f}\n")
+                buf.write(f"Net operating: ${data['operating_activities']['net_cash_from_operating']:,.2f}\n")
+                buf.write(f"Net investing: ${data['investing_activities']['net_investing_activities']:,.2f}\n")
+                buf.write(f"Net financing: ${data['financing_activities']['net_financing_activities']:,.2f}\n")
+                buf.write(f"Net change: ${data['net_change_in_cash']:,.2f}\n")
+                buf.write(f"Opening cash: ${data['opening_cash_balance']:,.2f}\n")
+                buf.write(f"Closing cash: ${data['closing_cash_balance']:,.2f}\n")
+                content = buf.getvalue().encode("utf-8")
+                fname = f"cashflow_{fc}_{ps}_{pe}.txt"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+
+            if path == "/cashflow/excel":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                ps = qs.get("period_start", [""])[0].strip()
+                pe = qs.get("period_end", [""])[0].strip()
+                with open_db() as conn:
+                    data = _cashflow.generate_cash_flow_statement(fc, ps, pe, conn)
+                import csv as _csv_m2
+                import io as _io_m2
+                buf = _io_m2.StringIO()
+                w = _csv_m2.writer(buf)
+                w.writerow(["Section", "Item", "Amount"])
+                op = data["operating_activities"]
+                w.writerow(["Operating", "Net income", op["net_income"]])
+                w.writerow(["Operating", "Depreciation", op["depreciation_amortization"]])
+                wc = op["working_capital_changes"]
+                w.writerow(["Operating", "AR change", wc["accounts_receivable_change"]])
+                w.writerow(["Operating", "AP change", wc["accounts_payable_change"]])
+                w.writerow(["Operating", "Net operating", op["net_cash_from_operating"]])
+                inv = data["investing_activities"]
+                w.writerow(["Investing", "Capital assets", -inv["purchase_of_capital_assets"]])
+                w.writerow(["Investing", "Disposal proceeds", inv["proceeds_from_disposal"]])
+                w.writerow(["Investing", "Net investing", inv["net_investing_activities"]])
+                fin = data["financing_activities"]
+                w.writerow(["Financing", "Debt proceeds", fin["proceeds_from_long_term_debt"]])
+                w.writerow(["Financing", "Debt repayment", -fin["repayment_of_long_term_debt"]])
+                w.writerow(["Financing", "Net financing", fin["net_financing_activities"]])
+                w.writerow(["Summary", "Net change", data["net_change_in_cash"]])
+                w.writerow(["Summary", "Opening cash", data["opening_cash_balance"]])
+                w.writerow(["Summary", "Closing cash", data["closing_cash_balance"]])
+                csv_bytes = buf.getvalue().encode("utf-8-sig")
+                fname = f"cashflow_{fc}_{ps}_{pe}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(csv_bytes)))
+                self.end_headers()
+                self.wfile.write(csv_bytes)
+                return
+
+            # --- T2 Corporate Tax Pre-fill ---
+            if path == "/t2":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                fy = qs.get("fiscal_year", [""])[0].strip()
+                self._send_html(render_t2(ctx, user, lang=lang, client_code=fc, fiscal_year=fy))
+                return
+
+            if path == "/t2/pdf":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                fy = qs.get("fiscal_year", [""])[0].strip()
+                fiscal_year_end = f"{fy}-12-31"
+                with open_db() as conn:
+                    data = _t2.generate_t2_prefill(fc, fiscal_year_end, conn)
+                import io as _io_m3
+                buf = _io_m3.StringIO()
+                buf.write(f"T2 Pre-fill Report — {fc} — FY {fy}\n")
+                buf.write(f"{data['disclaimer']['en']}\n\n")
+                for sched_key in ("schedule_1", "schedule_100", "schedule_125"):
+                    sched = data[sched_key]
+                    buf.write(f"\n{sched.get('title', sched_key)}\n")
+                    buf.write("-" * 60 + "\n")
+                    for ln in sched.get("lines", []):
+                        buf.write(f"  Line {ln['line']:6s}  {ln['description']:40s}  ${ln['amount']:>12,.2f}\n")
+                content = buf.getvalue().encode("utf-8")
+                fname = f"t2_prefill_{fc}_{fy}.txt"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+
+            if path == "/t2/excel":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                fc = qs.get("client_code", [""])[0].strip()
+                fy = qs.get("fiscal_year", [""])[0].strip()
+                fiscal_year_end = f"{fy}-12-31"
+                with open_db() as conn:
+                    data = _t2.generate_t2_prefill(fc, fiscal_year_end, conn)
+                import csv as _csv_m3
+                import io as _io_m4
+                buf = _io_m4.StringIO()
+                w = _csv_m3.writer(buf)
+                w.writerow(["Schedule", "Line", "Description", "Amount", "GL Accounts", "Confidence"])
+                for sched_key in ("schedule_1", "schedule_100", "schedule_125"):
+                    sched = data[sched_key]
+                    sched_name = sched.get("title", sched_key)
+                    for ln in sched.get("lines", []):
+                        w.writerow([sched_name, ln["line"], ln["description"], ln["amount"],
+                                    "; ".join(ln.get("gl_accounts", [])), ln.get("confidence", "")])
+                # CO-17
+                for ln in data.get("co17", {}).get("lines", []):
+                    w.writerow(["CO-17", ln.get("co17_line", ""), ln.get("description", ""),
+                                ln.get("amount", 0), "", ""])
+                csv_bytes = buf.getvalue().encode("utf-8-sig")
+                fname = f"t2_prefill_{fc}_{fy}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(csv_bytes)))
+                self.end_headers()
+                self.wfile.write(csv_bytes)
                 return
 
             self._send_html(page_layout(
@@ -8812,9 +10168,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/build":
-                payload = build_posting_job(document_id=document_id, target_system="qbo", entry_kind="expense", db_path=DB_PATH)
+                payload = build_posting_job(document_id, target_system="qbo", entry_kind="expense")
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
-                                     flash=t("flash_posting_job_created", lang) + ": " + normalize_text(payload.posting_id))
+                                     flash=t("flash_posting_job_created", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
 
             if path == "/qbo/approve":
@@ -8926,29 +10282,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if posting is None:
                     # FIX 2: Infer entry_kind from doc_row
                     inferred_entry_kind = _infer_entry_kind(doc_row) if doc_row is not None else "expense"
-                    build_posting_job(document_id=document_id, target_system="qbo", entry_kind=inferred_entry_kind, db_path=DB_PATH)
+                    build_posting_job(document_id, target_system="qbo", entry_kind=inferred_entry_kind)
                     posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("Could not create posting job")
-                payload = approve_posting_job(posting_id=normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER, db_path=DB_PATH)
+                payload = approve_posting_job(normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER)
                 clear_manual_hold(document_id)
                 set_document_status(document_id, "Ready")
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
-                                     flash=t("flash_approved", lang) + ": " + normalize_text(payload.posting_id))
+                                     flash=t("flash_approved", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
 
             if path == "/qbo/post":
                 posting = get_qbo_posting_job(document_id)
                 if posting is None:
-                    build_posting_job(document_id=document_id, target_system="qbo", entry_kind="expense", db_path=DB_PATH)
+                    build_posting_job(document_id, target_system="qbo", entry_kind="expense")
                     posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("Could not create posting job")
                 posting_id = normalize_text(posting["posting_id"])
                 if normalize_text(posting["posting_status"]) == "post_failed":
-                    retry_posting_job(posting_id=posting_id, reviewer=DEFAULT_REVIEWER, note="retry from dashboard", db_path=DB_PATH)
+                    retry_posting_job(posting_id, reviewer=DEFAULT_REVIEWER, notes=["retry from dashboard"])
                 elif normalize_text(posting["approval_state"]) != "approved_for_posting" or normalize_text(posting["posting_status"]) != "ready_to_post":
-                    approve_posting_job(posting_id=posting_id, reviewer=DEFAULT_REVIEWER, db_path=DB_PATH)
+                    approve_posting_job(posting_id, reviewer=DEFAULT_REVIEWER)
                 result = qbo_post_one_ready_job(posting_id, db_path=DB_PATH)
                 if normalize_text(result.get("status")) == "posted":
                     set_document_status(document_id, "Ready")
@@ -8996,7 +10352,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("No posting job exists for this document")
                 payload = retry_posting_job(posting_id=normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER, note="retry from dashboard", db_path=DB_PATH)
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
-                                     flash=t("flash_retry_prepared", lang) + ": " + normalize_text(payload.posting_id))
+                                     flash=t("flash_retry_prepared", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
 
             # Portfolio routes
@@ -9942,6 +11298,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            if path == "/audit/risk/reset":
+                if ctx.get("role") not in ("manager", "owner"):
+                    raise ValueError(t("err_risk_forbidden", lang))
+                risk_eng_id = normalize_text(form.get("engagement_id", ""))
+                if not risk_eng_id:
+                    raise ValueError("engagement_id is required")
+                with open_db() as conn:
+                    _cas.delete_risk_matrix(conn, risk_eng_id)
+                    eng = _audit.get_engagement(conn, risk_eng_id)
+                    if not eng:
+                        raise ValueError("Engagement not found")
+                    coa = _audit.get_chart_of_accounts(conn)
+                    accounts = [{"account_code": a["account_code"], "account_name": a.get("account_name", "")} for a in coa]
+                    _cas.create_risk_matrix(conn, risk_eng_id, accounts, assessed_by=user["username"])
+                self._flash_redirect(
+                    f"/audit/risk?engagement_id={urlquote(risk_eng_id)}",
+                    flash=t("flash_risk_generated", lang),
+                )
+                return
+
             if path == "/audit/risk/update":
                 if ctx.get("role") not in ("manager", "owner"):
                     raise ValueError(t("err_risk_forbidden", lang))
@@ -10117,7 +11493,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._flash_redirect("/admin/updates", error=t("err_forbidden", lang))
                     return
                 try:
-                    from scripts.update_ledgerlink import check_for_updates
+                    from scripts.update_otocpa import check_for_updates
                     info = check_for_updates()
                     if info.get("update_available"):
                         self._flash_redirect(
@@ -10136,7 +11512,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._flash_redirect("/admin/updates", error=t("err_forbidden", lang))
                     return
                 try:
-                    from scripts.update_ledgerlink import install_update_background
+                    from scripts.update_otocpa import install_update_background
                     result = install_update_background()
                     if result.get("success"):
                         self._flash_redirect("/admin/updates",
@@ -10469,6 +11845,93 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect("/journal_entries")
                 return
 
+            # --- Fixed Assets POST routes ---
+            if path == "/fixed_assets/add":
+                cc = normalize_text(form.get("client_code"))
+                name = normalize_text(form.get("asset_name"))
+                acq_date = normalize_text(form.get("acquisition_date"))
+                cost = normalize_amount_input(form.get("cost"))
+                cca_cls = normalize_text(form.get("cca_class"))
+                with open_db() as conn:
+                    _fa.add_asset(cc, name, acq_date, cost or 0, cca_cls, conn)
+                self._flash_redirect(f"/fixed_assets?client_code={urlquote(cc)}", flash=t("fa_added", lang))
+                return
+
+            if path == "/fixed_assets/calculate_cca":
+                cc = normalize_text(form.get("client_code"))
+                fy_end = normalize_text(form.get("fiscal_year_end"))
+                with open_db() as conn:
+                    _fa.calculate_annual_cca(cc, fy_end, conn)
+                self._flash_redirect(f"/fixed_assets?client_code={urlquote(cc)}", flash=t("fa_cca_calculated", lang))
+                return
+
+            if path == "/fixed_assets/dispose":
+                asset_id = normalize_text(form.get("asset_id"))
+                disp_date = normalize_text(form.get("disposal_date"))
+                proceeds = normalize_amount_input(form.get("proceeds"))
+                with open_db() as conn:
+                    result = _fa.dispose_asset(asset_id, disp_date, proceeds or 0, conn)
+                parts = []
+                if result.get("recapture", 0) > 0:
+                    parts.append(f"Recapture: ${result['recapture']:,.2f}")
+                if result.get("terminal_loss", 0) > 0:
+                    parts.append(f"Terminal loss: ${result['terminal_loss']:,.2f}")
+                if result.get("capital_gain", 0) > 0:
+                    parts.append(f"Capital gain: ${result['capital_gain']:,.2f}")
+                msg = t("fa_disposed", lang)
+                if parts:
+                    msg += " — " + ", ".join(parts)
+                self._flash_redirect("/fixed_assets", flash=msg)
+                return
+
+            if path == "/fixed_assets/confirm":
+                asset_id = normalize_text(form.get("asset_id"))
+                with open_db() as conn:
+                    conn.execute(
+                        "UPDATE fixed_assets SET status = 'active' WHERE asset_id = ? AND status = 'draft'",
+                        (asset_id,),
+                    )
+                    conn.commit()
+                self._flash_redirect("/fixed_assets", flash=t("fa_confirmed", lang))
+                return
+
+            # --- AR POST routes ---
+            if path == "/ar/create":
+                cc = normalize_text(form.get("client_code"))
+                with open_db() as conn:
+                    _aging.create_ar_invoice(
+                        client_code=cc,
+                        customer_name=normalize_text(form.get("customer_name")),
+                        invoice_date=normalize_text(form.get("invoice_date")),
+                        due_date=normalize_text(form.get("due_date")),
+                        amount_ht=normalize_amount_input(form.get("amount_ht")) or 0,
+                        gst_amount=normalize_amount_input(form.get("gst_amount")) or 0,
+                        qst_amount=normalize_amount_input(form.get("qst_amount")) or 0,
+                        customer_email=normalize_text(form.get("customer_email")),
+                        description=normalize_text(form.get("description")),
+                        created_by=user.get("username", ""),
+                        conn=conn,
+                    )
+                self._flash_redirect(f"/ar?client_code={urlquote(cc)}", flash=t("ar_created", lang))
+                return
+
+            if path == "/ar/mark_paid":
+                inv_id = normalize_text(form.get("invoice_id"))
+                pay_date = normalize_text(form.get("payment_date"))
+                cc = normalize_text(form.get("client_code"))
+                with open_db() as conn:
+                    _aging.mark_ar_invoice_paid(inv_id, pay_date, conn=conn)
+                self._flash_redirect(f"/ar?client_code={urlquote(cc)}", flash=t("ar_marked_paid", lang))
+                return
+
+            if path == "/ar/send":
+                inv_id = normalize_text(form.get("invoice_id"))
+                cc = normalize_text(form.get("client_code"))
+                with open_db() as conn:
+                    _aging.send_ar_invoice(inv_id, conn)
+                self._flash_redirect(f"/ar?client_code={urlquote(cc)}", flash=t("ar_sent", lang))
+                return
+
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
 
         except Exception as exc:
@@ -10483,7 +11946,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 def main() -> int:
     bootstrap_schema()
     print()
-    print("LEDGERLINK ACCOUNTING QUEUE")
+    print("OTOCPA ACCOUNTING QUEUE")
     print("=" * 80)
     print(f"Database : {DB_PATH}")
     print(f"Bind     : {HOST}:{PORT}")
@@ -10504,7 +11967,7 @@ def main() -> int:
 
     # Start the folder watcher if configured
     try:
-        _fw_cfg = json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+        _fw_cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
         if _fw_cfg.get("folder_watcher_enabled") and _fw_cfg.get("inbox_folder"):
             from scripts.folder_watcher import start_folder_watcher as _start_fw
             _start_fw()

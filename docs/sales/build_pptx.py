@@ -1,4 +1,4 @@
-"""Build LedgerLink AI sales presentation PPTX."""
+"""Build OtoCPA sales presentation PPTX."""
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
@@ -33,13 +33,13 @@ def add_bg(slide, color=DARK_BLUE):
 
 
 def add_logo(slide, x=Inches(0.4), y=Inches(0.25), size=Pt(14)):
-    """Add LedgerLink AI logo text to top-left."""
+    """Add OtoCPA logo text to top-left."""
     txBox = slide.shapes.add_textbox(x, y, Inches(2.5), Inches(0.4))
     tf = txBox.text_frame
     tf.word_wrap = False
     p = tf.paragraphs[0]
     run1 = p.add_run()
-    run1.text = "LedgerLink"
+    run1.text = "OtoCPA"
     run1.font.size = size
     run1.font.bold = True
     run1.font.color.rgb = WHITE
@@ -58,7 +58,7 @@ def add_logo_dark(slide):
     tf = txBox.text_frame
     p = tf.paragraphs[0]
     run1 = p.add_run()
-    run1.text = "LedgerLink"
+    run1.text = "OtoCPA"
     run1.font.size = Pt(14)
     run1.font.bold = True
     run1.font.color.rgb = DARK_BLUE
@@ -159,7 +159,7 @@ tf = txBox.text_frame
 p = tf.paragraphs[0]
 p.alignment = PP_ALIGN.CENTER
 run1 = p.add_run()
-run1.text = "LedgerLink"
+run1.text = "OtoCPA"
 run1.font.size = Pt(64)
 run1.font.bold = True
 run1.font.color.rgb = WHITE
@@ -191,7 +191,7 @@ shape.line.fill.background()
 txBox3 = slide.shapes.add_textbox(Inches(8), Inches(6.2), Inches(4.5), Inches(1))
 tf3 = txBox3.text_frame
 tf3.word_wrap = True
-for line in ["[Votre nom]  |  [Votre titre]", "[courriel]@ledgerlink.ca  |  [telephone]"]:
+for line in ["[Votre nom]  |  [Votre titre]", "[courriel]@otocpa.com  |  [telephone]"]:
     if tf3.paragraphs[0].text == "":
         p = tf3.paragraphs[0]
     else:
@@ -203,7 +203,7 @@ for line in ["[Votre nom]  |  [Votre titre]", "[courriel]@ledgerlink.ca  |  [tel
     p.alignment = PP_ALIGN.RIGHT
 
 add_notes(slide,
-    "Bonjour, merci de me recevoir. Je m'appelle [votre nom], je travaille chez LedgerLink. "
+    "Bonjour, merci de me recevoir. Je m'appelle [votre nom], je travaille chez OtoCPA. "
     "On aide les cabinets CPA du Quebec a automatiser la saisie comptable avec l'intelligence artificielle "
     "--- tout en gardant le controle humain sur chaque transaction. "
     "Je vais vous montrer comment en 15 minutes.\n\n"
@@ -269,7 +269,7 @@ slide = prs.slides.add_slide(prs.slide_layouts[6])
 add_bg(slide)
 add_logo(slide)
 
-add_title(slide, "LedgerLink AI traite les documents automatiquement", font_size=Pt(32))
+add_title(slide, "OtoCPA traite les documents automatiquement", font_size=Pt(32))
 add_subtitle(slide, "Photos, courriels, WhatsApp --- extraction instantanee", y=Inches(1.8))
 add_accent_line(slide, y=Inches(2.3))
 
@@ -311,7 +311,7 @@ add_body_text(slide,
 
 add_notes(slide,
     "'La solution, c'est simple. Votre client prend une photo de sa facture. "
-    "LedgerLink lit le document, extrait le fournisseur, le montant, la date, calcule les taxes, "
+    "OtoCPA lit le document, extrait le fournisseur, le montant, la date, calcule les taxes, "
     "suggere le compte GL, et votre equipe n'a qu'a cliquer Approuver. C'est tout.'\n\n"
     "Une phrase. Arretez. Puis dites: 'Laissez-moi vous montrer.'")
 
@@ -372,7 +372,7 @@ for title, body, color, y in layers:
         p2.font.name = "Segoe UI"
 
 add_notes(slide,
-    "'Ce qui distingue LedgerLink des autres outils IA, c'est l'architecture en trois couches.'\n\n"
+    "'Ce qui distingue OtoCPA des autres outils IA, c'est l'architecture en trois couches.'\n\n"
     "'Couche 1 : les taxes, la detection de fraude, et la classification comptable sont 100% basees sur des regles. "
     "Pas d'IA. Pas d'hallucination. Les calculs TPS/TVQ utilisent la librairie Decimal de Python --- zero erreur d'arrondi.'\n\n"
     "'Couche 2 : l'IA fait la lecture des documents et suggere des comptes. Mais elle ne decide de rien.'\n\n"
@@ -430,14 +430,14 @@ for col_idx, items in enumerate([col1, col2]):
         run_text.font.name = "Segoe UI"
 
 add_notes(slide,
-    "'C'est notre avantage le plus fort. LedgerLink est le seul logiciel construit specifiquement "
+    "'C'est notre avantage le plus fort. OtoCPA est le seul logiciel construit specifiquement "
     "pour la fiscalite quebecoise.'\n\n"
     "'TaxDome? Base a San Francisco, concu pour les Etats-Unis. Karbon? Australie. CaseWare? Ontario, TVH. "
     "Aucun ne gere le calcul parallele TPS/TVQ. Aucun ne pre-remplit le FPZ-500. "
     "Aucun ne comprend la methode rapide.'\n\n"
     "'Et surtout, aucun ne vous permet d'heberger les donnees sur votre propre serveur. "
     "Avec la Loi 25, c'est vous personnellement qui etes responsable des donnees de vos clients. "
-    "Avec LedgerLink, les donnees restent chez vous.'")
+    "Avec OtoCPA, les donnees restent chez vous.'")
 
 # ============================================================
 # SLIDE 6 - SECURITY AND PRIVACY
@@ -450,7 +450,7 @@ add_title(slide, "Vos donnees clients ne quittent jamais vos locaux", font_size=
 add_accent_line(slide, y=Inches(1.85))
 
 # Comparison table
-headers = ["", "Cloud (TaxDome/Karbon)", "LedgerLink"]
+headers = ["", "Cloud (TaxDome/Karbon)", "OtoCPA"]
 rows = [
     ["Ou sont les donnees?", "Serveurs AWS aux Etats-Unis", "Votre serveur, dans votre bureau"],
     ["Qui y a acces?", "L'editeur du logiciel", "Vous seul"],
@@ -482,7 +482,7 @@ for i, row in enumerate(rows):
         for p in cell.text_frame.paragraphs:
             p.font.size = Pt(15)
             p.font.name = "Segoe UI"
-            if j == 2:  # LedgerLink column
+            if j == 2:  # OtoCPA column
                 p.font.color.rgb = GREEN
                 p.font.bold = True
             elif j == 1:
@@ -500,7 +500,7 @@ add_notes(slide,
     "'Depuis la Loi 25, vous etes personnellement responsable des donnees de vos clients. "
     "Pas votre cabinet --- vous. Si les donnees de vos clients sont sur un serveur Amazon aux Etats-Unis "
     "et qu'il y a une breche, c'est votre nom sur l'avis de la Commission d'acces a l'information.'\n\n"
-    "'Avec LedgerLink, les donnees restent sur votre serveur. Dans votre bureau. Sous votre controle. Point final.'\n\n"
+    "'Avec OtoCPA, les donnees restent sur votre serveur. Dans votre bureau. Sous votre controle. Point final.'\n\n"
     "'L'IA traite les documents, mais rien n'est stocke dans le cloud. "
     "Les resultats d'extraction sont sauvegardes dans votre base de donnees locale SQLite.'\n\n"
     "Pause. Laissez le message s'imprimer.")
@@ -599,9 +599,9 @@ for i, (clients, hours, value, roi) in enumerate(roi_data):
 
 add_notes(slide,
     "'Voici les chiffres. Pas de marketing, juste du math.'\n\n"
-    "'Pour un cabinet de 30 clients, LedgerLink economise environ 160 heures par mois. "
+    "'Pour un cabinet de 30 clients, OtoCPA economise environ 160 heures par mois. "
     "A 150 dollars de l'heure, c'est 24 000 dollars par mois en capacite recuperee. "
-    "LedgerLink coute 249 dollars par mois.'\n\n"
+    "OtoCPA coute 249 dollars par mois.'\n\n"
     "Pause. Laissez les chiffres parler.\n\n"
     "'Qu'est-ce que vous feriez avec 160 heures de plus par mois? "
     "Prendre 10 nouveaux clients? Offrir des services-conseils a plus haute valeur? "
@@ -664,7 +664,7 @@ add_body_text(slide,
 
 add_notes(slide,
     "'Pour les cabinets qui font des missions de verification, d'examen ou de compilation, "
-    "le module d'audit justifie a lui seul le prix de LedgerLink.'\n\n"
+    "le module d'audit justifie a lui seul le prix de OtoCPA.'\n\n"
     "'On couvre les normes CAS 315 a 700 plus CSQC 1. Dossiers de travail, importance relative, "
     "echantillonnage, elements probants, evenements posterieurs, continuite d'exploitation "
     "--- tout integre dans le meme systeme que votre comptabilite.'\n\n"
@@ -768,7 +768,7 @@ add_notes(slide,
     "'Le forfait Professionnel est a 249 dollars par mois. Ca inclut 30 clients, 5 utilisateurs, "
     "le routeur IA, le rapprochement bancaire, la detection de fraude, et le pre-remplissage Revenu Quebec.'\n\n"
     "Arretez de parler. Laissez le silence travailler.\n\n"
-    "S'ils ne reagissent pas, ajoutez: 'A 150 dollars de l'heure, LedgerLink se paie en moins de 2 heures "
+    "S'ils ne reagissent pas, ajoutez: 'A 150 dollars de l'heure, OtoCPA se paie en moins de 2 heures "
     "de travail economise. Le premier mois.'\n\n"
     "Ne proposez jamais de rabais sans qu'on vous le demande.")
 
@@ -930,7 +930,7 @@ tf = txBox.text_frame
 p = tf.paragraphs[0]
 p.alignment = PP_ALIGN.CENTER
 run1 = p.add_run()
-run1.text = "LedgerLink"
+run1.text = "OtoCPA"
 run1.font.size = Pt(52)
 run1.font.bold = True
 run1.font.color.rgb = WHITE
@@ -963,10 +963,10 @@ shape.line.fill.background()
 contact_lines = [
     "[Votre nom]",
     "[Votre titre]",
-    "[votre.nom]@ledgerlink.ca",
+    "[votre.nom]@otocpa.com",
     "[Numero de telephone]",
     "",
-    "Reservez une demo : ledgerlink.ca",
+    "Reservez une demo : otocpa.com",
 ]
 txBox3 = slide.shapes.add_textbox(Inches(2), Inches(4.0), Inches(9), Inches(3))
 tf3 = txBox3.text_frame
@@ -996,7 +996,7 @@ add_notes(slide,
     "Si jamais la situation change, vous aurez mes coordonnees.' Laissez la fiche et partez.")
 
 # --- Save ---
-out_path = os.path.join(os.path.dirname(__file__), "LedgerLink_Presentation.pptx")
+out_path = os.path.join(os.path.dirname(__file__), "OtoCPA_Presentation.pptx")
 prs.save(out_path)
 print(f"Presentation saved to: {out_path}")
 print(f"Slides: {len(prs.slides)}")

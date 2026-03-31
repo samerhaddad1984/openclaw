@@ -1,4 +1,4 @@
-# LedgerLink AI — World Championship Red-Team Break Report
+# OtoCPA — World Championship Red-Team Break Report
 
 **Date:** 2026-03-24
 **Tester:** Independent Adversarial Red Team (Championship Mode)

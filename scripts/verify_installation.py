@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-scripts/verify_installation.py — LedgerLink Remote Installation Verifier
+scripts/verify_installation.py — OtoCPA Remote Installation Verifier
 =========================================================================
-Run from your office after a client installs LedgerLink to verify everything
+Run from your office after a client installs OtoCPA to verify everything
 is working correctly.
 
 Usage:
-    python scripts/verify_installation.py --url https://tremblay-cpa.ledgerlink.app --license-tier professionnel
+    python scripts/verify_installation.py --url https://tremblay-cpa.otocpa.com --license-tier professionnel
     python scripts/verify_installation.py --help
 """
 from __future__ import annotations
@@ -21,18 +21,18 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-SUPPORT_EMAIL = "support@ledgerlink.ca"
+SUPPORT_EMAIL = "support@otocpa.com"
 
 
 def _load_config() -> dict:
     try:
-        return json.loads((ROOT_DIR / "ledgerlink.config.json").read_text(encoding="utf-8"))
+        return json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
 def _send_email(subject: str, body: str, to_addr: str) -> bool:
-    """Send email via SMTP configured in ledgerlink.config.json."""
+    """Send email via SMTP configured in otocpa.config.json."""
     cfg = _load_config().get("digest", {})
     smtp_host = cfg.get("smtp_host", "")
     smtp_port = cfg.get("smtp_port", 587)
@@ -72,7 +72,7 @@ def _fetch_json(url: str, timeout: int = 15) -> dict | None:
 
 
 def verify_installation(base_url: str, expected_tier: str | None = None) -> dict:
-    """Run all 7 verification checks against a remote LedgerLink instance."""
+    """Run all 7 verification checks against a remote OtoCPA instance."""
     base_url = base_url.rstrip("/")
     results = []
 
@@ -153,7 +153,7 @@ def print_report(base_url: str, results: list, health: dict | None) -> int:
     """Print formatted verification report."""
     print()
     print("\u2554" + "\u2550" * 34 + "\u2557")
-    print("\u2551  LedgerLink Installation Verify  \u2551")
+    print("\u2551  OtoCPA Installation Verify  \u2551")
     print("\u255a" + "\u2550" * 34 + "\u255d")
     print()
 
@@ -179,9 +179,9 @@ def print_report(base_url: str, results: list, health: dict | None) -> int:
 
     # Send appropriate email
     if passed == total:
-        subject = f"[LedgerLink] Installation verified — {base_url}"
+        subject = f"[OtoCPA] Installation verified — {base_url}"
         body = (
-            f"Congratulations! LedgerLink installation at {base_url} "
+            f"Congratulations! OtoCPA installation at {base_url} "
             f"has passed all {total} verification checks.\n\n"
             f"All systems are operational.\n"
         )
@@ -189,9 +189,9 @@ def print_report(base_url: str, results: list, health: dict | None) -> int:
         if _send_email(subject, body, SUPPORT_EMAIL):
             print(f"  EMAIL: Congratulations email sent")
     else:
-        subject = f"[LedgerLink] Installation issues — {base_url}"
+        subject = f"[OtoCPA] Installation issues — {base_url}"
         body = (
-            f"LedgerLink installation verification at {base_url}\n"
+            f"OtoCPA installation verification at {base_url}\n"
             f"Result: {passed}/{total} checks passed\n\n"
             f"Issues:\n"
         )
@@ -209,12 +209,12 @@ def print_report(base_url: str, results: list, health: dict | None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="LedgerLink Remote Installation Verifier",
-        epilog="Example: python verify_installation.py --url https://tremblay-cpa.ledgerlink.app --license-tier professionnel",
+        description="OtoCPA Remote Installation Verifier",
+        epilog="Example: python verify_installation.py --url https://tremblay-cpa.otocpa.com --license-tier professionnel",
     )
     parser.add_argument(
         "--url", required=True,
-        help="Base URL of the LedgerLink instance (e.g. https://tremblay-cpa.ledgerlink.app)",
+        help="Base URL of the OtoCPA instance (e.g. https://tremblay-cpa.otocpa.com)",
     )
     parser.add_argument(
         "--license-tier",

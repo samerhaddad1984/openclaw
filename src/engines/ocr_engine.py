@@ -1,7 +1,7 @@
 """
 src/engines/ocr_engine.py
 =========================
-Multi-format document ingestion pipeline for LedgerLink.
+Multi-format document ingestion pipeline for OtoCPA.
 
 Supported formats (detected from file bytes, not extension):
     PDF, JPEG, PNG, HEIC, TIFF, WebP
@@ -56,8 +56,8 @@ _root_str = str(ROOT_DIR)
 if _root_str not in sys.path:
     sys.path.insert(0, _root_str)
 
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
-DB_PATH     = ROOT_DIR / "data" / "ledgerlink_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
+DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
 UPLOAD_DIR  = ROOT_DIR / "data" / "ocr_uploads"
 
 LOW_CONFIDENCE_THRESHOLD = 0.7
@@ -1278,7 +1278,7 @@ def run_email_ingest_server(host: str = "127.0.0.1", port: int = 8789) -> None:
 
     server = ThreadingHTTPServer((host, port), EmailIngestHandler)
     print()
-    print("LEDGERLINK OCR / EMAIL INGEST SERVER")
+    print("OTOCPA OCR / EMAIL INGEST SERVER")
     print("=" * 60)
     print(f"Endpoint : http://{host}:{port}/ingest/email")
     print(f"Health   : http://{host}:{port}/health")
@@ -1293,7 +1293,7 @@ def run_email_ingest_server(host: str = "127.0.0.1", port: int = 8789) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="LedgerLink OCR / Email Ingest Server")
+    parser = argparse.ArgumentParser(description="OtoCPA OCR / Email Ingest Server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8789)
     args = parser.parse_args()

@@ -26,7 +26,7 @@ from src.agents.tools.qbo_reference_resolver import (
 )
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORTS_DIR = ROOT_DIR / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -299,8 +299,8 @@ def build_qbo_expense_payload(
         private_note_parts.append(f"category={category}")
     if memo:
         private_note_parts.append(f"memo={memo}")
-    private_note_parts.append(f"ledgerlink_vendor={vendor}")
-    private_note_parts.append(f"ledgerlink_gl={gl_account}")
+    private_note_parts.append(f"otocpa_vendor={vendor}")
+    private_note_parts.append(f"otocpa_gl={gl_account}")
 
     line_detail: dict[str, Any] = {
         "AccountBasedExpenseLineDetail": {
@@ -618,7 +618,7 @@ def export_post_results(results: dict[str, Any], out_path: Optional[Path] = None
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="LedgerLink QuickBooks Online adapter")
+    parser = argparse.ArgumentParser(description="OtoCPA QuickBooks Online adapter")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     post_one_parser = subparsers.add_parser("post-one", help="Post one approved QBO posting job")

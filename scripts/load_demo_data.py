@@ -13,7 +13,7 @@ Per client (10 docs):
   - 1 bank statement match example
   - 4 other interesting documents
 
-Also adds "demo_mode": false to ledgerlink.config.json.
+Also adds "demo_mode": false to otocpa.config.json.
 
 Usage:
     python scripts/load_demo_data.py
@@ -29,8 +29,8 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
 CLIENTS = ["MARCEL", "BOLDUC", "DENTAIRE", "BOUTIQUE", "TECHLAVAL"]
 
 
@@ -156,7 +156,7 @@ def _pick_demo_docs(conn: sqlite3.Connection, client: str) -> list[str]:
 
 
 def _update_config() -> None:
-    """Add demo_mode: false to ledgerlink.config.json if not already present."""
+    """Add demo_mode: false to otocpa.config.json if not already present."""
     try:
         config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:

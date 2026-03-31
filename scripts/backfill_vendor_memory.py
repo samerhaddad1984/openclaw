@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.agents.core.vendor_memory_store import VendorMemoryStore
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def open_db() -> sqlite3.Connection:

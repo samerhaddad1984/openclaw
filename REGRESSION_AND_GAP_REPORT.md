@@ -1,4 +1,4 @@
-# LedgerLink AI — Independent Regression & Design Gap Report
+# OtoCPA — Independent Regression & Design Gap Report
 **Date:** 2026-03-24 (updated after P0/P1 fixes)
 **Test file:** `tests/test_independent_regression.py`
 **Result:** 29 passed, 0 xfailed, 0 failed

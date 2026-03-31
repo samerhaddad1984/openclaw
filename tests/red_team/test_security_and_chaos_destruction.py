@@ -90,9 +90,9 @@ def _make_key(tier: str, secret: str = TEST_SECRET,
 
 
 def _tmp_config(content: dict) -> Path:
-    """Write a temp ledgerlink.config.json and return its parent dir."""
+    """Write a temp otocpa.config.json and return its parent dir."""
     td = Path(tempfile.mkdtemp())
-    (td / "ledgerlink.config.json").write_text(
+    (td / "otocpa.config.json").write_text(
         json.dumps(content, indent=2), encoding="utf-8"
     )
     return td
@@ -211,7 +211,7 @@ class TestLicenseTierAttacks:
         """get_license_status with expired key must return valid=False."""
         key = _make_key("professionnel", expiry=PAST_DATE)
         td = _tmp_config({"license": {"key": key, "secret": TEST_SECRET}})
-        config_path = td / "ledgerlink.config.json"
+        config_path = td / "otocpa.config.json"
 
         with patch("src.engines.license_engine.ROOT_DIR", td):
             status = get_license_status()

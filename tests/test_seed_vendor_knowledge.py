@@ -37,7 +37,7 @@ from scripts.seed_vendor_knowledge import (
 
 @pytest.fixture()
 def tmp_db(tmp_path: Path) -> Path:
-    db_path = tmp_path / "test_ledgerlink.db"
+    db_path = tmp_path / "test_otocpa.db"
     seed(db_path)
     return db_path
 

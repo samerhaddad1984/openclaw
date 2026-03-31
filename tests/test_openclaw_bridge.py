@@ -48,7 +48,7 @@ from src.integrations.openclaw_bridge import (
 @pytest.fixture()
 def tmp_db(tmp_path: Path) -> Path:
     """Create a minimal in-memory SQLite database with required tables."""
-    db = tmp_path / "test_ledgerlink.db"
+    db = tmp_path / "test_otocpa.db"
     with sqlite3.connect(str(db)) as conn:
         conn.executescript("""
             CREATE TABLE dashboard_users (

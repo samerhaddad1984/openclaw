@@ -1,8 +1,8 @@
 {
   "script": "rebuild_document_store.py",
   "run_started_at_utc": "2026-03-09T22:29:12Z",
-  "source_folder": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real",
-  "database": "data\\ledgerlink_agent.db",
+  "source_folder": "D:\\Agents\\OtoCPAAi\\tests\\documents_real",
+  "database": "data\\otocpa_agent.db",
   "table": "documents",
   "ingest_script": "scripts\\ingest_folder_to_store.py",
   "dry_run": false,
@@ -44,7 +44,7 @@
         "tests\\documents_real"
       ],
       "returncode": 0,
-      "stdout": "\nINGEST FOLDER TO STORE\n====================================================================================================\nSource folder : D:\\Agents\\LedgerLinkAi\\tests\\documents_real\nPDF count     : 44\nDatabase      : D:\\Agents\\LedgerLinkAi\\data\\ledgerlink_agent.db\nRows before   : 0\n\n[1/44] Processing: 627103180481 (4).pdf\n[2/44] Processing: 628903221158.pdf\n[3/44] Processing: 638803173454 (1).pdf\n[4/44] Processing: 700003808337 (1).pdf\n[5/44] Processing: 700003808337.pdf\n[6/44] Processing: cn invoice august 1.pdf\n[7/44] Processing: G111640207_aa92003f290e4a19bd62c6e5b9b10cbd.pdf\n[8/44] Processing: G117449472_Invoice.pdf\n[9/44] Processing: G122025095_Invoice.pdf\n[10/44] Processing: G122225655_Invoice.pdf\n[11/44] Processing: G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf\n[12/44] Processing: G122707327_8a12d3e0dbc74b6189effb865bf27f36.pdf\n[13/44] Processing: G125729392_Invoice.pdf\n[14/44] Processing: G128573502_Invoice.pdf\n[15/44] Processing: Invoice-54E917E7-0072.pdf\n[16/44] Processing: Invoice-6A920927-0012.pdf\n[17/44] Processing: Invoice-6A920927-0013.pdf\n[18/44] Processing: Invoice-6A920927-0014.pdf\n[19/44] Processing: Invoice-6A920927-0015.pdf\n[20/44] Processing: Invoice-FBBD891C-0068.pdf\n[21/44] Processing: Invoice-FBBD891C-0069.pdf\n[22/44] Processing: Invoice-FBBD891C-0070.pdf\n[23/44] Processing: Invoice-FBBD891C-0071.pdf\n[24/44] Processing: Invoice-FBBD891C-0072.pdf\n[25/44] Processing: Invoice-FBBD891C-0073 (1).pdf\n[26/44] Processing: Invoice-FBBD891C-0073 (2).pdf\n[27/44] Processing: Invoice-FBBD891C-0073.pdf\n[28/44] Processing: Invoice-FBBD891C-0074.pdf\n[29/44] Processing: Invoice-FBBD891C-0075.pdf\n[30/44] Processing: Invoice-FBBD891C-0078.pdf\n[31/44] Processing: Invoice-FBBD891C-0079.pdf\n[32/44] Processing: Invoice-FBBD891C-0080.pdf\n[33/44] Processing: Invoice-FBBD891C-0081.pdf\n[34/44] Processing: Invoice-FBBD891C-0082.pdf\n[35/44] Processing: Invoice-FBBD891C-0083.pdf\n[36/44] Processing: invoice_8922355.pdf\n[37/44] Processing: onlineStatement_2024-07-09.pdf\n[38/44] Processing: PayPal_ Transaction Details.pdf\nCould not get FontBBox from font descriptor because None cannot be parsed as 4 floats\n[39/44] Processing: Receipt-2167-0997-5794.pdf\n[40/44] Processing: recu_de_massotherapie (13).pdf\n[41/44] Processing: recu_de_massotherapie (14).pdf\n[42/44] Processing: recu_de_massotherapie (15).pdf\n[43/44] Processing: Scan_20251125_171239.pdf\n[44/44] Processing: Telus Alarm 2024 (2).pdf\n\nINGEST SUMMARY\n----------------------------------------------------------------------------------------------------\nException            2\nIgnored              3\nNeedsReview          3\nReady                36\n\nDB ACTIONS\n----------------------------------------------------------------------------------------------------\ninserted             44\ndedup_deleted        0\n\nROW COUNTS\n----------------------------------------------------------------------------------------------------\nrows_before          0\nrows_after           44\nnet_row_change       44\n\nTOP ERRORS\n----------------------------------------------------------------------------------------------------\n2    PDF text extraction failed: OCR failed: Unable to get page count. Is poppler installed and in PATH?\n\nSaved results to: D:\\Agents\\LedgerLinkAi\\exports\\ingest_folder_results.json\nDone.\n",
+      "stdout": "\nINGEST FOLDER TO STORE\n====================================================================================================\nSource folder : D:\\Agents\\OtoCPAAi\\tests\\documents_real\nPDF count     : 44\nDatabase      : D:\\Agents\\OtoCPAAi\\data\\otocpa_agent.db\nRows before   : 0\n\n[1/44] Processing: 627103180481 (4).pdf\n[2/44] Processing: 628903221158.pdf\n[3/44] Processing: 638803173454 (1).pdf\n[4/44] Processing: 700003808337 (1).pdf\n[5/44] Processing: 700003808337.pdf\n[6/44] Processing: cn invoice august 1.pdf\n[7/44] Processing: G111640207_aa92003f290e4a19bd62c6e5b9b10cbd.pdf\n[8/44] Processing: G117449472_Invoice.pdf\n[9/44] Processing: G122025095_Invoice.pdf\n[10/44] Processing: G122225655_Invoice.pdf\n[11/44] Processing: G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf\n[12/44] Processing: G122707327_8a12d3e0dbc74b6189effb865bf27f36.pdf\n[13/44] Processing: G125729392_Invoice.pdf\n[14/44] Processing: G128573502_Invoice.pdf\n[15/44] Processing: Invoice-54E917E7-0072.pdf\n[16/44] Processing: Invoice-6A920927-0012.pdf\n[17/44] Processing: Invoice-6A920927-0013.pdf\n[18/44] Processing: Invoice-6A920927-0014.pdf\n[19/44] Processing: Invoice-6A920927-0015.pdf\n[20/44] Processing: Invoice-FBBD891C-0068.pdf\n[21/44] Processing: Invoice-FBBD891C-0069.pdf\n[22/44] Processing: Invoice-FBBD891C-0070.pdf\n[23/44] Processing: Invoice-FBBD891C-0071.pdf\n[24/44] Processing: Invoice-FBBD891C-0072.pdf\n[25/44] Processing: Invoice-FBBD891C-0073 (1).pdf\n[26/44] Processing: Invoice-FBBD891C-0073 (2).pdf\n[27/44] Processing: Invoice-FBBD891C-0073.pdf\n[28/44] Processing: Invoice-FBBD891C-0074.pdf\n[29/44] Processing: Invoice-FBBD891C-0075.pdf\n[30/44] Processing: Invoice-FBBD891C-0078.pdf\n[31/44] Processing: Invoice-FBBD891C-0079.pdf\n[32/44] Processing: Invoice-FBBD891C-0080.pdf\n[33/44] Processing: Invoice-FBBD891C-0081.pdf\n[34/44] Processing: Invoice-FBBD891C-0082.pdf\n[35/44] Processing: Invoice-FBBD891C-0083.pdf\n[36/44] Processing: invoice_8922355.pdf\n[37/44] Processing: onlineStatement_2024-07-09.pdf\n[38/44] Processing: PayPal_ Transaction Details.pdf\nCould not get FontBBox from font descriptor because None cannot be parsed as 4 floats\n[39/44] Processing: Receipt-2167-0997-5794.pdf\n[40/44] Processing: recu_de_massotherapie (13).pdf\n[41/44] Processing: recu_de_massotherapie (14).pdf\n[42/44] Processing: recu_de_massotherapie (15).pdf\n[43/44] Processing: Scan_20251125_171239.pdf\n[44/44] Processing: Telus Alarm 2024 (2).pdf\n\nINGEST SUMMARY\n----------------------------------------------------------------------------------------------------\nException            2\nIgnored              3\nNeedsReview          3\nReady                36\n\nDB ACTIONS\n----------------------------------------------------------------------------------------------------\ninserted             44\ndedup_deleted        0\n\nROW COUNTS\n----------------------------------------------------------------------------------------------------\nrows_before          0\nrows_after           44\nnet_row_change       44\n\nTOP ERRORS\n----------------------------------------------------------------------------------------------------\n2    PDF text extraction failed: OCR failed: Unable to get page count. Is poppler installed and in PATH?\n\nSaved results to: D:\\Agents\\OtoCPAAi\\exports\\ingest_folder_results.json\nDone.\n",
       "stderr": ""
     },
     "after_ingest": {
@@ -248,7 +248,7 @@
           "survivor_document_date": null,
           "survivor_doc_type": null,
           "survivor_file_name": "recu_de_massotherapie (13).pdf",
-          "survivor_file_path": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real\\recu_de_massotherapie (13).pdf"
+          "survivor_file_path": "D:\\Agents\\OtoCPAAi\\tests\\documents_real\\recu_de_massotherapie (13).pdf"
         },
         {
           "logical_fingerprint": "companycam|2025-10-06|1503.22|invoice",
@@ -264,7 +264,7 @@
           "survivor_document_date": "2025-10-06",
           "survivor_doc_type": "invoice",
           "survivor_file_name": "Invoice-FBBD891C-0073 (1).pdf",
-          "survivor_file_path": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real\\Invoice-FBBD891C-0073 (1).pdf"
+          "survivor_file_path": "D:\\Agents\\OtoCPAAi\\tests\\documents_real\\Invoice-FBBD891C-0073 (1).pdf"
         },
         {
           "logical_fingerprint": "companycam|2025-08-01|2511.00|invoice",
@@ -279,7 +279,7 @@
           "survivor_document_date": "2025-08-01",
           "survivor_doc_type": "invoice",
           "survivor_file_name": "cn invoice august 1.pdf",
-          "survivor_file_path": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real\\cn invoice august 1.pdf"
+          "survivor_file_path": "D:\\Agents\\OtoCPAAi\\tests\\documents_real\\cn invoice august 1.pdf"
         },
         {
           "logical_fingerprint": "hydro_quebec|2025-08-15|-43.05|credit_note",
@@ -294,7 +294,7 @@
           "survivor_document_date": "2025-08-15",
           "survivor_doc_type": "credit_note",
           "survivor_file_name": "700003808337 (1).pdf",
-          "survivor_file_path": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real\\700003808337 (1).pdf"
+          "survivor_file_path": "D:\\Agents\\OtoCPAAi\\tests\\documents_real\\700003808337 (1).pdf"
         },
         {
           "logical_fingerprint": "microsoft_canada_inc|2025-11-09|1065.54|invoice",
@@ -309,7 +309,7 @@
           "survivor_document_date": "2025-11-09",
           "survivor_doc_type": "invoice",
           "survivor_file_name": "G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf",
-          "survivor_file_path": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real\\G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf"
+          "survivor_file_path": "D:\\Agents\\OtoCPAAi\\tests\\documents_real\\G122707327_8a12d3e0dbc74b6189effb865bf27f36 (1).pdf"
         }
       ]
     },

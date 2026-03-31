@@ -1,12 +1,12 @@
 ﻿{
-  "app_name": "LedgerLink AI",
+  "app_name": "OtoCPA",
   "environment": "sandbox",
   "client_name": "CHANGE_ME",
   "company_code": "CHANGE_ME",
-  "data_root": "C:\LedgerLinkAI\data",
-  "documents_inbox": "C:\LedgerLinkAI\client_drop",
-  "exports_dir": "C:\LedgerLinkAI\exports",
-  "logs_dir": "C:\LedgerLinkAI\logs",
+  "data_root": "C:\OtoCPA\data",
+  "documents_inbox": "C:\OtoCPA\client_drop",
+  "exports_dir": "C:\OtoCPA\exports",
+  "logs_dir": "C:\OtoCPA\logs",
   "dashboard_url": "http://127.0.0.1:8787/",
   "qbo": {
     "environment": "sandbox",

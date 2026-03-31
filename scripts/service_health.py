@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/service_health.py — LedgerLink Self-Healing Health Monitor
+scripts/service_health.py — OtoCPA Self-Healing Health Monitor
 ===================================================================
 Runs every 5 minutes via Windows Scheduled Task.
 Checks 5 health indicators and auto-heals failures.
@@ -23,14 +23,14 @@ from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 
-INSTALL_DIR = Path(r"C:\LedgerLink")
+INSTALL_DIR = Path(r"C:\OtoCPA")
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
 LOG_PATH = INSTALL_DIR / "service.log" if INSTALL_DIR.exists() else ROOT_DIR / "data" / "service_health.log"
 STATE_PATH = ROOT_DIR / "data" / "health_state.json"
 DASH_PORT = 8787
-SUPPORT_EMAIL = "support@ledgerlink.ca"
+SUPPORT_EMAIL = "support@otocpa.com"
 MAX_CONSECUTIVE_FAILURES = 3
 MIN_DISK_MB = 500
 FREE_TARGET_MB = 1024
@@ -39,7 +39,7 @@ REQUIRED_PACKAGES = [
     "bcrypt", "sqlite3", "json", "hashlib", "html",
 ]
 
-logger = logging.getLogger("ledgerlink.health")
+logger = logging.getLogger("otocpa.health")
 
 
 def _setup_logging() -> None:
@@ -77,7 +77,7 @@ def _load_config() -> dict:
 
 
 def _send_alert_email(subject: str, body: str) -> bool:
-    """Send alert email via SMTP configured in ledgerlink.config.json."""
+    """Send alert email via SMTP configured in otocpa.config.json."""
     cfg = _load_config().get("digest", {})
     smtp_host = cfg.get("smtp_host", "")
     smtp_port = cfg.get("smtp_port", 587)
@@ -216,17 +216,17 @@ def _heal_http() -> str:
         # Try service restart first (Windows)
         if platform.system() == "Windows":
             result = subprocess.run(
-                ["sc", "stop", "LedgerLinkAI"],
+                ["sc", "stop", "OtoCPA"],
                 capture_output=True, text=True, timeout=15,
             )
             import time
             time.sleep(2)
             result = subprocess.run(
-                ["sc", "start", "LedgerLinkAI"],
+                ["sc", "start", "OtoCPA"],
                 capture_output=True, text=True, timeout=15,
             )
             if result.returncode == 0:
-                return "Service LedgerLinkAI restarted"
+                return "Service OtoCPA restarted"
 
         # Fallback: start directly
         subprocess.Popen(
@@ -349,9 +349,9 @@ def auto_heal(failed_checks: list) -> dict:
 
         # If same check fails 3 times in a row, send email
         if count >= MAX_CONSECUTIVE_FAILURES:
-            subject = f"[LedgerLink ALERT] {check_name} failed {count} times"
+            subject = f"[OtoCPA ALERT] {check_name} failed {count} times"
             body = (
-                f"LedgerLink Health Monitor Alert\n"
+                f"OtoCPA Health Monitor Alert\n"
                 f"{'=' * 40}\n"
                 f"Check: {check_name}\n"
                 f"Consecutive failures: {count}\n"
@@ -411,7 +411,7 @@ def run_as_scheduled_task() -> int:
         print("ERROR: Scheduled tasks are only supported on Windows.")
         return 1
 
-    task_name = "LedgerLink Health Monitor"
+    task_name = "OtoCPA Health Monitor"
     python = sys.executable or "python"
     script = Path(__file__).resolve()
 
@@ -454,7 +454,7 @@ def main() -> int:
             failed = [n for n, r in results.items() if not r["ok"]]
             return 0 if not failed else 1
         elif cmd in ("--help", "-h"):
-            print("LedgerLink Health Monitor")
+            print("OtoCPA Health Monitor")
             print()
             print("Usage:")
             print("  python service_health.py           Run health check + auto-heal cycle")

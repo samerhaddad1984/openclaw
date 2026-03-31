@@ -2,7 +2,7 @@
 RED TEAM: Accounting Substance vs Form Destruction Tests
 =========================================================
 
-Core question: Does LedgerLink understand what a transaction IS,
+Core question: Does OtoCPA understand what a transaction IS,
 or just what it LOOKS LIKE?
 
 These tests attack the economic substance analysis capabilities of:

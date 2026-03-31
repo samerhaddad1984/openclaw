@@ -1,6 +1,6 @@
-# LedgerLink AI - Developer Guide
+# OtoCPA - Developer Guide
 
-> Comprehensive technical reference for developers joining the LedgerLink AI project.
+> Comprehensive technical reference for developers joining the OtoCPA project.
 > Last updated: 2026-03-25
 
 ---
@@ -22,15 +22,15 @@
 
 # Section 1 -- Project Overview
 
-## What LedgerLink AI Is
+## What OtoCPA Is
 
-LedgerLink AI is an accounting automation platform built for Canadian bookkeeping firms. It ingests documents (invoices, receipts, bank statements, credit memos) from email, SharePoint, a client portal, or a watched folder, extracts structured data, applies tax rules (GST/QST/HST), detects fraud, classifies economic substance, and posts transactions to QuickBooks Online -- all with a bilingual (French/English) review dashboard where accountants approve, correct, or escalate.
+OtoCPA is an accounting automation platform built for Canadian bookkeeping firms. It ingests documents (invoices, receipts, bank statements, credit memos) from email, SharePoint, a client portal, or a watched folder, extracts structured data, applies tax rules (GST/QST/HST), detects fraud, classifies economic substance, and posts transactions to QuickBooks Online -- all with a bilingual (French/English) review dashboard where accountants approve, correct, or escalate.
 
 The system is designed to run on-premise on a single Windows machine per firm. All client data stays on the firm's hardware; only AI API calls leave the network.
 
 ## The 3-Layer Architecture
 
-LedgerLink enforces a strict separation between deterministic logic, AI assistance, and human judgment:
+OtoCPA enforces a strict separation between deterministic logic, AI assistance, and human judgment:
 
 | Layer | Name | Guarantee | Examples |
 |-------|------|-----------|----------|
@@ -43,7 +43,7 @@ LedgerLink enforces a strict separation between deterministic logic, AI assistan
 | Component | Technology |
 |-----------|------------|
 | Language | Python 3.11 |
-| Database | SQLite (single file: `data/ledgerlink_agent.db`) |
+| Database | SQLite (single file: `data/otocpa_agent.db`) |
 | PDF Generation | ReportLab |
 | Image Processing | Pillow, pdf2image, pytesseract |
 | AI Providers | OpenRouter (Claude Sonnet for complex tasks), DeepSeek (routine tasks) |
@@ -59,7 +59,7 @@ LedgerLink enforces a strict separation between deterministic logic, AI assistan
 ## Repository Structure
 
 ```
-LedgerLinkAi/
+OtoCPAAi/
 +-- src/
 |   +-- agents/
 |   |   +-- core/          # Business logic: task store, approval engine, duplicate guard,
@@ -85,11 +85,11 @@ LedgerLinkAi/
 +-- project_docs/          # Technical specifications
 +-- reports/               # Rebuild and diagnostic reports
 +-- data/                  # Runtime data directory
-|   +-- ledgerlink_agent.db   # SQLite database (all tables)
+|   +-- otocpa_agent.db   # SQLite database (all tables)
 |   +-- incoming_documents/   # Watched folder for ingestion
 +-- exports/               # Generated CSV/JSON exports
 +-- build/ / dist/         # PyInstaller output
-+-- ledgerlink.config.json # Main application configuration
++-- otocpa.config.json # Main application configuration
 +-- client_config.json     # Per-client QBO configuration
 +-- .env.template          # Environment variable template
 ```
@@ -180,7 +180,7 @@ Watched Folder     ----+                                             |
 
 ## Database Schema Overview
 
-The SQLite database (`data/ledgerlink_agent.db`) contains 44+ tables organized into functional groups:
+The SQLite database (`data/otocpa_agent.db`) contains 44+ tables organized into functional groups:
 
 - **Core:** `documents`, `posting_jobs`
 - **Authentication:** `dashboard_users`, `dashboard_sessions`
@@ -198,7 +198,7 @@ See [Section 4](#section-4--database-schema) for complete column-level documenta
 
 ## The AI Router System
 
-LedgerLink uses a two-tier AI routing strategy configured in `ledgerlink.config.json`:
+OtoCPA uses a two-tier AI routing strategy configured in `otocpa.config.json`:
 
 | Task Type | Provider | Model | Cost Profile |
 |-----------|----------|-------|-------------|
@@ -209,7 +209,7 @@ The `ai_client_router.py` module handles prompt dispatch. All prompts are saniti
 
 ## The Learning Memory System
 
-LedgerLink learns from human corrections through three storage layers:
+OtoCPA learns from human corrections through three storage layers:
 
 1. **Vendor Memory** (`vendor_memory` table) -- When a human approves a posting, the system records the vendor + client_code combination with its GL account, tax code, category, and confidence. Future documents from the same vendor start with higher confidence. Lookups use normalized vendor keys (`vendor_key`) and client code keys (`client_code_key`) with indexes for fast retrieval.
 
@@ -691,7 +691,7 @@ See `src/engines/ocr_engine.py` above.
 **Key Functions:**
 - `append_jsonl(log_path: Path, obj: dict) -> None`
 
-### `src/agents/tools/ledgerlink_runner.py`
+### `src/agents/tools/otocpa_runner.py`
 **Purpose:** Orchestrates multi-stage pipeline runs with subprocess execution.
 **Key Functions:**
 - `run_python_script(script_name, args, timeout_seconds) -> StageResult`
@@ -699,7 +699,7 @@ See `src/engines/ocr_engine.py` above.
 - `get_posting_queue_summary(db_path) -> dict` -- Counts by posting_status
 **DB Tables:** documents (read), posting_jobs (read)
 
-### `src/agents/tools/ledgerlink_workflow_runner.py`
+### `src/agents/tools/otocpa_workflow_runner.py`
 **Purpose:** Email and SharePoint ingestion workflow management.
 **DB Tables:** documents (via subprocess pipeline)
 
@@ -828,7 +828,7 @@ See `src/engines/ocr_engine.py` above.
 
 # Section 4 -- Database Schema
 
-All tables are stored in a single SQLite database at `data/ledgerlink_agent.db`. Schema is managed by `scripts/migrate_db.py` which performs safe, additive migrations (adds missing columns and tables without modifying existing data).
+All tables are stored in a single SQLite database at `data/otocpa_agent.db`. Schema is managed by `scripts/migrate_db.py` which performs safe, additive migrations (adds missing columns and tables without modifying existing data).
 
 ## Core Document Management
 
@@ -1621,7 +1621,7 @@ See [Section 9](#section-9--known-limitations) for the specific xfails and their
 
 2. Build the executable:
    ```powershell
-   pyinstaller ledgerlink-setup.spec
+   pyinstaller otocpa-setup.spec
    ```
    The `.spec` file targets `src/agents/tools/setup_wizard.py` as the entry point.
 
@@ -1631,7 +1631,7 @@ See [Section 9](#section-9--known-limitations) for the specific xfails and their
 
 The PowerShell script automates client installation:
 - Detects Python 3.11/3.12
-- Creates install directory at `C:\LedgerLinkAI` (configurable)
+- Creates install directory at `C:\OtoCPA` (configurable)
 - Sets up virtual environment
 - Installs pip dependencies
 - Creates desktop shortcuts
@@ -1651,7 +1651,7 @@ This walks through:
 4. **Write config** (tunnel config.yml)
 5. **DNS route** (set up hostname)
 6. **Windows service** (register as background service)
-7. **Save URL** to `ledgerlink.config.json`
+7. **Save URL** to `otocpa.config.json`
 
 The tunnel exposes the client portal (port 8788) as an HTTPS public URL.
 
@@ -1674,7 +1674,7 @@ python scripts/generate_license.py \
 | cabinet | 75 | 15 | + Analytics, Microsoft 365, filing calendar, client communications |
 | entreprise | Unlimited | Unlimited | + Audit module, financial statements, sampling, API access |
 
-License keys are HMAC-SHA256 signed. The signing secret must match between generation and validation. Store the secret in `.env` as `LEDGERLINK_SIGNING_SECRET`.
+License keys are HMAC-SHA256 signed. The signing secret must match between generation and validation. Store the secret in `.env` as `OTOCPA_SIGNING_SECRET`.
 
 ## Demo Mode Setup
 
@@ -1684,7 +1684,7 @@ License keys are HMAC-SHA256 signed. The signing secret must match between gener
    ```
    This selects 50 curated documents (10 per client) showcasing fraud flags, AI warnings, meal receipts, and bank matches.
 
-2. Enable demo mode in `ledgerlink.config.json`:
+2. Enable demo mode in `otocpa.config.json`:
    ```json
    { "demo_mode": true }
    ```
@@ -1701,7 +1701,7 @@ Before deploying to a client:
 - [ ] Run `scripts/migrate_db.py` to ensure schema is current
 - [ ] Run `scripts/manage_dashboard_users.py init` to create the owner account
 - [ ] Set strong passwords for all accounts
-- [ ] Configure `ledgerlink.config.json` with correct AI API keys
+- [ ] Configure `otocpa.config.json` with correct AI API keys
 - [ ] Configure `.env` with QBO credentials (access token, realm ID)
 - [ ] Set `QBO_ENVIRONMENT=production` (not sandbox)
 - [ ] Generate and activate a license key for the correct tier
@@ -1823,7 +1823,7 @@ When the client portal is exposed via Cloudflare Tunnel:
 
 The following data **never leaves the client premises**:
 
-- The SQLite database (`data/ledgerlink_agent.db`) and all its contents
+- The SQLite database (`data/otocpa_agent.db`) and all its contents
 - Original document files (PDFs, images)
 - Extracted text and OCR results
 - QBO credentials (access tokens, realm IDs)
@@ -1841,4 +1841,4 @@ The following data **does leave** the network (encrypted in transit):
 
 ---
 
-*This guide was generated from the LedgerLink AI codebase as of 2026-03-25.*
+*This guide was generated from the OtoCPA codebase as of 2026-03-25.*

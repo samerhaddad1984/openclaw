@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.agents.core.learning_memory_store import LearningMemoryStore
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 DEFAULT_REVIEWER = "backfill"
 
 

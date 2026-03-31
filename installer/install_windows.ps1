@@ -1,19 +1,19 @@
 # ============================================================
-# LedgerLink AI — One-Line Windows Installer
+# OtoCPA — One-Line Windows Installer
 # ============================================================
 # Usage:
-#   powershell -ExecutionPolicy Bypass -c "iwr https://install.ledgerlink.ca/install.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "iwr https://install.otocpa.com/install.ps1 | iex"
 #
 # With license key:
-#   powershell -ExecutionPolicy Bypass -c "$key='LLAI-XXXX'; iwr https://install.ledgerlink.ca/install.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "$key='LLAI-XXXX'; iwr https://install.otocpa.com/install.ps1 | iex"
 # ============================================================
 
 $ErrorActionPreference = "Stop"
-$InstallDir = "C:\LedgerLink"
-$ReleaseUrl = "https://releases.ledgerlink.ai/latest/ledgerlink-latest.zip"
-$ReleaseMirror1 = "https://cdn.ledgerlink.ai/releases/ledgerlink-latest.zip"
-$ReleaseMirror2 = "https://github.com/ledgerlink/releases/releases/latest/download/ledgerlink-latest.zip"
-$InstallerBatUrl = "https://install.ledgerlink.ca/INSTALL_SMART.bat"
+$InstallDir = "C:\OtoCPA"
+$ReleaseUrl = "https://releases.otocpa.ai/latest/otocpa-latest.zip"
+$ReleaseMirror1 = "https://cdn.otocpa.ai/releases/otocpa-latest.zip"
+$ReleaseMirror2 = "https://github.com/otocpa/releases/releases/latest/download/otocpa-latest.zip"
+$InstallerBatUrl = "https://install.otocpa.com/INSTALL_SMART.bat"
 
 # ============================================================
 # Banner
@@ -21,7 +21,7 @@ $InstallerBatUrl = "https://install.ledgerlink.ca/INSTALL_SMART.bat"
 Write-Host ""
 Write-Host "  +======================================================+" -ForegroundColor Cyan
 Write-Host "  |                                                        |" -ForegroundColor Cyan
-Write-Host "  |        LedgerLink AI - Windows Installer               |" -ForegroundColor Cyan
+Write-Host "  |        OtoCPA - Windows Installer               |" -ForegroundColor Cyan
 Write-Host "  |        Installation automatique / Auto Install         |" -ForegroundColor Cyan
 Write-Host "  |                                                        |" -ForegroundColor Cyan
 Write-Host "  +======================================================+" -ForegroundColor Cyan
@@ -41,7 +41,7 @@ if (-not $isAdmin) {
     if ($key) {
         $scriptBlock += "`$key='$key'; "
     }
-    $scriptBlock += "iwr https://install.ledgerlink.ca/install.ps1 | iex"
+    $scriptBlock += "iwr https://install.otocpa.com/install.ps1 | iex"
 
     Start-Process powershell -Verb RunAs -ArgumentList "-ExecutionPolicy", "Bypass", "-Command", $scriptBlock
     exit 0
@@ -64,11 +64,11 @@ if (-not (Test-Path "$InstallDir\data")) {
 Write-Host "         Directory ready" -ForegroundColor Green
 
 # ============================================================
-# Step 2: Download LedgerLink ZIP
+# Step 2: Download OtoCPA ZIP
 # ============================================================
-Write-Host "  [3/5] Downloading LedgerLink..." -ForegroundColor White
+Write-Host "  [3/5] Downloading OtoCPA..." -ForegroundColor White
 
-$zipPath = "$InstallDir\ledgerlink-latest.zip"
+$zipPath = "$InstallDir\otocpa-latest.zip"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $downloaded = $false
@@ -87,9 +87,9 @@ foreach ($url in @($ReleaseUrl, $ReleaseMirror1, $ReleaseMirror2)) {
 }
 
 if (-not $downloaded) {
-    Write-Host "  ERROR: Could not download LedgerLink." -ForegroundColor Red
+    Write-Host "  ERROR: Could not download OtoCPA." -ForegroundColor Red
     Write-Host "  Check your internet connection and try again." -ForegroundColor Red
-    Write-Host "  Contact: support@ledgerlink.ca" -ForegroundColor Red
+    Write-Host "  Contact: support@otocpa.com" -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
 }
@@ -128,7 +128,7 @@ try {
 # ============================================================
 if ($key) {
     Write-Host "         License key detected: $key" -ForegroundColor Green
-    $configPath = "$InstallDir\ledgerlink.config.json"
+    $configPath = "$InstallDir\otocpa.config.json"
     if (Test-Path $configPath) {
         try {
             $config = Get-Content $configPath -Raw | ConvertFrom-Json
@@ -141,7 +141,7 @@ if ($key) {
     }
 
     # Also set environment variable for setup wizard
-    [System.Environment]::SetEnvironmentVariable("LEDGERLINK_LICENSE_KEY", $key, "Process")
+    [System.Environment]::SetEnvironmentVariable("OTOCPA_LICENSE_KEY", $key, "Process")
 }
 
 # ============================================================
@@ -160,7 +160,7 @@ if (Test-Path $batPath) {
     Write-Host "  |       Installation complete / Installation terminee    |" -ForegroundColor Green
     Write-Host "  |                                                        |" -ForegroundColor Green
     Write-Host "  |   Dashboard: http://localhost:8787                      |" -ForegroundColor Green
-    Write-Host "  |   Support:   support@ledgerlink.ca                     |" -ForegroundColor Green
+    Write-Host "  |   Support:   support@otocpa.com                     |" -ForegroundColor Green
     Write-Host "  |                                                        |" -ForegroundColor Green
     Write-Host "  +======================================================+" -ForegroundColor Green
     Write-Host ""

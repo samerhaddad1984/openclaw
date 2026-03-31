@@ -15,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
 from src.agents.tools.qbo_online_adapter import post_one_ready_job as qbo_post_one_ready_job
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORTS_DIR = ROOT_DIR / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 

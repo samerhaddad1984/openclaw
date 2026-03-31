@@ -12,7 +12,7 @@ from src.agents.core.task_store import TaskStore
 from src.agents.core.approval_store import ApprovalStore
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORTS_DIR = ROOT_DIR / "exports"
 BANK_MATCHES_PATH = EXPORTS_DIR / "bank_matches.json"
 OUTPUT_QUEUE_PATH = EXPORTS_DIR / "match_review_queue.json"

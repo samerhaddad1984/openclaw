@@ -6,6 +6,103 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+# =========================================================================
+# Confusable character detection and mixed-script attack prevention
+# =========================================================================
+
+CONFUSABLES: dict[str, str] = {
+    # Cyrillic uppercase → Latin
+    "\u0410": "A", "\u0412": "B", "\u0421": "C", "\u0415": "E",
+    "\u041D": "H", "\u0406": "I", "\u041A": "K", "\u041C": "M",
+    "\u041E": "O", "\u0420": "P", "\u0422": "T", "\u0425": "X",
+    "\u0423": "Y",
+    # Cyrillic lowercase → Latin
+    "\u0430": "a", "\u0432": "b", "\u0441": "c", "\u0435": "e",
+    "\u043D": "h", "\u0456": "i", "\u043A": "k", "\u043C": "m",
+    "\u043E": "o", "\u0440": "p", "\u0442": "t", "\u0445": "x",
+    "\u0443": "y",
+    # Greek uppercase → Latin
+    "\u0391": "A", "\u0392": "B", "\u0395": "E", "\u0397": "H",
+    "\u0399": "I", "\u039A": "K", "\u039C": "M", "\u039D": "N",
+    "\u039F": "O", "\u03A1": "P", "\u03A4": "T", "\u03A5": "Y",
+    "\u03A7": "X",
+    # Greek lowercase → Latin
+    "\u03B1": "a", "\u03B2": "b", "\u03B5": "e", "\u03B7": "h",
+    "\u03B9": "i", "\u03BA": "k", "\u03BC": "m", "\u03BD": "n",
+    "\u03BF": "o", "\u03C1": "p", "\u03C4": "t", "\u03C5": "y",
+    "\u03C7": "x",
+    # Fullwidth digits → ASCII
+    "\uFF10": "0", "\uFF11": "1", "\uFF12": "2", "\uFF13": "3",
+    "\uFF14": "4", "\uFF15": "5", "\uFF16": "6", "\uFF17": "7",
+    "\uFF18": "8", "\uFF19": "9",
+}
+
+
+def _char_script(ch: str) -> str:
+    """Determine the Unicode script of a character using unicodedata.name()."""
+    try:
+        name = unicodedata.name(ch, "")
+    except ValueError:
+        return "Common"
+    if name.startswith("LATIN"):
+        return "Latin"
+    if name.startswith("CYRILLIC"):
+        return "Cyrillic"
+    if name.startswith("GREEK"):
+        return "Greek"
+    if name.startswith("ARABIC"):
+        return "Arabic"
+    if name.startswith("HEBREW"):
+        return "Hebrew"
+    if name.startswith("CJK") or name.startswith("CHINESE"):
+        return "Chinese"
+    if name.startswith("FULLWIDTH"):
+        return "Fullwidth"
+    if ch.isdigit() or ch.isspace() or not ch.isalpha():
+        return "Common"
+    return "Other"
+
+
+def detect_mixed_scripts(text: str) -> dict:
+    """Detect mixed Unicode scripts within the same word.
+
+    Returns:
+        {is_mixed: bool, scripts_found: list, suspicious_chars: list}
+    """
+    if not text:
+        return {"is_mixed": False, "scripts_found": [], "suspicious_chars": []}
+
+    all_scripts: set[str] = set()
+    suspicious_chars: list[tuple[str, str, str]] = []
+    is_mixed = False
+
+    for word in text.split():
+        word_scripts: set[str] = set()
+        for ch in word:
+            script = _char_script(ch)
+            if script not in ("Common", "Other"):
+                word_scripts.add(script)
+                all_scripts.add(script)
+            if script in ("Cyrillic", "Greek", "Arabic", "Hebrew", "Fullwidth"):
+                suspicious_chars.append((ch, hex(ord(ch)), script))
+        # Mixed script within the SAME word
+        if len(word_scripts) > 1:
+            is_mixed = True
+
+    return {
+        "is_mixed": is_mixed,
+        "scripts_found": sorted(all_scripts),
+        "suspicious_chars": suspicious_chars,
+    }
+
+
+def normalize_confusables(text: str) -> str:
+    """Replace confusable characters with their Latin/ASCII equivalents."""
+    if not text:
+        return text
+    return "".join(CONFUSABLES.get(ch, ch) for ch in text)
+
+
 @dataclass
 class FingerprintBundle:
     physical_id: str

@@ -15,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 SCRIPTS_DIR = ROOT_DIR / "scripts"
 EXPORTS_DIR = ROOT_DIR / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -422,10 +422,10 @@ def build_posting_jobs_for_ready_documents(
             results.append(
                 {
                     "document_id": document_id,
-                    "posting_id": payload.posting_id,
-                    "status": payload.posting_status,
-                    "approval_state": payload.approval_state,
-                    "blocking_issues": payload.blocking_issues,
+                    "posting_id": payload["posting_id"],
+                    "status": payload["posting_status"],
+                    "approval_state": payload["approval_state"],
+                    "blocking_issues": payload["blocking_issues"],
                 }
             )
         except Exception as exc:
@@ -489,7 +489,7 @@ def run_posting_queue(*, target_system: str | None = "qbo", stop_on_error: bool 
 
 
 def save_pipeline_run(run_result: PipelineRunResult) -> Path:
-    filename = f"ledgerlink_runner_{run_result.run_at.replace(':', '-').replace('+', '_')}.json"
+    filename = f"otocpa_runner_{run_result.run_at.replace(':', '-').replace('+', '_')}.json"
     path = EXPORTS_DIR / filename
     path.write_text(json.dumps(run_result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
     return path
@@ -554,7 +554,7 @@ def run_full_cycle(
 
 def print_full_cycle_summary(run_result: dict[str, Any]) -> None:
     print()
-    print("LEDGERLINK RUNNER SUMMARY")
+    print("OTOCPA RUNNER SUMMARY")
     print("-" * 100)
     print(f"Run at      : {run_result.get('run_at')}")
     print(f"Success     : {run_result.get('success')}")
@@ -587,7 +587,7 @@ def print_full_cycle_summary(run_result: dict[str, Any]) -> None:
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="LedgerLink workflow runner for OpenClaw orchestration")
+    parser = argparse.ArgumentParser(description="OtoCPA workflow runner for OpenClaw orchestration")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("ingest")

@@ -1,7 +1,7 @@
-# OpenClaw → LedgerLink Bridge Setup
+# OpenClaw → OtoCPA Bridge Setup
 
 This document explains how to configure OpenClaw to forward inbound
-WhatsApp and Telegram media messages to the LedgerLink accounting pipeline.
+WhatsApp and Telegram media messages to the OtoCPA accounting pipeline.
 
 ## Overview
 
@@ -12,20 +12,20 @@ Client (WhatsApp / Telegram)
    OpenClaw gateway
         │  POST /ingest/openclaw  (JSON + base64 file)
         ▼
-   LedgerLink  (review_dashboard.py, port 8787)
+   OtoCPA  (review_dashboard.py, port 8787)
         │  OCR → documents table → review queue
         ▼
    Accountant reviews in dashboard
 ```
 
-LedgerLink does **not** send WhatsApp or Telegram replies.  OpenClaw
-handles all messaging; LedgerLink handles only the accounting.
+OtoCPA does **not** send WhatsApp or Telegram replies.  OpenClaw
+handles all messaging; OtoCPA handles only the accounting.
 
 ---
 
 ## Prerequisites
 
-1. LedgerLink dashboard is running (`python scripts/review_dashboard.py`).
+1. OtoCPA dashboard is running (`python scripts/review_dashboard.py`).
 2. The database schema is up to date:
 
    ```
@@ -42,7 +42,7 @@ handles all messaging; LedgerLink handles only the accounting.
 
 ## Register clients
 
-In the LedgerLink admin UI go to **User Management** and set:
+In the OtoCPA admin UI go to **User Management** and set:
 
 | Field             | Value                                  |
 |-------------------|----------------------------------------|
@@ -66,7 +66,7 @@ UPDATE dashboard_users
 ## Configure OpenClaw
 
 In your OpenClaw instance add a **webhook / forward** rule that fires on
-every inbound media message and sends a POST request to LedgerLink.
+every inbound media message and sends a POST request to OtoCPA.
 
 ### Endpoint
 
@@ -75,8 +75,8 @@ POST http://127.0.0.1:8787/ingest/openclaw
 Content-Type: application/json
 ```
 
-If OpenClaw and LedgerLink run on different machines, replace
-`127.0.0.1:8787` with the LedgerLink host/port (or Cloudflare Tunnel URL).
+If OpenClaw and OtoCPA run on different machines, replace
+`127.0.0.1:8787` with the OtoCPA host/port (or Cloudflare Tunnel URL).
 
 ### Payload schema
 
@@ -146,7 +146,7 @@ format (the sender receives no document_id).
 
 ## Monitoring
 
-Open the LedgerLink dashboard and go to **Diagnostics → Troubleshoot**.
+Open the OtoCPA dashboard and go to **Diagnostics → Troubleshoot**.
 The **OpenClaw Bridge** panel shows:
 
 - Last received message timestamp

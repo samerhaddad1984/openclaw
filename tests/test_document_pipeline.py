@@ -28,7 +28,7 @@ def short(value, length):
 
 def print_table(results):
     print("\n" + "=" * 150)
-    print("LEDGERLINK LOCAL DOCUMENT PIPELINE TEST")
+    print("OTOCPA LOCAL DOCUMENT PIPELINE TEST")
     print("=" * 150)
     print()
 

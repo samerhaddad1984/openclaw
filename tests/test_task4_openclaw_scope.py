@@ -79,7 +79,7 @@ class TestOpenDbReadonlyPresence:
         return callable(getattr(mod, "open_db_readonly", None))
 
     def test_bridge_has_open_db_readonly(self):
-        assert self._module_has_fn("src.agents.core.openclaw_ledgerlink_bridge")
+        assert self._module_has_fn("src.agents.core.openclaw_otocpa_bridge")
 
     def test_orchestrator_has_open_db_readonly(self):
         assert self._module_has_fn("src.agents.core.openclaw_case_orchestrator")
@@ -103,7 +103,7 @@ class TestOpenDbReadonlyBehavior:
         db = tmp_path / "test.db"
         make_test_db(db)
 
-        from src.agents.core.openclaw_ledgerlink_bridge import open_db_readonly
+        from src.agents.core.openclaw_otocpa_bridge import open_db_readonly
         with open_db_readonly(db) as conn:
             row = conn.execute("SELECT document_id FROM documents").fetchone()
         assert row is not None
@@ -112,7 +112,7 @@ class TestOpenDbReadonlyBehavior:
         db = tmp_path / "test.db"
         make_test_db(db)
 
-        from src.agents.core.openclaw_ledgerlink_bridge import open_db_readonly
+        from src.agents.core.openclaw_otocpa_bridge import open_db_readonly
         with pytest.raises(Exception):
             with open_db_readonly(db) as conn:
                 conn.execute("INSERT INTO documents (document_id) VALUES ('X')")
@@ -122,7 +122,7 @@ class TestOpenDbReadonlyBehavior:
         db = tmp_path / "test.db"
         make_test_db(db)
 
-        from src.agents.core.openclaw_ledgerlink_bridge import open_db_readonly
+        from src.agents.core.openclaw_otocpa_bridge import open_db_readonly
         with pytest.raises(Exception):
             with open_db_readonly(db) as conn:
                 conn.execute("UPDATE documents SET vendor='X' WHERE document_id='DOC-001'")
@@ -135,7 +135,7 @@ class TestOpenDbReadonlyBehavior:
 
 class TestMaybePostReadyJobGuard:
     def test_raises_permission_error_when_execute_false(self):
-        from src.agents.core.openclaw_ledgerlink_bridge import maybe_post_ready_job
+        from src.agents.core.openclaw_otocpa_bridge import maybe_post_ready_job
         with pytest.raises(PermissionError, match="OpenClaw"):
             maybe_post_ready_job(
                 orchestrator_result={"next_step": "do_nothing"},
@@ -144,7 +144,7 @@ class TestMaybePostReadyJobGuard:
             )
 
     def test_raises_permission_error_when_execute_true(self):
-        from src.agents.core.openclaw_ledgerlink_bridge import maybe_post_ready_job
+        from src.agents.core.openclaw_otocpa_bridge import maybe_post_ready_job
         with pytest.raises(PermissionError, match="OpenClaw"):
             maybe_post_ready_job(
                 orchestrator_result={"next_step": "post_now"},
@@ -153,7 +153,7 @@ class TestMaybePostReadyJobGuard:
             )
 
     def test_error_message_mentions_posting_builder(self):
-        from src.agents.core.openclaw_ledgerlink_bridge import maybe_post_ready_job
+        from src.agents.core.openclaw_otocpa_bridge import maybe_post_ready_job
         with pytest.raises(PermissionError) as exc_info:
             maybe_post_ready_job(
                 orchestrator_result={},
@@ -370,7 +370,7 @@ class TestRenderTroubleshoot:
     def test_render_troubleshoot_contains_db_path(self):
         mod = self._get_fn()
         html_out = mod.render_troubleshoot({}, {"username": "sam", "role": "owner"})
-        assert "ledgerlink_agent.db" in html_out
+        assert "otocpa_agent.db" in html_out
 
     def test_render_troubleshoot_has_backup_link(self):
         mod = self._get_fn()

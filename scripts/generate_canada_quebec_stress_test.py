@@ -55,7 +55,7 @@ from src.engines.payroll_engine import (
     EI_RATE_QUEBEC,
 )
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 SEED = 2025
@@ -1607,7 +1607,7 @@ def main() -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
-    print("  LedgerLink — Canada/Quebec CPA Stress Test Generator")
+    print("  OtoCPA — Canada/Quebec CPA Stress Test Generator")
     print("=" * 70)
     print(f"  Database: {db_path}")
     print(f"  Seed: {SEED}")

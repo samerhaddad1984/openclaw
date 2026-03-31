@@ -1,7 +1,7 @@
 """
 src/integrations/openclaw_bridge.py
 =====================================
-Bridge between OpenClaw (WhatsApp / Telegram gateway) and LedgerLink.
+Bridge between OpenClaw (WhatsApp / Telegram gateway) and OtoCPA.
 
 OpenClaw handles all messaging transport.  This module handles only the
 accounting side: decode the file bytes, run OCR, store the document, and
@@ -38,7 +38,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH    = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH    = ROOT_DIR / "data" / "otocpa_agent.db"
 UPLOAD_DIR = ROOT_DIR / "data" / "ocr_uploads"
 
 _VALID_PLATFORMS = {"whatsapp", "telegram"}

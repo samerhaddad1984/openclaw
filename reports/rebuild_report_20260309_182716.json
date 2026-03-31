@@ -1,8 +1,8 @@
 {
   "script": "rebuild_document_store.py",
   "run_started_at_utc": "2026-03-09T22:27:16Z",
-  "source_folder": "D:\\Agents\\LedgerLinkAi\\tests\\documents_real",
-  "database": "data\\ledgerlink_agent.db",
+  "source_folder": "D:\\Agents\\OtoCPAAi\\tests\\documents_real",
+  "database": "data\\otocpa_agent.db",
   "table": "documents",
   "ingest_script": "scripts\\ingest_folder_to_store.py",
   "dry_run": false,
@@ -209,13 +209,13 @@
         "tests\\documents_real"
       ],
       "returncode": 1,
-      "stdout": "Traceback (most recent call last):\n  File \"D:\\Agents\\LedgerLinkAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py)\n",
+      "stdout": "Traceback (most recent call last):\n  File \"D:\\Agents\\OtoCPAAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\OtoCPAAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\OtoCPAAi\\src\\agents\\core\\task_models.py)\n",
       "stderr": ""
     }
   },
   "warnings": [],
   "errors": [
-    "Ingestion failed.\nCommand: C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe scripts\\ingest_folder_to_store.py tests\\documents_real\nCaptured output:\nTraceback (most recent call last):\n  File \"D:\\Agents\\LedgerLinkAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\LedgerLinkAi\\src\\agents\\core\\task_models.py)\n"
+    "Ingestion failed.\nCommand: C:\\Users\\shaddad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe scripts\\ingest_folder_to_store.py tests\\documents_real\nCaptured output:\nTraceback (most recent call last):\n  File \"D:\\Agents\\OtoCPAAi\\scripts\\ingest_folder_to_store.py\", line 16, in <module>\n    from src.agents.core.task_models import DocumentRecord\n  File \"D:\\Agents\\OtoCPAAi\\src\\agents\\core\\task_models.py\", line 18, in <module>\n    from src.agents.core.task_models import DocumentRecord\nImportError: cannot import name 'DocumentRecord' from partially initialized module 'src.agents.core.task_models' (most likely due to a circular import) (D:\\Agents\\OtoCPAAi\\src\\agents\\core\\task_models.py)\n"
   ],
   "run_finished_at_utc": "2026-03-09T22:27:17Z"
 }

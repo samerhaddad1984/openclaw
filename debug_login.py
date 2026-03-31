@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "data" / "ledgerlink_agent.db"
+DB_PATH = Path(__file__).resolve().parent / "data" / "otocpa_agent.db"
 
 print(f"DB: {DB_PATH}")
 print(f"DB exists: {DB_PATH.exists()}")

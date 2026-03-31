@@ -1,7 +1,7 @@
 import sqlite3
 import json
 
-conn = sqlite3.connect("data/ledgerlink_agent.db")
+conn = sqlite3.connect("data/otocpa_agent.db")
 conn.row_factory = sqlite3.Row
 
 rows = conn.execute("""

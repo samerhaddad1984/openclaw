@@ -1,14 +1,14 @@
 """
 scripts/folder_watcher.py
 =========================
-Background folder-watcher service for LedgerLink.
+Background folder-watcher service for OtoCPA.
 
 Monitors a local inbox folder and automatically processes any new files
 dropped into it via the existing OCR pipeline (src/engines/ocr_engine.py).
 
-Configuration (ledgerlink.config.json):
+Configuration (otocpa.config.json):
     {
-        "inbox_folder":          "C:\\LedgerLink\\Inbox",
+        "inbox_folder":          "C:\\OtoCPA\\Inbox",
         "folder_watcher_enabled": true,
         "default_client_code":   ""
     }
@@ -40,8 +40,8 @@ if str(ROOT_DIR) not in sys.path:
 # Constants
 # ---------------------------------------------------------------------------
 
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
-DB_PATH     = ROOT_DIR / "data" / "ledgerlink_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
+DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
 
 SUPPORTED_SUFFIXES: frozenset[str] = frozenset(
     {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".tiff", ".tif", ".webp"}
@@ -428,7 +428,7 @@ def start_folder_watcher(
     """
     Start the folder watcher in a background daemon thread.
 
-    Reads ledgerlink.config.json when *inbox_folder* is not supplied.
+    Reads otocpa.config.json when *inbox_folder* is not supplied.
     Returns the Thread if started, or None if no inbox_folder is configured.
 
     Guarded by the caller: only call this when ``folder_watcher_enabled`` is
@@ -476,7 +476,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-    parser = argparse.ArgumentParser(description="LedgerLink Folder Watcher")
+    parser = argparse.ArgumentParser(description="OtoCPA Folder Watcher")
     parser.add_argument("--folder", help="Inbox folder path (overrides config)")
     parser.add_argument("--default-client", default="", help="Default client code")
     args = parser.parse_args()
@@ -487,7 +487,7 @@ def main() -> int:
         default_client_code=args.default_client,
     )
     if thread is None:
-        print("Watcher not started — set inbox_folder in ledgerlink.config.json")
+        print("Watcher not started — set inbox_folder in otocpa.config.json")
         return 1
     try:
         thread.join()
