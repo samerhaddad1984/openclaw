@@ -1,0 +1,2882 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LedgerLink AI — Technician Training System</title>
+<style>
+:root{--primary:#1F3864;--accent:#2563eb;--accent-light:#3b82f6;--green:#059669;--green-bg:#d1fae5;--green-text:#065f46;--yellow-bg:#fef3c7;--yellow-text:#92400e;--red-bg:#fee2e2;--red-text:#991b1b;--blue-bg:#eff6ff;--blue-text:#1e40af;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-500:#6b7280;--gray-700:#374151;--gray-900:#111827;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.1);--shadow-lg:0 4px 12px rgba(0,0,0,.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--gray-100);color:var(--gray-900);line-height:1.6;font-size:15px}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Header */
+.site-header{background:linear-gradient(135deg,#1F3864 0%,#1e40af 50%,#2563eb 100%);color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.site-header h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.site-header h1 span{opacity:.7;font-weight:400;font-size:14px;margin-left:8px}
+.header-actions{display:flex;align-items:center;gap:12px}
+.lang-toggle{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;transition:background .2s}
+.lang-toggle:hover{background:rgba(255,255,255,.25)}
+.header-progress{font-size:13px;opacity:.85}
+
+/* Navigation sidebar + main layout */
+.layout{display:flex;min-height:calc(100vh - 60px)}
+.sidebar{width:300px;background:#fff;border-right:1px solid var(--gray-200);padding:16px 0;overflow-y:auto;position:sticky;top:60px;height:calc(100vh - 60px);flex-shrink:0}
+.sidebar-section{padding:8px 16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray-500);letter-spacing:.5px;margin-top:8px}
+.sidebar a{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;color:var(--gray-700);transition:all .15s;border-left:3px solid transparent}
+.sidebar a:hover{background:var(--gray-50);text-decoration:none;color:var(--accent)}
+.sidebar a.active{background:var(--blue-bg);color:var(--accent);border-left-color:var(--accent);font-weight:600}
+.sidebar a .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sidebar a .status-dot.done{background:var(--green)}
+.sidebar a .status-dot.partial{background:#f59e0b}
+.sidebar a .status-dot.none{background:var(--gray-300)}
+.main-content{flex:1;padding:24px 32px;max-width:960px}
+
+/* Progress bar */
+.progress-overview{background:#fff;border-radius:var(--radius);padding:20px;margin-bottom:24px;box-shadow:var(--shadow)}
+.progress-overview h2{font-size:16px;margin-bottom:8px}
+.progress-bar-outer{background:var(--gray-200);height:10px;border-radius:5px;overflow:hidden;margin-bottom:8px}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:5px;transition:width .6s ease}
+.progress-stats{display:flex;justify-content:space-between;font-size:13px;color:var(--gray-500)}
+
+/* Module card */
+.module-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;transition:box-shadow .2s}
+.module-card:hover{box-shadow:var(--shadow-lg)}
+.module-header{padding:16px 20px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;gap:12px}
+.module-header h2{font-size:16px;font-weight:600;color:var(--primary);flex:1}
+.module-header .tags{display:flex;gap:6px;flex-shrink:0}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;white-space:nowrap}
+.badge-tech{background:var(--blue-bg);color:var(--blue-text)}
+.badge-senior{background:var(--yellow-bg);color:var(--yellow-text)}
+.badge-complete{background:var(--green-bg);color:var(--green-text)}
+.chevron{transition:transform .3s;font-size:18px;color:var(--gray-500);flex-shrink:0}
+.module-card.open .chevron{transform:rotate(180deg)}
+.module-body{display:none;padding:0 20px 20px;border-top:1px solid var(--gray-200)}
+.module-card.open .module-body{display:block}
+
+/* Content sections */
+.section{padding:16px 0;border-bottom:1px solid var(--gray-100)}
+.section:last-of-type{border-bottom:none}
+.section h3{font-size:15px;font-weight:600;color:var(--primary);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.section h3 .num{background:var(--accent);color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.section p,.section li{font-size:14px;color:var(--gray-700);margin-bottom:6px}
+.section ul,.section ol{padding-left:24px;margin-bottom:8px}
+.section li{margin-bottom:4px}
+.tip{background:var(--blue-bg);border-left:3px solid var(--accent);padding:10px 14px;margin:10px 0;font-size:13px;color:var(--blue-text);border-radius:0 8px 8px 0}
+.warning{background:var(--red-bg);border-left:3px solid #ef4444;padding:10px 14px;margin:10px 0;font-size:13px;color:var(--red-text);border-radius:0 8px 8px 0}
+.key-point{background:var(--yellow-bg);border-left:3px solid #f59e0b;padding:10px 14px;margin:10px 0;font-size:13px;color:var(--yellow-text);border-radius:0 8px 8px 0}
+table.info-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+table.info-table th{background:var(--gray-50);text-align:left;padding:8px 12px;border:1px solid var(--gray-200);font-weight:600}
+table.info-table td{padding:8px 12px;border:1px solid var(--gray-200)}
+
+/* Command blocks */
+.cmd-block{position:relative;background:#1e293b;color:#e2e8f0;padding:14px 48px 14px 16px;border-radius:8px;font-family:"Cascadia Code","Fira Code","Consolas",monospace;font-size:13px;margin:10px 0;overflow-x:auto;line-height:1.5;white-space:pre-wrap;word-break:break-all}
+.cmd-block .copy-btn{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;transition:all .2s}
+.cmd-block .copy-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.cmd-block .copy-btn.copied{background:var(--green);color:#fff;border-color:var(--green)}
+
+/* Quiz */
+.quiz-section{background:#f0fdf4;border-radius:8px;padding:18px;margin-top:16px}
+.quiz-section h3{font-size:15px;font-weight:600;color:#166534;margin-bottom:12px}
+.quiz-q{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #bbf7d0}
+.quiz-q:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
+.quiz-q p.q-text{font-size:14px;font-weight:600;color:#166534;margin-bottom:8px}
+.quiz-q label{display:block;padding:6px 10px;font-size:13px;cursor:pointer;border-radius:6px;margin-bottom:3px;transition:background .15s}
+.quiz-q label:hover{background:#dcfce7}
+.quiz-q input[type="radio"]{margin-right:8px;accent-color:var(--green)}
+.quiz-feedback{display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500}
+.quiz-feedback.correct{display:block;background:#d1fae5;color:#065f46}
+.quiz-feedback.wrong{display:block;background:#fee2e2;color:#991b1b}
+.quiz-submit{background:var(--green);color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;margin-top:10px;transition:background .2s}
+.quiz-submit:hover{background:#047857}
+.quiz-result{margin-top:12px;padding:12px;border-radius:8px;font-size:14px;font-weight:600;display:none}
+.quiz-result.pass{display:block;background:#d1fae5;color:#065f46}
+.quiz-result.fail{display:block;background:#fef3c7;color:#92400e}
+
+/* Certificate */
+.certificate-section{display:none;background:#fff;border:3px solid var(--primary);border-radius:var(--radius);padding:40px;text-align:center;margin:24px 0}
+.certificate-section.visible{display:block}
+.certificate-section h2{font-size:24px;color:var(--primary);margin-bottom:8px}
+.certificate-section .cert-line{font-size:14px;color:var(--gray-500);margin-bottom:4px}
+.certificate-section .cert-name{font-size:28px;font-weight:700;color:var(--accent);margin:16px 0}
+.certificate-section .cert-date{font-size:13px;color:var(--gray-500);margin-top:12px}
+.print-btn{background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;margin-top:16px;transition:background .2s}
+.print-btn:hover{background:#1d4ed8}
+
+/* Responsive */
+@media(max-width:768px){
+.sidebar{display:none}
+.main-content{padding:16px}
+.site-header{padding:12px 16px}
+.site-header h1{font-size:16px}
+.site-header h1 span{display:none}
+.module-header h2{font-size:14px}
+.certificate-section{padding:24px 16px}
+}
+.mobile-menu-btn{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
+@media(max-width:768px){
+.mobile-menu-btn{display:block}
+.sidebar.mobile-open{display:block;position:fixed;top:60px;left:0;z-index:99;width:300px;box-shadow:4px 0 12px rgba(0,0,0,.2)}
+}
+
+/* Print */
+@media print{
+.site-header,.sidebar,.progress-overview,.quiz-section,.print-btn,.header-actions,.mobile-menu-btn,.cmd-block .copy-btn{display:none!important}
+.module-body{display:block!important}
+.certificate-section{display:block!important;border:2px solid #000;page-break-inside:avoid}
+.module-card{box-shadow:none;border:1px solid #ddd;page-break-inside:avoid}
+body{background:#fff}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="site-header">
+<h1>
+<button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')">&#9776;</button>
+LedgerLink AI<span data-i18n="header_sub"> &mdash; Technician Training System</span>
+</h1>
+<div class="header-actions">
+<span class="header-progress" id="headerProgress">0 / 20</span>
+<button class="lang-toggle" onclick="toggleLang()" id="langBtn">FR</button>
+</div>
+</header>
+
+<!-- ==================== LAYOUT ==================== -->
+<div class="layout">
+
+<!-- ==================== SIDEBAR ==================== -->
+<nav class="sidebar" id="sidebar">
+<div class="sidebar-section" data-i18n="sidebar_section">Modules</div>
+<a href="#mod1" onclick="goModule(1)"><span class="status-dot none" id="dot1"></span><span data-i18n="nav1">1. Your Role</span></a>
+<a href="#mod2" onclick="goModule(2)"><span class="status-dot none" id="dot2"></span><span data-i18n="nav2">2. Architecture</span></a>
+<a href="#mod3" onclick="goModule(3)"><span class="status-dot none" id="dot3"></span><span data-i18n="nav3">3. Pre-Installation</span></a>
+<a href="#mod4" onclick="goModule(4)"><span class="status-dot none" id="dot4"></span><span data-i18n="nav4">4. Windows Install</span></a>
+<a href="#mod5" onclick="goModule(5)"><span class="status-dot none" id="dot5"></span><span data-i18n="nav5">5. Mac Install</span></a>
+<a href="#mod6" onclick="goModule(6)"><span class="status-dot none" id="dot6"></span><span data-i18n="nav6">6. Setup Wizard</span></a>
+<a href="#mod7" onclick="goModule(7)"><span class="status-dot none" id="dot7"></span><span data-i18n="nav7">7. Cloudflare Tunnel</span></a>
+<a href="#mod8" onclick="goModule(8)"><span class="status-dot none" id="dot8"></span><span data-i18n="nav8">8. Network Config</span></a>
+<a href="#mod9" onclick="goModule(9)"><span class="status-dot none" id="dot9"></span><span data-i18n="nav9">9. License Keys</span></a>
+<a href="#mod10" onclick="goModule(10)"><span class="status-dot none" id="dot10"></span><span data-i18n="nav10">10. First Login</span></a>
+<a href="#mod11" onclick="goModule(11)"><span class="status-dot none" id="dot11"></span><span data-i18n="nav11">11. Clients &amp; Staff</span></a>
+<a href="#mod12" onclick="goModule(12)"><span class="status-dot none" id="dot12"></span><span data-i18n="nav12">12. AI Providers</span></a>
+<a href="#mod13" onclick="goModule(13)"><span class="status-dot none" id="dot13"></span><span data-i18n="nav13">13. Email (SMTP)</span></a>
+<a href="#mod14" onclick="goModule(14)"><span class="status-dot none" id="dot14"></span><span data-i18n="nav14">14. WhatsApp &amp; Telegram</span></a>
+<a href="#mod15" onclick="goModule(15)"><span class="status-dot none" id="dot15"></span><span data-i18n="nav15">15. Database</span></a>
+<a href="#mod16" onclick="goModule(16)"><span class="status-dot none" id="dot16"></span><span data-i18n="nav16">16. Windows Service</span></a>
+<a href="#mod17" onclick="goModule(17)"><span class="status-dot none" id="dot17"></span><span data-i18n="nav17">17. Updates</span></a>
+<a href="#mod18" onclick="goModule(18)"><span class="status-dot none" id="dot18"></span><span data-i18n="nav18">18. Remote Support</span></a>
+<a href="#mod19" onclick="goModule(19)"><span class="status-dot none" id="dot19"></span><span data-i18n="nav19">19. Troubleshooting</span></a>
+<a href="#mod20" onclick="goModule(20)"><span class="status-dot none" id="dot20"></span><span data-i18n="nav20">20. Client Handoff</span></a>
+</nav>
+
+<!-- ==================== MAIN CONTENT ==================== -->
+<main class="main-content">
+
+<!-- Progress overview -->
+<div class="progress-overview">
+<h2 data-i18n="progress_title">Training Progress</h2>
+<div class="progress-bar-outer"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+<div class="progress-stats">
+<span id="progressText" data-i18n="progress_text">0 of 20 modules completed</span>
+<span id="progressPct">0%</span>
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 1 — YOUR ROLE AS A LEDGERLINK TECHNICIAN
+     ===================================================== -->
+<div class="module-card" id="mod1">
+<div class="module-header" onclick="toggleModule(1)">
+<h2 data-i18n="m1_title">Module 1 &mdash; Your Role as a LedgerLink Technician</h2>
+<div class="tags"><span class="badge badge-tech" data-i18n="badge_tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> <span data-i18n="m1_s1_title">What Your Job Is</span></h3>
+<p data-i18n="m1_s1_p1">As a LedgerLink Field Technician, your role is to <strong>install, configure, train, and hand off</strong> the LedgerLink AI accounting system at CPA firm client sites. You are the face of LedgerLink for the client.</p>
+<ul>
+<li data-i18n="m1_s1_li1">Install LedgerLink on the client's server computer (Windows or Mac)</li>
+<li data-i18n="m1_s1_li2">Run the setup wizard and configure all integrations</li>
+<li data-i18n="m1_s1_li3">Set up Cloudflare tunnel for remote access</li>
+<li data-i18n="m1_s1_li4">Train the CPA firm owner and staff on basic usage</li>
+<li data-i18n="m1_s1_li5">Verify everything works before leaving the site</li>
+<li data-i18n="m1_s1_li6">Document the installation and file a site visit report</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> <span data-i18n="m1_s2_title">What You Are NOT Responsible For</span></h3>
+<ul>
+<li data-i18n="m1_s2_li1">Making accounting decisions or giving tax advice</li>
+<li data-i18n="m1_s2_li2">Modifying GL account charts or tax codes for the client</li>
+<li data-i18n="m1_s2_li3">Writing or modifying Python code in production</li>
+<li data-i18n="m1_s2_li4">Accessing client financial data beyond what is needed for testing</li>
+<li data-i18n="m1_s2_li5">Promising features or timelines not approved by management</li>
+</ul>
+<div class="warning" data-i18n="m1_s2_warn">Never give accounting or tax advice. If a client asks about accounting treatment, direct them to their CPA or the LedgerLink documentation.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> <span data-i18n="m1_s3_title">Tools You Need for Every Site Visit</span></h3>
+<table class="info-table">
+<tr><th data-i18n="m1_s3_th1">Item</th><th data-i18n="m1_s3_th2">Purpose</th></tr>
+<tr><td data-i18n="m1_s3_r1c1">Laptop with LedgerLink installer USB</td><td data-i18n="m1_s3_r1c2">Run installation if internet is slow; carry installer files</td></tr>
+<tr><td data-i18n="m1_s3_r2c1">Admin credentials (for your LedgerLink admin portal)</td><td data-i18n="m1_s3_r2c2">Access provisioning system, generate keys if needed</td></tr>
+<tr><td data-i18n="m1_s3_r3c1">License key for the client (printed or in email)</td><td data-i18n="m1_s3_r3c2">Activate the client's license during setup</td></tr>
+<tr><td data-i18n="m1_s3_r4c1">Ethernet cable</td><td data-i18n="m1_s3_r4c2">Backup internet connection method</td></tr>
+<tr><td data-i18n="m1_s3_r5c1">Printed site visit checklist form</td><td data-i18n="m1_s3_r5c2">Document every step; required for your report</td></tr>
+<tr><td data-i18n="m1_s3_r6c1">Phone with camera</td><td data-i18n="m1_s3_r6c2">Test document upload, take photos of network config</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> <span data-i18n="m1_s4_title">Escalation Path</span></h3>
+<p data-i18n="m1_s4_p1"><strong>You fix:</strong> installation errors, port conflicts, Python version issues, Cloudflare setup, basic network config, service restarts, running autofix.py</p>
+<p data-i18n="m1_s4_p2"><strong>Escalate to Senior Support:</strong> database corruption, license signing issues, API integration failures that persist after basic troubleshooting, custom code modifications, hardware failures</p>
+<div class="tip" data-i18n="m1_s4_tip">When escalating, always collect: version number, autofix.py output, last 50 lines of install.log, database size, and exact error message with steps to reproduce.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> <span data-i18n="m1_s5_title">The 5-Step Site Visit Checklist</span></h3>
+<ol>
+<li data-i18n="m1_s5_li1"><strong>Assess:</strong> Verify system requirements, internet, available ports, and admin access</li>
+<li data-i18n="m1_s5_li2"><strong>Install:</strong> Run the installer, complete setup wizard, configure Cloudflare</li>
+<li data-i18n="m1_s5_li3"><strong>Verify:</strong> Run autofix.py, test all features, verify remote access</li>
+<li data-i18n="m1_s5_li4"><strong>Train:</strong> Walk the owner and staff through basic operations</li>
+<li data-i18n="m1_s5_li5"><strong>Handoff:</strong> Print credentials, leave documentation, file site visit report</li>
+</ol>
+</div>
+
+<!-- Quiz Module 1 -->
+<div class="quiz-section" id="quiz1">
+<h3 data-i18n="quiz_title">Quiz &mdash; Module 1</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text" data-i18n="m1_q1">1. What is your PRIMARY role as a LedgerLink technician?</p>
+<label><input type="radio" name="q1_1" value="a"> <span data-i18n="m1_q1a">Give tax advice to CPA firm clients</span></label>
+<label><input type="radio" name="q1_1" value="b"> <span data-i18n="m1_q1b">Install, configure, train, and hand off LedgerLink</span></label>
+<label><input type="radio" name="q1_1" value="c"> <span data-i18n="m1_q1c">Write custom Python code for each client</span></label>
+<label><input type="radio" name="q1_1" value="d"> <span data-i18n="m1_q1d">Manage the client's accounting records</span></label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text" data-i18n="m1_q2">2. Which of these should you escalate to Senior Support?</p>
+<label><input type="radio" name="q1_2" value="a"> <span data-i18n="m1_q2a">Port 8787 is already in use</span></label>
+<label><input type="radio" name="q1_2" value="b"> <span data-i18n="m1_q2b">Python is not installed on the client machine</span></label>
+<label><input type="radio" name="q1_2" value="c"> <span data-i18n="m1_q2c">Database corruption that cannot be fixed by autofix.py</span></label>
+<label><input type="radio" name="q1_2" value="d"> <span data-i18n="m1_q2d">Cloudflare tunnel not connecting</span></label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text" data-i18n="m1_q3">3. What must you always bring to a site visit?</p>
+<label><input type="radio" name="q1_3" value="a"> <span data-i18n="m1_q3a">Laptop with installer, admin credentials, and client license key</span></label>
+<label><input type="radio" name="q1_3" value="b"> <span data-i18n="m1_q3b">Only a USB drive with the installer</span></label>
+<label><input type="radio" name="q1_3" value="c"> <span data-i18n="m1_q3c">The client's accounting records</span></label>
+<label><input type="radio" name="q1_3" value="d"> <span data-i18n="m1_q3d">A printed copy of the Python source code</span></label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text" data-i18n="m1_q4">4. What is the FIRST step of the 5-step site visit checklist?</p>
+<label><input type="radio" name="q1_4" value="a"> <span data-i18n="m1_q4a">Install LedgerLink</span></label>
+<label><input type="radio" name="q1_4" value="b"> <span data-i18n="m1_q4b">Train the staff</span></label>
+<label><input type="radio" name="q1_4" value="c"> <span data-i18n="m1_q4c">Print credentials</span></label>
+<label><input type="radio" name="q1_4" value="d"> <span data-i18n="m1_q4d">Assess system requirements and verify admin access</span></label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text" data-i18n="m1_q5">5. A client asks you about GST/QST filing procedures. What do you do?</p>
+<label><input type="radio" name="q1_5" value="a"> <span data-i18n="m1_q5a">Explain the filing procedure to them</span></label>
+<label><input type="radio" name="q1_5" value="b"> <span data-i18n="m1_q5b">Direct them to their CPA or the LedgerLink documentation</span></label>
+<label><input type="radio" name="q1_5" value="c"> <span data-i18n="m1_q5c">File the taxes for them</span></label>
+<label><input type="radio" name="q1_5" value="d"> <span data-i18n="m1_q5d">Contact Revenu Quebec on their behalf</span></label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(1,5)">Submit</button>
+<div class="quiz-result" id="result1"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 2 — LEDGERLINK ARCHITECTURE FOR TECHNICIANS
+     ===================================================== -->
+<div class="module-card" id="mod2">
+<div class="module-header" onclick="toggleModule(2)">
+<h2 data-i18n="m2_title">Module 2 &mdash; LedgerLink Architecture for Technicians</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> How the Software Works</h3>
+<p>LedgerLink is a <strong>Python HTTP server</strong> that runs on a single computer at the CPA firm. It uses an <strong>SQLite database</strong> to store all data and runs as a <strong>Windows Service</strong> (or launchd on Mac) so it starts automatically on boot.</p>
+<ul>
+<li>The server is written in Python using only the standard library HTTP server plus a few dependencies (bcrypt, pdfplumber, Pillow, reportlab, etc.)</li>
+<li>All business logic runs on the server &mdash; browsers are just the display layer</li>
+<li>AI features (document classification, GL suggestions) call external APIs (DeepSeek, Anthropic Claude)</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Server vs Browser</h3>
+<table class="info-table">
+<tr><th>Runs on the Server Computer</th><th>Runs in the Browser</th></tr>
+<tr><td>Python HTTP server process</td><td>HTML/CSS/JavaScript dashboard UI</td></tr>
+<tr><td>SQLite database (all data)</td><td>Document review interface</td></tr>
+<tr><td>AI API calls to DeepSeek/Anthropic</td><td>Bank reconciliation forms</td></tr>
+<tr><td>PDF generation (reports, invoices)</td><td>Client portal upload interface</td></tr>
+<tr><td>Email sending (SMTP)</td><td>Settings and configuration screens</td></tr>
+<tr><td>File watcher (scanner inbox)</td><td>Nothing is stored in the browser</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Ports</h3>
+<table class="info-table">
+<tr><th>Port</th><th>Purpose</th><th>URL</th></tr>
+<tr><td><strong>8787</strong></td><td>Main dashboard (accountant interface)</td><td>http://127.0.0.1:8787/</td></tr>
+<tr><td><strong>8788</strong></td><td>Client portal (document upload by clients)</td><td>http://127.0.0.1:8788/</td></tr>
+<tr><td><strong>8790</strong></td><td>Setup wizard (initial configuration only)</td><td>http://127.0.0.1:8790/</td></tr>
+</table>
+<div class="tip">Port 8790 (setup wizard) is only used during initial installation. After setup is complete, only 8787 and 8788 need to be running.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> The Cloudflare Tunnel</h3>
+<p>A Cloudflare tunnel creates a secure connection from the client's server to the Cloudflare network, allowing remote access <strong>without opening ports on the router</strong>.</p>
+<ul>
+<li>Required for: remote access to the dashboard, client portal access from outside the office, remote support by technicians</li>
+<li>The tunnel exposes localhost:8787 (dashboard) and localhost:8788 (client portal) through a public HTTPS URL</li>
+<li>Runs as a Windows Service (cloudflared) or launchd job on Mac</li>
+<li>Free tier from Cloudflare is sufficient</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> File Structure: C:\LedgerLink\</h3>
+<div class="cmd-block">C:\LedgerLink\
+├── data\
+│   ├── ledgerlink_agent.db      # SQLite database (ALL data)
+│   ├── backups\                  # Automatic database backups
+│   ├── inbox\                    # Folder watcher scanned files
+│   └── setup_state.json          # Setup wizard progress
+├── scripts\
+│   ├── review_dashboard.py       # Main dashboard server
+│   ├── setup_wizard.py           # Setup wizard server
+│   ├── autofix.py                # Self-healing diagnostics
+│   ├── update_ledgerlink.py      # Remote update mechanism
+│   ├── setup_cloudflare.py       # Cloudflare tunnel setup
+│   └── migrate_db.py             # Database migrations
+├── src\                          # Application source code
+├── installer\
+│   ├── INSTALL.bat               # Windows installer
+│   ├── INSTALL_MAC.sh            # Mac installer
+│   └── service_wrapper.py        # Windows Service manager
+├── docs\                         # Documentation and training
+├── ledgerlink.config.json        # Main configuration file
+├── requirements.txt              # Python dependencies
+└── install.log                   # Installation log
+<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> The ledgerlink.config.json File</h3>
+<p>This is the central configuration file. Every setting is documented here:</p>
+<table class="info-table">
+<tr><th>Setting</th><th>Purpose</th><th>Default</th></tr>
+<tr><td><code>host</code></td><td>Network bind address</td><td>0.0.0.0 (all interfaces)</td></tr>
+<tr><td><code>port</code></td><td>Dashboard port</td><td>8787</td></tr>
+<tr><td><code>session_hours</code></td><td>Login session duration</td><td>12 hours</td></tr>
+<tr><td><code>ai_router.routine_provider</code></td><td>DeepSeek API config for routine AI tasks</td><td>deepseek-chat</td></tr>
+<tr><td><code>ai_router.premium_provider</code></td><td>Anthropic Claude API config for complex tasks</td><td>claude-sonnet</td></tr>
+<tr><td><code>digest.*</code></td><td>SMTP email configuration</td><td>smtp.gmail.com:587</td></tr>
+<tr><td><code>client_portal.port</code></td><td>Client portal port</td><td>8788</td></tr>
+<tr><td><code>client_portal.max_upload_mb</code></td><td>Max file upload size</td><td>20 MB</td></tr>
+<tr><td><code>security.bcrypt_rounds</code></td><td>Password hashing rounds</td><td>12</td></tr>
+<tr><td><code>database_path</code></td><td>Path to SQLite database</td><td>data/ledgerlink_agent.db</td></tr>
+<tr><td><code>license.key</code></td><td>The LLAI- license key</td><td>(empty)</td></tr>
+<tr><td><code>public_portal_url</code></td><td>Cloudflare public URL</td><td>(empty)</td></tr>
+</table>
+<div class="key-point">Never edit ledgerlink.config.json while the service is running unless you restart the service afterward. The config is read at startup.</div>
+</div>
+
+<!-- Quiz Module 2 -->
+<div class="quiz-section" id="quiz2">
+<h3>Quiz &mdash; Module 2</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. What database does LedgerLink use?</p>
+<label><input type="radio" name="q2_1" value="a"> MySQL</label>
+<label><input type="radio" name="q2_1" value="b"> SQLite</label>
+<label><input type="radio" name="q2_1" value="c"> PostgreSQL</label>
+<label><input type="radio" name="q2_1" value="d"> MongoDB</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. Which port is used for the main dashboard?</p>
+<label><input type="radio" name="q2_2" value="a"> 8788</label>
+<label><input type="radio" name="q2_2" value="b"> 8790</label>
+<label><input type="radio" name="q2_2" value="c"> 8787</label>
+<label><input type="radio" name="q2_2" value="d"> 80</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What is the purpose of the Cloudflare tunnel?</p>
+<label><input type="radio" name="q2_3" value="a"> Allow remote access without opening router ports</label>
+<label><input type="radio" name="q2_3" value="b"> Speed up the database</label>
+<label><input type="radio" name="q2_3" value="c"> Backup files to the cloud</label>
+<label><input type="radio" name="q2_3" value="d"> Send emails faster</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Where is the SQLite database file located?</p>
+<label><input type="radio" name="q2_4" value="a"> C:\LedgerLink\src\database.db</label>
+<label><input type="radio" name="q2_4" value="b"> C:\LedgerLink\ledgerlink.db</label>
+<label><input type="radio" name="q2_4" value="c"> C:\LedgerLink\scripts\db.sqlite</label>
+<label><input type="radio" name="q2_4" value="d"> C:\LedgerLink\data\ledgerlink_agent.db</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">5. When should you restart the service after editing config?</p>
+<label><input type="radio" name="q2_5" value="a"> Never, changes are automatic</label>
+<label><input type="radio" name="q2_5" value="b"> Only on Mondays</label>
+<label><input type="radio" name="q2_5" value="c"> Always &mdash; the config is read at startup</label>
+<label><input type="radio" name="q2_5" value="d"> Only if you change the port</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(2,5)">Submit</button>
+<div class="quiz-result" id="result2"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 3 — PRE-INSTALLATION CHECKLIST
+     ===================================================== -->
+<div class="module-card" id="mod3">
+<div class="module-header" onclick="toggleModule(3)">
+<h2 data-i18n="m3_title">Module 3 &mdash; Pre-Installation Checklist</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> System Requirements</h3>
+<table class="info-table">
+<tr><th>Requirement</th><th>Windows</th><th>Mac</th></tr>
+<tr><td>Operating System</td><td>Windows 10/11 64-bit</td><td>macOS 12 (Monterey) or higher</td></tr>
+<tr><td>RAM (minimum)</td><td>4 GB</td><td>4 GB</td></tr>
+<tr><td>RAM (recommended)</td><td>8 GB</td><td>8 GB</td></tr>
+<tr><td>Free disk space</td><td>10 GB minimum</td><td>10 GB minimum</td></tr>
+<tr><td>Python</td><td>3.11 or higher</td><td>3.11 or higher (via Homebrew)</td></tr>
+<tr><td>Internet</td><td>Required for setup and AI API calls</td><td>Required for setup and AI API calls</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Check Python Version</h3>
+<div class="cmd-block">python --version<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Must show <strong>3.11 or higher</strong>. If not installed or too old, the installer will download Python 3.11 automatically on Windows. On Mac, use <code>brew install python@3.11</code>.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Check Available Ports</h3>
+<p><strong>Windows:</strong></p>
+<div class="cmd-block">netstat -ano | findstr :8787
+netstat -ano | findstr :8788<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p><strong>Mac:</strong></p>
+<div class="cmd-block">lsof -i :8787
+lsof -i :8788<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>If any output appears, those ports are in use. You must free them before installation.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Check Windows Defender / Antivirus</h3>
+<p>Verify that the antivirus will not block Python or the LedgerLink installation directory. You may need to add <code>C:\LedgerLink\</code> and the Python installation directory to the antivirus exclusion list.</p>
+<div class="warning">Some antivirus software (Norton, McAfee, Kaspersky) will quarantine Python files. Check BEFORE starting the installation.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Verify License Key</h3>
+<p>Confirm you have the correct license key for this client. The key starts with <code>LLAI-</code> and was generated by the provisioning system. Check the client record in <code>clients.csv</code> or the provisioning email.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Check QuickBooks (If Applicable)</h3>
+<p>If the client uses QuickBooks Online (QBO), verify they have their QBO account credentials ready. The OAuth connection will be set up during the setup wizard Step 10.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Document Everything</h3>
+<p>Fill in the <strong>Pre-Installation</strong> section of your site visit form before proceeding. Record:</p>
+<ul>
+<li>Windows/Mac version and build number</li>
+<li>RAM and disk space available</li>
+<li>Python version (if pre-installed)</li>
+<li>Antivirus software installed</li>
+<li>Network configuration (IP, DNS, firewall)</li>
+<li>QuickBooks status</li>
+</ul>
+</div>
+
+<!-- Quiz Module 3 -->
+<div class="quiz-section" id="quiz3">
+<h3>Quiz &mdash; Module 3</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. What is the minimum Python version required?</p>
+<label><input type="radio" name="q3_1" value="a"> 3.9</label>
+<label><input type="radio" name="q3_1" value="b"> 3.11</label>
+<label><input type="radio" name="q3_1" value="c"> 3.8</label>
+<label><input type="radio" name="q3_1" value="d"> 2.7</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. What command checks if port 8787 is in use on Windows?</p>
+<label><input type="radio" name="q3_2" value="a"> ping 8787</label>
+<label><input type="radio" name="q3_2" value="b"> ipconfig /port 8787</label>
+<label><input type="radio" name="q3_2" value="c"> netstat -ano | findstr :8787</label>
+<label><input type="radio" name="q3_2" value="d"> tasklist | findstr 8787</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What is the minimum RAM requirement?</p>
+<label><input type="radio" name="q3_3" value="a"> 4 GB</label>
+<label><input type="radio" name="q3_3" value="b"> 2 GB</label>
+<label><input type="radio" name="q3_3" value="c"> 16 GB</label>
+<label><input type="radio" name="q3_3" value="d"> 1 GB</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Why should you check antivirus BEFORE installation?</p>
+<label><input type="radio" name="q3_4" value="a"> It slows down the computer</label>
+<label><input type="radio" name="q3_4" value="b"> It will delete the license key</label>
+<label><input type="radio" name="q3_4" value="c"> It blocks internet access</label>
+<label><input type="radio" name="q3_4" value="d"> It may quarantine Python files and block the install</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">5. What prefix do all LedgerLink license keys start with?</p>
+<label><input type="radio" name="q3_5" value="a"> KEY-</label>
+<label><input type="radio" name="q3_5" value="b"> LL-</label>
+<label><input type="radio" name="q3_5" value="c"> LLAI-</label>
+<label><input type="radio" name="q3_5" value="d"> LIC-</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(3,5)">Submit</button>
+<div class="quiz-result" id="result3"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 4 — WINDOWS INSTALLATION STEP BY STEP
+     ===================================================== -->
+<div class="module-card" id="mod4">
+<div class="module-header" onclick="toggleModule(4)">
+<h2>Module 4 &mdash; Windows Installation Step by Step</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Copy Installer Files</h3>
+<p>Copy the entire LedgerLink installer folder from the USB drive to the client's Desktop. The folder should contain: <code>INSTALL.bat</code>, <code>requirements.txt</code>, <code>scripts/</code>, <code>src/</code>, <code>installer/</code>, and all other project files.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Run INSTALL.bat as Administrator</h3>
+<p>Right-click <code>INSTALL.bat</code> &rarr; <strong>Run as administrator</strong>. This is mandatory &mdash; the installer will not work without admin privileges.</p>
+<div class="warning">ALWAYS run as Administrator. The installer checks for admin privileges. If not elevated, it will attempt to re-launch with elevation.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> What Happens During Installation</h3>
+<p>The installer runs 8 steps in sequence:</p>
+<ol>
+<li><strong>[1/8] Check Python</strong> &mdash; Verifies Python 3.11+. Downloads and installs if missing.</li>
+<li><strong>[2/8] Install dependencies</strong> &mdash; Runs <code>pip install -r requirements.txt</code></li>
+<li><strong>[3/8] Database migration</strong> &mdash; Runs <code>migrate_db.py</code> to create all tables</li>
+<li><strong>[4/8] Install Windows Service</strong> &mdash; Registers <code>LedgerLinkAI</code> service</li>
+<li><strong>[5/8] Start service</strong> &mdash; Starts the LedgerLink background service</li>
+<li><strong>[6/8] Create shortcuts</strong> &mdash; Desktop shortcuts for dashboard and wizard</li>
+<li><strong>[7/8] Start setup wizard</strong> &mdash; Launches the wizard on port 8790</li>
+<li><strong>[8/8] Open browser</strong> &mdash; Opens http://127.0.0.1:8790/ in the default browser</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Reading install.log</h3>
+<p>If anything fails, check the installation log:</p>
+<div class="cmd-block">type C:\LedgerLink\install.log<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>The log shows every step with timestamps. Look for lines containing <code>ERROR</code> or <code>FAIL</code>.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Verify the Windows Service</h3>
+<p>Open Services console:</p>
+<div class="cmd-block">services.msc<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Find <strong>"LedgerLink AI"</strong> in the list. Status should be <strong>Running</strong> and Startup Type should be <strong>Automatic</strong>.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Verify Ports Are Listening</h3>
+<div class="cmd-block">netstat -ano | findstr :8787
+netstat -ano | findstr :8788<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Both ports should show <code>LISTENING</code> state.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Open the Setup Wizard</h3>
+<p>Navigate to:</p>
+<div class="cmd-block">http://127.0.0.1:8790/<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">8</span> Common Windows Installation Errors</h3>
+
+<table class="info-table">
+<tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><strong>Python not found</strong></td><td>Python not installed or not in PATH</td><td>Install from python.org. CRITICAL: Check "Add to PATH" checkbox during install.</td></tr>
+<tr><td><strong>pip install fails</strong></td><td>pip is outdated or SSL error</td><td><code>python -m pip install --upgrade pip</code> then retry</td></tr>
+<tr><td><strong>Port 8787 in use</strong></td><td>Another process using the port</td><td>Find the PID: <code>netstat -ano | findstr :8787</code> then <code>taskkill /PID &lt;pid&gt; /F</code></td></tr>
+<tr><td><strong>Access denied</strong></td><td>Not running as Administrator</td><td>Right-click INSTALL.bat &rarr; Run as administrator</td></tr>
+<tr><td><strong>Antivirus blocking</strong></td><td>AV quarantines Python files</td><td>Add <code>C:\LedgerLink\</code> to AV exclusion list</td></tr>
+<tr><td><strong>Service fails to start</strong></td><td>Python path issue or port conflict</td><td>Check install.log. Verify Python in PATH. Check ports.</td></tr>
+</table>
+
+<p><strong>Fix for port in use:</strong></p>
+<div class="cmd-block">:: Find what's using port 8787
+netstat -ano | findstr :8787
+
+:: Kill the process (replace 1234 with actual PID)
+taskkill /PID 1234 /F<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+
+<p><strong>Fix for pip SSL error:</strong></p>
+<div class="cmd-block">python -m pip install --upgrade pip
+python -m pip install -r requirements.txt<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<!-- Quiz Module 4 -->
+<div class="quiz-section" id="quiz4">
+<h3>Quiz &mdash; Module 4</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. How must INSTALL.bat be run?</p>
+<label><input type="radio" name="q4_1" value="a"> Double-click</label>
+<label><input type="radio" name="q4_1" value="b"> Right-click &rarr; Run as administrator</label>
+<label><input type="radio" name="q4_1" value="c"> From PowerShell only</label>
+<label><input type="radio" name="q4_1" value="d"> From Task Scheduler</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">2. Where is the installation log file?</p>
+<label><input type="radio" name="q4_2" value="a"> C:\Windows\install.log</label>
+<label><input type="radio" name="q4_2" value="b"> Desktop\install.log</label>
+<label><input type="radio" name="q4_2" value="c"> C:\LedgerLink\data\install.log</label>
+<label><input type="radio" name="q4_2" value="d"> C:\LedgerLink\install.log</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">3. What is the name of the Windows Service?</p>
+<label><input type="radio" name="q4_3" value="a"> LedgerLink</label>
+<label><input type="radio" name="q4_3" value="b"> LedgerLinkService</label>
+<label><input type="radio" name="q4_3" value="c"> LedgerLinkAI</label>
+<label><input type="radio" name="q4_3" value="d"> LLAI-Service</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">4. How do you check if port 8787 is listening on Windows?</p>
+<label><input type="radio" name="q4_4" value="a"> netstat -ano | findstr :8787</label>
+<label><input type="radio" name="q4_4" value="b"> ping localhost:8787</label>
+<label><input type="radio" name="q4_4" value="c"> nslookup 8787</label>
+<label><input type="radio" name="q4_4" value="d"> tracert 8787</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What critical checkbox must be checked when installing Python?</p>
+<label><input type="radio" name="q4_5" value="a"> Install for current user only</label>
+<label><input type="radio" name="q4_5" value="b"> Add python.exe to PATH</label>
+<label><input type="radio" name="q4_5" value="c"> Install IDLE</label>
+<label><input type="radio" name="q4_5" value="d"> Install documentation</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">6. What is the first step the INSTALL.bat performs?</p>
+<label><input type="radio" name="q4_6" value="a"> Install dependencies</label>
+<label><input type="radio" name="q4_6" value="b"> Create shortcuts</label>
+<label><input type="radio" name="q4_6" value="c"> Check Python version</label>
+<label><input type="radio" name="q4_6" value="d"> Start the service</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">7. How do you kill a process using port 8787?</p>
+<label><input type="radio" name="q4_7" value="a"> net stop 8787</label>
+<label><input type="radio" name="q4_7" value="b"> sc delete 8787</label>
+<label><input type="radio" name="q4_7" value="c"> del /f port8787</label>
+<label><input type="radio" name="q4_7" value="d"> taskkill /PID &lt;pid&gt; /F</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">8. What URL does the setup wizard open at?</p>
+<label><input type="radio" name="q4_8" value="a"> http://127.0.0.1:8790/</label>
+<label><input type="radio" name="q4_8" value="b"> http://127.0.0.1:8787/</label>
+<label><input type="radio" name="q4_8" value="c"> http://localhost:80/</label>
+<label><input type="radio" name="q4_8" value="d"> http://127.0.0.1:8788/</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">9. What tool opens the Windows Services console?</p>
+<label><input type="radio" name="q4_9" value="a"> devmgmt.msc</label>
+<label><input type="radio" name="q4_9" value="b"> services.msc</label>
+<label><input type="radio" name="q4_9" value="c"> compmgmt.msc</label>
+<label><input type="radio" name="q4_9" value="d"> taskmgr.exe</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">10. What do you do if antivirus blocks Python files?</p>
+<label><input type="radio" name="q4_10" value="a"> Uninstall the antivirus</label>
+<label><input type="radio" name="q4_10" value="b"> Disable Windows Firewall</label>
+<label><input type="radio" name="q4_10" value="c"> Add C:\LedgerLink\ to the AV exclusion list</label>
+<label><input type="radio" name="q4_10" value="d"> Reinstall Python multiple times</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(4,10)">Submit</button>
+<div class="quiz-result" id="result4"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 5 — MAC INSTALLATION STEP BY STEP
+     ===================================================== -->
+<div class="module-card" id="mod5">
+<div class="module-header" onclick="toggleModule(5)">
+<h2>Module 5 &mdash; Mac Installation Step by Step</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Open Terminal</h3>
+<p>Applications &rarr; Utilities &rarr; Terminal. Or press <strong>Cmd+Space</strong>, type "Terminal", hit Enter.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Check / Install Homebrew</h3>
+<div class="cmd-block">brew --version<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>If Homebrew is not installed:</p>
+<div class="cmd-block">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<div class="tip">On Apple Silicon (M1/M2/M3), Homebrew installs to /opt/homebrew/. You may need to add it to PATH after install.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Install Python 3.11</h3>
+<div class="cmd-block">brew install python@3.11<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Verify:</p>
+<div class="cmd-block">python3 --version<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Run the Mac Installer</h3>
+<div class="cmd-block">cd ~/Desktop/LedgerLink && bash INSTALL_MAC.sh<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>The installer runs 6 steps: Homebrew check, Python check, dependencies, database migration, launchd service setup, and opens the browser.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Verify the Service</h3>
+<div class="cmd-block">launchctl list | grep ledgerlink<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>You should see <code>com.ledgerlink.ai</code> in the output. If the first column is <code>0</code> or a PID number, the service is running.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Verify Ports</h3>
+<div class="cmd-block">lsof -i :8787
+lsof -i :8788<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Common Mac Errors</h3>
+<table class="info-table">
+<tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><strong>Command not found: brew</strong></td><td>Homebrew not installed</td><td>Install Homebrew (see Step 2 above)</td></tr>
+<tr><td><strong>Permission denied</strong></td><td>Script not executable</td><td><code>chmod +x INSTALL_MAC.sh</code></td></tr>
+<tr><td><strong>Python version wrong</strong></td><td>System Python is old</td><td><code>brew link python@3.11</code></td></tr>
+<tr><td><strong>Port in use</strong></td><td>Another process on port</td><td><code>lsof -i :8787</code> then <code>kill &lt;PID&gt;</code></td></tr>
+<tr><td><strong>Gatekeeper blocks script</strong></td><td>macOS security</td><td>System Preferences &rarr; Security &rarr; Allow</td></tr>
+</table>
+
+<p><strong>Fix for permission denied:</strong></p>
+<div class="cmd-block">chmod +x INSTALL_MAC.sh
+bash INSTALL_MAC.sh<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+
+<p><strong>Fix for port in use:</strong></p>
+<div class="cmd-block"># Find PID using port 8787
+lsof -i :8787
+
+# Kill the process (replace 1234 with actual PID)
+kill 1234<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<!-- Quiz Module 5 -->
+<div class="quiz-section" id="quiz5">
+<h3>Quiz &mdash; Module 5</h3>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">1. What package manager is required on Mac?</p>
+<label><input type="radio" name="q5_1" value="a"> apt</label>
+<label><input type="radio" name="q5_1" value="b"> chocolatey</label>
+<label><input type="radio" name="q5_1" value="c"> Homebrew</label>
+<label><input type="radio" name="q5_1" value="d"> pip</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">2. What service manager does Mac use instead of Windows Services?</p>
+<label><input type="radio" name="q5_2" value="a"> launchd (launchctl)</label>
+<label><input type="radio" name="q5_2" value="b"> systemd</label>
+<label><input type="radio" name="q5_2" value="c"> sc.exe</label>
+<label><input type="radio" name="q5_2" value="d"> Windows Task Scheduler</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. How do you check ports on Mac?</p>
+<label><input type="radio" name="q5_3" value="a"> netstat -ano | findstr</label>
+<label><input type="radio" name="q5_3" value="b"> lsof -i :8787</label>
+<label><input type="radio" name="q5_3" value="c"> sc query 8787</label>
+<label><input type="radio" name="q5_3" value="d"> port-check 8787</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What do you do if INSTALL_MAC.sh says "Permission denied"?</p>
+<label><input type="radio" name="q5_4" value="a"> Run as root</label>
+<label><input type="radio" name="q5_4" value="b"> Delete and re-download</label>
+<label><input type="radio" name="q5_4" value="c"> Use Windows instead</label>
+<label><input type="radio" name="q5_4" value="d"> Run: chmod +x INSTALL_MAC.sh</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. Where does Homebrew install on Apple Silicon (M1/M2)?</p>
+<label><input type="radio" name="q5_5" value="a"> /opt/homebrew/</label>
+<label><input type="radio" name="q5_5" value="b"> /usr/local/</label>
+<label><input type="radio" name="q5_5" value="c"> /Applications/Homebrew/</label>
+<label><input type="radio" name="q5_5" value="d"> ~/homebrew/</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">6. What is the launchd service name for LedgerLink?</p>
+<label><input type="radio" name="q5_6" value="a"> LedgerLinkAI</label>
+<label><input type="radio" name="q5_6" value="b"> ledgerlink.service</label>
+<label><input type="radio" name="q5_6" value="c"> com.ledgerlink.ai</label>
+<label><input type="radio" name="q5_6" value="d"> org.ledgerlink.daemon</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">7. How do you install Python 3.11 on Mac?</p>
+<label><input type="radio" name="q5_7" value="a"> Download from python.org</label>
+<label><input type="radio" name="q5_7" value="b"> brew install python@3.11</label>
+<label><input type="radio" name="q5_7" value="c"> apt install python3.11</label>
+<label><input type="radio" name="q5_7" value="d"> pip install python</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">8. What does Gatekeeper do on Mac?</p>
+<label><input type="radio" name="q5_8" value="a"> Manages network ports</label>
+<label><input type="radio" name="q5_8" value="b"> Encrypts the database</label>
+<label><input type="radio" name="q5_8" value="c"> Manages user passwords</label>
+<label><input type="radio" name="q5_8" value="d"> Blocks unverified scripts from running</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">9. How do you kill a process on Mac?</p>
+<label><input type="radio" name="q5_9" value="a"> kill &lt;PID&gt;</label>
+<label><input type="radio" name="q5_9" value="b"> taskkill /PID &lt;PID&gt;</label>
+<label><input type="radio" name="q5_9" value="c"> sc stop &lt;PID&gt;</label>
+<label><input type="radio" name="q5_9" value="d"> Remove-Process &lt;PID&gt;</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">10. How many steps does INSTALL_MAC.sh run?</p>
+<label><input type="radio" name="q5_10" value="a"> 8</label>
+<label><input type="radio" name="q5_10" value="b"> 4</label>
+<label><input type="radio" name="q5_10" value="c"> 6</label>
+<label><input type="radio" name="q5_10" value="d"> 10</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(5,10)">Submit</button>
+<div class="quiz-result" id="result5"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 6 — SETUP WIZARD WALKTHROUGH
+     ===================================================== -->
+<div class="module-card" id="mod6">
+<div class="module-header" onclick="toggleModule(6)">
+<h2>Module 6 &mdash; Setup Wizard Walkthrough (All 20 Steps)</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Overview</h3>
+<p>The setup wizard runs at <code>http://127.0.0.1:8790/</code> and guides you through 20 configuration steps. Not all steps are required for launch &mdash; some integrations can be configured later.</p>
+<div class="tip"><strong>Required for launch:</strong> Steps 0-3 (Welcome, Firm Info, Admin Account, License Key). All other steps can be skipped during initial install and configured later from the dashboard.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Step-by-Step Guide</h3>
+<table class="info-table">
+<tr><th>Step</th><th>Name</th><th>Required?</th><th>Key Notes</th></tr>
+<tr><td>0</td><td>Welcome</td><td>Yes</td><td>Select language (FR/EN). Sets default language for the entire system.</td></tr>
+<tr><td>1</td><td>Firm Information</td><td>Yes</td><td>GST# format: 123456789RT0001. QST# format: 1234567890TQ0001. Both validated.</td></tr>
+<tr><td>2</td><td>Admin Account</td><td>Yes</td><td>Username: 3-50 chars, alphanumeric. Password: min 8 chars, requires uppercase, lowercase, number.</td></tr>
+<tr><td>3</td><td>License Key</td><td>Yes</td><td>Paste LLAI- key. Shows tier (Essentiel/Professionnel/Cabinet/Entreprise), expiry, max clients/users.</td></tr>
+<tr><td>4</td><td>AI Providers</td><td>Recommended</td><td>DeepSeek key from deepseek.com &rarr; API. Anthropic key from console.anthropic.com. Test button available.</td></tr>
+<tr><td>5</td><td>Email (SMTP)</td><td>Recommended</td><td>Gmail: App Password required (not regular password). smtp.gmail.com:587. Test sends email.</td></tr>
+<tr><td>6</td><td>Client Portal</td><td>Optional</td><td>Local URL auto-detected. Cloudflare URL configured separately (Module 7).</td></tr>
+<tr><td>7</td><td>WhatsApp</td><td>Optional</td><td>No Twilio account needed. Email support@ledgerlink.ca to activate. OpenClaw handles transport. Webhook: /ingest/openclaw.</td></tr>
+<tr><td>8</td><td>Telegram</td><td>Optional</td><td>No BotFather setup needed. Email support@ledgerlink.ca to activate. OpenClaw handles transport. Webhook: /ingest/openclaw.</td></tr>
+<tr><td>9</td><td>Microsoft 365</td><td>Optional</td><td>Requires Azure AD app registration. Tenant ID from Azure Portal.</td></tr>
+<tr><td>10</td><td>QuickBooks</td><td>Optional</td><td>OAuth flow connects QBO account. Need Realm ID from QBO settings.</td></tr>
+<tr><td>11</td><td>Folder Watcher</td><td>Optional</td><td>Default path: data/inbox. Point to scanner output folder for automatic ingestion.</td></tr>
+<tr><td>12</td><td>Daily Digest</td><td>Optional</td><td>Set time for daily email summary. Requires SMTP configured in Step 5.</td></tr>
+<tr><td>13</td><td>Backup</td><td>Recommended</td><td>Default: data/backups/. Set retention count. Configure OneDrive sync path if desired.</td></tr>
+<tr><td>14</td><td>Notifications</td><td>Optional</td><td>Per-event notification settings (new document, approval needed, etc.)</td></tr>
+<tr><td>15</td><td>Security</td><td>Optional</td><td>Session timeout (default 12h), lockout after failed logins.</td></tr>
+<tr><td>16</td><td>Staff Members</td><td>Yes</td><td>Add all staff who will use the system. Set roles: staff, manager, owner.</td></tr>
+<tr><td>17</td><td>Clients</td><td>Yes</td><td>Add all client companies. Code: max 10 chars, uppercase, unique.</td></tr>
+<tr><td>18</td><td>Review</td><td>Yes</td><td>Verify all required items show green. Fix any red items before proceeding.</td></tr>
+<tr><td>19</td><td>Complete</td><td>Yes</td><td>Print credentials card. Note dashboard URL and Cloudflare URL.</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Getting AI Provider Keys</h3>
+<p><strong>DeepSeek:</strong></p>
+<ol>
+<li>Go to <code>deepseek.com</code> &rarr; sign up / log in</li>
+<li>Navigate to API section</li>
+<li>Create an API key</li>
+<li>Copy and paste into the wizard</li>
+</ol>
+<p><strong>Anthropic Claude:</strong></p>
+<ol>
+<li>Go to <code>console.anthropic.com</code> &rarr; sign up / log in</li>
+<li>Navigate to API Keys</li>
+<li>Create a new key</li>
+<li>Copy and paste into the wizard</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Gmail App Password Setup</h3>
+<ol>
+<li>Go to Google Account &rarr; Security &rarr; 2-Step Verification (must be enabled)</li>
+<li>Scroll down to App Passwords</li>
+<li>Select "Mail" and "Windows Computer"</li>
+<li>Click Generate</li>
+<li>Copy the 16-character password</li>
+<li>Use <code>smtp.gmail.com</code> port <code>587</code> in the wizard</li>
+</ol>
+<div class="warning">Regular Gmail passwords will NOT work. You must generate an App Password with 2-Step Verification enabled.</div>
+</div>
+
+<!-- Quiz Module 6 -->
+<div class="quiz-section" id="quiz6">
+<h3>Quiz &mdash; Module 6</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. Which wizard steps are required for launch?</p>
+<label><input type="radio" name="q6_1" value="a"> All 20 steps</label>
+<label><input type="radio" name="q6_1" value="b"> Welcome, Firm Info, Admin Account, and License Key</label>
+<label><input type="radio" name="q6_1" value="c"> Only the License Key step</label>
+<label><input type="radio" name="q6_1" value="d"> Steps 1-10 only</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. What format is a GST number?</p>
+<label><input type="radio" name="q6_2" value="a"> GST-123456</label>
+<label><input type="radio" name="q6_2" value="b"> 123-456-789</label>
+<label><input type="radio" name="q6_2" value="c"> 123456789RT0001</label>
+<label><input type="radio" name="q6_2" value="d"> QST1234567890</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What type of password is required for Gmail SMTP?</p>
+<label><input type="radio" name="q6_3" value="a"> App Password (requires 2-Step Verification)</label>
+<label><input type="radio" name="q6_3" value="b"> Regular Gmail password</label>
+<label><input type="radio" name="q6_3" value="c"> Google API key</label>
+<label><input type="radio" name="q6_3" value="d"> OAuth token</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What SMTP port does Gmail use?</p>
+<label><input type="radio" name="q6_4" value="a"> 25</label>
+<label><input type="radio" name="q6_4" value="b"> 443</label>
+<label><input type="radio" name="q6_4" value="c"> 993</label>
+<label><input type="radio" name="q6_4" value="d"> 587</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What is the minimum password length for the admin account?</p>
+<label><input type="radio" name="q6_5" value="a"> 6 characters</label>
+<label><input type="radio" name="q6_5" value="b"> 8 characters</label>
+<label><input type="radio" name="q6_5" value="c"> 12 characters</label>
+<label><input type="radio" name="q6_5" value="d"> 4 characters</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">6. What does the Review step (Step 18) show?</p>
+<label><input type="radio" name="q6_6" value="a"> A summary of costs</label>
+<label><input type="radio" name="q6_6" value="b"> The license agreement</label>
+<label><input type="radio" name="q6_6" value="c"> Green/red status for all configuration items</label>
+<label><input type="radio" name="q6_6" value="d"> A list of available plugins</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">7. What is the WhatsApp/Telegram webhook endpoint in LedgerLink?</p>
+<label><input type="radio" name="q6_7" value="a"> /whatsapp/webhook</label>
+<label><input type="radio" name="q6_7" value="b"> /api/twilio</label>
+<label><input type="radio" name="q6_7" value="c"> /ingest/openclaw</label>
+<label><input type="radio" name="q6_7" value="d"> /webhook/messaging</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">8. What is the max client code length?</p>
+<label><input type="radio" name="q6_8" value="a"> 5 characters</label>
+<label><input type="radio" name="q6_8" value="b"> 10 characters</label>
+<label><input type="radio" name="q6_8" value="c"> 20 characters</label>
+<label><input type="radio" name="q6_8" value="d"> Unlimited</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">9. What should you print at Step 19 (Complete)?</p>
+<label><input type="radio" name="q6_9" value="a"> The license agreement</label>
+<label><input type="radio" name="q6_9" value="b"> The source code</label>
+<label><input type="radio" name="q6_9" value="c"> The database backup</label>
+<label><input type="radio" name="q6_9" value="d"> Credentials card with login info and URLs</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">10. Where do you get an Anthropic Claude API key?</p>
+<label><input type="radio" name="q6_10" value="a"> anthropic.com/download</label>
+<label><input type="radio" name="q6_10" value="b"> claude.ai/settings</label>
+<label><input type="radio" name="q6_10" value="c"> console.anthropic.com</label>
+<label><input type="radio" name="q6_10" value="d"> github.com/anthropic</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(6,10)">Submit</button>
+<div class="quiz-result" id="result6"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 7 — CLOUDFLARE TUNNEL SETUP
+     ===================================================== -->
+<div class="module-card" id="mod7">
+<div class="module-header" onclick="toggleModule(7)">
+<h2>Module 7 &mdash; Cloudflare Tunnel Setup</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Why Cloudflare Is Required</h3>
+<p>Without a Cloudflare tunnel, the dashboard and client portal are only accessible from the office local network. The tunnel provides:</p>
+<ul>
+<li>Secure HTTPS access from anywhere (home, mobile, client sites)</li>
+<li>Remote support access for technicians</li>
+<li>Client portal access for document uploads from outside the office</li>
+<li>No need to configure router port forwarding</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Creating a Cloudflare Account</h3>
+<p>Go to <code>dash.cloudflare.com</code> and create a free account. You need a domain added to Cloudflare (the client's domain or a shared LedgerLink domain).</p>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Installing cloudflared</h3>
+<p><strong>Windows:</strong></p>
+<div class="cmd-block">winget install Cloudflare.cloudflared<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p><strong>Mac:</strong></p>
+<div class="cmd-block">brew install cloudflared<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Creating and Configuring the Tunnel</h3>
+<p>You can use the automated script:</p>
+<div class="cmd-block">python scripts/setup_cloudflare.py<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Or manually:</p>
+<div class="cmd-block"># Authenticate with Cloudflare
+cloudflared login
+
+# Create the tunnel
+cloudflared tunnel create ledgerlink-firmname
+
+# Route DNS
+cloudflared tunnel route dns ledgerlink-firmname portal.firmname.com<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Register as Windows Service</h3>
+<div class="cmd-block">cloudflared service install<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>This ensures the tunnel starts automatically on boot. Verify:</p>
+<div class="cmd-block">sc query cloudflared<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Verify the Tunnel</h3>
+<p>Open the public URL in a browser (from your phone, not on office WiFi) to confirm it resolves to the LedgerLink dashboard.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Troubleshooting Tunnel Issues</h3>
+<table class="info-table">
+<tr><th>Issue</th><th>Fix</th></tr>
+<tr><td>No connection</td><td>Check <code>sc query cloudflared</code>. Restart: <code>sc stop cloudflared &amp;&amp; sc start cloudflared</code></td></tr>
+<tr><td>DNS not resolving</td><td>Wait 5 minutes for DNS propagation. Check Cloudflare dashboard DNS records.</td></tr>
+<tr><td>Certificate errors</td><td>Re-run <code>cloudflared login</code> to refresh certificate.</td></tr>
+</table>
+</div>
+
+<!-- Quiz Module 7 -->
+<div class="quiz-section" id="quiz7">
+<h3>Quiz &mdash; Module 7</h3>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">1. What is the main benefit of a Cloudflare tunnel?</p>
+<label><input type="radio" name="q7_1" value="a"> It speeds up the database</label>
+<label><input type="radio" name="q7_1" value="b"> It compresses files</label>
+<label><input type="radio" name="q7_1" value="c"> Secure remote access without router port forwarding</label>
+<label><input type="radio" name="q7_1" value="d"> It provides antivirus protection</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">2. How do you install cloudflared on Windows?</p>
+<label><input type="radio" name="q7_2" value="a"> winget install Cloudflare.cloudflared</label>
+<label><input type="radio" name="q7_2" value="b"> pip install cloudflared</label>
+<label><input type="radio" name="q7_2" value="c"> npm install cloudflared</label>
+<label><input type="radio" name="q7_2" value="d"> apt install cloudflared</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. What automated script sets up Cloudflare?</p>
+<label><input type="radio" name="q7_3" value="a"> scripts/install_cloudflare.py</label>
+<label><input type="radio" name="q7_3" value="b"> scripts/setup_cloudflare.py</label>
+<label><input type="radio" name="q7_3" value="c"> scripts/cloudflare_tunnel.py</label>
+<label><input type="radio" name="q7_3" value="d"> installer/cloudflare.bat</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. How do you verify the tunnel is registered as a Windows Service?</p>
+<label><input type="radio" name="q7_4" value="a"> ping cloudflared</label>
+<label><input type="radio" name="q7_4" value="b"> cloudflared --status</label>
+<label><input type="radio" name="q7_4" value="c"> netstat -ano | findstr cloudflared</label>
+<label><input type="radio" name="q7_4" value="d"> sc query cloudflared</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. What should you do if DNS is not resolving?</p>
+<label><input type="radio" name="q7_5" value="a"> Wait 5 minutes for propagation and check Cloudflare DNS records</label>
+<label><input type="radio" name="q7_5" value="b"> Reinstall LedgerLink</label>
+<label><input type="radio" name="q7_5" value="c"> Change the port number</label>
+<label><input type="radio" name="q7_5" value="d"> Delete the database</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(7,5)">Submit</button>
+<div class="quiz-result" id="result7"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 8 — NETWORK CONFIGURATION
+     ===================================================== -->
+<div class="module-card" id="mod8">
+<div class="module-header" onclick="toggleModule(8)">
+<h2>Module 8 &mdash; Network Configuration</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> LAN Access</h3>
+<p>By default, LedgerLink binds to <code>0.0.0.0</code> (all interfaces), making it accessible from any device on the local network. The LAN URL format is:</p>
+<div class="cmd-block">http://192.168.1.X:8787/<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Find the Server's IP Address</h3>
+<p><strong>Windows:</strong></p>
+<div class="cmd-block">ipconfig | findstr IPv4<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p><strong>Mac:</strong></p>
+<div class="cmd-block">ifconfig | grep "inet " | grep -v 127.0.0.1<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Windows Firewall Rules</h3>
+<p>Create inbound rules to allow traffic on ports 8787 and 8788:</p>
+<div class="cmd-block">:: Allow port 8787 (dashboard)
+netsh advfirewall firewall add rule name="LedgerLink Dashboard" dir=in action=allow protocol=TCP localport=8787
+
+:: Allow port 8788 (client portal)
+netsh advfirewall firewall add rule name="LedgerLink Portal" dir=in action=allow protocol=TCP localport=8788<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Mac Firewall</h3>
+<p>System Preferences &rarr; Security &amp; Privacy &rarr; Firewall &rarr; Firewall Options &rarr; Add Python to the allowed applications list.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Test from Another Device</h3>
+<p>From a phone or another computer on the same network, open a browser and go to <code>http://[server-ip]:8787/</code>. You should see the LedgerLink login page.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Document the Network Configuration</h3>
+<p>Record in your site visit form: server IP, subnet mask, gateway, DNS, and whether firewall rules were created.</p>
+</div>
+
+<!-- Quiz Module 8 -->
+<div class="quiz-section" id="quiz8">
+<h3>Quiz &mdash; Module 8</h3>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">1. What address does LedgerLink bind to by default?</p>
+<label><input type="radio" name="q8_1" value="a"> 0.0.0.0 (all interfaces)</label>
+<label><input type="radio" name="q8_1" value="b"> 127.0.0.1 (localhost only)</label>
+<label><input type="radio" name="q8_1" value="c"> 192.168.1.1</label>
+<label><input type="radio" name="q8_1" value="d"> 10.0.0.1</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. How do you find the server IP on Windows?</p>
+<label><input type="radio" name="q8_2" value="a"> ping localhost</label>
+<label><input type="radio" name="q8_2" value="b"> hostname -I</label>
+<label><input type="radio" name="q8_2" value="c"> ipconfig | findstr IPv4</label>
+<label><input type="radio" name="q8_2" value="d"> nslookup self</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. What command creates a Windows Firewall rule for port 8787?</p>
+<label><input type="radio" name="q8_3" value="a"> netsh firewall open 8787</label>
+<label><input type="radio" name="q8_3" value="b"> netsh advfirewall firewall add rule ...</label>
+<label><input type="radio" name="q8_3" value="c"> sc config firewall port=8787</label>
+<label><input type="radio" name="q8_3" value="d"> wf.msc add 8787</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. How do you test LAN access?</p>
+<label><input type="radio" name="q8_4" value="a"> Ping the server from another device</label>
+<label><input type="radio" name="q8_4" value="b"> Run nslookup on the server</label>
+<label><input type="radio" name="q8_4" value="c"> Check the install.log</label>
+<label><input type="radio" name="q8_4" value="d"> Open http://[server-ip]:8787/ from another device on the network</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. What two ports need firewall rules?</p>
+<label><input type="radio" name="q8_5" value="a"> 8787 and 8788</label>
+<label><input type="radio" name="q8_5" value="b"> 80 and 443</label>
+<label><input type="radio" name="q8_5" value="c"> 8787 and 8790</label>
+<label><input type="radio" name="q8_5" value="d"> 3306 and 5432</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(8,5)">Submit</button>
+<div class="quiz-result" id="result8"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 9 — LICENSE KEYS
+     ===================================================== -->
+<div class="module-card" id="mod9">
+<div class="module-header" onclick="toggleModule(9)">
+<h2>Module 9 &mdash; Generating and Activating License Keys</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> How License Keys Work</h3>
+<p>License keys are generated on the administrator's machine using the provisioning system. They are HMAC-SHA256 signed and encode the tier, firm name, max clients, max users, and expiry date.</p>
+<p>Key format: <code>LLAI-</code> followed by base64url-encoded JSON payload.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> The 4 License Tiers</h3>
+<table class="info-table">
+<tr><th>Tier</th><th>Max Clients</th><th>Max Users</th><th>Key Features</th></tr>
+<tr><td><strong>Essentiel</strong></td><td>10</td><td>3</td><td>Basic review, basic posting</td></tr>
+<tr><td><strong>Professionnel</strong></td><td>30</td><td>5</td><td>+ AI router, bank parser, fraud detection, RQ, time tracking, month-end</td></tr>
+<tr><td><strong>Cabinet</strong></td><td>75</td><td>15</td><td>+ Analytics, Microsoft 365, filing calendar, client communications</td></tr>
+<tr><td><strong>Entreprise</strong></td><td>Unlimited</td><td>Unlimited</td><td>+ Audit module, financial statements, sampling, API access</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Activating a License at the Client Site</h3>
+<ol>
+<li>During setup wizard Step 3, paste the <code>LLAI-</code> key</li>
+<li>The system validates the signature and checks expiry</li>
+<li>Tier, expiry, max clients, and max users are displayed</li>
+<li>Click Activate to save to <code>ledgerlink.config.json</code></li>
+</ol>
+<p>Or via the dashboard: go to <code>/license</code> &rarr; paste key &rarr; Activate.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Multi-Machine Licensing</h3>
+<p>Each license supports up to <strong>3 machines</strong>. When activated on a new machine, the machine ID (based on hostname + disk serial) is registered in the database. If the limit is exceeded, a warning appears but the system continues to function.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> What to Do If Activation Fails</h3>
+<ul>
+<li><strong>Invalid signature:</strong> The signing secret in <code>.env</code> may not match. Contact the administrator.</li>
+<li><strong>Expired:</strong> The license has passed its expiry date. A new key must be generated.</li>
+<li><strong>Internet required:</strong> Activation itself does not require internet, but if the signing secret is missing, check the <code>.env</code> file.</li>
+</ul>
+</div>
+
+<!-- Quiz Module 9 -->
+<div class="quiz-section" id="quiz9">
+<h3>Quiz &mdash; Module 9</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. How many machines can use a single license?</p>
+<label><input type="radio" name="q9_1" value="a"> 1</label>
+<label><input type="radio" name="q9_1" value="b"> 3</label>
+<label><input type="radio" name="q9_1" value="c"> 5</label>
+<label><input type="radio" name="q9_1" value="d"> Unlimited</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. What tier allows up to 75 clients and 15 users?</p>
+<label><input type="radio" name="q9_2" value="a"> Essentiel</label>
+<label><input type="radio" name="q9_2" value="b"> Professionnel</label>
+<label><input type="radio" name="q9_2" value="c"> Cabinet</label>
+<label><input type="radio" name="q9_2" value="d"> Entreprise</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What signing algorithm is used for license keys?</p>
+<label><input type="radio" name="q9_3" value="a"> HMAC-SHA256</label>
+<label><input type="radio" name="q9_3" value="b"> RSA-2048</label>
+<label><input type="radio" name="q9_3" value="c"> AES-256</label>
+<label><input type="radio" name="q9_3" value="d"> MD5</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Where can you activate a license in the dashboard?</p>
+<label><input type="radio" name="q9_4" value="a"> /settings</label>
+<label><input type="radio" name="q9_4" value="b"> /admin</label>
+<label><input type="radio" name="q9_4" value="c"> /activate</label>
+<label><input type="radio" name="q9_4" value="d"> /license</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What happens if a license expires?</p>
+<label><input type="radio" name="q9_5" value="a"> The system deletes all data</label>
+<label><input type="radio" name="q9_5" value="b"> Activation fails and a new key must be generated</label>
+<label><input type="radio" name="q9_5" value="c"> The system automatically renews</label>
+<label><input type="radio" name="q9_5" value="d"> Nothing, it keeps working forever</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(9,5)">Submit</button>
+<div class="quiz-result" id="result9"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 10 — FIRST LOGIN AND HANDOFF VERIFICATION
+     ===================================================== -->
+<div class="module-card" id="mod10">
+<div class="module-header" onclick="toggleModule(10)">
+<h2>Module 10 &mdash; First Login and Handoff Verification</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Verification Checklist</h3>
+<p>After installation, run through every item on this list before handing off to the client:</p>
+<ol>
+<li><strong>Log in</strong> as the owner account created during setup</li>
+<li><strong>Verify dashboard</strong> loads with the correct firm name</li>
+<li><strong>Verify language toggle</strong> works (FR/EN switch in the header)</li>
+<li><strong>Upload a test document:</strong> take a photo of any receipt with your phone and upload it</li>
+<li><strong>Verify the document</strong> appears in the review queue</li>
+<li><strong>Verify AI suggestions:</strong> GL account and tax code should be suggested</li>
+<li><strong>Approve the test document</strong></li>
+<li><strong>Test bank import:</strong> download a sample Desjardins CSV and import it</li>
+<li><strong>Verify email:</strong> go to /troubleshoot and trigger a test email</li>
+<li><strong>Verify Cloudflare URL:</strong> open the public URL from your phone (not on office WiFi)</li>
+<li><strong>Verify client portal:</strong> open port 8788 or Cloudflare portal URL</li>
+<li><strong>Run autofix.py:</strong></li>
+</ol>
+<div class="cmd-block">python scripts/autofix.py<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>All checks should show <strong>PASS</strong>. Fix any FAIL items before leaving.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Document the Configuration</h3>
+<p>Fill in the <strong>Handoff</strong> section of the site visit form with:</p>
+<ul>
+<li>Dashboard URL (local and Cloudflare)</li>
+<li>Client portal URL</li>
+<li>Admin username</li>
+<li>License tier and expiry</li>
+<li>AI providers configured (yes/no)</li>
+<li>Email configured (yes/no)</li>
+<li>Autofix results (all PASS?)</li>
+</ul>
+</div>
+
+<!-- Quiz Module 10 -->
+<div class="quiz-section" id="quiz10">
+<h3>Quiz &mdash; Module 10</h3>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">1. What script verifies system health?</p>
+<label><input type="radio" name="q10_1" value="a"> scripts/check_health.py</label>
+<label><input type="radio" name="q10_1" value="b"> scripts/verify_install.py</label>
+<label><input type="radio" name="q10_1" value="c"> scripts/autofix.py</label>
+<label><input type="radio" name="q10_1" value="d"> scripts/test_system.py</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">2. How do you verify Cloudflare access works?</p>
+<label><input type="radio" name="q10_2" value="a"> Ping the Cloudflare URL</label>
+<label><input type="radio" name="q10_2" value="b"> Open the public URL from a device NOT on office WiFi</label>
+<label><input type="radio" name="q10_2" value="c"> Check the install.log</label>
+<label><input type="radio" name="q10_2" value="d"> Run a traceroute</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What should you test after uploading a document?</p>
+<label><input type="radio" name="q10_3" value="a"> That AI suggests a GL account and tax code</label>
+<label><input type="radio" name="q10_3" value="b"> That the file is deleted</label>
+<label><input type="radio" name="q10_3" value="c"> That an email is sent automatically</label>
+<label><input type="radio" name="q10_3" value="d"> That the database grows by exactly 1 MB</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Where do you trigger a test email?</p>
+<label><input type="radio" name="q10_4" value="a"> /settings</label>
+<label><input type="radio" name="q10_4" value="b"> /email/test</label>
+<label><input type="radio" name="q10_4" value="c"> /admin/email</label>
+<label><input type="radio" name="q10_4" value="d"> /troubleshoot</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What should all autofix checks show before handoff?</p>
+<label><input type="radio" name="q10_5" value="a"> WARN</label>
+<label><input type="radio" name="q10_5" value="b"> PASS</label>
+<label><input type="radio" name="q10_5" value="c"> OK or SKIP</label>
+<label><input type="radio" name="q10_5" value="d"> FIXED</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(10,5)">Submit</button>
+<div class="quiz-result" id="result10"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 11 — ADDING CLIENTS AND STAFF
+     ===================================================== -->
+<div class="module-card" id="mod11">
+<div class="module-header" onclick="toggleModule(11)">
+<h2>Module 11 &mdash; Adding Clients and Staff</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Adding Clients</h3>
+<p>Go to <code>/clients</code> &rarr; Add Client. Required fields:</p>
+<table class="info-table">
+<tr><th>Field</th><th>Rules</th></tr>
+<tr><td>Client Code</td><td>Max 10 characters, uppercase, unique per firm (e.g., TREMB, GAGN01)</td></tr>
+<tr><td>Client Name</td><td>Full legal name of the client company</td></tr>
+<tr><td>GST Number</td><td>Format: 123456789RT0001 (validated)</td></tr>
+<tr><td>QST Number</td><td>Format: 1234567890TQ0001 (validated)</td></tr>
+<tr><td>Filing Frequency</td><td>Monthly, Quarterly, or Annual</td></tr>
+<tr><td>Language</td><td>FR or EN &mdash; affects all automated communications to this client</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Adding Staff (Users)</h3>
+<p>Go to <code>/users</code> &rarr; Add User. Roles:</p>
+<table class="info-table">
+<tr><th>Role</th><th>Permissions</th></tr>
+<tr><td><strong>staff</strong></td><td>View and review assigned documents only</td></tr>
+<tr><td><strong>manager</strong></td><td>View all documents, approve, manage clients</td></tr>
+<tr><td><strong>owner</strong></td><td>Full access: users, settings, license, troubleshoot, training</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Credentials and First Login</h3>
+<ul>
+<li>Generate temporary passwords: min 8 chars, mix of upper/lower/numbers</li>
+<li>Print the credentials card from <code>/setup/complete</code></li>
+<li>Test each staff login to verify it works</li>
+<li>Show each staff member how to change their password on first login</li>
+</ul>
+</div>
+
+<!-- Quiz Module 11 -->
+<div class="quiz-section" id="quiz11">
+<h3>Quiz &mdash; Module 11</h3>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">1. What is the maximum length of a client code?</p>
+<label><input type="radio" name="q11_1" value="a"> 10 characters</label>
+<label><input type="radio" name="q11_1" value="b"> 20 characters</label>
+<label><input type="radio" name="q11_1" value="c"> 5 characters</label>
+<label><input type="radio" name="q11_1" value="d"> Unlimited</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. Which role has full access to all settings?</p>
+<label><input type="radio" name="q11_2" value="a"> staff</label>
+<label><input type="radio" name="q11_2" value="b"> manager</label>
+<label><input type="radio" name="q11_2" value="c"> owner</label>
+<label><input type="radio" name="q11_2" value="d"> admin</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. What must client codes be?</p>
+<label><input type="radio" name="q11_3" value="a"> Lowercase and unique</label>
+<label><input type="radio" name="q11_3" value="b"> Uppercase and unique per firm</label>
+<label><input type="radio" name="q11_3" value="c"> Any case, duplicates allowed</label>
+<label><input type="radio" name="q11_3" value="d"> Numeric only</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Where do you print the credentials card?</p>
+<label><input type="radio" name="q11_4" value="a"> /admin/print</label>
+<label><input type="radio" name="q11_4" value="b"> /credentials</label>
+<label><input type="radio" name="q11_4" value="c"> /users/print</label>
+<label><input type="radio" name="q11_4" value="d"> /setup/complete</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. What does the language setting on a client control?</p>
+<label><input type="radio" name="q11_5" value="a"> Language of all automated communications to that client</label>
+<label><input type="radio" name="q11_5" value="b"> The dashboard language for all users</label>
+<label><input type="radio" name="q11_5" value="c"> The database encoding</label>
+<label><input type="radio" name="q11_5" value="d"> Nothing, it is cosmetic</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(11,5)">Submit</button>
+<div class="quiz-result" id="result11"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 12 — CONFIGURING AI PROVIDERS
+     ===================================================== -->
+<div class="module-card" id="mod12">
+<div class="module-header" onclick="toggleModule(12)">
+<h2>Module 12 &mdash; Configuring AI Providers</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Why AI Providers Are Needed</h3>
+<p>LedgerLink uses external AI APIs to classify documents, extract vendor names, suggest GL accounts, detect anomalies, and generate compliance narratives. Without API keys, the system falls back to keyword-only matching (less accurate).</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> The Two Providers</h3>
+<table class="info-table">
+<tr><th>Provider</th><th>Used For</th><th>Cost Estimate</th></tr>
+<tr><td><strong>DeepSeek</strong></td><td>Routine tasks: classify documents, extract vendors, suggest GL codes</td><td>~$5/month for 50 clients</td></tr>
+<tr><td><strong>Anthropic Claude</strong></td><td>Complex tasks: explain anomalies, compliance narratives, escalation decisions</td><td>~$10/month for 50 clients</td></tr>
+</table>
+<p>Total estimated cost: approximately <strong>$15/month</strong> for a firm with 50 clients.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Where to Enter Keys</h3>
+<p>Option 1: Setup wizard Step 4 (AI Providers)</p>
+<p>Option 2: Edit <code>ledgerlink.config.json</code> directly:</p>
+<div class="cmd-block">{
+  "ai_router": {
+    "routine_provider": {
+      "api_key": "sk-your-deepseek-key-here"
+    },
+    "premium_provider": {
+      "api_key": "sk-ant-your-anthropic-key-here"
+    }
+  }
+}<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<div class="key-point">After editing the config file, restart the service for changes to take effect.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Testing</h3>
+<p>Use the Test button in the wizard, or upload a receipt and verify that AI suggestions appear (GL account, tax code, vendor name).</p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> No API Key?</h3>
+<p>If no API keys are configured, the system still works but uses keyword-only matching for document classification. AI suggestions will not appear. This is acceptable for initial setup if the client plans to add keys later.</p>
+</div>
+
+<!-- Quiz Module 12 -->
+<div class="quiz-section" id="quiz12">
+<h3>Quiz &mdash; Module 12</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. Which provider handles routine document classification?</p>
+<label><input type="radio" name="q12_1" value="a"> Anthropic Claude</label>
+<label><input type="radio" name="q12_1" value="b"> DeepSeek</label>
+<label><input type="radio" name="q12_1" value="c"> OpenAI</label>
+<label><input type="radio" name="q12_1" value="d"> Google Gemini</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">2. What is the estimated monthly AI cost for 50 clients?</p>
+<label><input type="radio" name="q12_2" value="a"> ~$15</label>
+<label><input type="radio" name="q12_2" value="b"> ~$100</label>
+<label><input type="radio" name="q12_2" value="c"> ~$500</label>
+<label><input type="radio" name="q12_2" value="d"> Free</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">3. What happens if no API keys are configured?</p>
+<label><input type="radio" name="q12_3" value="a"> The system crashes</label>
+<label><input type="radio" name="q12_3" value="b"> All documents are rejected</label>
+<label><input type="radio" name="q12_3" value="c"> System uses keyword-only matching (no AI suggestions)</label>
+<label><input type="radio" name="q12_3" value="d"> The license is revoked</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What must you do after editing ledgerlink.config.json?</p>
+<label><input type="radio" name="q12_4" value="a"> Delete the database</label>
+<label><input type="radio" name="q12_4" value="b"> Reinstall Python</label>
+<label><input type="radio" name="q12_4" value="c"> Run autofix.py</label>
+<label><input type="radio" name="q12_4" value="d"> Restart the service</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. Where is the Anthropic Claude key entered in the config?</p>
+<label><input type="radio" name="q12_5" value="a"> ai_router.premium_provider.api_key</label>
+<label><input type="radio" name="q12_5" value="b"> ai_router.routine_provider.api_key</label>
+<label><input type="radio" name="q12_5" value="c"> claude.api_key</label>
+<label><input type="radio" name="q12_5" value="d"> premium.key</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(12,5)">Submit</button>
+<div class="quiz-result" id="result12"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 13 — EMAIL (SMTP) CONFIGURATION
+     ===================================================== -->
+<div class="module-card" id="mod13">
+<div class="module-header" onclick="toggleModule(13)">
+<h2>Module 13 &mdash; Configuring Email (SMTP)</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Why Email Is Needed</h3>
+<p>LedgerLink uses email for: daily digest reports, client communications, document upload notifications, and password resets.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Gmail Setup</h3>
+<ol>
+<li>Go to Google Account &rarr; Security &rarr; 2-Step Verification (enable if not already)</li>
+<li>Go to App Passwords (search for "App passwords" in Google Account)</li>
+<li>Select App: Mail, Device: Windows Computer</li>
+<li>Click Generate &mdash; copy the 16-character password</li>
+<li>SMTP settings: <code>smtp.gmail.com</code>, port <code>587</code></li>
+</ol>
+<div class="warning">Regular Gmail passwords will NOT work. You MUST use an App Password.</div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Outlook / Office 365 Setup</h3>
+<p>SMTP: <code>smtp.office365.com</code>, port <code>587</code>. Use the full email address as the username and the account password. Modern Auth (OAuth) may be required for some tenants.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Testing</h3>
+<p>Use the Test button in the wizard (Step 5). It sends a test email to the admin address. If it fails:</p>
+<table class="info-table">
+<tr><th>Error</th><th>Cause</th></tr>
+<tr><td>Authentication failed</td><td>Wrong App Password (not regular password)</td></tr>
+<tr><td>Connection refused</td><td>Wrong port (use 587, not 465 or 25)</td></tr>
+<tr><td>Timeout</td><td>Firewall blocking outbound port 587</td></tr>
+</table>
+</div>
+
+<!-- Quiz Module 13 -->
+<div class="quiz-section" id="quiz13">
+<h3>Quiz &mdash; Module 13</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. What port does Gmail SMTP use?</p>
+<label><input type="radio" name="q13_1" value="a"> 25</label>
+<label><input type="radio" name="q13_1" value="b"> 587</label>
+<label><input type="radio" name="q13_1" value="c"> 993</label>
+<label><input type="radio" name="q13_1" value="d"> 465</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. Why can't you use a regular Gmail password?</p>
+<label><input type="radio" name="q13_2" value="a"> Gmail is not supported</label>
+<label><input type="radio" name="q13_2" value="b"> Regular passwords are too short</label>
+<label><input type="radio" name="q13_2" value="c"> Google requires App Passwords for third-party SMTP access</label>
+<label><input type="radio" name="q13_2" value="d"> Gmail uses a different protocol</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What is the Outlook SMTP host?</p>
+<label><input type="radio" name="q13_3" value="a"> smtp.office365.com</label>
+<label><input type="radio" name="q13_3" value="b"> mail.outlook.com</label>
+<label><input type="radio" name="q13_3" value="c"> smtp.microsoft.com</label>
+<label><input type="radio" name="q13_3" value="d"> imap.outlook.com</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. A timeout error during email test means:</p>
+<label><input type="radio" name="q13_4" value="a"> Wrong password</label>
+<label><input type="radio" name="q13_4" value="b"> Wrong email address</label>
+<label><input type="radio" name="q13_4" value="c"> Database is locked</label>
+<label><input type="radio" name="q13_4" value="d"> Firewall is blocking outbound port 587</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What must be enabled before generating a Gmail App Password?</p>
+<label><input type="radio" name="q13_5" value="a"> Less secure app access</label>
+<label><input type="radio" name="q13_5" value="b"> 2-Step Verification</label>
+<label><input type="radio" name="q13_5" value="c"> POP3 access</label>
+<label><input type="radio" name="q13_5" value="d"> IMAP access</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(13,5)">Submit</button>
+<div class="quiz-result" id="result13"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 14 — WHATSAPP VIA TWILIO
+     ===================================================== -->
+<div class="module-card" id="mod14">
+<div class="module-header" onclick="toggleModule(14)">
+<h2>Module 14 &mdash; WhatsApp &amp; Telegram via OpenClaw</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<!-- ===== WHATSAPP & TELEGRAM via OpenClaw ===== -->
+<h3 style="border-bottom:2px solid #2563eb;padding-bottom:6px;margin-top:0">WhatsApp and Telegram &mdash; Document Reception via OpenClaw</h3>
+
+<!-- PART A -->
+<div class="section">
+<h3><span class="num">A</span> What the CPA Firm Needs</h3>
+<p><strong>NOTHING.</strong> No Twilio account. No WhatsApp Business account. No API keys.</p>
+<p>The CPA firm only needs:</p>
+<ul>
+<li>LedgerLink running with Cloudflare tunnel active</li>
+<li>You (the technician) to email <strong>support@ledgerlink.ca</strong> to activate their firm</li>
+</ul>
+</div>
+
+<!-- PART B -->
+<div class="section">
+<h3><span class="num">B</span> How It Works (Simple Explanation)</h3>
+<ol>
+<li>Samer runs <strong>OpenClaw</strong> at <strong>openclaw.io</strong> &mdash; this is the WhatsApp/Telegram gateway</li>
+<li>When a client sends a photo to the LedgerLink WhatsApp number, OpenClaw receives it</li>
+<li>OpenClaw forwards it to the CPA firm&rsquo;s LedgerLink at: <code>https://[cloudflare-url]/ingest/openclaw</code></li>
+<li>LedgerLink runs OCR and creates the document in the review queue</li>
+<li>The accountant reviews it like any other document</li>
+</ol>
+<p><strong>LedgerLink never talks to WhatsApp directly. OpenClaw handles everything.</strong></p>
+</div>
+
+<!-- PART C -->
+<div class="section">
+<h3><span class="num">C</span> Technician Setup Steps (Exactly 4 Steps)</h3>
+
+<p><strong>Step 1: Verify Cloudflare tunnel is running and note the firm&rsquo;s public URL</strong></p>
+<p>Example: <code>https://tremblay-cpa.ledgerlink.app</code></p>
+<p>Test it: open the URL on your phone &mdash; dashboard should load</p>
+
+<p><strong>Step 2: Email support@ledgerlink.ca with:</strong></p>
+<div class="cmd-block">Subject: Activate OpenClaw for [Firm Name]
+
+Firm name: Tremblay CPA Inc
+Cloudflare URL: https://tremblay-cpa.ledgerlink.app
+Contact person: Sam Tremblay
+Requested services: WhatsApp / Telegram / both<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+
+<p><strong>Step 3: Samer activates the firm in OpenClaw (within 24 hours)</strong></p>
+<p>You receive a confirmation email when active. The confirmation includes the WhatsApp number clients use to send documents.</p>
+
+<p><strong>Step 4: Register each client&rsquo;s phone number in LedgerLink</strong></p>
+<ul>
+<li>Go to dashboard &rarr; <strong>Users</strong> &rarr; find the client account</li>
+<li>Enter their WhatsApp number in format <code>+15141234567</code> (with country code)</li>
+<li>For Telegram: enter their numeric Telegram ID</li>
+<li>(Client finds their Telegram ID by messaging <strong>@userinfobot</strong> on Telegram)</li>
+</ul>
+</div>
+
+<!-- PART D -->
+<div class="section">
+<h3><span class="num">D</span> Testing After Activation</h3>
+<ol>
+<li>Make sure Cloudflare tunnel is running</li>
+<li>Send a photo of any receipt to the LedgerLink WhatsApp number</li>
+<li>Within 30 seconds check the review queue &mdash; the document should appear</li>
+<li>If it does not appear, check the messaging log:</li>
+</ol>
+<p>Go to <code>/troubleshoot</code> &rarr; <strong>OpenClaw Bridge</strong> panel</p>
+<p>Or run this command:</p>
+<div class="cmd-block">python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); [print(r) for r in conn.execute('SELECT platform,sender_id,status,sent_at FROM messaging_log ORDER BY sent_at DESC LIMIT 10').fetchall()]; conn.close()"<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<!-- PART E -->
+<div class="section">
+<h3><span class="num">E</span> Common Problems and Fixes</h3>
+
+<p><strong>Problem 1: Document not created after sending WhatsApp photo</strong></p>
+<ul>
+<li><strong>Cause:</strong> Client phone number not registered in LedgerLink</li>
+<li><strong>Fix:</strong> Go to Users &rarr; find client &rarr; add their WhatsApp number with country code</li>
+<li><strong>Check:</strong></li>
+</ul>
+<div class="cmd-block">SELECT username, whatsapp_number FROM dashboard_users WHERE whatsapp_number IS NOT NULL;<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+
+<p><strong>Problem 2: messaging_log shows unknown_sender</strong></p>
+<ul>
+<li><strong>Cause:</strong> Phone number in database does not match what WhatsApp sends</li>
+<li><strong>Fix:</strong> Check exact format &mdash; must include country code. <code>+15141234567</code> not <code>5141234567</code></li>
+<li><strong>Fix:</strong></li>
+</ul>
+<div class="cmd-block">UPDATE dashboard_users SET whatsapp_number='+15141234567' WHERE username='client_abc';<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+
+<p><strong>Problem 3: Cloudflare URL not reachable</strong></p>
+<ul>
+<li><strong>Cause:</strong> Tunnel not running</li>
+<li><strong>Fix:</strong> <code>sc start cloudflared</code> (Windows) or <code>launchctl start com.cloudflare.cloudflared</code> (Mac)</li>
+<li><strong>Check:</strong> <code>curl https://[cloudflare-url]/ingest/openclaw</code> &mdash; should return 400 (not 404 or timeout)</li>
+</ul>
+
+<p><strong>Problem 4: Client sends text message, no document created</strong></p>
+<ul>
+<li>This is <strong>correct behavior</strong> &mdash; text-only messages return status: <code>no_file</code></li>
+<li>Tell client: always send a <strong>PHOTO or PDF</strong>, not just text</li>
+</ul>
+
+<p><strong>Problem 5: OpenClaw not yet activated for this firm</strong></p>
+<ul>
+<li><strong>Cause:</strong> You forgot to email support@ledgerlink.ca</li>
+<li><strong>Fix:</strong> Email now with firm name and Cloudflare URL</li>
+</ul>
+</div>
+
+<!-- PART F -->
+<div class="section">
+<h3><span class="num">F</span> What to Tell the Client About WhatsApp</h3>
+<p>Give them this simple instruction (print it out):</p>
+<div class="cmd-block">Pour soumettre un document via WhatsApp / To submit a document via WhatsApp:
+
+1. Enregistrez ce num&eacute;ro dans vos contacts / Save this number in your contacts: [WhatsApp number from Samer]
+2. Envoyez une photo claire de votre re&ccedil;u ou facture / Send a clear photo of your receipt or invoice
+3. C'est tout! / That is all!
+
+Votre comptable le recevra automatiquement / Your accountant will receive it automatically<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<!-- ===== TELEGRAM SECTION (same simple approach) ===== -->
+<h3 style="border-bottom:2px solid #2563eb;padding-bottom:6px;margin-top:2em">Telegram &mdash; Same Simple Approach</h3>
+
+<div class="section">
+<h3><span class="num">G</span> Telegram Setup</h3>
+<p>Telegram works <strong>exactly like WhatsApp</strong> through OpenClaw. The technician does <strong>not</strong> need to create a bot via @BotFather.</p>
+<ol>
+<li>Email <strong>support@ledgerlink.ca</strong> to activate (same email as WhatsApp &mdash; request Telegram in the &ldquo;Requested services&rdquo; field)</li>
+<li>Samer sets up the Telegram bot in OpenClaw and sends you the bot name (e.g. <code>@TremblayComptaBot</code>)</li>
+<li>Register each client&rsquo;s Telegram ID in their LedgerLink user profile</li>
+<li>Test by sending a photo to the LedgerLink Telegram bot &mdash; it should appear in the review queue within 30 seconds</li>
+</ol>
+<p>To find a client&rsquo;s Telegram ID: they message <strong>@userinfobot</strong> on Telegram &mdash; it replies with their numeric ID (e.g. <code>123456789</code>).</p>
+</div>
+
+<!-- Quiz Module 14 -->
+<div class="quiz-section" id="quiz14">
+<h3>Quiz &mdash; Module 14</h3>
+
+<div class="quiz-q" data-correct="a">
+<p class="q-text">1. Does the CPA firm need to create any WhatsApp or Twilio account?</p>
+<label><input type="radio" name="q14_1" value="a"> No &mdash; OpenClaw handles everything, the firm needs nothing</label>
+<label><input type="radio" name="q14_1" value="b"> Yes &mdash; they need a Twilio account</label>
+<label><input type="radio" name="q14_1" value="c"> Yes &mdash; they need a WhatsApp Business account</label>
+<label><input type="radio" name="q14_1" value="d"> Yes &mdash; they need both Twilio and WhatsApp Business</label>
+</div>
+
+<div class="quiz-q" data-correct="b">
+<p class="q-text">2. What is the ONE thing the technician must do to activate WhatsApp?</p>
+<label><input type="radio" name="q14_2" value="a"> Configure Twilio credentials in the setup wizard</label>
+<label><input type="radio" name="q14_2" value="b"> Email support@ledgerlink.ca with the firm name and Cloudflare URL</label>
+<label><input type="radio" name="q14_2" value="c"> Create a WhatsApp Business account</label>
+<label><input type="radio" name="q14_2" value="d"> Set up a webhook in OpenClaw</label>
+</div>
+
+<div class="quiz-q" data-correct="c">
+<p class="q-text">3. Why would a client&rsquo;s WhatsApp photo not appear in the queue?</p>
+<label><input type="radio" name="q14_3" value="a"> LedgerLink cannot connect to WhatsApp</label>
+<label><input type="radio" name="q14_3" value="b"> The Twilio sandbox has expired</label>
+<label><input type="radio" name="q14_3" value="c"> Their phone number is not registered in their LedgerLink user profile</label>
+<label><input type="radio" name="q14_3" value="d"> The file was too large</label>
+</div>
+
+<div class="quiz-q" data-correct="b">
+<p class="q-text">4. What URL does OpenClaw send messages to?</p>
+<label><input type="radio" name="q14_4" value="a"> https://[cloudflare-url]/whatsapp/webhook</label>
+<label><input type="radio" name="q14_4" value="b"> https://[cloudflare-url]/ingest/openclaw</label>
+<label><input type="radio" name="q14_4" value="c"> https://[cloudflare-url]/api/twilio</label>
+<label><input type="radio" name="q14_4" value="d"> https://api.whatsapp.com/webhook</label>
+</div>
+
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. A client sends a text message with no photo. What happens?</p>
+<label><input type="radio" name="q14_5" value="a"> Nothing &mdash; text-only messages are ignored, only photos and PDFs create documents</label>
+<label><input type="radio" name="q14_5" value="b"> An error is returned to the client</label>
+<label><input type="radio" name="q14_5" value="c"> The text is saved as a document</label>
+<label><input type="radio" name="q14_5" value="d"> LedgerLink crashes</label>
+</div>
+
+<p><strong>Telegram Questions</strong></p>
+
+<div class="quiz-q" data-correct="c">
+<p class="q-text">6. How does LedgerLink identify which client sent a Telegram message?</p>
+<label><input type="radio" name="q14_6" value="a"> Phone number suffix match</label>
+<label><input type="radio" name="q14_6" value="b"> Username lookup</label>
+<label><input type="radio" name="q14_6" value="c"> Exact match on telegram_id in dashboard_users</label>
+<label><input type="radio" name="q14_6" value="d"> Email address lookup</label>
+</div>
+
+<div class="quiz-q" data-correct="b">
+<p class="q-text">7. What is the correct webhook URL for Telegram?</p>
+<label><input type="radio" name="q14_7" value="a"> https://[cloudflare-url]/telegram/webhook</label>
+<label><input type="radio" name="q14_7" value="b"> https://[cloudflare-url]/ingest/openclaw</label>
+<label><input type="radio" name="q14_7" value="c"> https://[cloudflare-url]/api/telegram</label>
+<label><input type="radio" name="q14_7" value="d"> https://api.telegram.org/bot/webhook</label>
+</div>
+
+<div class="quiz-q" data-correct="a">
+<p class="q-text">8. How does a client find their Telegram user ID?</p>
+<label><input type="radio" name="q14_8" value="a"> Message @userinfobot on Telegram</label>
+<label><input type="radio" name="q14_8" value="b"> Check Telegram Settings &rarr; Account</label>
+<label><input type="radio" name="q14_8" value="c"> Ask the firm&rsquo;s bot</label>
+<label><input type="radio" name="q14_8" value="d"> It is the same as their phone number</label>
+</div>
+
+<div class="quiz-q" data-correct="a">
+<p class="q-text">9. What happens if a client sends a text-only Telegram message?</p>
+<label><input type="radio" name="q14_9" value="a"> Logged as no_file &mdash; no document created</label>
+<label><input type="radio" name="q14_9" value="b"> An error is sent back</label>
+<label><input type="radio" name="q14_9" value="c"> The text is saved as a note</label>
+<label><input type="radio" name="q14_9" value="d"> The bot crashes</label>
+</div>
+
+<div class="quiz-q" data-correct="b">
+<p class="q-text">10. Does the technician need to create a Telegram bot via @BotFather?</p>
+<label><input type="radio" name="q14_10" value="a"> Yes &mdash; they must create the bot themselves</label>
+<label><input type="radio" name="q14_10" value="b"> No &mdash; email support@ledgerlink.ca and Samer sets it up in OpenClaw</label>
+<label><input type="radio" name="q14_10" value="c"> Yes &mdash; and they must also configure the webhook</label>
+<label><input type="radio" name="q14_10" value="d"> Only for Telegram, not for WhatsApp</label>
+</div>
+
+<button class="quiz-submit" onclick="gradeQuiz(14,10)">Submit</button>
+<div class="quiz-result" id="result14"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 15 — DATABASE MANAGEMENT
+     ===================================================== -->
+<div class="module-card" id="mod15">
+<div class="module-header" onclick="toggleModule(15)">
+<h2>Module 15 &mdash; Database Management</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Database Location</h3>
+<div class="cmd-block">data/ledgerlink_agent.db<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>This single SQLite file contains ALL data: users, clients, documents, audit logs, sessions, etc.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Manual Backup</h3>
+<p>Simply copy the .db file while the service is stopped (or use the backup feature):</p>
+<div class="cmd-block">:: Stop service first
+sc stop LedgerLinkAI
+
+:: Copy the database
+copy data\ledgerlink_agent.db data\backups\manual_backup_%date:~-4,4%%date:~-7,2%%date:~-10,2%.db
+
+:: Start service
+sc start LedgerLinkAI<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Restore from Backup</h3>
+<div class="cmd-block">:: Stop service
+sc stop LedgerLinkAI
+
+:: Replace database with backup
+copy /Y data\backups\ledgerlink_agent_20260315_120000.db data\ledgerlink_agent.db
+
+:: Start service
+sc start LedgerLinkAI<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Integrity Check</h3>
+<div class="cmd-block">python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); print(conn.execute('PRAGMA integrity_check').fetchone())"<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Expected output: <code>('ok',)</code></p>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> VACUUM (Reclaim Space)</h3>
+<div class="cmd-block">python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); conn.execute('VACUUM'); conn.close()"<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Automatic Backups</h3>
+<p>Backups are stored in <code>data/backups/</code> with timestamps. Configure retention count and OneDrive sync path in the setup wizard Step 13.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Database Migration After Update</h3>
+<div class="cmd-block">python scripts/migrate_db.py<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>This adds any new columns or tables required by the update. Always run after an update.</p>
+</div>
+
+<!-- Quiz Module 15 -->
+<div class="quiz-section" id="quiz15">
+<h3>Quiz &mdash; Module 15</h3>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">1. What is the database filename?</p>
+<label><input type="radio" name="q15_1" value="a"> ledgerlink_agent.db</label>
+<label><input type="radio" name="q15_1" value="b"> ledgerlink.sqlite</label>
+<label><input type="radio" name="q15_1" value="c"> data.db</label>
+<label><input type="radio" name="q15_1" value="d"> database.sql</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. What must you do before manually copying the database?</p>
+<label><input type="radio" name="q15_2" value="a"> Run VACUUM</label>
+<label><input type="radio" name="q15_2" value="b"> Delete old backups</label>
+<label><input type="radio" name="q15_2" value="c"> Stop the service</label>
+<label><input type="radio" name="q15_2" value="d"> Run migrate_db.py</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. What does PRAGMA integrity_check return for a healthy database?</p>
+<label><input type="radio" name="q15_3" value="a"> ('healthy',)</label>
+<label><input type="radio" name="q15_3" value="b"> ('ok',)</label>
+<label><input type="radio" name="q15_3" value="c"> ('pass',)</label>
+<label><input type="radio" name="q15_3" value="d"> ('true',)</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. When should you run migrate_db.py?</p>
+<label><input type="radio" name="q15_4" value="a"> Every day</label>
+<label><input type="radio" name="q15_4" value="b"> Every month</label>
+<label><input type="radio" name="q15_4" value="c"> Only during initial install</label>
+<label><input type="radio" name="q15_4" value="d"> After every update</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. What does VACUUM do?</p>
+<label><input type="radio" name="q15_5" value="a"> Reclaims unused disk space in the database</label>
+<label><input type="radio" name="q15_5" value="b"> Deletes all data</label>
+<label><input type="radio" name="q15_5" value="c"> Creates a backup</label>
+<label><input type="radio" name="q15_5" value="d"> Checks for errors</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(15,5)">Submit</button>
+<div class="quiz-result" id="result15"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 16 — WINDOWS SERVICE MANAGEMENT
+     ===================================================== -->
+<div class="module-card" id="mod16">
+<div class="module-header" onclick="toggleModule(16)">
+<h2>Module 16 &mdash; Windows Service Management</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> What the Service Does</h3>
+<p>The LedgerLink Windows Service keeps the dashboard server running 24/7 automatically, even after a reboot. The service name is <code>LedgerLinkAI</code>.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Service Commands</h3>
+<table class="info-table">
+<tr><th>Action</th><th>Command</th></tr>
+<tr><td>Check status</td><td><code>sc query LedgerLinkAI</code> or open <code>services.msc</code></td></tr>
+<tr><td>Start</td><td><code>sc start LedgerLinkAI</code></td></tr>
+<tr><td>Stop</td><td><code>sc stop LedgerLinkAI</code></td></tr>
+<tr><td>Restart</td><td><code>sc stop LedgerLinkAI &amp;&amp; sc start LedgerLinkAI</code></td></tr>
+<tr><td>Set auto-start</td><td>services.msc &rarr; Properties &rarr; Startup type: Automatic</td></tr>
+<tr><td>Uninstall</td><td><code>python installer/service_wrapper.py remove</code></td></tr>
+<tr><td>Reinstall</td><td><code>python installer/service_wrapper.py install</code></td></tr>
+</table>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> If the Service Fails to Start</h3>
+<ol>
+<li>Check <code>install.log</code> for errors</li>
+<li>Verify Python is in PATH: <code>python --version</code></li>
+<li>Check port conflicts: <code>netstat -ano | findstr :8787</code></li>
+<li>Try running the dashboard manually to see the error: <code>python scripts/review_dashboard.py</code></li>
+</ol>
+</div>
+
+<!-- Quiz Module 16 -->
+<div class="quiz-section" id="quiz16">
+<h3>Quiz &mdash; Module 16</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. What is the Windows Service name?</p>
+<label><input type="radio" name="q16_1" value="a"> LedgerLink</label>
+<label><input type="radio" name="q16_1" value="b"> LedgerLinkAI</label>
+<label><input type="radio" name="q16_1" value="c"> LLAI</label>
+<label><input type="radio" name="q16_1" value="d"> LedgerLinkService</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. How do you restart the service?</p>
+<label><input type="radio" name="q16_2" value="a"> sc restart LedgerLinkAI</label>
+<label><input type="radio" name="q16_2" value="b"> net restart LedgerLinkAI</label>
+<label><input type="radio" name="q16_2" value="c"> sc stop LedgerLinkAI &amp;&amp; sc start LedgerLinkAI</label>
+<label><input type="radio" name="q16_2" value="d"> taskkill /restart LedgerLinkAI</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. How do you uninstall the service?</p>
+<label><input type="radio" name="q16_3" value="a"> python installer/service_wrapper.py remove</label>
+<label><input type="radio" name="q16_3" value="b"> sc delete LedgerLinkAI</label>
+<label><input type="radio" name="q16_3" value="c"> Uninstall from Control Panel</label>
+<label><input type="radio" name="q16_3" value="d"> Delete C:\LedgerLink\</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What is the first thing to check if the service fails to start?</p>
+<label><input type="radio" name="q16_4" value="a"> Reboot the computer</label>
+<label><input type="radio" name="q16_4" value="b"> Reinstall Python</label>
+<label><input type="radio" name="q16_4" value="c"> Delete the database</label>
+<label><input type="radio" name="q16_4" value="d"> Check install.log for errors</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What startup type should the service have?</p>
+<label><input type="radio" name="q16_5" value="a"> Manual</label>
+<label><input type="radio" name="q16_5" value="b"> Automatic</label>
+<label><input type="radio" name="q16_5" value="c"> Disabled</label>
+<label><input type="radio" name="q16_5" value="d"> Delayed Start</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(16,5)">Submit</button>
+<div class="quiz-result" id="result16"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 17 — RUNNING UPDATES
+     ===================================================== -->
+<div class="module-card" id="mod17">
+<div class="module-header" onclick="toggleModule(17)">
+<h2>Module 17 &mdash; Running Updates</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Check for Updates</h3>
+<div class="cmd-block">python scripts/update_ledgerlink.py --check<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Or from the dashboard: <code>/admin/updates</code></p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Install an Update</h3>
+<div class="cmd-block">python scripts/update_ledgerlink.py --install<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>What happens during update:</p>
+<ol>
+<li>Service stops</li>
+<li>Database and application files are backed up</li>
+<li>New files are downloaded and extracted</li>
+<li>Database migrations run (<code>migrate_db.py</code>)</li>
+<li>Service restarts</li>
+<li>Dashboard is verified (HTTP 200 check)</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Automatic Rollback</h3>
+<p>If the update fails (migration error or dashboard does not respond), the system automatically rolls back to the pre-update backup.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Manual Rollback</h3>
+<div class="cmd-block">python scripts/update_ledgerlink.py --rollback<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Post-Update Verification</h3>
+<p>Always run autofix after an update:</p>
+<div class="cmd-block">python scripts/autofix.py<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+<p>Check the version number in the dashboard footer.</p>
+</div>
+
+<!-- Quiz Module 17 -->
+<div class="quiz-section" id="quiz17">
+<h3>Quiz &mdash; Module 17</h3>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">1. What happens if an update fails?</p>
+<label><input type="radio" name="q17_1" value="a"> The system stays broken</label>
+<label><input type="radio" name="q17_1" value="b"> All data is deleted</label>
+<label><input type="radio" name="q17_1" value="c"> Automatic rollback to pre-update backup</label>
+<label><input type="radio" name="q17_1" value="d"> You must reinstall from scratch</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">2. What command checks for available updates?</p>
+<label><input type="radio" name="q17_2" value="a"> python scripts/update_ledgerlink.py --check</label>
+<label><input type="radio" name="q17_2" value="b"> python scripts/autofix.py --update</label>
+<label><input type="radio" name="q17_2" value="c"> pip install --upgrade ledgerlink</label>
+<label><input type="radio" name="q17_2" value="d"> sc query LedgerLinkAI /update</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. What should you ALWAYS run after an update?</p>
+<label><input type="radio" name="q17_3" value="a"> INSTALL.bat</label>
+<label><input type="radio" name="q17_3" value="b"> python scripts/autofix.py</label>
+<label><input type="radio" name="q17_3" value="c"> python setup.py install</label>
+<label><input type="radio" name="q17_3" value="d"> pip freeze</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What is the first thing the update process does?</p>
+<label><input type="radio" name="q17_4" value="a"> Download new files</label>
+<label><input type="radio" name="q17_4" value="b"> Run migrations</label>
+<label><input type="radio" name="q17_4" value="c"> Restart the service</label>
+<label><input type="radio" name="q17_4" value="d"> Stop the service</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">5. How do you manually roll back an update?</p>
+<label><input type="radio" name="q17_5" value="a"> python scripts/update_ledgerlink.py --rollback</label>
+<label><input type="radio" name="q17_5" value="b"> python scripts/autofix.py --restore</label>
+<label><input type="radio" name="q17_5" value="c"> sc config LedgerLinkAI /rollback</label>
+<label><input type="radio" name="q17_5" value="d"> Delete the data folder</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(17,5)">Submit</button>
+<div class="quiz-result" id="result17"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 18 — REMOTE SUPPORT PROCEDURES
+     ===================================================== -->
+<div class="module-card" id="mod18">
+<div class="module-header" onclick="toggleModule(18)">
+<h2>Module 18 &mdash; Remote Support Procedures</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Connecting Remotely</h3>
+<p>Access the client's dashboard via their Cloudflare tunnel URL. Log in with your technician or owner credentials.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Remote Diagnostics</h3>
+<ul>
+<li><code>/troubleshoot</code> &mdash; System status, disk space, service status, run autofix</li>
+<li><code>/admin/remote</code> &mdash; Restart service, create backup, check system info</li>
+<li><code>/admin/updates</code> &mdash; Check and install updates</li>
+<li><code>/audit</code> &mdash; Review recent audit log events</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Escalation Information to Collect</h3>
+<p>Before escalating to senior support, always collect:</p>
+<ul>
+<li>Version number from dashboard footer</li>
+<li>autofix.py output (all checks)</li>
+<li>install.log last 50 lines</li>
+<li>Database size (file properties of ledgerlink_agent.db)</li>
+<li>Exact error message and steps to reproduce</li>
+</ul>
+</div>
+
+<!-- Quiz Module 18 -->
+<div class="quiz-section" id="quiz18">
+<h3>Quiz &mdash; Module 18</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. How do you access a client's system remotely?</p>
+<label><input type="radio" name="q18_1" value="a"> SSH into their server</label>
+<label><input type="radio" name="q18_1" value="b"> Via the Cloudflare tunnel URL in a browser</label>
+<label><input type="radio" name="q18_1" value="c"> Remote Desktop Protocol</label>
+<label><input type="radio" name="q18_1" value="d"> TeamViewer</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. Where do you run autofix remotely?</p>
+<label><input type="radio" name="q18_2" value="a"> /admin/autofix</label>
+<label><input type="radio" name="q18_2" value="b"> /diagnostics</label>
+<label><input type="radio" name="q18_2" value="c"> /troubleshoot</label>
+<label><input type="radio" name="q18_2" value="d"> /health</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What 5 pieces of info must you collect before escalating?</p>
+<label><input type="radio" name="q18_3" value="a"> Version, autofix output, install.log, DB size, exact error</label>
+<label><input type="radio" name="q18_3" value="b"> License key, password, IP address, OS version, RAM</label>
+<label><input type="radio" name="q18_3" value="c"> Client name, email, phone, tier, expiry</label>
+<label><input type="radio" name="q18_3" value="d"> Python version, pip list, requirements.txt, config, .env</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. Where do you check recent system events?</p>
+<label><input type="radio" name="q18_4" value="a"> /events</label>
+<label><input type="radio" name="q18_4" value="b"> /log</label>
+<label><input type="radio" name="q18_4" value="c"> /history</label>
+<label><input type="radio" name="q18_4" value="d"> /audit</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. Where can you install updates remotely?</p>
+<label><input type="radio" name="q18_5" value="a"> /admin/install</label>
+<label><input type="radio" name="q18_5" value="b"> /admin/updates</label>
+<label><input type="radio" name="q18_5" value="c"> /update</label>
+<label><input type="radio" name="q18_5" value="d"> /patch</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(18,5)">Submit</button>
+<div class="quiz-result" id="result18"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 19 — COMMON PROBLEMS AND SOLUTIONS
+     ===================================================== -->
+<div class="module-card" id="mod19">
+<div class="module-header" onclick="toggleModule(19)">
+<h2>Module 19 &mdash; Common Installation Problems and Solutions</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span><span class="badge badge-senior">Senior Tech</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> Python Not Found During Install</h3>
+<p><strong>Symptom:</strong> INSTALL.bat shows "Python 3.11+ not found"</p>
+<p><strong>Cause:</strong> Python not installed or not in PATH</p>
+<div class="cmd-block">:: Download and install Python from python.org
+:: CRITICAL: Check "Add python.exe to PATH" during install
+:: After install, open a NEW command prompt:
+python --version<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> pip Install Fails with SSL Error</h3>
+<p><strong>Symptom:</strong> SSL: CERTIFICATE_VERIFY_FAILED</p>
+<p><strong>Cause:</strong> Corporate firewall or proxy intercepting SSL</p>
+<div class="cmd-block">python -m pip install --upgrade pip --trusted-host pypi.org --trusted-host files.pythonhosted.org
+python -m pip install -r requirements.txt --trusted-host pypi.org --trusted-host files.pythonhosted.org<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Port 8787 Already in Use</h3>
+<p><strong>Symptom:</strong> "Address already in use" error</p>
+<div class="cmd-block">:: Find the process
+netstat -ano | findstr :8787
+
+:: Kill it (replace PID)
+taskkill /PID 1234 /F<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Dashboard Shows Blank White Page</h3>
+<p><strong>Symptom:</strong> Browser shows empty page at http://127.0.0.1:8787/</p>
+<p><strong>Cause:</strong> JavaScript error or missing static files</p>
+<div class="cmd-block">:: Try running the dashboard manually to see errors
+python scripts/review_dashboard.py
+
+:: Check browser developer console (F12) for JavaScript errors
+:: Clear browser cache: Ctrl+Shift+Delete<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> Windows Service Fails to Start (Error 1053)</h3>
+<p><strong>Symptom:</strong> Service shows error 1053 (timeout)</p>
+<div class="cmd-block">:: Run manually to see the actual error
+python scripts/review_dashboard.py
+
+:: Check for port conflicts
+netstat -ano | findstr :8787
+
+:: Reinstall the service
+python installer/service_wrapper.py remove
+python installer/service_wrapper.py install
+sc start LedgerLinkAI<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Setup Wizard Will Not Open</h3>
+<p><strong>Symptom:</strong> http://127.0.0.1:8790/ does not load</p>
+<div class="cmd-block">:: Check if the wizard process is running
+netstat -ano | findstr :8790
+
+:: Start manually
+python scripts/setup_wizard.py<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">7</span> Cloudflare Tunnel Not Connecting</h3>
+<div class="cmd-block">:: Check service status
+sc query cloudflared
+
+:: Restart the service
+sc stop cloudflared
+sc start cloudflared
+
+:: Check logs
+type %USERPROFILE%\.cloudflared\cloudflared.log<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">8</span> License Key Activation Fails</h3>
+<p><strong>Cause:</strong> Signing secret mismatch or expired key</p>
+<ul>
+<li>Verify the <code>.env</code> file contains <code>LEDGERLINK_SIGNING_SECRET</code></li>
+<li>Check the key has not expired (expiry date encoded in the key)</li>
+<li>Contact the administrator to regenerate the key if needed</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">9</span> Email Test Fails</h3>
+<p>See Module 13 for SMTP troubleshooting. Common causes: wrong App Password, wrong port, firewall blocking 587.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">10</span> WhatsApp/Telegram Webhook Not Receiving</h3>
+<p>Verify: Cloudflare tunnel is running, OpenClaw webhook URL ends in <code>/ingest/openclaw</code> (not <code>/whatsapp/webhook</code>), and the LedgerLink service is running. Check <code>messaging_log</code> table for <code>unknown_sender</code> entries.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">11</span> Database Locked Error</h3>
+<p><strong>Symptom:</strong> "database is locked" error</p>
+<div class="cmd-block">:: Stop all processes accessing the database
+sc stop LedgerLinkAI
+
+:: Wait 5 seconds, then restart
+sc start LedgerLinkAI<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">12</span> Antivirus Quarantines Python Files</h3>
+<p>Add exclusions for: <code>C:\LedgerLink\</code>, <code>C:\Program Files\Python3*\</code>, and the <code>%APPDATA%\Python\</code> folder.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">13</span> Mac Gatekeeper Blocks the Installer</h3>
+<p>System Preferences &rarr; Security &amp; Privacy &rarr; General &rarr; click "Allow Anyway" for the blocked script.</p>
+</div>
+
+<div class="section">
+<h3><span class="num">14</span> Low Disk Space Warning</h3>
+<div class="cmd-block">:: Check disk space
+wmic logicaldisk get size,freespace,caption
+
+:: Clean old backups (keep last 5)
+:: Delete files in data\backups\ older than 30 days<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<div class="section">
+<h3><span class="num">15</span> Memory Error on Startup</h3>
+<p><strong>Cause:</strong> Not enough RAM. Check system memory:</p>
+<div class="cmd-block">:: Windows
+systeminfo | findstr Memory
+
+:: Close unnecessary applications and restart the service<button class="copy-btn" onclick="copyCmd(this)">Copy</button></div>
+</div>
+
+<!-- Quiz Module 19 -->
+<div class="quiz-section" id="quiz19">
+<h3>Quiz &mdash; Module 19</h3>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">1. How do you fix "Port 8787 already in use"?</p>
+<label><input type="radio" name="q19_1" value="a"> Change the port in config</label>
+<label><input type="radio" name="q19_1" value="b"> Find the PID with netstat and kill it with taskkill</label>
+<label><input type="radio" name="q19_1" value="c"> Reboot the computer</label>
+<label><input type="radio" name="q19_1" value="d"> Reinstall LedgerLink</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">2. What flag helps with SSL errors during pip install?</p>
+<label><input type="radio" name="q19_2" value="a"> --no-ssl</label>
+<label><input type="radio" name="q19_2" value="b"> --insecure</label>
+<label><input type="radio" name="q19_2" value="c"> --trusted-host pypi.org</label>
+<label><input type="radio" name="q19_2" value="d"> --disable-cert</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">3. What is Windows Service error 1053?</p>
+<label><input type="radio" name="q19_3" value="a"> Service timeout (failed to start in time)</label>
+<label><input type="radio" name="q19_3" value="b"> Access denied</label>
+<label><input type="radio" name="q19_3" value="c"> Port conflict</label>
+<label><input type="radio" name="q19_3" value="d"> Database corruption</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. How do you fix "database is locked"?</p>
+<label><input type="radio" name="q19_4" value="a"> Delete the database</label>
+<label><input type="radio" name="q19_4" value="b"> Run VACUUM</label>
+<label><input type="radio" name="q19_4" value="c"> Reinstall Python</label>
+<label><input type="radio" name="q19_4" value="d"> Stop and restart the service</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">5. What checkbox is critical when installing Python on Windows?</p>
+<label><input type="radio" name="q19_5" value="a"> Install for current user only</label>
+<label><input type="radio" name="q19_5" value="b"> Add python.exe to PATH</label>
+<label><input type="radio" name="q19_5" value="c"> Install IDLE</label>
+<label><input type="radio" name="q19_5" value="d"> Compile .pyc files</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">6. How do you fix Mac Gatekeeper blocking?</p>
+<label><input type="radio" name="q19_6" value="a"> Disable Gatekeeper permanently</label>
+<label><input type="radio" name="q19_6" value="b"> Reinstall macOS</label>
+<label><input type="radio" name="q19_6" value="c"> System Preferences &rarr; Security &rarr; Allow Anyway</label>
+<label><input type="radio" name="q19_6" value="d"> Use a different Mac</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">7. Where is the .env file that contains the signing secret?</p>
+<label><input type="radio" name="q19_7" value="a"> In the LedgerLink root directory</label>
+<label><input type="radio" name="q19_7" value="b"> In C:\Windows\</label>
+<label><input type="radio" name="q19_7" value="c"> In the user's home directory</label>
+<label><input type="radio" name="q19_7" value="d"> In the Python installation folder</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">8. What should you do FIRST when the dashboard shows a blank page?</p>
+<label><input type="radio" name="q19_8" value="a"> Reinstall everything</label>
+<label><input type="radio" name="q19_8" value="b"> Run the dashboard manually to see errors</label>
+<label><input type="radio" name="q19_8" value="c"> Delete the database</label>
+<label><input type="radio" name="q19_8" value="d"> Update Python</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">9. How do you check available disk space on Windows?</p>
+<label><input type="radio" name="q19_9" value="a"> df -h</label>
+<label><input type="radio" name="q19_9" value="b"> diskpart list</label>
+<label><input type="radio" name="q19_9" value="c"> wmic logicaldisk get size,freespace,caption</label>
+<label><input type="radio" name="q19_9" value="d"> fsutil volume diskfree C:</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">10. What AV exclusion paths are needed?</p>
+<label><input type="radio" name="q19_10" value="a"> Only C:\LedgerLink\</label>
+<label><input type="radio" name="q19_10" value="b"> Only the Python folder</label>
+<label><input type="radio" name="q19_10" value="c"> Only %APPDATA%</label>
+<label><input type="radio" name="q19_10" value="d"> C:\LedgerLink\, Python install folder, and %APPDATA%\Python\</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(19,10)">Submit</button>
+<div class="quiz-result" id="result19"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     MODULE 20 — CLIENT HANDOFF PROCEDURE
+     ===================================================== -->
+<div class="module-card" id="mod20">
+<div class="module-header" onclick="toggleModule(20)">
+<h2>Module 20 &mdash; Client Handoff Procedure</h2>
+<div class="tags"><span class="badge badge-tech">Field Technician</span></div>
+<span class="chevron">&#9662;</span>
+</div>
+<div class="module-body">
+
+<div class="section">
+<h3><span class="num">1</span> The 20-Item Handoff Checklist</h3>
+<ol>
+<li>Dashboard loads at correct URL with correct firm name</li>
+<li>Language toggle (FR/EN) works</li>
+<li>Owner account can log in</li>
+<li>All staff accounts can log in</li>
+<li>License shows correct tier and expiry</li>
+<li>AI providers configured and tested (if applicable)</li>
+<li>Email sending works (test email received)</li>
+<li>Document upload works (test receipt processed)</li>
+<li>AI suggestions appear on test document</li>
+<li>Bank import works (sample CSV imported)</li>
+<li>Client portal accessible (port 8788)</li>
+<li>Cloudflare tunnel working (accessible from phone off WiFi)</li>
+<li>Windows Service set to Automatic startup</li>
+<li>Firewall rules created for ports 8787 and 8788</li>
+<li>All clients added to the system</li>
+<li>autofix.py shows all PASS</li>
+<li>Credentials card printed</li>
+<li>User manual PDF provided to client</li>
+<li>Desktop shortcuts created</li>
+<li>Site visit form completed</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">2</span> Training the CPA Firm Owner (15-Minute Walkthrough)</h3>
+<ol>
+<li><strong>Login:</strong> Show them the URL, username, password</li>
+<li><strong>Dashboard overview:</strong> Explain the review queue, status indicators</li>
+<li><strong>Document review:</strong> How to approve/reject/hold a document</li>
+<li><strong>Client management:</strong> How to add/edit clients at /clients</li>
+<li><strong>Bank import:</strong> How to upload a CSV from Desjardins/RBC</li>
+<li><strong>User manual:</strong> Point them to the PDF for detailed instructions</li>
+<li><strong>Support contact:</strong> Who to call and how to reach remote support</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">3</span> Staff Quick-Start Training</h3>
+<p>Show each staff member:</p>
+<ul>
+<li>How to log in (URL + credentials)</li>
+<li>How to change their password</li>
+<li>How to view the review queue</li>
+<li>How to approve/reject documents</li>
+<li>Point them to /training for the online training system</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">4</span> Providing Documentation</h3>
+<ul>
+<li>Give the client the <strong>user manual PDF</strong> (from /docs/)</li>
+<li>Give them the printed <strong>credentials card</strong></li>
+<li>Leave your <strong>contact information</strong> for follow-up questions</li>
+</ul>
+</div>
+
+<div class="section">
+<h3><span class="num">5</span> End-to-End Test</h3>
+<p>Before leaving, perform a complete test with the client watching:</p>
+<ol>
+<li>Client uploads a real document from their phone (photo of receipt)</li>
+<li>Document appears in the review queue</li>
+<li>Accountant reviews and approves the document</li>
+<li>Show the document is properly categorized with GL code and tax code</li>
+</ol>
+</div>
+
+<div class="section">
+<h3><span class="num">6</span> Schedule Follow-Up</h3>
+<ul>
+<li>Schedule a <strong>30-day check-in call</strong> with the client</li>
+<li>File the <strong>site visit report</strong> within 24 hours</li>
+<li>Note any items that need follow-up (e.g., WhatsApp production number pending)</li>
+</ul>
+</div>
+
+<!-- Quiz Module 20 -->
+<div class="quiz-section" id="quiz20">
+<h3>Quiz &mdash; Module 20</h3>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">1. How many items are on the handoff checklist?</p>
+<label><input type="radio" name="q20_1" value="a"> 10</label>
+<label><input type="radio" name="q20_1" value="b"> 15</label>
+<label><input type="radio" name="q20_1" value="c"> 20</label>
+<label><input type="radio" name="q20_1" value="d"> 25</label>
+</div>
+<div class="quiz-q" data-correct="a">
+<p class="q-text">2. How long should the owner training walkthrough take?</p>
+<label><input type="radio" name="q20_2" value="a"> 15 minutes</label>
+<label><input type="radio" name="q20_2" value="b"> 1 hour</label>
+<label><input type="radio" name="q20_2" value="c"> 30 minutes</label>
+<label><input type="radio" name="q20_2" value="d"> 2 hours</label>
+</div>
+<div class="quiz-q" data-correct="b">
+<p class="q-text">3. When should the site visit report be filed?</p>
+<label><input type="radio" name="q20_3" value="a"> Within 1 week</label>
+<label><input type="radio" name="q20_3" value="b"> Within 24 hours</label>
+<label><input type="radio" name="q20_3" value="c"> At the end of the month</label>
+<label><input type="radio" name="q20_3" value="d"> Immediately before leaving</label>
+</div>
+<div class="quiz-q" data-correct="d">
+<p class="q-text">4. What is the purpose of the end-to-end test?</p>
+<label><input type="radio" name="q20_4" value="a"> To stress test the server</label>
+<label><input type="radio" name="q20_4" value="b"> To check internet speed</label>
+<label><input type="radio" name="q20_4" value="c"> To verify the license</label>
+<label><input type="radio" name="q20_4" value="d"> To show the client the complete workflow from upload to approval</label>
+</div>
+<div class="quiz-q" data-correct="c">
+<p class="q-text">5. When should the follow-up call be scheduled?</p>
+<label><input type="radio" name="q20_5" value="a"> 1 week</label>
+<label><input type="radio" name="q20_5" value="b"> 2 weeks</label>
+<label><input type="radio" name="q20_5" value="c"> 30 days</label>
+<label><input type="radio" name="q20_5" value="d"> 90 days</label>
+</div>
+<button class="quiz-submit" onclick="gradeQuiz(20,5)">Submit</button>
+<div class="quiz-result" id="result20"></div>
+</div>
+
+</div>
+</div>
+
+<!-- =====================================================
+     CERTIFICATE
+     ===================================================== -->
+<div class="certificate-section" id="certificate">
+<h2 data-i18n="cert_title">Certificate of Completion</h2>
+<div class="cert-line" data-i18n="cert_org">LedgerLink AI &mdash; Field Technician Training Program</div>
+<div class="cert-line" data-i18n="cert_certify">This certifies that</div>
+<div class="cert-name" id="certName">&mdash;</div>
+<div class="cert-line" data-i18n="cert_completed">has successfully completed all 20 technical training modules</div>
+<div class="cert-line" data-i18n="cert_role">Certified LedgerLink Field Technician</div>
+<div class="cert-date" id="certDate"></div>
+<button class="print-btn" onclick="window.print()">Print Certificate</button>
+</div>
+
+</main>
+</div>
+
+<!-- ==================== SCRIPTS ==================== -->
+<script>
+/* ===== State ===== */
+const TOTAL_MODULES = 20;
+let state = JSON.parse(localStorage.getItem('ll_tech_training') || '{}');
+if (!state.completed) state.completed = {};
+if (!state.lang) state.lang = 'en';
+if (!state.name) state.name = '';
+
+/* ===== i18n ===== */
+const I18N = {
+  en: {
+    header_sub: " \u2014 Technician Training System",
+    sidebar_section: "Modules",
+    progress_title: "Training Progress",
+    progress_text: "{n} of 20 modules completed",
+    badge_tech: "Field Technician",
+    badge_senior: "Senior Tech",
+    quiz_title: "Quiz",
+    quiz_pass: "Passed! {n}/{t} correct.",
+    quiz_fail: "Score: {n}/{t}. You need {p}% to pass. Review and try again.",
+    cert_title: "Certificate of Completion",
+    cert_org: "LedgerLink AI \u2014 Field Technician Training Program",
+    cert_certify: "This certifies that",
+    cert_completed: "has successfully completed all 20 technical training modules",
+    cert_role: "Certified LedgerLink Field Technician",
+    nav1:"1. Your Role",nav2:"2. Architecture",nav3:"3. Pre-Installation",nav4:"4. Windows Install",nav5:"5. Mac Install",
+    nav6:"6. Setup Wizard",nav7:"7. Cloudflare Tunnel",nav8:"8. Network Config",nav9:"9. License Keys",nav10:"10. First Login",
+    nav11:"11. Clients & Staff",nav12:"12. AI Providers",nav13:"13. Email (SMTP)",nav14:"14. WhatsApp & Telegram",nav15:"15. Database",
+    nav16:"16. Windows Service",nav17:"17. Updates",nav18:"18. Remote Support",nav19:"19. Troubleshooting",nav20:"20. Client Handoff",
+    m1_title:"Module 1 \u2014 Your Role as a LedgerLink Technician",
+    m2_title:"Module 2 \u2014 LedgerLink Architecture for Technicians",
+    m3_title:"Module 3 \u2014 Pre-Installation Checklist"
+  },
+  fr: {
+    header_sub: " \u2014 Formation technicien",
+    sidebar_section: "Modules",
+    progress_title: "Progression de la formation",
+    progress_text: "{n} sur 20 modules compl\u00e9t\u00e9s",
+    badge_tech: "Technicien terrain",
+    badge_senior: "Tech. s\u00e9nior",
+    quiz_title: "Quiz",
+    quiz_pass: "R\u00e9ussi! {n}/{t} bonnes r\u00e9ponses.",
+    quiz_fail: "Score: {n}/{t}. Vous avez besoin de {p}% pour r\u00e9ussir. R\u00e9visez et r\u00e9essayez.",
+    cert_title: "Certificat de r\u00e9ussite",
+    cert_org: "LedgerLink AI \u2014 Programme de formation technicien",
+    cert_certify: "Ceci certifie que",
+    cert_completed: "a compl\u00e9t\u00e9 avec succ\u00e8s les 20 modules de formation technique",
+    cert_role: "Technicien LedgerLink certifi\u00e9",
+    nav1:"1. Votre r\u00f4le",nav2:"2. Architecture",nav3:"3. Pr\u00e9-installation",nav4:"4. Install. Windows",nav5:"5. Install. Mac",
+    nav6:"6. Assistant config.",nav7:"7. Tunnel Cloudflare",nav8:"8. R\u00e9seau",nav9:"9. Cl\u00e9s licence",nav10:"10. Premi\u00e8re connexion",
+    nav11:"11. Clients & personnel",nav12:"12. Fournisseurs IA",nav13:"13. Courriel (SMTP)",nav14:"14. WhatsApp & Telegram",nav15:"15. Base de donn\u00e9es",
+    nav16:"16. Service Windows",nav17:"17. Mises \u00e0 jour",nav18:"18. Support \u00e0 distance",nav19:"19. D\u00e9pannage",nav20:"20. Remise au client"
+  }
+};
+
+function applyLang() {
+  const lang = state.lang;
+  document.documentElement.lang = lang;
+  document.documentElement.dataset.lang = lang;
+  document.getElementById('langBtn').textContent = lang === 'en' ? 'FR' : 'EN';
+  const strings = I18N[lang] || I18N.en;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (strings[key]) el.innerHTML = strings[key];
+  });
+}
+
+function toggleLang() {
+  state.lang = state.lang === 'en' ? 'fr' : 'en';
+  saveState();
+  applyLang();
+  updateProgress();
+}
+
+/* ===== Module toggle ===== */
+function toggleModule(n) {
+  const card = document.getElementById('mod' + n);
+  card.classList.toggle('open');
+  // Close mobile menu
+  document.querySelector('.sidebar').classList.remove('mobile-open');
+}
+
+function goModule(n) {
+  // Close all first
+  document.querySelectorAll('.module-card.open').forEach(c => c.classList.remove('open'));
+  toggleModule(n);
+  document.getElementById('mod' + n).scrollIntoView({behavior: 'smooth', block: 'start'});
+  document.querySelector('.sidebar').classList.remove('mobile-open');
+}
+
+/* ===== Copy command ===== */
+function copyCmd(btn) {
+  const block = btn.parentElement;
+  const text = block.textContent.replace('Copy', '').replace('Copied!', '').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+/* ===== Quiz grading ===== */
+function gradeQuiz(modNum, totalQ) {
+  const quiz = document.getElementById('quiz' + modNum);
+  const questions = quiz.querySelectorAll('.quiz-q');
+  let correct = 0;
+  questions.forEach((q, i) => {
+    const correctAns = q.dataset.correct;
+    const selected = q.querySelector('input[type="radio"]:checked');
+    if (selected && selected.value === correctAns) correct++;
+  });
+  const pct = Math.round(correct / totalQ * 100);
+  const passing = 70;
+  const resultDiv = document.getElementById('result' + modNum);
+  const lang = state.lang || 'en';
+  const strings = I18N[lang] || I18N.en;
+
+  if (pct >= passing) {
+    resultDiv.className = 'quiz-result pass';
+    resultDiv.textContent = strings.quiz_pass.replace('{n}', correct).replace('{t}', totalQ);
+    resultDiv.style.display = 'block';
+    state.completed[modNum] = true;
+    saveState();
+    updateProgress();
+  } else {
+    resultDiv.className = 'quiz-result fail';
+    resultDiv.textContent = strings.quiz_fail.replace('{n}', correct).replace('{t}', totalQ).replace('{p}', passing);
+    resultDiv.style.display = 'block';
+  }
+}
+
+/* ===== Progress tracking ===== */
+function updateProgress() {
+  const done = Object.keys(state.completed).filter(k => state.completed[k]).length;
+  const pct = Math.round(done / TOTAL_MODULES * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  const lang = state.lang || 'en';
+  const strings = I18N[lang] || I18N.en;
+  document.getElementById('progressText').textContent = strings.progress_text.replace('{n}', done);
+  document.getElementById('headerProgress').textContent = done + ' / ' + TOTAL_MODULES;
+
+  // Update sidebar dots
+  for (let i = 1; i <= TOTAL_MODULES; i++) {
+    const dot = document.getElementById('dot' + i);
+    if (dot) {
+      dot.className = 'status-dot ' + (state.completed[i] ? 'done' : 'none');
+    }
+  }
+
+  // Show certificate if all done
+  if (done >= TOTAL_MODULES) {
+    const cert = document.getElementById('certificate');
+    cert.classList.add('visible');
+    if (!state.name) {
+      state.name = prompt(lang === 'fr' ? 'Entrez votre nom complet pour le certificat:' : 'Enter your full name for the certificate:') || 'Technician';
+      saveState();
+    }
+    document.getElementById('certName').textContent = state.name;
+    document.getElementById('certDate').textContent = new Date().toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', {year:'numeric',month:'long',day:'numeric'});
+  }
+}
+
+function saveState() {
+  localStorage.setItem('ll_tech_training', JSON.stringify(state));
+}
+
+/* ===== Init ===== */
+applyLang();
+updateProgress();
+</script>
+
+</body>
+</html>

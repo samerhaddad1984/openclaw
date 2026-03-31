@@ -144,6 +144,8 @@ node_modules/
 package-lock.json
 
 # Database (too large for git, backed up separately)
+data/*.db
+data/backups/
 data/ledgerlink_agent.db
 data/client_uploads/
 data/incoming_documents/

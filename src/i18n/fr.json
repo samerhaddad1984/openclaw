@@ -1165,5 +1165,7 @@
   "lbl_version":                     "14. Vérification de version",
   "autofix_ver_ok":                  "À jour — version {version}",
   "autofix_ver_update":              "Mise à jour disponible : {installed} → {remote}",
-  "autofix_ver_error":               "Impossible de vérifier les mises à jour : {error}"
+  "autofix_ver_error":               "Impossible de vérifier les mises à jour : {error}",
+
+  "training_nav_link":               "Formation"
 }

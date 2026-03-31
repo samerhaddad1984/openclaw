@@ -648,10 +648,89 @@ class BankMatcher:
         documents: list[DocumentRecord],
         transactions: list[BankTransaction],
     ) -> list[MatchResult]:
+        # --- Performance: cache normalize_text and parse_date to avoid
+        #     redundant computation across O(n*m) candidate evaluations ---
+        _norm_cache: dict = {}
+        _date_cache: dict = {}
+        _orig_normalize = self.normalize_text
+        _orig_parse_date = self.parse_date
+
+        def _cached_normalize(value):
+            if value not in _norm_cache:
+                _norm_cache[value] = _orig_normalize(value)
+            return _norm_cache[value]
+
+        def _cached_parse_date(value, language=None):
+            key = (value, language)
+            if key not in _date_cache:
+                _date_cache[key] = _orig_parse_date(value, language)
+            return _date_cache[key]
+
+        self.normalize_text = _cached_normalize
+        self.parse_date = _cached_parse_date
+
+        try:
+            return self._match_documents_core(documents, transactions)
+        finally:
+            self.normalize_text = _orig_normalize
+            self.parse_date = _orig_parse_date
+
+    def _match_documents_core(
+        self,
+        documents: list[DocumentRecord],
+        transactions: list[BankTransaction],
+    ) -> list[MatchResult]:
+        import bisect as _bisect
+        import math as _math
+
         all_candidates: list[MatchCandidate] = []
 
+        # Build amount index: group invoices by normalized_amount (nearest $0.01)
+        _amount_index: dict[int, list[DocumentRecord]] = {}
+        _no_amount_docs: list[DocumentRecord] = []
         for doc in documents:
-            for txn in transactions:
+            if doc.amount is not None:
+                _famt = float(doc.amount)
+                if _math.isfinite(_famt):
+                    cents = round(abs(_famt) * 100)
+                    _amount_index.setdefault(cents, []).append(doc)
+                else:
+                    _no_amount_docs.append(doc)
+            else:
+                _no_amount_docs.append(doc)
+        _sorted_cents = sorted(_amount_index.keys())
+
+        # Build vendor index: group invoices by first 3 chars of normalized vendor
+        _vendor_index: dict[str, list[DocumentRecord]] = {}
+        for doc in documents:
+            prefix = self.normalize_text(getattr(doc, 'vendor', None) or "")[:3]
+            _vendor_index.setdefault(prefix, []).append(doc)
+
+        max_diff_cents = round(self.max_amount_diff * 100)
+
+        for txn in transactions:
+            # Use amount index for O(1) lookup instead of O(n) scan
+            if txn.amount is not None and _math.isfinite(float(txn.amount)):
+                txn_cents = round(abs(float(txn.amount)) * 100)
+                lo = _bisect.bisect_left(_sorted_cents, txn_cents - max_diff_cents)
+                hi = _bisect.bisect_right(_sorted_cents, txn_cents + max_diff_cents)
+                seen: set = set()
+                candidate_docs: list[DocumentRecord] = []
+                for idx in range(lo, hi):
+                    for doc in _amount_index[_sorted_cents[idx]]:
+                        doc_oid = id(doc)
+                        if doc_oid not in seen:
+                            seen.add(doc_oid)
+                            candidate_docs.append(doc)
+                for doc in _no_amount_docs:
+                    doc_oid = id(doc)
+                    if doc_oid not in seen:
+                        seen.add(doc_oid)
+                        candidate_docs.append(doc)
+            else:
+                candidate_docs = list(documents)
+
+            for doc in candidate_docs:
                 candidate = self.evaluate_candidate(doc, txn)
                 if candidate is None:
                     continue
@@ -745,6 +824,18 @@ class BankMatcher:
             )
 
         return results
+
+    def batch_match(
+        self,
+        bank_transactions: list[BankTransaction],
+        invoices: list[DocumentRecord],
+    ) -> list[MatchResult]:
+        """Batch match bank transactions against invoices using the indexed approach.
+
+        Convenience wrapper around match_documents with parameter names that
+        reflect the typical caller's perspective (bank-first, invoices-second).
+        """
+        return self.match_documents(invoices, bank_transactions)
 
     # FIX 7 + BLOCK4: Split payment detection — one payment matching multiple invoices
     def detect_split_payments(

@@ -56,5 +56,6 @@
     "port": 8789,
     "api_key": ""
   },
-  "demo_mode": false
+  "demo_mode": false,
+  "database_path": "data/ledgerlink_agent.db"
 }

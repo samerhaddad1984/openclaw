@@ -168,9 +168,14 @@ def utc_now_iso() -> str:
     return utc_now().replace(microsecond=0).isoformat()
 
 
+def _dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
+    """Row factory that returns plain dicts so .get() works everywhere."""
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+
 def open_db() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = _dict_factory
     return conn
 
 
@@ -389,7 +394,7 @@ def bootstrap_schema() -> None:
             print("  [bootstrap] must_reset_password=1 set for all existing users (bcrypt migration)")
 
         # Seed a default admin account if no users exist
-        count = conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone()[0]
+        count = list(conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone().values())[0]
         if count == 0:
             conn.execute(
                 "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, must_reset_password, created_at) VALUES (?,?,?,?,1,1,?)",
@@ -501,7 +506,7 @@ def is_rate_limited(ip: str) -> bool:
             " WHERE ip_address=? AND success=0 AND attempted_at>=?",
             (ip, window_start),
         ).fetchone()
-    return (row[0] if row else 0) >= _RATE_LIMIT_MAX_FAILURES
+    return (list(row.values())[0] if row else 0) >= _RATE_LIMIT_MAX_FAILURES
 
 
 def get_session_user(handler: BaseHTTPRequestHandler) -> dict[str, Any] | None:
@@ -781,7 +786,7 @@ def get_documents(
     only_my_queue: bool = False,
     only_unassigned: bool = False,
     limit: int = 500,
-) -> list[sqlite3.Row]:
+) -> list[dict]:
     where: list[str] = []
     params: list[Any] = []
 
@@ -840,11 +845,11 @@ def get_documents(
     params.append(limit)
 
     with open_db() as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+        rows = [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
 
     wanted = normalize_key(status)
     if not wanted:
-        return list(rows)
+        return rows
     return [r for r in rows if normalize_key(get_accounting_status(r)) == wanted]
 
 
@@ -862,9 +867,9 @@ def _infer_entry_kind(doc_row) -> str:
     return "expense"
 
 
-def get_document(document_id: str) -> sqlite3.Row | None:
+def get_document(document_id: str) -> dict | None:
     with open_db() as conn:
-        return conn.execute(
+        row = conn.execute(
             """
             SELECT
                 d.document_id, d.file_name, d.file_path, d.client_code, d.vendor,
@@ -900,6 +905,7 @@ def get_document(document_id: str) -> sqlite3.Row | None:
             """,
             (document_id,),
         ).fetchone()
+        return dict(row) if row else None
 
 
 def update_document_fields(document_id: str, fields: dict[str, Any]) -> None:
@@ -961,15 +967,16 @@ def assign_document(document_id: str, assigned_to: str, assigned_by: str, note: 
         conn.commit()
 
 
-def get_qbo_posting_job(document_id: str) -> sqlite3.Row | None:
+def get_qbo_posting_job(document_id: str) -> dict | None:
     with open_db() as conn:
-        return conn.execute(
+        row = conn.execute(
             "SELECT * FROM posting_jobs WHERE document_id=? AND target_system='qbo' ORDER BY COALESCE(updated_at,created_at) DESC, rowid DESC LIMIT 1",
             (document_id,),
         ).fetchone()
+        return dict(row) if row else None
 
 
-def record_learning_corrections(document_id: str, before_row: sqlite3.Row, updated_fields: dict[str, Any]) -> None:
+def record_learning_corrections(document_id: str, before_row: dict, updated_fields: dict[str, Any]) -> None:
     tracked = {"vendor","client_code","doc_type","amount","document_date","gl_account","tax_code","category","review_status"}
     for field, submitted in updated_fields.items():
         if field not in tracked:
@@ -1033,7 +1040,7 @@ def render_learning_history(document_id: str, lang: str = "fr") -> str:
     return f'<div class="card"><h3>{esc(title)}</h3><table><thead>{th}</thead><tbody>{rows_html}</tbody></table></div>'
 
 
-def render_learning_suggestions(document_id: str, row: sqlite3.Row, username: str,
+def render_learning_suggestions(document_id: str, row: dict, username: str,
                                  lang: str = "fr") -> str:
     title = t("section_learning_suggestions", lang)
     try:
@@ -1125,7 +1132,7 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
     """Render invoice line items and deposit allocation cards for document detail."""
     try:
         _db = sqlite3.connect(str(DB_PATH))
-        _db.row_factory = sqlite3.Row
+        _db.row_factory = _dict_factory
         lines = _db.execute(
             """SELECT line_number, description, quantity, unit_price,
                       line_total_pretax, tax_regime, gst_amount, qst_amount,
@@ -1211,7 +1218,7 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             dep_amt = raw_result.get("deposit_amount", 0)
             if dep_amt and float(dep_amt) > 0:
                 _db2 = sqlite3.connect(str(DB_PATH))
-                _db2.row_factory = sqlite3.Row
+                _db2.row_factory = _dict_factory
                 alloc = allocate_deposit_proportionally(document_id, dep_amt, _db2)
                 _db2.close()
 
@@ -6027,7 +6034,12 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
                 f'text-decoration:none;white-space:nowrap;">'
                 f'{esc(t("comm_nav_link", lang))}{_badge}</a>'
             )
-        right_controls = f'{user_pill} {comm_link_html} {lang_toggle} {logout_btn}'
+        training_link_html = (
+            f'<a href="/training" style="color:#cbd5e1;font-size:13px;'
+            f'text-decoration:none;white-space:nowrap;">'
+            f'{esc(t("training_nav_link", lang))}</a>'
+        )
+        right_controls = f'{user_pill} {comm_link_html} {training_link_html} {lang_toggle} {logout_btn}'
 
     # Audit navigation strip — visible to manager/owner only
     audit_nav_html = ""
@@ -6258,7 +6270,7 @@ def render_user_management(ctx: dict[str, Any], user: dict[str, Any], flash: str
             user=user, lang=lang)
 
     with open_db() as conn:
-        users = conn.execute("SELECT * FROM dashboard_users ORDER BY username").fetchall()
+        users = [dict(r) for r in conn.execute("SELECT * FROM dashboard_users ORDER BY username").fetchall()]
 
     rows_html = "".join(f"""
         <tr>
@@ -6528,10 +6540,18 @@ def render_communications(
 
 def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 flash: str, flash_error: str, include_ignored: bool,
-                only_my_queue: bool, only_unassigned: bool, lang: str = "fr") -> str:
+                only_my_queue: bool, only_unassigned: bool, lang: str = "fr",
+                page: int = 1, per_page: int = 50) -> str:
     rows = get_documents(ctx=ctx, status=status, q=q, include_ignored=include_ignored,
                          only_my_queue=only_my_queue, only_unassigned=only_unassigned)
     counts = get_status_counts(ctx)
+
+    # Pagination
+    total_rows = len(rows)
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start_idx = (page - 1) * per_page
+    rows = rows[start_idx:start_idx + per_page]
 
     portfolio_btn = (
         f'<a class="button-link btn-dark" href="/portfolios">{esc(t("btn_manage_portfolios", lang))}</a>'
@@ -6574,7 +6594,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         <div class="stat"><div class="small muted">{esc(t("stat_on_hold", lang))}</div><div><strong>{counts.get("On Hold",0)}</strong></div></div>
         <div class="stat"><div class="small muted">{esc(t("stat_ready_to_post", lang))}</div><div><strong>{counts.get("Ready to Post",0)}</strong></div></div>
         <div class="stat"><div class="small muted">{esc(t("stat_posted", lang))}</div><div><strong>{counts.get("Posted",0)}</strong></div></div>
-        <div class="stat"><div class="small muted">{esc(t("stat_visible", lang))}</div><div><strong>{len(rows)}</strong></div></div>
+        <div class="stat"><div class="small muted">{esc(t("stat_visible", lang))}</div><div><strong>{total_rows}</strong></div></div>
     </div>"""
 
     status_opts = "".join(
@@ -6654,7 +6674,55 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         <tbody>{"".join(row_html) if row_html else no_docs_cell}</tbody>
     </table></div>"""
 
-    return page_layout(t("dashboard_title", lang), stats_html + filters_html + table_html,
+    # Pagination controls
+    pagination_html = ""
+    if total_pages > 1:
+        # Build base query string preserving existing filters
+        import urllib.parse as _up
+        pq = {}
+        if status:
+            pq["status"] = status
+        if q:
+            pq["q"] = q
+        if include_ignored:
+            pq["include_ignored"] = "1"
+        if only_my_queue:
+            pq["queue_mode"] = "mine"
+        elif only_unassigned:
+            pq["queue_mode"] = "unassigned"
+
+        def _page_url(p: int) -> str:
+            pq["page"] = str(p)
+            return "/?" + _up.urlencode(pq)
+
+        page_links: list[str] = []
+        if page > 1:
+            page_links.append(f'<a class="btn-secondary" href="{esc(_page_url(1))}">&laquo; 1</a>')
+            page_links.append(f'<a class="btn-secondary" href="{esc(_page_url(page - 1))}">&lsaquo; Prev</a>')
+
+        # Show window of pages around current
+        window_start = max(1, page - 3)
+        window_end = min(total_pages, page + 3)
+        for p in range(window_start, window_end + 1):
+            if p == page:
+                page_links.append(f'<strong style="padding:6px 12px;background:#0d6efd;color:#fff;border-radius:4px;">{p}</strong>')
+            else:
+                page_links.append(f'<a class="btn-secondary" href="{esc(_page_url(p))}">{p}</a>')
+
+        if page < total_pages:
+            page_links.append(f'<a class="btn-secondary" href="{esc(_page_url(page + 1))}">Next &rsaquo;</a>')
+            page_links.append(f'<a class="btn-secondary" href="{esc(_page_url(total_pages))}">{total_pages} &raquo;</a>')
+
+        pagination_html = f"""<div class="card" style="text-align:center;">
+            <div style="display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;">
+                {" ".join(page_links)}
+            </div>
+            <div class="small muted" style="margin-top:6px;">
+                Page {page} of {total_pages} &middot; {total_rows} documents
+            </div>
+        </div>"""
+
+    return page_layout(t("dashboard_title", lang), stats_html + filters_html + table_html + pagination_html,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
@@ -6732,7 +6800,36 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         suffix = Path(file_path).suffix.lower()
         pdf_url = f"/pdf?id={urlquote(document_id)}"
         preview_title = esc(t("doc_section_preview", lang))
-        if suffix == ".pdf":
+        # Check if the file actually exists on disk (try original path, then local fallbacks)
+        _file_exists = False
+        try:
+            Path(file_path).resolve(strict=True)
+            _file_exists = True
+        except (OSError, RuntimeError):
+            _fname = Path(file_path).name
+            for _candidate in (
+                ROOT_DIR / "tests" / "documents_real" / _fname,
+                ROOT_DIR / "src" / "agents" / "data" / "downloads" / _fname,
+                ROOT_DIR / _fname,
+            ):
+                try:
+                    _candidate.resolve(strict=True)
+                    _file_exists = True
+                    break
+                except (OSError, RuntimeError):
+                    continue
+        if not _file_exists:
+            pdf_viewer_html = (
+                f'<div class="card"><h3>{preview_title}</h3>'
+                '<div style="border:2px solid #3b82f6;border-radius:8px;padding:20px 24px;background:#eff6ff;">'
+                '<p style="margin:0 0 8px;font-weight:600;color:#1e40af;">'
+                'Document de test \u2014 aucun fichier PDF disponible / Test document \u2014 no PDF file available</p>'
+                '<p style="margin:0;font-size:13px;color:#64748b;">'
+                'Ce document a \u00e9t\u00e9 g\u00e9n\u00e9r\u00e9 automatiquement pour les tests / '
+                'This document was generated automatically for testing</p>'
+                '</div></div>'
+            )
+        elif suffix == ".pdf":
             pdf_viewer_html = f"""<div class="card"><h3>{preview_title}</h3>
                 <iframe src="{pdf_url}" style="width:100%;height:800px;border:1px solid #e5e7eb;border-radius:8px;" title="{preview_title}"></iframe>
             </div>"""
@@ -6997,11 +7094,11 @@ def _onboarding_check_needed(user: dict[str, Any]) -> bool:
 
         # Count users (only trigger if <=1 user or 0 clients)
         try:
-            user_count = conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone()[0]
+            user_count = list(conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone().values())[0]
         except Exception:
             user_count = 0
         try:
-            client_count = conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+            client_count = list(conn.execute("SELECT COUNT(*) FROM clients").fetchone().values())[0]
         except Exception:
             client_count = 0
 
@@ -7390,6 +7487,129 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _build_health_response(self) -> dict[str, Any]:
+        """Build the JSON response for GET /health."""
+        import shutil as _shutil
+
+        # DB check
+        db_ok = False
+        documents_count = 0
+        users_count = 0
+        if DB_PATH.exists():
+            try:
+                conn = sqlite3.connect(str(DB_PATH), timeout=5)
+                conn.row_factory = _dict_factory
+                cur = conn.execute("PRAGMA integrity_check")
+                db_ok = cur.fetchone().get("integrity_check", "") == "ok"
+                try:
+                    documents_count = conn.execute(
+                        "SELECT COUNT(*) AS c FROM documents"
+                    ).fetchone().get("c", 0)
+                except Exception:
+                    pass
+                try:
+                    users_count = conn.execute(
+                        "SELECT COUNT(*) AS c FROM users"
+                    ).fetchone().get("c", 0)
+                except Exception:
+                    pass
+                conn.close()
+            except Exception:
+                pass
+
+        # Disk free
+        try:
+            usage = _shutil.disk_usage(str(ROOT_DIR))
+            disk_gb_free = round(usage.free / (1024 ** 3), 1)
+        except Exception:
+            disk_gb_free = 0.0
+
+        # License
+        try:
+            lic = get_license_status()
+            license_valid = lic.get("valid", False)
+            license_tier = lic.get("tier", "")
+            license_expiry = lic.get("expiry", "")
+        except Exception:
+            license_valid = False
+            license_tier = ""
+            license_expiry = ""
+
+        # Uptime
+        uptime_seconds = (datetime.now(timezone.utc) - _SERVICE_START).total_seconds()
+        uptime_hours = round(uptime_seconds / 3600, 1)
+
+        # Install date & wizard
+        cfg = {}
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        install_date = cfg.get("install_date", _SERVICE_START.isoformat())
+        wizard_complete = cfg.get("wizard_complete", False)
+
+        return {
+            "status": "ok",
+            "version": _get_app_version(),
+            "db_ok": db_ok,
+            "service_ok": True,
+            "disk_gb_free": disk_gb_free,
+            "documents_count": documents_count,
+            "users_count": users_count,
+            "license_valid": license_valid,
+            "license_tier": license_tier,
+            "license_expiry": license_expiry,
+            "uptime_hours": uptime_hours,
+            "install_date": install_date,
+            "wizard_complete": wizard_complete,
+        }
+
+    def _build_health_full_response(self) -> dict[str, Any]:
+        """Build the JSON response for GET /health/full (owner only)."""
+        import pkg_resources as _pkg
+
+        base = self._build_health_response()
+
+        # Autofix results
+        autofix_results = None
+        autofix_path = ROOT_DIR / "scripts" / "autofix.py"
+        if autofix_path.exists():
+            try:
+                import subprocess as _sp
+                result = _sp.run(
+                    [sys.executable, str(autofix_path), "--quiet", "--json"],
+                    capture_output=True, text=True, timeout=30, cwd=str(ROOT_DIR),
+                )
+                if result.stdout.strip():
+                    autofix_results = json.loads(result.stdout.strip())
+            except Exception:
+                autofix_results = "autofix execution failed"
+
+        # Last 5 errors from log
+        last_errors: list[str] = []
+        if LOG_PATH.exists():
+            try:
+                lines = LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
+                error_lines = [ln for ln in lines if "ERROR" in ln or "FAIL" in ln]
+                last_errors = error_lines[-5:]
+            except Exception:
+                pass
+
+        # Package list
+        packages: list[str] = []
+        try:
+            packages = [f"{d.project_name}=={d.version}" for d in _pkg.working_set]
+        except Exception:
+            pass
+
+        base.update({
+            "python_version": sys.version,
+            "autofix_results": autofix_results,
+            "last_errors": last_errors,
+            "packages": packages,
+        })
+        return base
+
     def _serve_db_backup(self) -> None:
         """Stream the SQLite database file as a binary download."""
         if not DB_PATH.exists():
@@ -7406,30 +7626,66 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
     def _serve_pdf(self, document_id: str, user: dict[str, Any]) -> None:
         """Serve the raw PDF file for a document, gated by session auth."""
+        # Minimal HTML helper for errors shown inside iframes — no full page layout
+        def _pdf_error(title: str, body: str, status: int = 404) -> None:
+            html = (
+                f'<!DOCTYPE html><html><head><meta charset="utf-8">'
+                f'<style>body{{font-family:system-ui,sans-serif;padding:40px;color:#1e293b;}}'
+                f'.box{{border:2px solid #3b82f6;border-radius:8px;padding:20px 24px;background:#eff6ff;max-width:600px;}}'
+                f'.box h2{{margin:0 0 8px;font-size:16px;color:#1e40af;}}'
+                f'.box p{{margin:4px 0;font-size:14px;color:#475569;}}'
+                f'</style></head><body><div class="box"><h2>{title}</h2>{body}</div></body></html>'
+            )
+            self._send_html(html, status=status)
         if not document_id:
-            self._send_html(page_layout("Bad Request", '<div class="card"><h2>Missing document id</h2></div>', user=user), status=400)
+            _pdf_error("Bad Request", "<p>Missing document id</p>", 400)
             return
         row = get_document(document_id)
         if row is None:
-            self._send_html(page_layout("Not Found", '<div class="card"><h2>Document not found</h2></div>', user=user), status=404)
+            _pdf_error("Not Found", "<p>Document not found</p>", 404)
             return
         # Access control
         ctx = build_user_context(user)
         if not ctx["can_view_all_clients"]:
             allowed_keys = {normalize_key(c) for c in ctx.get("allowed_clients", [])}
             if normalize_key(row["client_code"]) not in allowed_keys:
-                self._send_html(page_layout("Access Denied", '<div class="card"><h2>Access denied</h2></div>', user=user), status=403)
+                _pdf_error("Access Denied", "<p>Access denied</p>", 403)
                 return
         file_path = normalize_text(row["file_path"])
         if not file_path:
-            self._send_html(page_layout("Not Found", '<div class="card"><h2>No file path recorded for this document</h2></div>', user=user), status=404)
+            _pdf_error("Not Found", "<p>No file path recorded for this document</p>", 404)
             return
         path_obj = Path(file_path)
         # Resolve and safety-check — must be an existing file
+        resolved = None
         try:
             resolved = path_obj.resolve(strict=True)
         except (OSError, RuntimeError):
-            self._send_html(page_layout("Not Found", f'<div class="card"><h2>File not found on disk</h2><p class="muted">{esc(file_path)}</p></div>', user=user), status=404)
+            pass
+        # Fallback: if absolute path doesn't exist, try to find the file
+        # relative to ROOT_DIR (handles DB paths from a different machine)
+        if resolved is None:
+            _fname = Path(file_path).name
+            # Try common relative locations
+            for _candidate in (
+                ROOT_DIR / "tests" / "documents_real" / _fname,
+                ROOT_DIR / "src" / "agents" / "data" / "downloads" / _fname,
+                ROOT_DIR / _fname,
+            ):
+                try:
+                    resolved = _candidate.resolve(strict=True)
+                    break
+                except (OSError, RuntimeError):
+                    continue
+        if resolved is None:
+            _pdf_error(
+                "Document de test / Test document",
+                "<p>Document de test — aucun fichier PDF disponible / Test document — no PDF file available</p>"
+                "<p style='font-size:13px;color:#64748b;margin-top:8px;'>"
+                "Ce document a \u00e9t\u00e9 g\u00e9n\u00e9r\u00e9 automatiquement pour les tests / "
+                "This document was generated automatically for testing</p>",
+                404,
+            )
             return
         suffix = resolved.suffix.lower()
         if suffix == ".pdf":
@@ -7544,6 +7800,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_login(flash_error, lang=lang))
                 return
 
+            # --- /health (no authentication) ---
+            if path == "/health":
+                self._send_json(self._build_health_response())
+                return
+
             user = get_session_user(self)
             if not user:
                 self._redirect("/login")
@@ -7551,6 +7812,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             lang = get_user_lang(user)
             ctx = build_user_context(user)
+
+            # --- /health/full (owner authentication required) ---
+            if path == "/health/full":
+                if user.get("role") != "owner":
+                    self._send_json({"error": "owner authentication required"}, status=403)
+                    return
+                self._send_json(self._build_health_full_response())
+                return
 
             if path == "/":
                 # Onboarding redirect: owner with no staff or no clients
@@ -7561,9 +7830,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 q = qs.get("q", [""])[0]
                 include_ignored = qs.get("include_ignored", ["0"])[0] == "1"
                 queue_mode = qs.get("queue_mode", ["all"])[0]
+                try:
+                    page = max(1, int(qs.get("page", ["1"])[0]))
+                except (ValueError, TypeError):
+                    page = 1
                 self._send_html(render_home(ctx, user, status, q, flash, flash_error,
                                             include_ignored, queue_mode == "mine",
-                                            queue_mode == "unassigned", lang=lang))
+                                            queue_mode == "unassigned", lang=lang,
+                                            page=page))
                 return
 
             if path == "/change_password":
@@ -8222,6 +8496,61 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_journal_entries(ctx, user, flash, flash_error, lang=lang))
                 return
 
+            # ------------------------------------------------------------------
+            # Training (all authenticated users)
+            # ------------------------------------------------------------------
+            if path == "/training":
+                training_file = ROOT_DIR / "docs" / "training" / "staff_training.html"
+                if training_file.exists():
+                    content = training_file.read_text(encoding="utf-8")
+                    self._send_html(content)
+                else:
+                    self._send_html(page_layout(
+                        t("training_nav_link", lang),
+                        f'<div class="card"><h2>{esc(t("training_nav_link", lang))}</h2>'
+                        f'<p>Training content not found.</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=404)
+                return
+
+            # ------------------------------------------------------------------
+            # Technician Training (owner only)
+            # ------------------------------------------------------------------
+            if path == "/training/technician":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                tech_training_file = ROOT_DIR / "docs" / "training" / "technician_training.html"
+                if tech_training_file.exists():
+                    content = tech_training_file.read_text(encoding="utf-8")
+                    self._send_html(content)
+                else:
+                    self._send_html(page_layout(
+                        "Technician Training",
+                        f'<div class="card"><h2>Technician Training</h2>'
+                        f'<p>Training content not found.</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=404)
+                return
+
+            # ------------------------------------------------------------------
+            # Training Certificate (authenticated users)
+            # ------------------------------------------------------------------
+            if path == "/training/certificate":
+                self._send_html(page_layout(
+                    t("training_nav_link", lang),
+                    '<div class="card"><h2>Training Certificate</h2>'
+                    '<p>Complete all modules and quizzes to earn your certificate.</p>'
+                    '<p>Your progress is tracked automatically via the training portal.</p>'
+                    f'<p><a href="/training">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                    user=user, lang=lang))
+                return
+
             self._send_html(page_layout(
                 t("err_not_found", lang),
                 f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2>'
@@ -8263,9 +8592,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     return
 
                 with open_db() as conn:
-                    user_row = conn.execute(
+                    _user_raw = conn.execute(
                         "SELECT * FROM dashboard_users WHERE username=? AND active=1", (username,)
                     ).fetchone()
+                    user_row = dict(_user_raw) if _user_raw else None
                 # Unified error message for both "user not found" and "wrong password"
                 if not user_row or not verify_password(password, user_row["password_hash"]):
                     record_login_attempt(ip, username, False)
@@ -9384,7 +9714,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                 if mat_check.get("material_item"):
                                     paper_id = wp_result.get("paper_id") or str(wp_result.get("id", ""))
                                     try:
-                                        cols = {r[1] for r in conn.execute("PRAGMA table_info(working_papers)").fetchall()}
+                                        cols = {r["name"] for r in conn.execute("PRAGMA table_info(working_papers)").fetchall()}
                                         if "is_material" not in cols:
                                             conn.execute("ALTER TABLE working_papers ADD COLUMN is_material INTEGER DEFAULT 0")
                                         conn.execute(
