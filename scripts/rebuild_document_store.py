@@ -16,7 +16,7 @@ from src.agents.core.duplicate_guard import DuplicateGuard
 from src.agents.core.exception_router import ExceptionRouter
 from src.agents.core.vendor_decision_enricher import VendorDecisionEnricher
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def utc_now_iso() -> str:

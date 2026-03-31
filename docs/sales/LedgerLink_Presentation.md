@@ -1,4 +1,4 @@
-# LedgerLink AI --- Presentation Deck (12 Slides)
+# OtoCPA --- Presentation Deck (12 Slides)
 
 **Audience:** CPA firm owners and managing partners in Quebec
 **Duration:** 20 minutes (12 slides + 8 minutes Q&A)
@@ -8,13 +8,13 @@
 
 ## SLIDE 1 --- TITLE
 
-### LedgerLink AI --- La comptabilité intelligente pour les cabinets CPA du Québec
+### OtoCPA --- La comptabilité intelligente pour les cabinets CPA du Québec
 
-**Visual:** LedgerLink logo centered. Tagline below. Your name, title, and contact in bottom-right corner.
+**Visual:** OtoCPA logo centered. Tagline below. Your name, title, and contact in bottom-right corner.
 
 **Speaking Notes:**
 
-> "Bonjour, merci de me recevoir. Je m'appelle [votre nom], je travaille chez LedgerLink. On aide les cabinets CPA du Québec à automatiser la saisie comptable avec l'intelligence artificielle --- tout en gardant le contrôle humain sur chaque transaction. Je vais vous montrer comment en 15 minutes."
+> "Bonjour, merci de me recevoir. Je m'appelle [votre nom], je travaille chez OtoCPA. On aide les cabinets CPA du Québec à automatiser la saisie comptable avec l'intelligence artificielle --- tout en gardant le contrôle humain sur chaque transaction. Je vais vous montrer comment en 15 minutes."
 
 Timing: 30 seconds maximum. Do not describe the product yet. Do not show features. Just introduce yourself, thank them, and set the time expectation. Short is confident.
 
@@ -48,7 +48,7 @@ Timing: 30 seconds maximum. Do not describe the product yet. Do not show feature
 
 ## SLIDE 3 --- THE SOLUTION
 
-### LedgerLink AI traite les documents automatiquement --- photos, courriels, WhatsApp
+### OtoCPA traite les documents automatiquement --- photos, courriels, WhatsApp
 
 **Visual:** Flow diagram in 4 steps:
 
@@ -60,7 +60,7 @@ Show a phone photo of a receipt on the left, an arrow, the extracted data in the
 
 **Speaking Notes:**
 
-> "La solution, c'est simple. Votre client prend une photo de sa facture. LedgerLink lit le document, extrait le fournisseur, le montant, la date, calcule les taxes, suggere le compte GL, et votre equipe n'a qu'a cliquer Approuver. C'est tout."
+> "La solution, c'est simple. Votre client prend une photo de sa facture. OtoCPA lit le document, extrait le fournisseur, le montant, la date, calcule les taxes, suggere le compte GL, et votre equipe n'a qu'a cliquer Approuver. C'est tout."
 >
 > Une phrase. Arretez. Puis dites: "Laissez-moi vous montrer." Et passez a la demo si vous en etes la, ou continuez les slides si c'est une presentation formelle.
 
@@ -92,7 +92,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 **Speaking Notes:**
 
-> "Ce qui distingue LedgerLink des autres outils IA, c'est l'architecture en trois couches."
+> "Ce qui distingue OtoCPA des autres outils IA, c'est l'architecture en trois couches."
 >
 > "Couche 1 : les taxes, la detection de fraude, et la classification comptable sont 100% basees sur des regles. Pas d'IA. Pas d'hallucination. Les calculs TPS/TVQ utilisent la librairie Decimal de Python --- zero erreur d'arrondi."
 >
@@ -125,11 +125,11 @@ Historique d'audit complet (qui, quoi, quand)
 
 **Speaking Notes:**
 
-> "C'est notre avantage le plus fort. LedgerLink est le seul logiciel construit specifiquement pour la fiscalite quebecoise."
+> "C'est notre avantage le plus fort. OtoCPA est le seul logiciel construit specifiquement pour la fiscalite quebecoise."
 >
 > "TaxDome? Base a San Francisco, concu pour les Etats-Unis. Karbon? Australie. CaseWare? Ontario, TVH. Aucun ne gere le calcul parallele TPS/TVQ. Aucun ne pre-remplit le FPZ-500. Aucun ne comprend la methode rapide."
 >
-> "Et surtout, aucun ne vous permet d'heberger les donnees sur votre propre serveur. Avec la Loi 25, c'est vous personnellement qui etes responsable des donnees de vos clients. Avec LedgerLink, les donnees restent chez vous."
+> "Et surtout, aucun ne vous permet d'heberger les donnees sur votre propre serveur. Avec la Loi 25, c'est vous personnellement qui etes responsable des donnees de vos clients. Avec OtoCPA, les donnees restent chez vous."
 
 ---
 
@@ -139,7 +139,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 **Visual:** Two-column comparison:
 
-| | TaxDome / Karbon / Cloud | LedgerLink |
+| | TaxDome / Karbon / Cloud | OtoCPA |
 |---|---|---|
 | **Ou sont les donnees?** | Serveurs AWS aux Etats-Unis | Votre serveur, dans votre bureau |
 | **Qui y a acces?** | L'editeur du logiciel | Vous seul |
@@ -155,7 +155,7 @@ Historique d'audit complet (qui, quoi, quand)
 >
 > "Depuis la Loi 25, vous etes personnellement responsable des donnees de vos clients. Pas votre cabinet --- vous. Si les donnees de vos clients sont sur un serveur Amazon aux Etats-Unis et qu'il y a une breche, c'est votre nom sur l'avis de la Commission d'acces a l'information."
 >
-> "Avec LedgerLink, les donnees restent sur votre serveur. Dans votre bureau. Sous votre controle. Point final."
+> "Avec OtoCPA, les donnees restent sur votre serveur. Dans votre bureau. Sous votre controle. Point final."
 >
 > "L'IA traite les documents, mais rien n'est stocke dans le cloud. Les resultats d'extraction sont sauvegardes dans votre base de donnees locale SQLite."
 >
@@ -169,7 +169,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 **Visual:** Table with before/after comparison:
 
-| Tache | Avant LedgerLink | Apres LedgerLink | Temps economise |
+| Tache | Avant OtoCPA | Apres OtoCPA | Temps economise |
 |---|---|---|---|
 | Saisie de donnees | 3 h / client | 0 h (extraction automatique) | **3 h** |
 | Rapprochement bancaire | 1,5 h / client | 20 min (correspondance automatique) | **1 h 10** |
@@ -179,7 +179,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 **At scale:**
 
-| Nombre de clients | Heures economisees / mois | Valeur a 150 $/h | Cout LedgerLink | ROI |
+| Nombre de clients | Heures economisees / mois | Valeur a 150 $/h | Cout OtoCPA | ROI |
 |---|---|---|---|---|
 | 10 clients | 53 h | 7 950 $ | 99 $/mois | **8 000%** |
 | 30 clients | 160 h | 24 000 $ | 249 $/mois | **9 600%** |
@@ -189,7 +189,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 > "Voici les chiffres. Pas de marketing, juste du math."
 >
-> "Pour un cabinet de 30 clients, LedgerLink economise environ 160 heures par mois. A 150 dollars de l'heure, c'est 24 000 dollars par mois en capacite recuperee. LedgerLink coute 249 dollars par mois."
+> "Pour un cabinet de 30 clients, OtoCPA economise environ 160 heures par mois. A 150 dollars de l'heure, c'est 24 000 dollars par mois en capacite recuperee. OtoCPA coute 249 dollars par mois."
 >
 > *Pause. Laissez les chiffres parler.*
 >
@@ -229,7 +229,7 @@ Historique d'audit complet (qui, quoi, quand)
 
 **Speaking Notes:**
 
-> "Pour les cabinets qui font des missions de verification, d'examen ou de compilation, le module d'audit justifie a lui seul le prix de LedgerLink."
+> "Pour les cabinets qui font des missions de verification, d'examen ou de compilation, le module d'audit justifie a lui seul le prix de OtoCPA."
 >
 > "On couvre les normes CAS 315 a 700 plus CSQC 1. Dossiers de travail, importance relative, echantillonnage, elements probants, evenements posterieurs, continuite d'exploitation --- tout integre dans le meme systeme que votre comptabilite."
 >
@@ -279,7 +279,7 @@ Comprend: installation sur votre serveur, configuration, formation initiale, mig
 >
 > *Arretez de parler. Laissez le silence travailler.*
 >
-> S'ils ne reagissent pas, ajoutez: "A 150 dollars de l'heure, LedgerLink se paie en moins de 2 heures de travail economise. Le premier mois."
+> S'ils ne reagissent pas, ajoutez: "A 150 dollars de l'heure, OtoCPA se paie en moins de 2 heures de travail economise. Le premier mois."
 >
 > Ne proposez jamais de rabais sans qu'on vous le demande. Si on vous le demande, voir docs/sales/OBJECTIONS.md.
 
@@ -370,12 +370,12 @@ pas sur la technologie]"
 ```
 [Votre nom]
 [Votre titre]
-[votre.nom]@ledgerlink.ca
+[votre.nom]@otocpa.com
 [Numero de telephone]
 
 Reservez une demo : [lien Calendly ou numero direct]
 
-ledgerlink.ca
+otocpa.com
 ```
 
 **Speaking Notes:**

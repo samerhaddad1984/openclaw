@@ -40,7 +40,7 @@ from src.agents.core.learning_memory_store import LearningMemoryStore
 from src.agents.core.learning_correction_store import LearningCorrectionStore
 from src.agents.core.learning_suggestion_engine import LearningSuggestionEngine
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 SEED = 2024
 random.seed(SEED)

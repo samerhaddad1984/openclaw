@@ -20,7 +20,7 @@ from src.agents.core.dashboard_auth import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Manage LedgerLink dashboard users"
+        description="Manage OtoCPA dashboard users"
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)

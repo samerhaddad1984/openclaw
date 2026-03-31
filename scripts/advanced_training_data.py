@@ -2,7 +2,7 @@
 """
 scripts/advanced_training_data.py
 =================================
-5 advanced training-data generators for LedgerLink.
+5 advanced training-data generators for OtoCPA.
 
 Generators
 ----------
@@ -39,7 +39,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from src.engines.fraud_engine import run_fraud_detection, _quebec_holidays
 from src.agents.core.hallucination_guard import verify_ai_output, verify_numeric_totals
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 TRAINING_DIR = ROOT_DIR / "data" / "training"
 
 SEED = 42

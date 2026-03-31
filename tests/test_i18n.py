@@ -1,5 +1,5 @@
 """
-tests/test_i18n.py — pytest tests for the LedgerLink i18n system.
+tests/test_i18n.py — pytest tests for the OtoCPA i18n system.
 
 Tests cover:
   - JSON files are valid and contain required keys

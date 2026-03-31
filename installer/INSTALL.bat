@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 :: ============================================================
-:: LedgerLink AI - Windows Installer
+:: OtoCPA - Windows Installer
 :: ============================================================
 
 :: Request administrator elevation
@@ -15,20 +15,20 @@ if %errorlevel% neq 0 (
 
 :: Set install directory
 set "INSTALL_DIR=%~dp0"
-set "LOG_FILE=C:\LedgerLink\install.log"
+set "LOG_FILE=C:\OtoCPA\install.log"
 
 :: Create log directory
-if not exist "C:\LedgerLink" mkdir "C:\LedgerLink"
+if not exist "C:\OtoCPA" mkdir "C:\OtoCPA"
 
 :: Start logging
 echo ============================================================ > "%LOG_FILE%"
-echo LedgerLink AI - Installation Log >> "%LOG_FILE%"
+echo OtoCPA - Installation Log >> "%LOG_FILE%"
 echo Date: %date% %time% >> "%LOG_FILE%"
 echo ============================================================ >> "%LOG_FILE%"
 
 echo.
 echo ============================================================
-echo   LedgerLink AI - Installation en cours / Installing...
+echo   OtoCPA - Installation en cours / Installing...
 echo ============================================================
 echo.
 
@@ -122,11 +122,11 @@ echo.
 echo [6/8] Creating shortcuts... >> "%LOG_FILE%"
 echo [6/8] Creation des raccourcis / Creating shortcuts...
 
-:: LedgerLink AI shortcut
-powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\LedgerLink AI.url'); $s.TargetPath = 'http://127.0.0.1:8787/'; $s.Save()"
+:: OtoCPA shortcut
+powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\OtoCPA.url'); $s.TargetPath = 'http://127.0.0.1:8787/'; $s.Save()"
 
 :: Setup Wizard shortcut
-powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\LedgerLink Setup.url'); $s.TargetPath = 'http://127.0.0.1:8790/'; $s.Save()"
+powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\OtoCPA Setup.url'); $s.TargetPath = 'http://127.0.0.1:8790/'; $s.Save()"
 
 echo   OK
 echo.
@@ -154,7 +154,7 @@ echo ============================================================
 echo   Installation terminee! / Installation complete!
 echo ============================================================
 echo.
-echo   LedgerLink AI:    http://127.0.0.1:8787/
+echo   OtoCPA:    http://127.0.0.1:8787/
 echo   Setup Wizard:     http://127.0.0.1:8790/
 echo.
 echo   Log: %LOG_FILE%

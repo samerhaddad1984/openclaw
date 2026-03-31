@@ -25,8 +25,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH     = ROOT_DIR / "data" / "ledgerlink_agent.db"
-CONFIG_PATH = ROOT_DIR / "ledgerlink.config.json"
+DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
+CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
 
 
 # ---------------------------------------------------------------------------

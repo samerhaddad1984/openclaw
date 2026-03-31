@@ -18,7 +18,7 @@ class ClientRegistryEntry:
 
 
 class ClientRegistry:
-    def __init__(self, graph_list: GraphList, site_id: str, list_name: str = "LedgerLink Clients"):
+    def __init__(self, graph_list: GraphList, site_id: str, list_name: str = "OtoCPA Clients"):
         self.graph_list = graph_list
         self.site_id = site_id
         self.list_name = list_name

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-autofix.py — LedgerLink AI self-healing diagnostic & repair script
+autofix.py — OtoCPA self-healing diagnostic & repair script
 ==================================================================
 Checks 10 health conditions in order and auto-fixes where possible.
 
@@ -38,11 +38,11 @@ from pathlib import Path
 # Paths
 # ──────────────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).resolve().parent.parent
-DB_PATH     = ROOT / "data" / "ledgerlink_agent.db"
+DB_PATH     = ROOT / "data" / "otocpa_agent.db"
 BACKUP_DIR  = ROOT / "data" / "backups"
-CONFIG_PATH = ROOT / "ledgerlink.config.json"
+CONFIG_PATH = ROOT / "otocpa.config.json"
 LOGS_DIR    = ROOT / "logs"
-SYS_LOGS    = ROOT / ".ledgerlink_system" / "logs"
+SYS_LOGS    = ROOT / ".otocpa_system" / "logs"
 MIGRATE_PY  = ROOT / "scripts" / "migrate_db.py"
 DASHBOARD_PY= ROOT / "scripts" / "review_dashboard.py"
 DASH_PORT   = 8787
@@ -53,7 +53,7 @@ PORTAL_PORT = 8788
 # ──────────────────────────────────────────────────────────────────────────────
 _STRINGS: dict[str, dict[str, str]] = {
     "en": {
-        "header":           "LedgerLink AI — Self-Healing Diagnostics",
+        "header":           "OtoCPA — Self-Healing Diagnostics",
         "pass":             "PASS ",
         "fail":             "FAIL ",
         "fixed":            "FIXED",
@@ -66,7 +66,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "lbl_sessions":     "4. Orphaned sessions",
         "lbl_locks":        "5. Locked periods blocking edits",
         "lbl_ports":        "6. Port conflicts (8787, 8788)",
-        "lbl_config":       "7. Config file (ledgerlink.config.json)",
+        "lbl_config":       "7. Config file (otocpa.config.json)",
         "lbl_deps":         "8. Python dependencies",
         "lbl_logs":         "9. Recent log errors (last 24 h)",
         "lbl_dashboard":    "10. Dashboard smoke test",
@@ -134,7 +134,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "dash_nostart":     "Could not start dashboard subprocess — check Python path",
         "dash_timeout":     "Dashboard did not start within {sec}s — check for startup errors",
         # inbox folder
-        "inbox_skip":       "Folder watcher not configured in ledgerlink.config.json — skipping",
+        "inbox_skip":       "Folder watcher not configured in otocpa.config.json — skipping",
         "inbox_ok":         "Inbox folder exists and is writable: {path}",
         "inbox_created":    "Inbox folder created: {path}",
         "inbox_not_writable": "Inbox folder exists but is not writable: {path}",
@@ -145,7 +145,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "cf_stopped":         "Cloudflare Tunnel service is stopped — attempting restart...",
         "cf_restarted":       "Cloudflare Tunnel restarted — public URL: {url}",
         "cf_restart_fail":    "Could not restart Cloudflare Tunnel — run: sc start cloudflared",
-        "cf_no_url":          "Tunnel is running but public_portal_url not set in ledgerlink.config.json",
+        "cf_no_url":          "Tunnel is running but public_portal_url not set in otocpa.config.json",
         # license
         "lbl_license":        "13. License check",
         "lic_ok":             "License valid — tier: {tier}, expires: {expiry}",
@@ -164,7 +164,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "divider":          "─" * 72,
     },
     "fr": {
-        "header":           "LedgerLink AI — Diagnostics auto-réparation",
+        "header":           "OtoCPA — Diagnostics auto-réparation",
         "pass":             "OK   ",
         "fail":             "ÉCHEC",
         "fixed":            "RÉPRD",
@@ -177,7 +177,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "lbl_sessions":     "4. Sessions orphelines",
         "lbl_locks":        "5. Périodes verrouillées bloquant les modifications",
         "lbl_ports":        "6. Conflits de port (8787, 8788)",
-        "lbl_config":       "7. Fichier de configuration (ledgerlink.config.json)",
+        "lbl_config":       "7. Fichier de configuration (otocpa.config.json)",
         "lbl_deps":         "8. Dépendances Python",
         "lbl_logs":         "9. Erreurs récentes dans les journaux (dernières 24 h)",
         "lbl_dashboard":    "10. Test de démarrage du tableau de bord",
@@ -256,7 +256,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "cf_stopped":         "Le service Cloudflare Tunnel est arrêté — tentative de redémarrage...",
         "cf_restarted":       "Tunnel Cloudflare redémarré — URL publique : {url}",
         "cf_restart_fail":    "Impossible de redémarrer le tunnel — exécutez : sc start cloudflared",
-        "cf_no_url":          "Tunnel actif mais public_portal_url absent de ledgerlink.config.json",
+        "cf_no_url":          "Tunnel actif mais public_portal_url absent de otocpa.config.json",
         # license
         "lbl_license":        "13. Vérification de la licence",
         "lic_ok":             "Licence valide — forfait : {tier}, expire le : {expiry}",
@@ -956,8 +956,8 @@ _DEFAULT_CONFIG: dict = {
         "smtp_port": 587,
         "smtp_user": "yourfirm@gmail.com",
         "smtp_password": "your-app-password",
-        "from_address": "ledgerlink@yourfirm.com",
-        "from_name": "LedgerLink AI",
+        "from_address": "otocpa@yourfirm.com",
+        "from_name": "OtoCPA",
     },
     "security": {
         "bcrypt_rounds": 12,
@@ -1261,7 +1261,7 @@ def check_inbox_folder() -> None:
 
     if inbox.exists():
         # Check writability via a temp file probe
-        probe = inbox / ".ledgerlink_write_test"
+        probe = inbox / ".otocpa_write_test"
         try:
             probe.write_text("ok", encoding="utf-8")
             probe.unlink()
@@ -1295,7 +1295,7 @@ def _cf_service_running() -> bool:
 
 
 def _cf_public_url() -> str:
-    """Return the public_portal_url from ledgerlink.config.json, or ''."""
+    """Return the public_portal_url from otocpa.config.json, or ''."""
     try:
         cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         return cfg.get("public_portal_url", "")
@@ -1390,9 +1390,9 @@ def check_version() -> None:
             cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             update_url = cfg.get("update_url")
         if not update_url:
-            update_url = "https://releases.ledgerlink.ai/latest/version.json"
+            update_url = "https://releases.otocpa.ai/latest/version.json"
 
-        req = urllib.request.Request(update_url, headers={"User-Agent": "LedgerLink-Autofix/1.0"})
+        req = urllib.request.Request(update_url, headers={"User-Agent": "OtoCPA-Autofix/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             remote_data = json.loads(resp.read().decode("utf-8"))
         remote_ver = remote_data.get("version", "0.0.0")
@@ -1416,7 +1416,7 @@ def main() -> None:
     global _LANG, _USE_COLOR
 
     parser = argparse.ArgumentParser(
-        description="LedgerLink AI — self-healing diagnostic script",
+        description="OtoCPA — self-healing diagnostic script",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

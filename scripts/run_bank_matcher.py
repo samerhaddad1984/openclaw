@@ -13,7 +13,7 @@ from src.agents.core.task_store import TaskStore
 from src.agents.tools.bank_matcher import BankMatcher
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORTS_DIR = ROOT_DIR / "exports"
 SAMPLE_TXNS_PATH = ROOT_DIR / "tests" / "sample_bank_transactions.json"
 

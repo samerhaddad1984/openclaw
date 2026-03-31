@@ -1,7 +1,7 @@
 """
 src/engines/fraud_engine.py
 ===========================
-Layer 1 deterministic fraud detection for LedgerLink.
+Layer 1 deterministic fraud detection for OtoCPA.
 
 No AI calls are made here.  AI is used exclusively to *explain* flagged
 items in the UI — detection itself is 100% rule-based and deterministic.
@@ -47,7 +47,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # ---------------------------------------------------------------------------
 # Severity constants
@@ -982,6 +982,213 @@ def _rule_payee_invoice_mismatch(
 
 
 # ---------------------------------------------------------------------------
+# Rule 14: Near-duplicate invoice numbers (OCR-resilient)
+# ---------------------------------------------------------------------------
+
+def _normalize_invoice_number(raw: str) -> str:
+    """OCR-resilient invoice number normalization.
+
+    O→0, I/l→1, S→5, strip hyphens/spaces, uppercase.
+    """
+    if not raw:
+        return ""
+    s = str(raw).strip().upper()
+    s = s.replace("O", "0").replace("I", "1").replace("L", "1").replace("S", "5")
+    s = s.replace("-", "").replace(" ", "")
+    return s
+
+
+def _rule_near_duplicate_invoice_number(
+    conn: sqlite3.Connection,
+    document_id: str,
+    vendor: str,
+    client_code: str,
+    invoice_number: str,
+    doc_date: date,
+) -> dict[str, Any] | None:
+    """Flag when a different document has an invoice number that normalizes
+    to the same value (catches OCR confusables like INV-001 vs INV-0O1)."""
+    if not invoice_number:
+        return None
+    norm = _normalize_invoice_number(invoice_number)
+    if not norm:
+        return None
+    # Check for invoice_number or invoice_number_normalized columns
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(documents)").fetchall()}
+    if "invoice_number" not in cols:
+        return None
+    window_start = (doc_date - timedelta(days=365)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT document_id, invoice_number, vendor
+          FROM documents
+         WHERE LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
+           AND document_id != ?
+           AND invoice_number IS NOT NULL
+           AND invoice_number != ''
+           AND document_date >= ?
+         LIMIT 200
+        """,
+        (client_code, document_id, window_start),
+    ).fetchall()
+    for r in rows:
+        other_inv = str(r["invoice_number"] or "")
+        if not other_inv:
+            continue
+        other_norm = _normalize_invoice_number(other_inv)
+        if other_norm == norm and other_inv != invoice_number:
+            return {
+                "rule":     "near_duplicate_invoice_number",
+                "severity": HIGH,
+                "i18n_key": "fraud_near_duplicate_invoice_number",
+                "params": {
+                    "invoice_number": invoice_number,
+                    "other_invoice":  other_inv,
+                    "other_doc_id":   str(r["document_id"]),
+                    "normalized":     norm,
+                },
+            }
+        # Also flag exact same invoice number from same vendor
+        if other_norm == norm and other_inv == invoice_number:
+            other_vendor = _normalize_vendor_key(str(r["vendor"] or ""))
+            this_vendor = _normalize_vendor_key(vendor)
+            if this_vendor and other_vendor and this_vendor == other_vendor:
+                return {
+                    "rule":     "near_duplicate_invoice_number",
+                    "severity": HIGH,
+                    "i18n_key": "fraud_near_duplicate_invoice_number",
+                    "params": {
+                        "invoice_number": invoice_number,
+                        "other_invoice":  other_inv,
+                        "other_doc_id":   str(r["document_id"]),
+                        "normalized":     norm,
+                    },
+                }
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Rule 15: Multi-channel duplicate (same invoice via email + WhatsApp + portal)
+# ---------------------------------------------------------------------------
+
+def _rule_multi_channel_duplicate(
+    conn: sqlite3.Connection,
+    document_id: str,
+    vendor: str,
+    client_code: str,
+    amount: float,
+    invoice_number: str,
+) -> dict[str, Any] | None:
+    """Flag when the same invoice (vendor + amount + invoice_number) appears
+    in multiple documents — likely submitted through different channels."""
+    if not invoice_number or not vendor:
+        return None
+    norm_inv = _normalize_invoice_number(invoice_number)
+    if not norm_inv:
+        return None
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(documents)").fetchall()}
+    if "invoice_number" not in cols:
+        return None
+    rows = conn.execute(
+        """
+        SELECT document_id, vendor, amount, invoice_number
+          FROM documents
+         WHERE LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
+           AND document_id != ?
+           AND invoice_number IS NOT NULL
+           AND invoice_number != ''
+         LIMIT 500
+        """,
+        (client_code, document_id),
+    ).fetchall()
+    matches = []
+    vendor_norm = _normalize_vendor_key(vendor)
+    for r in rows:
+        r_vendor_norm = _normalize_vendor_key(str(r["vendor"] or ""))
+        r_inv_norm = _normalize_invoice_number(str(r["invoice_number"] or ""))
+        r_amount = _safe_float(r["amount"])
+        if (r_inv_norm == norm_inv
+                and r_vendor_norm == vendor_norm
+                and r_amount is not None
+                and abs(r_amount - amount) < 0.01):
+            matches.append(str(r["document_id"]))
+    if matches:
+        return {
+            "rule":     "multi_channel_duplicate",
+            "severity": HIGH,
+            "i18n_key": "fraud_multi_channel_duplicate",
+            "params": {
+                "vendor":         vendor,
+                "invoice_number": invoice_number,
+                "duplicates":     ", ".join(matches[:5]),
+                "count":          str(len(matches)),
+            },
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Rule 16: Credit note loop (credit → re-invoice → credit cycle)
+# ---------------------------------------------------------------------------
+
+def _rule_credit_note_loop(
+    conn: sqlite3.Connection,
+    vendor: str,
+    client_code: str,
+    abs_amount: float,
+    doc_date: date,
+    exclude_doc_id: str,
+) -> dict[str, Any] | None:
+    """Detect credit-note / re-invoice cycles: same vendor issues credit note
+    and then a new invoice for a similar amount within 60 days, repeated.
+
+    A single credit+re-invoice is normal. Three or more cycles = suspicious loop.
+    """
+    if not vendor:
+        return None
+    window_start = (doc_date - timedelta(days=180)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT document_id, amount, document_date, doc_type
+          FROM documents
+         WHERE LOWER(TRIM(COALESCE(vendor, ''))) = LOWER(TRIM(?))
+           AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
+           AND document_date >= ?
+           AND document_id != ?
+         ORDER BY document_date ASC
+         LIMIT 200
+        """,
+        (vendor, client_code, window_start, exclude_doc_id),
+    ).fetchall()
+    credit_count = 0
+    reinvoice_count = 0
+    for r in rows:
+        r_amount = _safe_float(r["amount"])
+        r_type = str(r["doc_type"] if "doc_type" in r.keys() else "").lower()
+        if r_amount is None:
+            continue
+        is_credit = r_amount < 0 or r_type == "credit_note"
+        if is_credit and abs(abs(r_amount) - abs_amount) < (abs_amount * 0.10 + 0.01):
+            credit_count += 1
+        elif not is_credit and abs(r_amount - abs_amount) < (abs_amount * 0.10 + 0.01):
+            reinvoice_count += 1
+    # 3+ credit notes with similar amount from same vendor = loop
+    if credit_count >= 2 and reinvoice_count >= 2:
+        return {
+            "rule":     "credit_note_loop",
+            "severity": HIGH,
+            "i18n_key": "fraud_credit_note_loop",
+            "params": {
+                "vendor":          vendor,
+                "credit_count":    str(credit_count),
+                "reinvoice_count": str(reinvoice_count),
+                "amount":          f"${abs_amount:,.2f}",
+            },
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Main detection function
 # ---------------------------------------------------------------------------
 
@@ -1027,6 +1234,16 @@ def run_fraud_detection(
     doc_type    = str(doc.get("doc_type") or "").strip().lower()
     is_credit   = amount < 0 or doc_type == "credit_note"
     abs_amount  = abs(amount)
+
+    # Extract invoice number from doc or raw_result
+    invoice_number = str(doc.get("invoice_number") or "").strip()
+    if not invoice_number and raw_json:
+        try:
+            _raw = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+            if isinstance(_raw, dict):
+                invoice_number = str(_raw.get("invoice_number") or "").strip()
+        except Exception:
+            pass
 
     flags: list[dict[str, Any]] = []
 
@@ -1094,6 +1311,27 @@ def run_fraud_detection(
                 flag = _rule_payee_invoice_mismatch(conn, document_id, vendor)
                 if flag:
                     flags.append(flag)
+
+            # Rule 14: Near-duplicate invoice numbers
+            if invoice_number:
+                flag = _rule_near_duplicate_invoice_number(
+                    conn, document_id, vendor, client_code, invoice_number, doc_date)
+                if flag:
+                    flags.append(flag)
+
+            # Rule 15: Multi-channel duplicate
+            if invoice_number and vendor:
+                flag = _rule_multi_channel_duplicate(
+                    conn, document_id, vendor, client_code, amount, invoice_number)
+                if flag:
+                    flags.append(flag)
+
+            # Rule 16: Credit note loop (check even on positive invoices)
+            if vendor:
+                flag = _rule_credit_note_loop(
+                    conn, vendor, client_code, abs_amount, doc_date, document_id)
+                if flag:
+                    flags.append(flag)
         else:
             # --- Credit note rules ---
             # Rule CN-1: Duplicate credit note (same vendor + same amount within 30 days)
@@ -1137,6 +1375,13 @@ def run_fraud_detection(
             # BLOCK 5: Apply vendor amount anomaly to credit notes (using abs amount)
             if vendor:
                 flag = _rule_vendor_amount_anomaly(abs_amount, history, fuzzy_history=fuzzy_history)
+                if flag:
+                    flags.append(flag)
+
+            # Rule 16: Credit note loop
+            if vendor:
+                flag = _rule_credit_note_loop(
+                    conn, vendor, client_code, abs_amount, doc_date, document_id)
                 if flag:
                     flags.append(flag)
 

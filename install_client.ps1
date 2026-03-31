@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "C:\LedgerLinkAI",
+    [string]$InstallRoot = "C:\OtoCPA",
     [string]$PythonCommand = "python",
     [switch]$SkipVenv,
     [switch]$SkipDependencies,
@@ -109,7 +109,7 @@ function Write-ConfigTemplate {
 
     $json = @"
 {
-  "app_name": "LedgerLink AI",
+  "app_name": "OtoCPA",
   "environment": "sandbox",
   "client_name": "CHANGE_ME",
   "company_code": "CHANGE_ME",
@@ -207,7 +207,7 @@ function Create-DesktopShortcut {
     $shortcut.Save()
 }
 
-Write-Step "LedgerLink AI Client Installer Started"
+Write-Step "OtoCPA Client Installer Started"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -247,10 +247,10 @@ if (Test-Path (Join-Path $ProjectRoot "tests")) {
     Copy-Directory-Contents -SourceDir (Join-Path $ProjectRoot "tests") -DestinationDir (Join-Path $InstallRoot "tests")
 }
 
-if (Test-Path (Join-Path $ProjectRoot "data\ledgerlink_agent.db")) {
+if (Test-Path (Join-Path $ProjectRoot "data\otocpa_agent.db")) {
     Copy-Item `
-        -Path (Join-Path $ProjectRoot "data\ledgerlink_agent.db") `
-        -Destination (Join-Path $InstallRoot "data\ledgerlink_agent.db") `
+        -Path (Join-Path $ProjectRoot "data\otocpa_agent.db") `
+        -Destination (Join-Path $InstallRoot "data\otocpa_agent.db") `
         -Force
 }
 
@@ -303,9 +303,9 @@ else {
 if (-not $SkipDesktopShortcut) {
     Write-Step "Creating desktop shortcuts"
 
-    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_dashboard.bat") -ShortcutName "LedgerLink Dashboard.lnk"
-    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_queue.bat") -ShortcutName "LedgerLink Queue.lnk"
-    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_doctor.bat") -ShortcutName "LedgerLink Doctor.lnk"
+    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_dashboard.bat") -ShortcutName "OtoCPA Dashboard.lnk"
+    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_queue.bat") -ShortcutName "OtoCPA Queue.lnk"
+    Create-DesktopShortcut -TargetPath (Join-Path $InstallRoot "run_doctor.bat") -ShortcutName "OtoCPA Doctor.lnk"
 }
 
 Write-Step "Verifying install structure"
@@ -314,7 +314,7 @@ $mustExist = @(
     (Join-Path $InstallRoot "src\agents\core"),
     (Join-Path $InstallRoot "scripts\review_dashboard.py"),
     (Join-Path $InstallRoot "scripts\run_openclaw_queue.py"),
-    (Join-Path $InstallRoot "data\ledgerlink_agent.db"),
+    (Join-Path $InstallRoot "data\otocpa_agent.db"),
     (Join-Path $InstallRoot ".venv\Scripts\python.exe")
 )
 

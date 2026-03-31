@@ -1,8 +1,8 @@
-# LedgerLink AI --- System Administrator Guide
+# OtoCPA --- System Administrator Guide
 
 **Version:** 1.0
 **Last updated:** 2026-03-25
-**Support:** support@ledgerlink.ca
+**Support:** support@otocpa.com
 
 ---
 
@@ -39,9 +39,9 @@
 Additional Windows notes:
 
 - Administrator privileges are required for installation (the bootstrap installer checks via `IsUserAnAdmin()`).
-- The installer registers LedgerLink as a Windows Service named `LedgerLinkAI` that starts automatically on boot.
+- The installer registers OtoCPA as a Windows Service named `OtoCPA` that starts automatically on boot.
 - .NET Framework 4.7+ is recommended for NSSM service wrapper support.
-- Antivirus software may need an exclusion for `C:\Program Files\LedgerLink\`.
+- Antivirus software may need an exclusion for `C:\Program Files\OtoCPA\`.
 
 ### Mac / Apple Requirements
 
@@ -98,23 +98,23 @@ python bootstrap_install.py --license-key LLAI-XXXX-YOUR-KEY-HERE --firm-name "Y
 |---|---|---|---|
 | `--license-key` | Yes | --- | Your license key (starts with `LLAI-`) |
 | `--firm-name` | Yes | --- | Your firm or cabinet name |
-| `--release-url` | No | `https://releases.ledgerlink.ai/latest/ledgerlink-latest.zip` | URL to download the release archive |
-| `--install-dir` | No | `C:\Program Files\LedgerLink` | Installation directory |
+| `--release-url` | No | `https://releases.otocpa.ai/latest/otocpa-latest.zip` | URL to download the release archive |
+| `--install-dir` | No | `C:\Program Files\OtoCPA` | Installation directory |
 | `--skip-python` | No | Off | Skip Python installation check |
 
 The installer performs these steps automatically:
 
 1. Checks/installs Python 3.11+
 2. Verifies pip is available
-3. Downloads the latest LedgerLink release archive
+3. Downloads the latest OtoCPA release archive
 4. Installs Python dependencies from `requirements.txt`
 5. Initializes the database via `migrate_db.py`
-6. Saves the license key and firm name to `ledgerlink.config.json`
-7. Registers the `LedgerLinkAI` Windows Service (auto-start)
+6. Saves the license key and firm name to `otocpa.config.json`
+7. Registers the `OtoCPA` Windows Service (auto-start)
 8. Creates desktop shortcuts (Dashboard + Setup Wizard)
 9. Opens the setup wizard in your default browser
 
-**Installation log:** All output is logged to `C:\LedgerLink\install.log`. If the installation fails, check this file for details.
+**Installation log:** All output is logged to `C:\OtoCPA\install.log`. If the installation fails, check this file for details.
 
 ### Step 3: Setup Wizard Walkthrough
 
@@ -175,14 +175,14 @@ The wizard confirms setup is complete and provides a link to the dashboard.
 
 ### Step 4: Configure API Keys
 
-LedgerLink uses two AI providers:
+OtoCPA uses two AI providers:
 
 **DeepSeek (routine provider --- recommended for cost efficiency):**
 
 1. Go to `https://platform.deepseek.com/` and create an account.
 2. Navigate to API Keys and generate a new key.
 3. Copy the key (starts with `sk-`).
-4. Enter it in the setup wizard Step 2, or edit `ledgerlink.config.json`:
+4. Enter it in the setup wizard Step 2, or edit `otocpa.config.json`:
 
 ```json
 {
@@ -202,7 +202,7 @@ LedgerLink uses two AI providers:
 1. Go to `https://console.anthropic.com/` and create an account.
 2. Navigate to API Keys and generate a new key.
 3. Copy the key (starts with `sk-ant-`).
-4. Enter it in the setup wizard Step 2, or add to `ledgerlink.config.json`:
+4. Enter it in the setup wizard Step 2, or add to `otocpa.config.json`:
 
 ```json
 {
@@ -251,7 +251,7 @@ To generate a Gmail App Password: Google Account > Security > 2-Step Verificatio
 Cloudflare Tunnel provides secure remote access to the client portal (port 8788) without opening firewall ports.
 
 1. Open a **Command Prompt as Administrator**.
-2. Navigate to the LedgerLink installation directory.
+2. Navigate to the OtoCPA installation directory.
 3. Run the Cloudflare setup wizard:
 
 ```
@@ -262,11 +262,11 @@ The wizard performs 7 steps:
 
 1. **Downloads `cloudflared.exe`** from the official Cloudflare release URL to the `cloudflare/` folder.
 2. **Authenticates with Cloudflare** --- opens your browser to sign in to your Cloudflare account and authorize the certificate.
-3. **Creates a tunnel** named `ledgerlink` (or reuses an existing one).
+3. **Creates a tunnel** named `otocpa` (or reuses an existing one).
 4. **Writes the tunnel configuration** (`cloudflare/config.yml`) pointing to `localhost:8788`.
 5. **Sets up DNS routing** --- prompts you for a public hostname (e.g., `portal.yourfirm.com`). You must have a domain in your Cloudflare account.
 6. **Registers `cloudflared` as a Windows Service** with auto-start.
-7. **Saves the public URL** to `ledgerlink.config.json` as `public_portal_url`.
+7. **Saves the public URL** to `otocpa.config.json` as `public_portal_url`.
 
 **Optional flag:** If you have already authenticated with Cloudflare, use `--skip-login`:
 
@@ -339,7 +339,7 @@ Provide the client with:
 3. **License key** (if not already activated)
 4. **Instructions to change their password** on first login
 5. **Access instructions PDF** (download from the setup wizard Step 6 "Complete" page)
-6. **Support contact:** support@ledgerlink.ca
+6. **Support contact:** support@otocpa.com
 
 ---
 
@@ -369,13 +369,13 @@ python3 --version
 
 Expected output: `Python 3.12.x`
 
-### Step 3: Clone or Download LedgerLink
+### Step 3: Clone or Download OtoCPA
 
 **Option A --- Git clone:**
 
 ```bash
-git clone https://your-repo-url/LedgerLinkAi.git
-cd LedgerLinkAi
+git clone https://your-repo-url/OtoCPAAi.git
+cd OtoCPAAi
 ```
 
 **Option B --- Download archive:**
@@ -383,8 +383,8 @@ cd LedgerLinkAi
 Download the release ZIP from the release server, then:
 
 ```bash
-unzip ledgerlink-latest.zip -d ~/LedgerLink
-cd ~/LedgerLink
+unzip otocpa-latest.zip -d ~/OtoCPA
+cd ~/OtoCPA
 ```
 
 ### Step 4: Install Dependencies with pip
@@ -400,7 +400,7 @@ python3 -m pip install -r requirements.txt
 python3 scripts/migrate_db.py
 ```
 
-This creates and initializes the SQLite database at `data/ledgerlink_agent.db`.
+This creates and initializes the SQLite database at `data/otocpa_agent.db`.
 
 ### Step 6: Start the Dashboard Manually
 
@@ -420,32 +420,32 @@ nohup python3 scripts/review_dashboard.py > logs/dashboard.log 2>&1 &
 
 ### Step 7: Set Up launchd for Auto-Start on Mac
 
-Create a launchd plist file to start LedgerLink automatically on boot:
+Create a launchd plist file to start OtoCPA automatically on boot:
 
 ```bash
-cat > ~/Library/LaunchAgents/com.ledgerlink.dashboard.plist << 'EOF'
+cat > ~/Library/LaunchAgents/com.otocpa.dashboard.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ledgerlink.dashboard</string>
+    <string>com.otocpa.dashboard</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/python3</string>
-        <string>/Users/YOUR_USERNAME/LedgerLink/scripts/review_dashboard.py</string>
+        <string>/Users/YOUR_USERNAME/OtoCPA/scripts/review_dashboard.py</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/YOUR_USERNAME/LedgerLink</string>
+    <string>/Users/YOUR_USERNAME/OtoCPA</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/YOUR_USERNAME/LedgerLink/logs/dashboard.log</string>
+    <string>/Users/YOUR_USERNAME/OtoCPA/logs/dashboard.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOUR_USERNAME/LedgerLink/logs/dashboard_error.log</string>
+    <string>/Users/YOUR_USERNAME/OtoCPA/logs/dashboard_error.log</string>
 </dict>
 </plist>
 EOF
@@ -454,19 +454,19 @@ EOF
 Replace `YOUR_USERNAME` with your macOS username. Then load it:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.ledgerlink.dashboard.plist
+launchctl load ~/Library/LaunchAgents/com.otocpa.dashboard.plist
 ```
 
 To verify it is running:
 
 ```bash
-launchctl list | grep ledgerlink
+launchctl list | grep otocpa
 ```
 
 To stop:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.ledgerlink.dashboard.plist
+launchctl unload ~/Library/LaunchAgents/com.otocpa.dashboard.plist
 ```
 
 ### Step 8: Configure Cloudflare Tunnel on Mac
@@ -486,7 +486,7 @@ cloudflared login
 3. Create a tunnel:
 
 ```bash
-cloudflared tunnel create ledgerlink
+cloudflared tunnel create otocpa
 ```
 
 4. Create the config file at `~/.cloudflared/config.yml`:
@@ -504,7 +504,7 @@ ingress:
 5. Route DNS:
 
 ```bash
-cloudflared tunnel route dns ledgerlink portal.yourfirm.com
+cloudflared tunnel route dns otocpa portal.yourfirm.com
 ```
 
 6. Install as a service:
@@ -542,7 +542,7 @@ Complete the same remaining steps as Windows:
 
 ### How to Generate a New License Key
 
-Run the following command from the LedgerLink installation directory:
+Run the following command from the OtoCPA installation directory:
 
 ```
 python scripts/generate_license.py --tier professionnel --firm "Tremblay CPA" --months 12
@@ -561,19 +561,19 @@ python scripts/generate_license.py --tier professionnel --firm "Tremblay CPA" --
 
 **Where to find your signing secret:**
 
-The signing secret is stored as `LEDGERLINK_SIGNING_SECRET` in your `.env` file at the root of the LedgerLink installation. Example `.env` content:
+The signing secret is stored as `OTOCPA_SIGNING_SECRET` in your `.env` file at the root of the OtoCPA installation. Example `.env` content:
 
 ```
-LEDGERLINK_SIGNING_SECRET=your-long-random-secret-string-here
+OTOCPA_SIGNING_SECRET=your-long-random-secret-string-here
 ```
 
-If neither `.env` nor the `LEDGERLINK_SIGNING_SECRET` environment variable is set, you must pass `--secret` on the command line. Without a secret, the script will exit with an error.
+If neither `.env` nor the `OTOCPA_SIGNING_SECRET` environment variable is set, you must pass `--secret` on the command line. Without a secret, the script will exit with an error.
 
 **Example output:**
 
 ```
 ------------------------------------------------------------------------
-  LedgerLink License Key
+  OtoCPA License Key
 ------------------------------------------------------------------------
   Firm        : Tremblay CPA
   Tier        : professionnel
@@ -661,7 +661,7 @@ python scripts/generate_license.py --tier professionnel --firm "Tremblay CPA" --
 ```
 
 2. The old key continues to work until the new one is activated.
-3. Once the client activates the new key, it replaces the old one in `ledgerlink.config.json`.
+3. Once the client activates the new key, it replaces the old one in `otocpa.config.json`.
 4. Only one key is active at a time per installation.
 
 ---
@@ -675,7 +675,7 @@ python scripts/generate_license.py --tier professionnel --firm "Tremblay CPA" --
    - Or visit `/troubleshoot` in their local dashboard.
 
 2. **Get their public URL:**
-   - The public URL is stored in `ledgerlink.config.json` as `public_portal_url`.
+   - The public URL is stored in `otocpa.config.json` as `public_portal_url`.
    - The client can find it on the `/troubleshoot` page.
    - Example: `https://portal.tremblycpa.com`
 
@@ -717,9 +717,9 @@ python scripts/autofix.py --lang en
 
 **Dashboard not loading:**
 
-1. Check if the Windows Service is running: `sc query LedgerLinkAI`
-2. If stopped, start it: `sc start LedgerLinkAI`
-3. If it won't start, check the log: `C:\LedgerLink\install.log`
+1. Check if the Windows Service is running: `sc query OtoCPA`
+2. If stopped, start it: `sc start OtoCPA`
+3. If it won't start, check the log: `C:\OtoCPA\install.log`
 4. Run autofix: `python scripts/autofix.py --lang en`
 5. Check if port 8787 is in use by another process (autofix check #6 handles this)
 
@@ -744,7 +744,7 @@ python scripts/set_password.py
 
 **Email not sending:**
 
-1. Verify SMTP configuration in `ledgerlink.config.json`.
+1. Verify SMTP configuration in `otocpa.config.json`.
 2. For Gmail: ensure you are using an App Password, not your regular password.
 3. For Outlook: ensure your account allows SMTP relay.
 4. Check spam/junk folders on the receiving end.
@@ -764,7 +764,7 @@ python scripts/set_password.py
 1. Run a PRAGMA integrity check:
 
 ```
-python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); print(conn.execute('PRAGMA integrity_check').fetchone())"
+python -c "import sqlite3; conn=sqlite3.connect('data/otocpa_agent.db'); print(conn.execute('PRAGMA integrity_check').fetchone())"
 ```
 
 2. If the result is not `('ok',)`, restore from backup (see Section 6).
@@ -772,7 +772,7 @@ python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); pri
 
 **QuickBooks connection failed:**
 
-1. Check that QBO credentials are configured in `ledgerlink.config.json`.
+1. Check that QBO credentials are configured in `otocpa.config.json`.
 2. Re-authorize the QBO connection via the dashboard `/admin` settings.
 3. Verify the QBO API key has not expired.
 4. Check Intuit's service status for outages.
@@ -791,9 +791,9 @@ python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); pri
 ### Automatic Backup
 
 - **Location:** `data/backups/`
-- **Naming convention:** `ledgerlink_agent_YYYYMMDD_HHMMSS.db`
-- **Trigger:** Backups are created automatically before every update (by `update_ledgerlink.py`).
-- **Application backups:** `data/backups/app_backup_YYYYMMDD_HHMMSS/` (contains `scripts/`, `src/`, `version.json`, and `ledgerlink.config.json`).
+- **Naming convention:** `otocpa_agent_YYYYMMDD_HHMMSS.db`
+- **Trigger:** Backups are created automatically before every update (by `update_otocpa.py`).
+- **Application backups:** `data/backups/app_backup_YYYYMMDD_HHMMSS/` (contains `scripts/`, `src/`, `version.json`, and `otocpa.config.json`).
 
 ### How to Trigger a Manual Backup
 
@@ -801,18 +801,18 @@ python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); pri
 
 1. Navigate to `/troubleshoot`.
 2. Click **"Download DB Backup"**.
-3. The browser downloads a copy of `ledgerlink_agent.db`.
+3. The browser downloads a copy of `otocpa_agent.db`.
 
 **From the command line:**
 
 ```
-copy data\ledgerlink_agent.db data\backups\ledgerlink_agent_manual_%date:~-4%%date:~4,2%%date:~7,2%.db
+copy data\otocpa_agent.db data\backups\otocpa_agent_manual_%date:~-4%%date:~4,2%%date:~7,2%.db
 ```
 
 On Mac/Linux:
 
 ```bash
-cp data/ledgerlink_agent.db "data/backups/ledgerlink_agent_manual_$(date +%Y%m%d_%H%M%S).db"
+cp data/otocpa_agent.db "data/backups/otocpa_agent_manual_$(date +%Y%m%d_%H%M%S).db"
 ```
 
 ### How to Restore from Backup
@@ -820,7 +820,7 @@ cp data/ledgerlink_agent.db "data/backups/ledgerlink_agent_manual_$(date +%Y%m%d
 **Step 1: Stop the Windows Service**
 
 ```
-sc stop LedgerLinkAI
+sc stop OtoCPA
 ```
 
 Wait a few seconds for the service to stop completely.
@@ -828,7 +828,7 @@ Wait a few seconds for the service to stop completely.
 **Step 2: Copy the backup file**
 
 ```
-copy data\backups\ledgerlink_agent_20260325_143000.db data\ledgerlink_agent.db
+copy data\backups\otocpa_agent_20260325_143000.db data\otocpa_agent.db
 ```
 
 Replace the filename with the backup you want to restore.
@@ -844,7 +844,7 @@ This ensures the restored database has all the latest schema changes.
 **Step 4: Start the Windows Service**
 
 ```
-sc start LedgerLinkAI
+sc start OtoCPA
 ```
 
 **Step 5: Verify data is intact**
@@ -864,13 +864,13 @@ sc start LedgerLinkAI
 Copy the `data/backups/` folder to an external drive, network share, or cloud storage:
 
 ```
-xcopy /E /Y data\backups\ E:\LedgerLink_Backups\
+xcopy /E /Y data\backups\ E:\OtoCPA_Backups\
 ```
 
 On Mac/Linux:
 
 ```bash
-rsync -av data/backups/ /Volumes/ExternalDrive/LedgerLink_Backups/
+rsync -av data/backups/ /Volumes/ExternalDrive/OtoCPA_Backups/
 ```
 
 Schedule this with Windows Task Scheduler or a cron job for automated offsite backups.
@@ -888,23 +888,23 @@ Navigate to `/admin/updates`. The page shows the installed version and checks th
 **From the command line:**
 
 ```
-python scripts/update_ledgerlink.py --check
+python scripts/update_otocpa.py --check
 ```
 
 Output example:
 
 ```
-LedgerLink Update Check
+OtoCPA Update Check
 ==================================================
   Installed version : 1.2.0
   Release date      : 2026-03-01
-  Update server     : https://releases.ledgerlink.ai/latest/version.json
+  Update server     : https://releases.otocpa.ai/latest/version.json
 
   UPDATE AVAILABLE: 1.2.0 -> 1.3.0
   Release date : 2026-03-20
   Changelog    : Bug fixes and performance improvements
 
-  Run: python update_ledgerlink.py --install
+  Run: python update_otocpa.py --install
 ```
 
 ### How to Install an Update Remotely
@@ -913,7 +913,7 @@ LedgerLink Update Check
 2. Navigate to `/admin/updates`.
 3. Click **"Install Update"** button.
 4. The update process runs automatically:
-   - Stops the LedgerLinkAI service
+   - Stops the OtoCPA service
    - Creates database and application backups
    - Downloads the update package
    - Applies the update files
@@ -927,17 +927,17 @@ LedgerLink Update Check
 **Step 1: Check for available updates**
 
 ```
-python scripts/update_ledgerlink.py --check
+python scripts/update_otocpa.py --check
 ```
 
 **Step 2: Install the update**
 
 ```
-python scripts/update_ledgerlink.py --install
+python scripts/update_otocpa.py --install
 ```
 
 This command:
-- Stops the LedgerLinkAI Windows Service
+- Stops the OtoCPA Windows Service
 - Backs up the database and application files
 - Downloads and extracts the update
 - Runs `migrate_db.py`
@@ -954,18 +954,18 @@ python -c "import json; print(json.load(open('version.json'))['version'])"
 
 ### What to Do If an Update Fails
 
-1. **Check the install log:** `C:\LedgerLink\install.log`
+1. **Check the install log:** `C:\OtoCPA\install.log`
 2. **The update system auto-rolls back** if migrations fail or the dashboard does not respond after the update.
 3. **To manually roll back:**
 
 ```
-python scripts/update_ledgerlink.py --rollback
+python scripts/update_otocpa.py --rollback
 ```
 
 This restores the most recent application and database backups.
 
 4. If rollback also fails, manually restore from backup (see Section 6).
-5. **Contact support** with the error message from the install log: support@ledgerlink.ca
+5. **Contact support** with the error message from the install log: support@otocpa.com
 
 ---
 
@@ -1033,7 +1033,7 @@ Follow the prompts to set a new password.
 
 **Step 4: Contact support**
 
-Email support@ledgerlink.ca with:
+Email support@otocpa.com with:
 - Time of suspected breach
 - What was observed
 - Audit log export (if available)
@@ -1043,12 +1043,12 @@ Email support@ledgerlink.ca with:
 1. Generate new API keys from your AI providers:
    - **DeepSeek:** `https://platform.deepseek.com/` > API Keys
    - **Anthropic:** `https://console.anthropic.com/` > API Keys
-2. Update `ledgerlink.config.json` with the new keys in the `ai_router` section.
+2. Update `otocpa.config.json` with the new keys in the `ai_router` section.
 3. Restart the Windows Service:
 
 ```
-sc stop LedgerLinkAI
-sc start LedgerLinkAI
+sc stop OtoCPA
+sc start OtoCPA
 ```
 
 4. Verify AI extraction still works by uploading a test document.
@@ -1066,24 +1066,24 @@ sc start LedgerLinkAI
 2. If the database is very large (> 500 MB), run VACUUM to reclaim space:
 
 ```
-python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); conn.execute('VACUUM'); conn.close()"
+python -c "import sqlite3; conn=sqlite3.connect('data/otocpa_agent.db'); conn.execute('VACUUM'); conn.close()"
 ```
 
 This can take several minutes for large databases. Stop the service first to avoid lock conflicts:
 
 ```
-sc stop LedgerLinkAI
-python -c "import sqlite3; conn=sqlite3.connect('data/ledgerlink_agent.db'); conn.execute('VACUUM'); conn.close()"
-sc start LedgerLinkAI
+sc stop OtoCPA
+python -c "import sqlite3; conn=sqlite3.connect('data/otocpa_agent.db'); conn.execute('VACUUM'); conn.close()"
+sc start OtoCPA
 ```
 
 **Check disk space:**
 
-Ensure at least 5 GB of free space on the drive containing `data/ledgerlink_agent.db`. Full disks cause severe performance degradation with SQLite.
+Ensure at least 5 GB of free space on the drive containing `data/otocpa_agent.db`. Full disks cause severe performance degradation with SQLite.
 
 **Check RAM usage:**
 
-Open Task Manager (Ctrl+Shift+Esc) and check if the system is running low on memory. LedgerLink typically uses 200--500 MB of RAM. If the system has only 4 GB total, consider upgrading to 8 GB.
+Open Task Manager (Ctrl+Shift+Esc) and check if the system is running low on memory. OtoCPA typically uses 200--500 MB of RAM. If the system has only 4 GB total, consider upgrading to 8 GB.
 
 ### Tests Taking Too Long
 
@@ -1099,7 +1099,7 @@ python -m pytest tests/ -q --ignore=tests/test_generate_test_data.py --ignore=te
 
 ### "Port 8787 is already in use" / "Port 8788 is already in use"
 
-**Cause:** Another process is using the port that LedgerLink needs.
+**Cause:** Another process is using the port that OtoCPA needs.
 
 **Fix:**
 
@@ -1116,7 +1116,7 @@ netstat -ano | findstr :8787
 tasklist /FI "PID eq 12345"
 ```
 
-4. Stop the conflicting process, or change LedgerLink's port in the dashboard script.
+4. Stop the conflicting process, or change OtoCPA's port in the dashboard script.
 5. Alternatively, run autofix which can detect and offer to kill conflicting processes:
 
 ```
@@ -1129,10 +1129,10 @@ python scripts/autofix.py --lang en
 
 **Fix:**
 
-1. Stop all LedgerLink processes:
+1. Stop all OtoCPA processes:
 
 ```
-sc stop LedgerLinkAI
+sc stop OtoCPA
 ```
 
 2. Check for any remaining Python processes:
@@ -1141,18 +1141,18 @@ sc stop LedgerLinkAI
 tasklist | findstr python
 ```
 
-3. Kill any stale Python processes related to LedgerLink.
+3. Kill any stale Python processes related to OtoCPA.
 4. Delete any `-journal` or `-wal` files next to the database (only if the service is fully stopped):
 
 ```
-del data\ledgerlink_agent.db-journal
-del data\ledgerlink_agent.db-wal
+del data\otocpa_agent.db-journal
+del data\otocpa_agent.db-wal
 ```
 
 5. Restart the service:
 
 ```
-sc start LedgerLinkAI
+sc start OtoCPA
 ```
 
 ### "API key invalid" / "Invalid API key"
@@ -1161,12 +1161,12 @@ sc start LedgerLinkAI
 
 **Fix:**
 
-1. Verify the API key in `ledgerlink.config.json` under the `ai_router` section.
+1. Verify the API key in `otocpa.config.json` under the `ai_router` section.
 2. Log in to the provider's dashboard and verify the key is active:
    - DeepSeek: `https://platform.deepseek.com/`
    - Anthropic: `https://console.anthropic.com/`
 3. Check that the key has available credits/balance.
-4. If the key was rotated, update `ledgerlink.config.json` and restart the service.
+4. If the key was rotated, update `otocpa.config.json` and restart the service.
 
 ### "SMTP authentication failed"
 
@@ -1174,7 +1174,7 @@ sc start LedgerLinkAI
 
 **Fix:**
 
-1. Verify SMTP settings in `ledgerlink.config.json`.
+1. Verify SMTP settings in `otocpa.config.json`.
 2. For Gmail: you must use an **App Password**, not your regular Google password. Enable 2-Step Verification first, then generate an App Password.
 3. For Outlook/M365: check if your organization requires OAuth instead of basic auth.
 4. Test the credentials by sending a test email from the setup wizard or `/admin` settings.
@@ -1221,7 +1221,7 @@ type cloudflare\cloudflared.log
 
 ### "Disk full" / "No space left on device"
 
-**Cause:** The drive containing LedgerLink has run out of free space.
+**Cause:** The drive containing OtoCPA has run out of free space.
 
 **Fix:**
 
@@ -1231,7 +1231,7 @@ type cloudflare\cloudflared.log
    - Run VACUUM on the database (see Section 9)
    - Delete temporary files from `%TEMP%`
    - Move the `exports/` folder to an external drive
-3. Consider moving LedgerLink to a larger drive.
+3. Consider moving OtoCPA to a larger drive.
 
 ### "Python version too old"
 
@@ -1242,7 +1242,7 @@ type cloudflare\cloudflared.log
 1. Check current version: `python --version`
 2. Download Python 3.12 from `https://www.python.org/downloads/`
 3. Install with "Add to PATH" checked.
-4. Restart the LedgerLink service.
+4. Restart the OtoCPA service.
 
 ### "Invalid license key format"
 
@@ -1260,7 +1260,7 @@ type cloudflare\cloudflared.log
 
 **Fix:**
 
-1. Verify that `LEDGERLINK_SIGNING_SECRET` in the client's `.env` file matches the secret used when generating the key.
+1. Verify that `OTOCPA_SIGNING_SECRET` in the client's `.env` file matches the secret used when generating the key.
 2. If they do not match, either:
    - Update the client's `.env` with the correct secret, or
    - Re-generate the key using the secret that matches the client's `.env`.
@@ -1325,11 +1325,11 @@ python scripts/autofix.py --lang en > diagnostic_report.txt 2>&1
 type version.json
 ```
 
-5. **Send all of the above** to support@ledgerlink.ca.
+5. **Send all of the above** to support@otocpa.com.
 
 ### Support Contact
 
-- **Email:** support@ledgerlink.ca
+- **Email:** support@otocpa.com
 - **Response time:** Within 4 business hours on business days (Mon--Fri, 9:00--17:00 Eastern Time).
 
 ---
@@ -1349,19 +1349,19 @@ Each license key supports up to **3 machines** per firm. The system tracks machi
 
 **Database sharing options:**
 
-- **Same network:** Both machines can share the same database if the database file is on a shared network drive. Point both installations to the same `data/ledgerlink_agent.db` path.
+- **Same network:** Both machines can share the same database if the database file is on a shared network drive. Point both installations to the same `data/otocpa_agent.db` path.
 - **Standalone:** Each machine has its own database. Documents and users are independent.
 
 ### How to Migrate to a New Computer
 
-**Step 1: Install LedgerLink on the new computer**
+**Step 1: Install OtoCPA on the new computer**
 
 Follow the full installation process (Section 2 for Windows, Section 3 for Mac).
 
 **Step 2: Copy the database from the old machine**
 
 ```
-copy \\OLD_MACHINE\C$\Program Files\LedgerLink\data\ledgerlink_agent.db "C:\Program Files\LedgerLink\data\ledgerlink_agent.db"
+copy \\OLD_MACHINE\C$\Program Files\OtoCPA\data\otocpa_agent.db "C:\Program Files\OtoCPA\data\otocpa_agent.db"
 ```
 
 Or transfer via USB drive, network share, etc.
@@ -1369,7 +1369,7 @@ Or transfer via USB drive, network share, etc.
 **Step 3: Copy the configuration file**
 
 ```
-copy \\OLD_MACHINE\C$\Program Files\LedgerLink\ledgerlink.config.json "C:\Program Files\LedgerLink\ledgerlink.config.json"
+copy \\OLD_MACHINE\C$\Program Files\OtoCPA\otocpa.config.json "C:\Program Files\OtoCPA\otocpa.config.json"
 ```
 
 **Step 4: Run database migrations on the new computer**
@@ -1386,10 +1386,10 @@ python scripts/migrate_db.py
 
 **Step 6: Deactivate the old machine**
 
-If the old machine is still running LedgerLink:
+If the old machine is still running OtoCPA:
 
-1. Stop the service on the old machine: `sc stop LedgerLinkAI`
-2. Uninstall the service: `sc delete LedgerLinkAI`
+1. Stop the service on the old machine: `sc stop OtoCPA`
+2. Uninstall the service: `sc delete OtoCPA`
 3. Optionally delete the installation directory.
 
 The old machine's activation slot is freed automatically when the license is next validated and that machine has not checked in recently.
@@ -1406,6 +1406,6 @@ Administrators can view all machines registered under their license via the `/li
 
 ---
 
-*End of LedgerLink AI System Administrator Guide*
-*For the latest version of this document, check the `docs/` folder in your LedgerLink installation.*
-*Support: support@ledgerlink.ca*
+*End of OtoCPA System Administrator Guide*
+*For the latest version of this document, check the `docs/` folder in your OtoCPA installation.*
+*Support: support@otocpa.com*

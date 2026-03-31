@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-scripts/install_second_machine.py — Install LedgerLink on a second machine
+scripts/install_second_machine.py — Install OtoCPA on a second machine
 ==========================================================================
-Cross-platform installer for deploying LedgerLink on a fresh Windows or Mac
-machine.  Assumes you already have a working LedgerLink instance and want to
+Cross-platform installer for deploying OtoCPA on a fresh Windows or Mac
+machine.  Assumes you already have a working OtoCPA instance and want to
 set up a second workstation.
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
     python3 scripts/install_second_machine.py            # Mac
 
 Optional flags:
-    --config PATH   Path to ledgerlink.config.json copied from first machine
+    --config PATH   Path to otocpa.config.json copied from first machine
     --skip-deps     Skip pip install of requirements
     --server-mode   Configure this machine as server (others connect via browser)
 """
@@ -35,12 +35,12 @@ from pathlib import Path
 MIN_PYTHON = (3, 11)
 DASHBOARD_PORT = 8787
 ROOT_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = ROOT_DIR / "ledgerlink.config.json"
+CONFIG_FILE = ROOT_DIR / "otocpa.config.json"
 REQUIREMENTS_FILE = ROOT_DIR / "requirements.txt"
 MIGRATE_SCRIPT = ROOT_DIR / "scripts" / "migrate_db.py"
 SERVICE_WRAPPER = ROOT_DIR / "installer" / "service_wrapper.py"
 LAUNCHD_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
-LAUNCHD_PLIST_NAME = "com.ledgerlink.plist"
+LAUNCHD_PLIST_NAME = "com.otocpa.plist"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -152,7 +152,7 @@ def step_migrate_db() -> None:
 # Step 4: Copy configuration from first machine
 # ---------------------------------------------------------------------------
 def step_copy_config(config_src: str | None) -> None:
-    """Copy ledgerlink.config.json from USB / network share / specified path."""
+    """Copy otocpa.config.json from USB / network share / specified path."""
     log.info("Step 4: Configuration ...")
 
     if config_src:
@@ -166,7 +166,7 @@ def step_copy_config(config_src: str | None) -> None:
         log.info("Config already exists at %s — keeping it", CONFIG_FILE)
     else:
         log.warning(
-            "No config file found. Copy ledgerlink.config.json from your first machine "
+            "No config file found. Copy otocpa.config.json from your first machine "
             "to: %s", CONFIG_FILE,
         )
 
@@ -175,7 +175,7 @@ def step_copy_config(config_src: str | None) -> None:
 # Step 5 (platform-specific): Register auto-start
 # ---------------------------------------------------------------------------
 def step_register_autostart_windows() -> None:
-    """Register LedgerLink as a Windows Service via service_wrapper.py."""
+    """Register OtoCPA as a Windows Service via service_wrapper.py."""
     log.info("Step 5: Registering Windows Service ...")
 
     if SERVICE_WRAPPER.exists():
@@ -184,13 +184,13 @@ def step_register_autostart_windows() -> None:
         log.info("Windows service installed")
     else:
         log.info(
-            "service_wrapper.py not found — you can start LedgerLink manually:\n"
+            "service_wrapper.py not found — you can start OtoCPA manually:\n"
             "    python scripts/review_dashboard.py"
         )
 
 
 def step_register_autostart_mac() -> None:
-    """Create a launchd plist so LedgerLink starts automatically on macOS."""
+    """Create a launchd plist so OtoCPA starts automatically on macOS."""
     log.info("Step 5: Creating launchd plist for auto-start ...")
 
     LAUNCHD_PLIST_DIR.mkdir(parents=True, exist_ok=True)
@@ -204,7 +204,7 @@ def step_register_autostart_mac() -> None:
         <plist version="1.0">
         <dict>
             <key>Label</key>
-            <string>com.ledgerlink</string>
+            <string>com.otocpa</string>
             <key>ProgramArguments</key>
             <array>
                 <string>/usr/local/bin/python3</string>
@@ -217,9 +217,9 @@ def step_register_autostart_mac() -> None:
             <key>KeepAlive</key>
             <true/>
             <key>StandardOutPath</key>
-            <string>{ROOT_DIR / "data" / "ledgerlink.stdout.log"}</string>
+            <string>{ROOT_DIR / "data" / "otocpa.stdout.log"}</string>
             <key>StandardErrorPath</key>
-            <string>{ROOT_DIR / "data" / "ledgerlink.stderr.log"}</string>
+            <string>{ROOT_DIR / "data" / "otocpa.stderr.log"}</string>
         </dict>
         </plist>
     """)
@@ -243,7 +243,7 @@ def step_start_service_windows() -> None:
 
 
 def step_start_service_mac() -> None:
-    """Load the launchd plist to start LedgerLink."""
+    """Load the launchd plist to start OtoCPA."""
     log.info("Step 6: Loading launchd plist ...")
     plist_path = LAUNCHD_PLIST_DIR / LAUNCHD_PLIST_NAME
     if plist_path.exists():
@@ -257,7 +257,7 @@ def step_start_service_mac() -> None:
 # Step 7: Open browser
 # ---------------------------------------------------------------------------
 def step_open_browser() -> None:
-    """Open the LedgerLink dashboard in the default browser."""
+    """Open the OtoCPA dashboard in the default browser."""
     url = f"http://127.0.0.1:{DASHBOARD_PORT}/"
     log.info("Step 7: Opening %s ...", url)
     try:
@@ -271,11 +271,11 @@ def step_open_browser() -> None:
 # ---------------------------------------------------------------------------
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Install LedgerLink on a second machine (Windows or Mac)",
+        description="Install OtoCPA on a second machine (Windows or Mac)",
     )
     parser.add_argument(
         "--config", default=None,
-        help="Path to ledgerlink.config.json copied from your first machine",
+        help="Path to otocpa.config.json copied from your first machine",
     )
     parser.add_argument(
         "--skip-deps", action="store_true",
@@ -289,7 +289,7 @@ def main() -> int:
 
     system = platform.system()
     log.info("=" * 60)
-    log.info("LedgerLink — Second Machine Installer")
+    log.info("OtoCPA — Second Machine Installer")
     log.info("Platform : %s", platform.platform())
     log.info("Root dir : %s", ROOT_DIR)
     log.info("=" * 60)
@@ -320,7 +320,7 @@ def main() -> int:
     if args.server_mode:
         log.info(
             "Server mode: other machines on your network can access "
-            "LedgerLink at http://<this-machine-ip>:%d/", DASHBOARD_PORT,
+            "OtoCPA at http://<this-machine-ip>:%d/", DASHBOARD_PORT,
         )
     log.info("=" * 60)
     return 0

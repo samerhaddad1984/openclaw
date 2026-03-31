@@ -139,9 +139,9 @@ class TestGenerateAllQrPdf:
         # Instructions text is embedded in the PDF
         assert b"Scannez" in result or b"Scan" in result
 
-    def test_pdf_contains_ledgerlink_header(self):
+    def test_pdf_contains_otocpa_header(self):
         result = generate_all_qr_pdf(SAMPLE_CLIENTS, "http://127.0.0.1:8788")
-        assert b"LedgerLink" in result
+        assert b"OtoCPA" in result
 
     def test_missing_client_name_falls_back_to_code(self):
         clients = [{"client_code": "X99", "client_name": None}]

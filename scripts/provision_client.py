@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/provision_client.py -- Provision a new LedgerLink client.
+scripts/provision_client.py -- Provision a new OtoCPA client.
 
 Generates a license key, builds the installer ZIP, optionally sends email,
 and logs the client to clients.csv.
@@ -80,9 +80,9 @@ def _send_email(
     zip_path: Path,
 ) -> bool:
     """Send installation email to client. Returns True on success."""
-    # Read SMTP config from ledgerlink.config.json
+    # Read SMTP config from otocpa.config.json
     import json
-    config_path = ROOT / "ledgerlink.config.json"
+    config_path = ROOT / "otocpa.config.json"
     try:
         cfg = json.loads(config_path.read_text(encoding="utf-8"))
     except Exception:
@@ -94,22 +94,22 @@ def _send_email(
     smtp_user = digest.get("smtp_user", "")
     smtp_pass = digest.get("smtp_password", "")
     from_addr = digest.get("from_address", smtp_user)
-    from_name = digest.get("from_name", "LedgerLink AI")
+    from_name = digest.get("from_name", "OtoCPA")
 
     if not smtp_user or not smtp_pass or smtp_pass == "your-app-password":
         print("  WARNING: SMTP not configured. Email not sent.")
-        print("  Configure digest.smtp_* in ledgerlink.config.json to enable email.")
+        print("  Configure digest.smtp_* in otocpa.config.json to enable email.")
         return False
 
     msg = MIMEMultipart()
     msg["From"] = f"{from_name} <{from_addr}>"
     msg["To"] = email_to
-    msg["Subject"] = f"LedgerLink AI - Votre installation / Your installation"
+    msg["Subject"] = f"OtoCPA - Votre installation / Your installation"
 
     body = f"""Bonjour {contact},
 
-Votre licence LedgerLink AI est prete!
-Your LedgerLink AI license is ready!
+Votre licence OtoCPA est prete!
+Your OtoCPA license is ready!
 
 === INFORMATIONS / DETAILS ===
 Cabinet / Firm: {firm}
@@ -123,7 +123,7 @@ Expiration: {expiry}
 
 WINDOWS:
 1. Extrayez le fichier ZIP sur votre bureau / Extract the ZIP to your desktop
-2. Ouvrez le dossier LedgerLink / Open the LedgerLink folder
+2. Ouvrez le dossier OtoCPA / Open the OtoCPA folder
 3. Double-cliquez INSTALL.bat / Double-click INSTALL.bat
 4. Cliquez Oui si Windows demande la permission / Click Yes if Windows asks
 5. Attendez 5 minutes / Wait 5 minutes
@@ -131,15 +131,15 @@ WINDOWS:
 MAC:
 1. Extrayez le fichier ZIP sur votre bureau / Extract the ZIP to your desktop
 2. Ouvrez Terminal / Open Terminal
-3. Tapez / Type: cd ~/Desktop/LedgerLink && bash INSTALL_MAC.sh
+3. Tapez / Type: cd ~/Desktop/OtoCPA && bash INSTALL_MAC.sh
 4. Attendez 5 minutes / Wait 5 minutes
 
-Support: support@ledgerlink.ca
+Support: support@otocpa.com
 
 Merci de votre confiance!
 Thank you for your trust!
 
--- LedgerLink AI
+-- OtoCPA
 """
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
@@ -177,7 +177,7 @@ Thank you for your trust!
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Provision a new LedgerLink client",
+        description="Provision a new OtoCPA client",
     )
     parser.add_argument("--firm", required=True, help="Client firm name")
     parser.add_argument(
@@ -197,15 +197,15 @@ def main() -> None:
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  LedgerLink AI - Client Provisioning")
+    print("  OtoCPA - Client Provisioning")
     print("=" * 60)
 
     # Step 1: Read signing secret
     print("\n[1/5] Reading signing secret...")
     secret = get_signing_secret()
     if not secret:
-        print("ERROR: LEDGERLINK_SIGNING_SECRET not found in .env")
-        print("Create .env with: LEDGERLINK_SIGNING_SECRET=your-secret-here")
+        print("ERROR: OTOCPA_SIGNING_SECRET not found in .env")
+        print("Create .env with: OTOCPA_SIGNING_SECRET=your-secret-here")
         sys.exit(1)
     print("  OK")
 

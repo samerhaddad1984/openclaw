@@ -12,7 +12,7 @@ from src.agents.core.task_store import TaskStore  # noqa: E402
 from src.agents.tools.duplicate_detector import find_duplicate_candidates_from_store  # noqa: E402
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORT_DIR = ROOT_DIR / "exports"
 
 

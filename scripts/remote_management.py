@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/remote_management.py — LedgerLink Remote Management Utilities
+scripts/remote_management.py — OtoCPA Remote Management Utilities
 ======================================================================
 Provides remote management capabilities over Cloudflare Tunnel.
 Used by the dashboard's /admin/remote route.
@@ -23,13 +23,13 @@ from pathlib import Path
 # Paths
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT / "data" / "otocpa_agent.db"
 BACKUP_DIR = ROOT / "data" / "backups"
-LOG_PATH = ROOT / "data" / "ledgerlink.log"
+LOG_PATH = ROOT / "data" / "otocpa.log"
 AUTOFIX_SCRIPT = ROOT / "scripts" / "autofix.py"
-UPDATE_SCRIPT = ROOT / "scripts" / "update_ledgerlink.py"
+UPDATE_SCRIPT = ROOT / "scripts" / "update_otocpa.py"
 
-SERVICE_NAME = "LedgerLinkAI"
+SERVICE_NAME = "OtoCPA"
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ def get_system_status() -> dict:
         if BACKUP_DIR.exists():
             backups = sorted(
                 [f for f in BACKUP_DIR.iterdir()
-                 if f.is_file() and f.name.startswith("ledgerlink_agent_")],
+                 if f.is_file() and f.name.startswith("otocpa_agent_")],
                 reverse=True,
             )
             if backups:
@@ -130,7 +130,7 @@ def get_system_status() -> dict:
 # ---------------------------------------------------------------------------
 
 def restart_service() -> dict:
-    """Restart the LedgerLink Windows Service."""
+    """Restart the OtoCPA Windows Service."""
     result = {"success": False, "message": "", "error": ""}
 
     try:
@@ -177,7 +177,7 @@ def create_backup() -> dict:
     try:
         BACKUP_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = BACKUP_DIR / f"ledgerlink_agent_{ts}.db"
+        backup_path = BACKUP_DIR / f"otocpa_agent_{ts}.db"
         shutil.copy2(str(DB_PATH), str(backup_path))
         result["success"] = True
         result["backup_name"] = backup_path.name
@@ -195,7 +195,7 @@ def list_backups() -> list[dict]:
         return backups
 
     for f in sorted(BACKUP_DIR.iterdir(), reverse=True):
-        if f.is_file() and f.name.startswith("ledgerlink_agent_"):
+        if f.is_file() and f.name.startswith("otocpa_agent_"):
             backups.append({
                 "name": f.name,
                 "size_mb": round(f.stat().st_size / (1024 * 1024), 2),
@@ -213,7 +213,7 @@ def trigger_update() -> dict:
     result = {"success": False, "message": "", "error": ""}
 
     if not UPDATE_SCRIPT.exists():
-        result["error"] = "update_ledgerlink.py not found"
+        result["error"] = "update_otocpa.py not found"
         return result
 
     try:

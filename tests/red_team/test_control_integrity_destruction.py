@@ -1,7 +1,7 @@
 """
 tests/red_team/test_control_integrity_destruction.py
 =====================================================
-Red-team destruction tests for LedgerLink AI control integrity.
+Red-team destruction tests for OtoCPA control integrity.
 
 Attacks six areas:
   1. Silent revert / silent correction risk in DB triggers

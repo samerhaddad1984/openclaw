@@ -1,4 +1,4 @@
-# LedgerLink AI --- Sales Script (Word for Word)
+# OtoCPA --- Sales Script (Word for Word)
 
 **For:** Sales representatives, founders, and partners doing outbound sales
 **Target:** CPA firm owners and managing partners in Quebec
@@ -10,11 +10,11 @@
 
 ### French:
 
-> "Bonjour [prenom], c'est [votre nom] de LedgerLink. Je ne vous derangerai pas longtemps. On aide les cabinets CPA du Quebec a eliminer la saisie manuelle de donnees avec l'intelligence artificielle. Est-ce que la saisie de factures, c'est quelque chose qui prend beaucoup de temps dans votre cabinet?"
+> "Bonjour [prenom], c'est [votre nom] de OtoCPA. Je ne vous derangerai pas longtemps. On aide les cabinets CPA du Quebec a eliminer la saisie manuelle de donnees avec l'intelligence artificielle. Est-ce que la saisie de factures, c'est quelque chose qui prend beaucoup de temps dans votre cabinet?"
 
 ### English:
 
-> "Hi [first name], this is [your name] from LedgerLink. I'll be brief. We help Quebec CPA firms eliminate manual data entry using AI. Is invoice data entry something that takes up a lot of your team's time?"
+> "Hi [first name], this is [your name] from OtoCPA. I'll be brief. We help Quebec CPA firms eliminate manual data entry using AI. Is invoice data entry something that takes up a lot of your team's time?"
 
 ### Rules:
 
@@ -30,11 +30,11 @@
 
 ### French:
 
-> "Bonjour [prenom], c'est [votre nom] de LedgerLink. On aide les cabinets CPA a eliminer la saisie manuelle avec l'IA --- un de vos collegues du [quartier/region] economise 160 heures par mois. Je vous envoie un courriel avec les details. Bonne journee."
+> "Bonjour [prenom], c'est [votre nom] de OtoCPA. On aide les cabinets CPA a eliminer la saisie manuelle avec l'IA --- un de vos collegues du [quartier/region] economise 160 heures par mois. Je vous envoie un courriel avec les details. Bonne journee."
 
 ### English:
 
-> "Hi [first name], this is [your name] from LedgerLink. We help CPA firms eliminate manual data entry with AI --- one of your peers in [area] saves 160 hours a month. I'll send you an email with details. Have a great day."
+> "Hi [first name], this is [your name] from OtoCPA. We help CPA firms eliminate manual data entry with AI --- one of your peers in [area] saves 160 hours a month. I'll send you an email with details. Have a great day."
 
 ### Rules:
 
@@ -105,11 +105,11 @@ After 3--5 discovery questions, transition:
 
 ### French:
 
-> "Merci, c'est tres utile. Vous avez mentionne [repeter leur plus gros probleme dans leurs propres mots]. C'est exactement ce que LedgerLink regle. Est-ce que je peux vous montrer en 15 minutes comment ca fonctionne avec un vrai document?"
+> "Merci, c'est tres utile. Vous avez mentionne [repeter leur plus gros probleme dans leurs propres mots]. C'est exactement ce que OtoCPA regle. Est-ce que je peux vous montrer en 15 minutes comment ca fonctionne avec un vrai document?"
 
 ### English:
 
-> "Thanks, that's really helpful. You mentioned [repeat their biggest pain in their own words]. That's exactly what LedgerLink solves. Can I show you in 15 minutes how it works with a real document?"
+> "Thanks, that's really helpful. You mentioned [repeat their biggest pain in their own words]. That's exactly what OtoCPA solves. Can I show you in 15 minutes how it works with a real document?"
 
 ### Rules:
 
@@ -146,7 +146,7 @@ Quick summary for in-call demos:
 
 ### If they say "That's expensive":
 
-> "Je comprends. Comparons les chiffres. Vous avez [X] clients. A 5 heures de saisie par client, c'est [Y] heures par mois. A 150 dollars de l'heure, c'est [Z] dollars de capacite. LedgerLink coute 249 dollars. Ca veut dire que le logiciel se paie en [calcul] heures de travail. Moins d'une journee."
+> "Je comprends. Comparons les chiffres. Vous avez [X] clients. A 5 heures de saisie par client, c'est [Y] heures par mois. A 150 dollars de l'heure, c'est [Z] dollars de capacite. OtoCPA coute 249 dollars. Ca veut dire que le logiciel se paie en [calcul] heures de travail. Moins d'une journee."
 
 ### If they ask for a discount:
 
@@ -194,7 +194,7 @@ See `docs/sales/OBJECTIONS.md` --- "Can we get a discount?"
 > Merci pour votre temps aujourd'hui. Voici un resume rapide:
 >
 > - Votre cabinet a [X] clients actifs avec environ [Y] heures de saisie par mois
-> - LedgerLink pourrait vous faire recuperer [Z] heures/mois (valeur de [$$] a 150 $/h)
+> - OtoCPA pourrait vous faire recuperer [Z] heures/mois (valeur de [$$] a 150 $/h)
 > - Forfait recommande: [Professionnel/Cabinet] a [prix]/mois
 >
 > Prochaine etape: [demo mardi / pilote 30 jours / je vous rappelle jeudi]

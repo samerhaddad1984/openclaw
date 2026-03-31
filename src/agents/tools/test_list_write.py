@@ -17,7 +17,7 @@ DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = DATA_DIR / "config.json"
 TOKENS_FILE = DATA_DIR / "tokens.json"
 
-LIST_NAME = "LedgerLink Queue"
+LIST_NAME = "OtoCPA Queue"
 
 
 def now_iso() -> str:

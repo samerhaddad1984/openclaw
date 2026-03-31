@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-LedgerLink AI — Client Account Manager
+OtoCPA — Client Account Manager
 ========================================
 Run from project root:
 
@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH  = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH  = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def open_db() -> sqlite3.Connection:
@@ -123,7 +123,7 @@ def cmd_deactivate(args: argparse.Namespace) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Manage LedgerLink client portal accounts"
+        description="Manage OtoCPA client portal accounts"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

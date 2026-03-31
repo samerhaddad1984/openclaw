@@ -17,7 +17,7 @@ from src.agents.tools.fingerprint_utils import (
     compute_file_sha256,
 )
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 INGEST_FOLDER = ROOT_DIR / "data" / "incoming_documents"
 
 

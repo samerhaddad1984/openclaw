@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # ---------------------------------------------------------------------------
 # Tax rate constants (mirrors tax_engine.py)
@@ -173,7 +173,8 @@ def determine_place_of_supply(
     if not supply_type:
         _SHIPPING_KW = {"shipping", "freight", "delivery", "livraison", "transport", "expédition"}
         _SERVICE_KW = {"service", "labour", "labor", "installation", "consulting",
-                       "main d'oeuvre", "consultation", "professional fee"}
+                       "main d'oeuvre", "consultation", "professional fee",
+                       "honoraire", "honoraires"}
         if any(kw in desc for kw in _SHIPPING_KW):
             supply_type = SUPPLY_SHIPPING
         elif any(kw in desc for kw in _SERVICE_KW):
@@ -346,7 +347,7 @@ def calculate_line_tax(
     # Meals: 50% recovery
     desc = str(line.get("description", "")).lower()
     _MEAL_KW = {"meal", "repas", "restaurant", "dining", "entertainment",
-                "divertissement", "reception"}
+                "divertissement", "reception", "réception"}
     if any(kw in desc for kw in _MEAL_KW):
         itc_pct = _HALF
         itr_pct = _HALF

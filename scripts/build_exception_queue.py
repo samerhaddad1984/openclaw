@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 from src.agents.core.task_store import TaskStore  # noqa: E402
 
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORT_DIR = ROOT_DIR / "exports"
 OUTPUT_FILE = EXPORT_DIR / "exception_queue.json"
 

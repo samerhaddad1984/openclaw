@@ -17,7 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 EXPORTS_DIR = ROOT_DIR / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -771,7 +771,7 @@ def export_reference_cache_snapshot(
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="LedgerLink QBO reference resolver")
+    parser = argparse.ArgumentParser(description="OtoCPA QBO reference resolver")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     vendor_parser = subparsers.add_parser("find-vendor", help="Resolve a QBO vendor by name")

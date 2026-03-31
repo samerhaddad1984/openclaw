@@ -34,7 +34,7 @@ from src.agents.core.hallucination_guard import (
 )
 from src.agents.core.learning_suggestion_engine import LearningSuggestionEngine
 
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 REPORT_PATH = ROOT_DIR / "stress_test_report.txt"
 
 CLIENTS = ["MARCEL", "BOLDUC", "DENTAIRE", "BOUTIQUE", "TECHLAVAL",
@@ -685,7 +685,7 @@ def _format_result(result: dict[str, Any]) -> list[str]:
 
 def main() -> int:
     print("=" * 70)
-    print("LedgerLink Stress Test — 10 Validation Checks")
+    print("OtoCPA Stress Test — 10 Validation Checks")
     print("=" * 70)
     print(f"Database: {DB_PATH}")
     print(f"Started:  {datetime.now(timezone.utc).isoformat()}")
@@ -738,7 +738,7 @@ def main() -> int:
 
     # ── Save report ──────────────────────────────────────────────────────
     report_lines = [
-        "LedgerLink Stress Test Report",
+        "OtoCPA Stress Test Report",
         "=" * 70,
         f"Database: {DB_PATH}",
         f"Generated: {datetime.now(timezone.utc).isoformat()}",

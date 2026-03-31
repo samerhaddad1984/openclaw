@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-installer/service_wrapper.py — LedgerLink Windows Service Manager
+installer/service_wrapper.py — OtoCPA Windows Service Manager
 =================================================================
-Install, start, stop, restart, and remove LedgerLink as a Windows service.
+Install, start, stop, restart, and remove OtoCPA as a Windows service.
 
 Usage:
     python installer/service_wrapper.py install
@@ -21,12 +21,12 @@ import sys
 import time
 from pathlib import Path
 
-SERVICE_NAME = "LedgerLinkAI"
-SERVICE_DISPLAY = "LedgerLink AI Accounting"
-SERVICE_DESC = "LedgerLink AI — Intelligent Accounting Document Queue & Client Portal"
+SERVICE_NAME = "OtoCPA"
+SERVICE_DISPLAY = "OtoCPA Accounting"
+SERVICE_DESC = "OtoCPA — Intelligent Accounting Document Queue & Client Portal"
 ROOT_DIR = Path(__file__).resolve().parent.parent
 DASHBOARD_SCRIPT = ROOT_DIR / "scripts" / "review_dashboard.py"
-RUN_BAT = ROOT_DIR / "run_ledgerlink.bat"
+RUN_BAT = ROOT_DIR / "run_otocpa.bat"
 DASH_PORT = 8787
 PORTAL_PORT = 8788
 
@@ -104,7 +104,7 @@ def _find_nssm() -> str | None:
 
 
 def install() -> int:
-    """Install LedgerLink as a Windows service."""
+    """Install OtoCPA as a Windows service."""
     print(f"Installing service '{SERVICE_NAME}'...")
 
     python = _find_python()
@@ -165,7 +165,7 @@ def install() -> int:
 
 
 def start() -> int:
-    """Start the LedgerLink service."""
+    """Start the OtoCPA service."""
     print(f"Starting service '{SERVICE_NAME}'...")
 
     if not _service_exists():
@@ -202,7 +202,7 @@ def start() -> int:
 
 
 def stop() -> int:
-    """Stop the LedgerLink service."""
+    """Stop the OtoCPA service."""
     print(f"Stopping service '{SERVICE_NAME}'...")
 
     if not _service_exists():
@@ -227,14 +227,14 @@ def stop() -> int:
 
 
 def restart() -> int:
-    """Restart the LedgerLink service."""
+    """Restart the OtoCPA service."""
     stop()
     time.sleep(2)
     return start()
 
 
 def remove() -> int:
-    """Remove the LedgerLink service."""
+    """Remove the OtoCPA service."""
     print(f"Removing service '{SERVICE_NAME}'...")
 
     if not _service_exists():
@@ -295,7 +295,7 @@ def main() -> int:
         return 1
 
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        print("LedgerLink AI — Service Manager")
+        print("OtoCPA — Service Manager")
         print()
         print("Usage:")
         for cmd in COMMANDS:

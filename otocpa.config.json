@@ -39,8 +39,8 @@
     "smtp_port": 587,
     "smtp_user": "yourfirm@gmail.com",
     "smtp_password": "your-app-password",
-    "from_address": "ledgerlink@yourfirm.com",
-    "from_name": "LedgerLink AI"
+    "from_address": "otocpa@yourfirm.com",
+    "from_name": "OtoCPA"
   },
   "security": {
     "bcrypt_rounds": 12,
@@ -57,5 +57,5 @@
     "api_key": ""
   },
   "demo_mode": false,
-  "database_path": "data/ledgerlink_agent.db"
+  "database_path": "data/otocpa_agent.db"
 }

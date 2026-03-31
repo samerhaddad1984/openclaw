@@ -1,1 +1,1 @@
-# Red-team adversarial test suite for LedgerLink
+# Red-team adversarial test suite for OtoCPA

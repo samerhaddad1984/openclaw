@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "C:\LedgerLinkAI",
+    [string]$InstallRoot = "C:\OtoCPA",
     [int]$LoopSeconds = 60,
     [int]$BatchLimit = 20
 )
@@ -40,7 +40,7 @@ if (-not (Test-Path $logDir)) {
 
 Set-Location $InstallRoot
 
-Write-Step "LedgerLink background worker started"
+Write-Step "OtoCPA background worker started"
 Write-Host "Install root : $InstallRoot"
 Write-Host "Loop seconds : $LoopSeconds"
 Write-Host "Batch limit  : $BatchLimit"

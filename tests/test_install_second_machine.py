@@ -15,7 +15,7 @@ import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT_DIR / "scripts" / "install_second_machine.py"
-CONFIG_FILE = ROOT_DIR / "ledgerlink.config.json"
+CONFIG_FILE = ROOT_DIR / "otocpa.config.json"
 DOCS_FILE = ROOT_DIR / "docs" / "SECOND_MACHINE_INSTALL.md"
 
 
@@ -30,8 +30,8 @@ class TestFilesExist:
 
     def test_config_has_database_path(self):
         cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        assert "database_path" in cfg, "ledgerlink.config.json must contain database_path"
-        assert cfg["database_path"] == "data/ledgerlink_agent.db"
+        assert "database_path" in cfg, "otocpa.config.json must contain database_path"
+        assert cfg["database_path"] == "data/otocpa_agent.db"
 
 
 # ── script imports cleanly ──────────────────────────────────────────────────
@@ -98,7 +98,7 @@ class TestCopyConfig:
         src = tmp_path / "source_config.json"
         src.write_text('{"test": true}', encoding="utf-8")
 
-        dest = tmp_path / "ledgerlink.config.json"
+        dest = tmp_path / "otocpa.config.json"
         with mock.patch.object(mod, "CONFIG_FILE", dest):
             mod.step_copy_config(str(src))
         assert dest.exists()
@@ -113,7 +113,7 @@ class TestCopyConfig:
     def test_no_source_keeps_existing(self, tmp_path):
         """When no source is given and config exists, keep it."""
         mod = self._load()
-        dest = tmp_path / "ledgerlink.config.json"
+        dest = tmp_path / "otocpa.config.json"
         dest.write_text('{"existing": true}', encoding="utf-8")
         with mock.patch.object(mod, "CONFIG_FILE", dest):
             mod.step_copy_config(None)
@@ -187,7 +187,7 @@ class TestConfigFile:
 
     def test_database_path_value(self):
         cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        assert cfg["database_path"] == "data/ledgerlink_agent.db"
+        assert cfg["database_path"] == "data/otocpa_agent.db"
 
     def test_existing_keys_preserved(self):
         cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -230,9 +230,9 @@ class TestLaunchdPlist:
         with mock.patch.object(mod, "LAUNCHD_PLIST_DIR", plist_dir):
             mod.step_register_autostart_mac()
 
-        plist_file = plist_dir / "com.ledgerlink.plist"
+        plist_file = plist_dir / "com.otocpa.plist"
         assert plist_file.exists()
         content = plist_file.read_text(encoding="utf-8")
-        assert "com.ledgerlink" in content
+        assert "com.otocpa" in content
         assert "review_dashboard.py" in content
         assert "RunAtLoad" in content

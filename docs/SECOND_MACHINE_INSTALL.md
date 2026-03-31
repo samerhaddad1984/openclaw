@@ -1,22 +1,22 @@
-# Installing LedgerLink on a Second Machine
+# Installing OtoCPA on a Second Machine
 
-This guide walks you through setting up LedgerLink on a new Windows or Mac
-workstation.  It assumes you already have a working LedgerLink instance on
+This guide walks you through setting up OtoCPA on a new Windows or Mac
+workstation.  It assumes you already have a working OtoCPA instance on
 another machine.
 
 ---
 
 ## Quick Start (automated)
 
-Copy the entire LedgerLink folder to the new machine (USB, network share, or
+Copy the entire OtoCPA folder to the new machine (USB, network share, or
 zip), then run:
 
 ```bash
 # Windows
-python scripts/install_second_machine.py --config "E:\ledgerlink.config.json"
+python scripts/install_second_machine.py --config "E:\otocpa.config.json"
 
 # Mac
-python3 scripts/install_second_machine.py --config "/Volumes/USB/ledgerlink.config.json"
+python3 scripts/install_second_machine.py --config "/Volumes/USB/otocpa.config.json"
 ```
 
 The script handles dependency installation, database setup, service
@@ -40,7 +40,7 @@ python --version
 ### 2. Install dependencies
 
 ```cmd
-cd C:\path\to\LedgerLink
+cd C:\path\to\OtoCPA
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
@@ -53,11 +53,11 @@ python scripts/migrate_db.py
 
 ### 4. Copy your configuration
 
-Copy `ledgerlink.config.json` from your first machine (USB, network share, or
-email) into the LedgerLink root directory:
+Copy `otocpa.config.json` from your first machine (USB, network share, or
+email) into the OtoCPA root directory:
 
 ```cmd
-copy "E:\ledgerlink.config.json" "C:\path\to\LedgerLink\ledgerlink.config.json"
+copy "E:\otocpa.config.json" "C:\path\to\OtoCPA\otocpa.config.json"
 ```
 
 ### 5. Register as a Windows Service
@@ -90,7 +90,7 @@ python3 --version
 ### 2. Install dependencies
 
 ```bash
-cd /path/to/LedgerLink
+cd /path/to/OtoCPA
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 ```
@@ -104,12 +104,12 @@ python3 scripts/migrate_db.py
 ### 4. Copy your configuration
 
 ```bash
-cp /Volumes/USB/ledgerlink.config.json ./ledgerlink.config.json
+cp /Volumes/USB/otocpa.config.json ./otocpa.config.json
 ```
 
 ### 5. Create a launchd plist for auto-start
 
-Create `~/Library/LaunchAgents/com.ledgerlink.plist`:
+Create `~/Library/LaunchAgents/com.otocpa.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -118,14 +118,14 @@ Create `~/Library/LaunchAgents/com.ledgerlink.plist`:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ledgerlink</string>
+    <string>com.otocpa</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/python3</string>
-        <string>/path/to/LedgerLink/scripts/review_dashboard.py</string>
+        <string>/path/to/OtoCPA/scripts/review_dashboard.py</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/path/to/LedgerLink</string>
+    <string>/path/to/OtoCPA</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -137,7 +137,7 @@ Create `~/Library/LaunchAgents/com.ledgerlink.plist`:
 ### 6. Load the plist
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.ledgerlink.plist
+launchctl load ~/Library/LaunchAgents/com.otocpa.plist
 ```
 
 ### 7. Open the dashboard
@@ -151,11 +151,11 @@ Navigate to <http://127.0.0.1:8787/> in your browser.
 ### Option A — Shared network drive (simple)
 
 Place the `.db` file on a network share that both machines can access, then
-edit `ledgerlink.config.json` on **both** machines:
+edit `otocpa.config.json` on **both** machines:
 
 ```json
 {
-  "database_path": "\\\\SERVER\\share\\ledgerlink_agent.db"
+  "database_path": "\\\\SERVER\\share\\otocpa_agent.db"
 }
 ```
 
@@ -164,10 +164,10 @@ edit `ledgerlink.config.json` on **both** machines:
 
 ### Option B — One server, browser-only clients (recommended)
 
-Run LedgerLink on one machine (the "server") and have the second machine
+Run OtoCPA on one machine (the "server") and have the second machine
 connect via its browser — no installation required on the client.
 
-1. On the server machine, ensure `ledgerlink.config.json` has:
+1. On the server machine, ensure `otocpa.config.json` has:
 
    ```json
    {
@@ -188,7 +188,7 @@ Both users share the same database with no sync issues.
 
 ### Option C — Separate databases with manual sync
 
-Each machine has its own database.  Use LedgerLink's backup/restore to sync:
+Each machine has its own database.  Use OtoCPA's backup/restore to sync:
 
 1. On Machine A: **Settings > Backup > Export**
 2. Copy the backup file to Machine B
@@ -200,9 +200,9 @@ Each machine has its own database.  Use LedgerLink's backup/restore to sync:
 
 1. On the **old** machine, go to **Settings > License** and click
    **Deactivate**.
-2. Copy `ledgerlink.config.json` to the new machine (it contains your license
+2. Copy `otocpa.config.json` to the new machine (it contains your license
    key).
-3. On the **new** machine, open LedgerLink.  It will re-activate the license
+3. On the **new** machine, open OtoCPA.  It will re-activate the license
    automatically against the license server.
 
 If you cannot deactivate on the old machine (e.g. it is broken), contact
@@ -212,14 +212,14 @@ support — licenses can be reset server-side.
 
 ## Copying Your Config from Old Machine to New Machine
 
-The file `ledgerlink.config.json` in the LedgerLink root directory contains
+The file `otocpa.config.json` in the OtoCPA root directory contains
 all configuration: AI provider keys, SMTP settings, firm name, license,
 network settings, and the database path.
 
-1. On the old machine, locate `ledgerlink.config.json`.
-2. Copy it to the new machine's LedgerLink root directory via USB, network
+1. On the old machine, locate `otocpa.config.json`.
+2. Copy it to the new machine's OtoCPA root directory via USB, network
    share, or any file-transfer method.
 3. **Review and update** any machine-specific paths (e.g. `database_path` if
    it references a local directory that differs on the new machine).
 
-That's it — LedgerLink reads all settings from this single file on startup.
+That's it — OtoCPA reads all settings from this single file on startup.

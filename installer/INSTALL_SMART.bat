@@ -3,42 +3,42 @@ chcp 65001 >nul 2>&1
 setlocal EnableDelayedExpansion
 
 :: ============================================================
-:: LedgerLink AI — Smart Zero-Touch Installer
+:: OtoCPA — Smart Zero-Touch Installer
 :: ============================================================
 :: One-click install: admin elevation, Python, packages, DB,
 :: firewall, service, autofix, Cloudflare, wizard, shortcuts.
 :: Bilingual FR/EN throughout. No technician needed.
 :: ============================================================
 
-set "INSTALL_DIR=C:\LedgerLink"
-set "LOG_FILE=C:\LedgerLink\install.log"
+set "INSTALL_DIR=C:\OtoCPA"
+set "LOG_FILE=C:\OtoCPA\install.log"
 set "PYTHON_VERSION=3.11.9"
 set "PYTHON_URL=https://www.python.org/ftp/python/%PYTHON_VERSION%/python-%PYTHON_VERSION%-amd64.exe"
 set "PYTHON_URL_MIRROR1=https://www.python.org/ftp/python/3.11.8/python-3.11.8-amd64.exe"
 set "PYTHON_URL_MIRROR2=https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
-set "RELEASE_URL=https://releases.ledgerlink.ai/latest/ledgerlink-latest.zip"
-set "RELEASE_MIRROR1=https://cdn.ledgerlink.ai/releases/ledgerlink-latest.zip"
-set "RELEASE_MIRROR2=https://github.com/ledgerlink/releases/releases/latest/download/ledgerlink-latest.zip"
+set "RELEASE_URL=https://releases.otocpa.ai/latest/otocpa-latest.zip"
+set "RELEASE_MIRROR1=https://cdn.otocpa.ai/releases/otocpa-latest.zip"
+set "RELEASE_MIRROR2=https://github.com/otocpa/releases/releases/latest/download/otocpa-latest.zip"
 set "CLOUDFLARED_URL=https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-set "SUPPORT_EMAIL=support@ledgerlink.ai"
+set "SUPPORT_EMAIL=support@otocpa.ai"
 set "DASH_PORT=8787"
 set "PORTAL_PORT=8788"
 set "WIZARD_PORT=8790"
-set "SERVICE_NAME=LedgerLinkAI"
+set "SERVICE_NAME=OtoCPA"
 set "STEP_TOTAL=12"
 set "ERRORS=0"
 
 :: ============================================================
 :: STEP 0 — Banner
 :: ============================================================
-title LedgerLink AI — Installation
+title OtoCPA — Installation
 color 1F
 cls
 echo.
 echo  ╔══════════════════════════════════════════════════════════╗
 echo  ║                                                          ║
-echo  ║          LedgerLink AI — Installation automatique        ║
-echo  ║          LedgerLink AI — Automatic Installation          ║
+echo  ║          OtoCPA — Installation automatique        ║
+echo  ║          OtoCPA — Automatic Installation          ║
 echo  ║                                                          ║
 echo  ╚══════════════════════════════════════════════════════════╝
 echo.
@@ -85,7 +85,7 @@ if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if not exist "%INSTALL_DIR%\data" mkdir "%INSTALL_DIR%\data"
 
 echo ============================================================ > "%LOG_FILE%"
-echo LedgerLink AI — Smart Installer Log >> "%LOG_FILE%"
+echo OtoCPA — Smart Installer Log >> "%LOG_FILE%"
 echo Date: %date% %time% >> "%LOG_FILE%"
 echo Machine: %COMPUTERNAME% >> "%LOG_FILE%"
 echo OS: %OS% >> "%LOG_FILE%"
@@ -246,13 +246,13 @@ echo   Python: !PY_VER! — !PYTHON_CMD! >> "%LOG_FILE%"
 echo.
 
 :: ============================================================
-:: STEP 3 — Download latest LedgerLink
+:: STEP 3 — Download latest OtoCPA
 :: ============================================================
 :step3
-echo  [3/%STEP_TOTAL%] Telechargement de LedgerLink / Downloading LedgerLink...
-echo [STEP 3] Downloading LedgerLink... >> "%LOG_FILE%"
+echo  [3/%STEP_TOTAL%] Telechargement de OtoCPA / Downloading OtoCPA...
+echo [STEP 3] Downloading OtoCPA... >> "%LOG_FILE%"
 
-set "RELEASE_ZIP=%TEMP%\ledgerlink-release.zip"
+set "RELEASE_ZIP=%TEMP%\otocpa-release.zip"
 set "DL_OK=0"
 
 :: Try main URL (3 attempts)
@@ -293,8 +293,8 @@ if !DL_OK! equ 0 (
 
     if !DL_OK! equ 0 (
         echo.
-        echo   ERREUR: Impossible de telecharger LedgerLink.
-        echo   ERROR: Could not download LedgerLink.
+        echo   ERREUR: Impossible de telecharger OtoCPA.
+        echo   ERROR: Could not download OtoCPA.
         echo   Verifiez votre connexion / Check your Internet connection.
         echo   Contact: %SUPPORT_EMAIL%
         echo [STEP 3] FAILED — no download, no local files >> "%LOG_FILE%"
@@ -426,26 +426,26 @@ echo  [6/%STEP_TOTAL%] Configuration du pare-feu / Configuring firewall...
 echo [STEP 6] Configuring Windows Firewall... >> "%LOG_FILE%"
 
 :: Remove old rules first (ignore errors if they don't exist)
-netsh advfirewall firewall delete rule name="LedgerLink Dashboard" >nul 2>&1
-netsh advfirewall firewall delete rule name="LedgerLink Portal" >nul 2>&1
-netsh advfirewall firewall delete rule name="LedgerLink Wizard" >nul 2>&1
+netsh advfirewall firewall delete rule name="OtoCPA Dashboard" >nul 2>&1
+netsh advfirewall firewall delete rule name="OtoCPA Portal" >nul 2>&1
+netsh advfirewall firewall delete rule name="OtoCPA Wizard" >nul 2>&1
 
 :: Add new rules
-netsh advfirewall firewall add rule name="LedgerLink Dashboard" protocol=TCP dir=in localport=%DASH_PORT% action=allow >nul 2>&1
+netsh advfirewall firewall add rule name="OtoCPA Dashboard" protocol=TCP dir=in localport=%DASH_PORT% action=allow >nul 2>&1
 if !errorlevel! equ 0 (
     echo   Port %DASH_PORT% (Dashboard) — OK >> "%LOG_FILE%"
 ) else (
     echo   Port %DASH_PORT% — FAILED >> "%LOG_FILE%"
 )
 
-netsh advfirewall firewall add rule name="LedgerLink Portal" protocol=TCP dir=in localport=%PORTAL_PORT% action=allow >nul 2>&1
+netsh advfirewall firewall add rule name="OtoCPA Portal" protocol=TCP dir=in localport=%PORTAL_PORT% action=allow >nul 2>&1
 if !errorlevel! equ 0 (
     echo   Port %PORTAL_PORT% (Portal) — OK >> "%LOG_FILE%"
 ) else (
     echo   Port %PORTAL_PORT% — FAILED >> "%LOG_FILE%"
 )
 
-netsh advfirewall firewall add rule name="LedgerLink Wizard" protocol=TCP dir=in localport=%WIZARD_PORT% action=allow >nul 2>&1
+netsh advfirewall firewall add rule name="OtoCPA Wizard" protocol=TCP dir=in localport=%WIZARD_PORT% action=allow >nul 2>&1
 
 echo   Pare-feu configure / Firewall configured
 echo [STEP 6] OK >> "%LOG_FILE%"
@@ -480,13 +480,13 @@ if exist "%INSTALL_DIR%\installer\service_wrapper.py" (
 ) else (
     :service_fallback
     :: Create a startup batch file
-    echo @echo off > "%INSTALL_DIR%\run_ledgerlink.bat"
-    echo cd /d "%INSTALL_DIR%" >> "%INSTALL_DIR%\run_ledgerlink.bat"
-    echo "!PYTHON_CMD!" "%INSTALL_DIR%\scripts\review_dashboard.py" >> "%INSTALL_DIR%\run_ledgerlink.bat"
+    echo @echo off > "%INSTALL_DIR%\run_otocpa.bat"
+    echo cd /d "%INSTALL_DIR%" >> "%INSTALL_DIR%\run_otocpa.bat"
+    echo "!PYTHON_CMD!" "%INSTALL_DIR%\scripts\review_dashboard.py" >> "%INSTALL_DIR%\run_otocpa.bat"
 
     :: Create service via sc
-    sc create %SERVICE_NAME% binPath= "cmd.exe /c \"%INSTALL_DIR%\run_ledgerlink.bat\"" start= auto DisplayName= "LedgerLink AI Accounting" >nul 2>&1
-    sc description %SERVICE_NAME% "LedgerLink AI — Intelligent Accounting Platform" >nul 2>&1
+    sc create %SERVICE_NAME% binPath= "cmd.exe /c \"%INSTALL_DIR%\run_otocpa.bat\"" start= auto DisplayName= "OtoCPA Accounting" >nul 2>&1
+    sc description %SERVICE_NAME% "OtoCPA — Intelligent Accounting Platform" >nul 2>&1
     sc start %SERVICE_NAME% >nul 2>&1
 )
 
@@ -533,7 +533,7 @@ if exist "%INSTALL_DIR%\scripts\autofix.py" (
 :: Register health monitor as scheduled task
 echo   Enregistrement du moniteur de sante / Registering health monitor...
 echo [STEP 8b] Registering health monitor scheduled task... >> "%LOG_FILE%"
-schtasks /create /tn "LedgerLink Health Monitor" /tr "python C:\LedgerLink\scripts\service_health.py" /sc minute /mo 5 /ru SYSTEM /f >> "%LOG_FILE%" 2>&1
+schtasks /create /tn "OtoCPA Health Monitor" /tr "python C:\OtoCPA\scripts\service_health.py" /sc minute /mo 5 /ru SYSTEM /f >> "%LOG_FILE%" 2>&1
 if !errorlevel! equ 0 (
     echo   Health monitor registered — runs every 5 minutes
     echo [STEP 8b] OK — health monitor registered >> "%LOG_FILE%"
@@ -597,9 +597,9 @@ if !CF_INSTALLED! equ 1 (
     :: Check if already authenticated
     cloudflared tunnel list >nul 2>&1
     if !errorlevel! equ 0 (
-        cloudflared tunnel create "ledgerlink-!TUNNEL_ID!" >> "%LOG_FILE%" 2>&1
+        cloudflared tunnel create "otocpa-!TUNNEL_ID!" >> "%LOG_FILE%" 2>&1
         if !errorlevel! equ 0 (
-            echo   Tunnel cree: ledgerlink-!TUNNEL_ID! >> "%LOG_FILE%"
+            echo   Tunnel cree: otocpa-!TUNNEL_ID! >> "%LOG_FILE%"
 
             :: Install as Windows service
             cloudflared service install >> "%LOG_FILE%" 2>&1
@@ -682,25 +682,25 @@ set "PUB_DESKTOP=%PUBLIC%\Desktop"
 echo [InternetShortcut]
 echo URL=http://127.0.0.1:%DASH_PORT%/
 echo IconIndex=0
-) > "%DESKTOP%\LedgerLink Dashboard.url"
+) > "%DESKTOP%\OtoCPA Dashboard.url"
 
 :: Portal shortcut
 (
 echo [InternetShortcut]
 echo URL=http://127.0.0.1:%PORTAL_PORT%/
 echo IconIndex=0
-) > "%DESKTOP%\LedgerLink Portail Client.url"
+) > "%DESKTOP%\OtoCPA Portail Client.url"
 
 :: Setup wizard shortcut
 (
 echo [InternetShortcut]
 echo URL=http://127.0.0.1:%WIZARD_PORT%/
 echo IconIndex=0
-) > "%DESKTOP%\LedgerLink Setup.url"
+) > "%DESKTOP%\OtoCPA Setup.url"
 
 :: Copy to public desktop too (for all users)
-copy "%DESKTOP%\LedgerLink Dashboard.url" "%PUB_DESKTOP%\" >nul 2>&1
-copy "%DESKTOP%\LedgerLink Portail Client.url" "%PUB_DESKTOP%\" >nul 2>&1
+copy "%DESKTOP%\OtoCPA Dashboard.url" "%PUB_DESKTOP%\" >nul 2>&1
+copy "%DESKTOP%\OtoCPA Portail Client.url" "%PUB_DESKTOP%\" >nul 2>&1
 
 :: Add to Windows startup (run dashboard on login)
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
@@ -708,7 +708,7 @@ set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 echo @echo off
 echo cd /d "%INSTALL_DIR%"
 echo start "" /MIN "!PYTHON_CMD!" "%INSTALL_DIR%\scripts\review_dashboard.py"
-) > "%STARTUP%\LedgerLink.bat"
+) > "%STARTUP%\OtoCPA.bat"
 
 echo   Raccourcis crees / Shortcuts created
 echo   Demarrage automatique configure / Auto-start configured
@@ -768,12 +768,12 @@ echo  ┌───────────────────────�
 echo  │  Des raccourcis ont ete crees sur votre bureau:          │
 echo  │  Shortcuts have been created on your desktop:            │
 echo  │                                                          │
-echo  │    - LedgerLink Dashboard                                │
-echo  │    - LedgerLink Portail Client                           │
-echo  │    - LedgerLink Setup                                    │
+echo  │    - OtoCPA Dashboard                                │
+echo  │    - OtoCPA Portail Client                           │
+echo  │    - OtoCPA Setup                                    │
 echo  │                                                          │
-echo  │  LedgerLink demarrera automatiquement avec Windows.      │
-echo  │  LedgerLink will start automatically with Windows.       │
+echo  │  OtoCPA demarrera automatiquement avec Windows.      │
+echo  │  OtoCPA will start automatically with Windows.       │
 echo  └──────────────────────────────────────────────────────────┘
 echo.
 echo  Appuyez sur une touche pour fermer / Press any key to close...

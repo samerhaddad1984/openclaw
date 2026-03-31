@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def utc_now_iso() -> str:
@@ -874,6 +874,7 @@ def upsert_posting_job(
         "blocking_issues": json_dumps_stable(effective_blocking_issues),
         "notes": json_dumps_stable(effective_notes),
         "external_id": effective_external_id or None,
+        "payload_json": "{}",
         "updated_at": now_iso,
     }
 
@@ -1396,6 +1397,7 @@ def build_split_settlement_entries(
                 "reviewer": reviewer,
                 "blocking_issues": json_dumps_stable([]),
                 "notes": json_dumps_stable(split_notes),
+                "payload_json": "{}",
                 "created_at": now_iso,
                 "updated_at": now_iso,
             }

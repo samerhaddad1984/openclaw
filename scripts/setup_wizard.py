@@ -1,5 +1,5 @@
 """
-scripts/setup_wizard.py -- LedgerLink Professional Setup Wizard
+scripts/setup_wizard.py -- OtoCPA Professional Setup Wizard
 ================================================================
 Standalone HTTP server on port 8790.  Python stdlib + bcrypt only.
 Bilingual FR/EN.  Guides the installer through every required step.
@@ -70,8 +70,8 @@ def get_local_ip() -> str:
 # ---------------------------------------------------------------------------
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_FILE = ROOT_DIR / "data" / "setup_state.json"
-CONFIG_FILE = ROOT_DIR / "ledgerlink.config.json"
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+CONFIG_FILE = ROOT_DIR / "otocpa.config.json"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # ---------------------------------------------------------------------------
 # Step definitions  (step_num -> (path, fr_label, en_label))
@@ -109,7 +109,7 @@ PATH_TO_STEP = {s[0]: i for i, s in enumerate(STEPS)}
 # ---------------------------------------------------------------------------
 STRINGS: dict[str, dict[str, str]] = {
     "fr": {
-        "title": "Assistant de configuration LedgerLink",
+        "title": "Assistant de configuration OtoCPA",
         "btn_next": "Suivant \u2192",
         "btn_back": "\u2190 Retour",
         "btn_skip": "Ignorer pour l'instant",
@@ -135,12 +135,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "skip_for_now": "Ignorer pour l'instant",
         "skip_add_later": "Ignorer \u2014 ajouter plus tard",
         "configure_later": "Vous pouvez configurer ceci plus tard dans Parametres",
-        "welcome_title": "Bienvenue dans LedgerLink AI",
+        "welcome_title": "Bienvenue dans OtoCPA",
         "welcome_subtitle": "Ce guide vous prendra environ 15 minutes",
         "welcome_checklist_title": "Ce dont vous aurez besoin",
         "welcome_gst": "Votre numero de TPS (si inscrit)",
         "welcome_qst": "Votre numero de TVQ (si inscrit)",
-        "welcome_license": "Votre cle de licence LedgerLink",
+        "welcome_license": "Votre cle de licence OtoCPA",
         "welcome_password": "Un mot de passe administrateur",
         "welcome_email": "Votre adresse courriel professionnelle",
         "firm_title": "Informations de votre cabinet",
@@ -169,7 +169,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "pw_req_upper": "Au moins une majuscule",
         "pw_req_digit": "Au moins un chiffre",
         "license_title": "Activer votre licence",
-        "license_subtitle": "Votre cle de licence vous a ete envoyee par courriel par LedgerLink",
+        "license_subtitle": "Votre cle de licence vous a ete envoyee par courriel par OtoCPA",
         "license_key": "Cle de licence",
         "license_key_ph": "LLAI-XXXX...",
         "license_validate": "Valider",
@@ -179,9 +179,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "license_expiry": "Expiration",
         "license_max_clients": "Clients maximum",
         "license_max_users": "Utilisateurs maximum",
-        "license_support": "Contactez support@ledgerlink.app pour obtenir votre cle",
+        "license_support": "Contactez support@otocpa.com pour obtenir votre cle",
         "ai_title": "Configuration de l'intelligence artificielle",
-        "ai_subtitle": "LedgerLink utilise deux services d'IA pour lire vos documents et suggerer des categories. Ces services sont optionnels mais recommandes.",
+        "ai_subtitle": "OtoCPA utilise deux services d'IA pour lire vos documents et suggerer des categories. Ces services sont optionnels mais recommandes.",
         "ai_routine_title": "Fournisseur standard (taches repetitives)",
         "ai_routine_rec": "Recommande: DeepSeek",
         "ai_routine_where": "Ou obtenir une cle: deepseek.com \u2192 API \u2192 Create Key",
@@ -193,13 +193,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "ai_model": "Modele",
         "ai_cost": "Cout estime avec 50 clients: ~15$/mois",
         "email_title": "Configuration du courriel",
-        "email_subtitle": "LedgerLink envoie des resumes quotidiens et des messages aux clients par courriel",
+        "email_subtitle": "OtoCPA envoie des resumes quotidiens et des messages aux clients par courriel",
         "smtp_host": "Serveur SMTP",
         "smtp_port": "Port",
         "smtp_email": "Adresse courriel",
         "smtp_password": "Mot de passe",
         "smtp_display": "Nom d'affichage",
-        "smtp_display_help": "Ex: LedgerLink \u2014 Cabinet Tremblay",
+        "smtp_display_help": "Ex: OtoCPA \u2014 Cabinet Tremblay",
         "email_gmail": "Gmail",
         "email_outlook": "Outlook / Office 365",
         "email_manual": "Configuration manuelle",
@@ -212,7 +212,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "portal_cf_btn": "Configurer Cloudflare maintenant",
         "portal_cf_remote": "Pour permettre l'acces a distance, configurez Cloudflare ci-dessous",
         "whatsapp_title": "WhatsApp \u2014 Reception de documents",
-        "whatsapp_subtitle": "Vos clients pourront envoyer des photos de recus et factures via WhatsApp. LedgerLink les traitera automatiquement.",
+        "whatsapp_subtitle": "Vos clients pourront envoyer des photos de recus et factures via WhatsApp. OtoCPA les traitera automatiquement.",
         "whatsapp_need": "Vous avez besoin d'un compte Twilio (gratuit pour commencer)",
         "whatsapp_cost": "~0.005$ par message",
         "whatsapp_sid": "Account SID",
@@ -242,25 +242,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "telegram_guide_4": "Copiez le token fourni par BotFather",
         "telegram_guide_5": "Collez-le ci-dessus",
         "m365_title": "Microsoft 365 \u2014 Integration courriel et calendrier",
-        "m365_subtitle": "Connectez LedgerLink a votre Microsoft 365 pour recevoir automatiquement les factures par courriel et synchroniser les echeances dans Outlook",
+        "m365_subtitle": "Connectez OtoCPA a votre Microsoft 365 pour recevoir automatiquement les factures par courriel et synchroniser les echeances dans Outlook",
         "m365_feat_email": "Lit automatiquement les courriels avec pieces jointes",
         "m365_feat_invoice": "Traite les factures recues par courriel",
         "m365_feat_calendar": "Synchronise les echeances TPS/TVQ dans votre calendrier Outlook",
         "m365_feat_teams": "Envoie le resume quotidien via Teams",
         "m365_service_email": "Compte de service",
-        "m365_service_email_help": "Ex: ledgerlink@votrecabinet.com",
+        "m365_service_email_help": "Ex: otocpa@votrecabinet.com",
         "m365_password": "Mot de passe",
         "m365_tenant_id": "ID de locataire",
         "m365_tenant_help": "Trouvez-le dans le portail Azure \u2192 Azure Active Directory \u2192 Properties",
         "m365_enable": "Activer Microsoft 365",
         "m365_guide_title": "Guide etape par etape",
-        "m365_guide_1": "Creez un compte Microsoft 365 pour LedgerLink (ex: ledgerlink@votrecabinet.com)",
+        "m365_guide_1": "Creez un compte Microsoft 365 pour OtoCPA (ex: otocpa@votrecabinet.com)",
         "m365_guide_2": "Connectez-vous au portail Azure: portal.azure.com",
         "m365_guide_3": "Cherchez Azure Active Directory \u2192 Properties",
         "m365_guide_4": "Copiez le Tenant ID",
         "m365_guide_5": "Entrez les informations ci-dessus",
         "qbo_title": "QuickBooks Online \u2014 Synchronisation comptable",
-        "qbo_subtitle": "Connectez LedgerLink a QuickBooks Online pour enregistrer automatiquement les transactions approuvees",
+        "qbo_subtitle": "Connectez OtoCPA a QuickBooks Online pour enregistrer automatiquement les transactions approuvees",
         "qbo_feat_post": "Enregistre les transactions approuvees dans QuickBooks",
         "qbo_feat_vendor": "Synchronise les fournisseurs",
         "qbo_feat_account": "Met a jour les comptes",
@@ -277,7 +277,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "qbo_guide_4": "Copiez Client ID et Client Secret",
         "qbo_guide_5": "Cliquez Connecter a QuickBooks ci-dessus",
         "folder_title": "Dossier de reception automatique",
-        "folder_subtitle": "LedgerLink surveille un dossier sur votre ordinateur. Tout document depose dans ce dossier est traite automatiquement. Ideal pour les scanners USB et OneDrive.",
+        "folder_subtitle": "OtoCPA surveille un dossier sur votre ordinateur. Tout document depose dans ce dossier est traite automatiquement. Ideal pour les scanners USB et OneDrive.",
         "folder_path": "Dossier de reception",
         "folder_create": "Creer le dossier",
         "folder_enable": "Activer la surveillance",
@@ -293,7 +293,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "digest_lang": "Langue",
         "digest_preview": "Apercu",
         "backup_title": "Sauvegarde automatique",
-        "backup_subtitle": "LedgerLink sauvegarde automatiquement votre base de donnees. Configurez ou stocker vos sauvegardes.",
+        "backup_subtitle": "OtoCPA sauvegarde automatiquement votre base de donnees. Configurez ou stocker vos sauvegardes.",
         "backup_folder": "Dossier de sauvegarde",
         "backup_freq": "Frequence",
         "backup_freq_daily": "Quotidienne",
@@ -332,7 +332,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "security_https": "Forcer HTTPS",
         "security_https_auto": "Active automatiquement si Cloudflare est configure",
         "staff_title": "Ajouter votre equipe",
-        "staff_subtitle": "Ajoutez les membres de votre personnel qui utiliseront LedgerLink",
+        "staff_subtitle": "Ajoutez les membres de votre personnel qui utiliseront OtoCPA",
         "staff_fullname": "Prenom et nom",
         "staff_username": "Nom d'utilisateur",
         "staff_role": "Role",
@@ -375,7 +375,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "review_configured": "Configure",
         "review_skipped": "Non configure",
         "complete_title": "Installation terminee!",
-        "complete_subtitle": "Votre systeme LedgerLink est pret a etre utilise.",
+        "complete_subtitle": "Votre systeme OtoCPA est pret a etre utilise.",
         "complete_dashboard": "URL du tableau de bord",
         "complete_portal": "URL du portail client",
         "complete_copy": "Copier",
@@ -404,16 +404,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "already_complete": "Configuration deja effectuee",
         "already_complete_msg": "Le systeme a deja ete configure. Accedez au tableau de bord.",
         "setup_complete_title": "Configuration terminee !",
-        "setup_complete_msg": "Votre systeme LedgerLink est pret a etre utilise.",
+        "setup_complete_msg": "Votre systeme OtoCPA est pret a etre utilise.",
         "network_heading": "Configuration reseau",
         "local_url": "URL reseau local",
         "remote_url": "URL acces distant",
-        "network_info": "Votre serveur LedgerLink sera accessible a",
+        "network_info": "Votre serveur OtoCPA sera accessible a",
         "network_info_suffix": "sur votre reseau local",
         "dashboard_url_label": "URL du tableau de bord",
     },
     "en": {
-        "title": "LedgerLink Setup Wizard",
+        "title": "OtoCPA Setup Wizard",
         "btn_next": "Next \u2192",
         "btn_back": "\u2190 Back",
         "btn_skip": "Skip for now",
@@ -439,12 +439,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "skip_for_now": "Skip for now",
         "skip_add_later": "Skip \u2014 add later",
         "configure_later": "You can configure this later in Settings",
-        "welcome_title": "Welcome to LedgerLink AI",
+        "welcome_title": "Welcome to OtoCPA",
         "welcome_subtitle": "This guide will take about 15 minutes",
         "welcome_checklist_title": "What you will need",
         "welcome_gst": "Your GST number (if registered)",
         "welcome_qst": "Your QST number (if registered)",
-        "welcome_license": "Your LedgerLink license key",
+        "welcome_license": "Your OtoCPA license key",
         "welcome_password": "An administrator password",
         "welcome_email": "Your professional email address",
         "firm_title": "Your Firm Information",
@@ -473,7 +473,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "pw_req_upper": "At least one uppercase",
         "pw_req_digit": "At least one number",
         "license_title": "Activate Your License",
-        "license_subtitle": "Your license key was emailed to you by LedgerLink",
+        "license_subtitle": "Your license key was emailed to you by OtoCPA",
         "license_key": "License key",
         "license_key_ph": "LLAI-XXXX...",
         "license_validate": "Validate",
@@ -483,9 +483,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "license_expiry": "Expiry",
         "license_max_clients": "Max clients",
         "license_max_users": "Max users",
-        "license_support": "Contact support@ledgerlink.app to get your key",
+        "license_support": "Contact support@otocpa.com to get your key",
         "ai_title": "AI Configuration",
-        "ai_subtitle": "LedgerLink uses two AI services to read your documents and suggest categories. These services are optional but recommended.",
+        "ai_subtitle": "OtoCPA uses two AI services to read your documents and suggest categories. These services are optional but recommended.",
         "ai_routine_title": "Standard provider (routine tasks)",
         "ai_routine_rec": "Recommended: DeepSeek",
         "ai_routine_where": "Where to get a key: deepseek.com \u2192 API \u2192 Create Key",
@@ -497,13 +497,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "ai_model": "Model",
         "ai_cost": "Estimated cost with 50 clients: ~$15/month",
         "email_title": "Email Configuration",
-        "email_subtitle": "LedgerLink sends daily summaries and client messages by email",
+        "email_subtitle": "OtoCPA sends daily summaries and client messages by email",
         "smtp_host": "SMTP Server",
         "smtp_port": "Port",
         "smtp_email": "Email address",
         "smtp_password": "Password",
         "smtp_display": "Display name",
-        "smtp_display_help": "E.g.: LedgerLink \u2014 Tremblay Firm",
+        "smtp_display_help": "E.g.: OtoCPA \u2014 Tremblay Firm",
         "email_gmail": "Gmail",
         "email_outlook": "Outlook / Office 365",
         "email_manual": "Manual Configuration",
@@ -516,7 +516,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "portal_cf_btn": "Configure Cloudflare now",
         "portal_cf_remote": "To allow remote access, configure Cloudflare below",
         "whatsapp_title": "WhatsApp \u2014 Document Reception",
-        "whatsapp_subtitle": "Your clients can send photos of receipts and invoices via WhatsApp. LedgerLink will process them automatically.",
+        "whatsapp_subtitle": "Your clients can send photos of receipts and invoices via WhatsApp. OtoCPA will process them automatically.",
         "whatsapp_need": "You need a Twilio account (free to start)",
         "whatsapp_cost": "~$0.005 per message",
         "whatsapp_sid": "Account SID",
@@ -546,25 +546,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "telegram_guide_4": "Copy the token provided by BotFather",
         "telegram_guide_5": "Paste it above",
         "m365_title": "Microsoft 365 \u2014 Email and Calendar Integration",
-        "m365_subtitle": "Connect LedgerLink to your Microsoft 365 to automatically receive invoices by email and sync deadlines in Outlook",
+        "m365_subtitle": "Connect OtoCPA to your Microsoft 365 to automatically receive invoices by email and sync deadlines in Outlook",
         "m365_feat_email": "Automatically reads emails with attachments",
         "m365_feat_invoice": "Processes invoices received by email",
         "m365_feat_calendar": "Syncs GST/QST deadlines to your Outlook calendar",
         "m365_feat_teams": "Sends daily digest via Teams",
         "m365_service_email": "Service account email",
-        "m365_service_email_help": "E.g.: ledgerlink@yourfirm.com",
+        "m365_service_email_help": "E.g.: otocpa@yourfirm.com",
         "m365_password": "Password",
         "m365_tenant_id": "Tenant ID",
         "m365_tenant_help": "Find it in Azure portal \u2192 Azure Active Directory \u2192 Properties",
         "m365_enable": "Enable Microsoft 365",
         "m365_guide_title": "Step-by-step guide",
-        "m365_guide_1": "Create a Microsoft 365 account for LedgerLink (e.g.: ledgerlink@yourfirm.com)",
+        "m365_guide_1": "Create a Microsoft 365 account for OtoCPA (e.g.: otocpa@yourfirm.com)",
         "m365_guide_2": "Sign in to the Azure portal: portal.azure.com",
         "m365_guide_3": "Search for Azure Active Directory \u2192 Properties",
         "m365_guide_4": "Copy the Tenant ID",
         "m365_guide_5": "Enter the information above",
         "qbo_title": "QuickBooks Online \u2014 Accounting Sync",
-        "qbo_subtitle": "Connect LedgerLink to QuickBooks Online to automatically post approved transactions",
+        "qbo_subtitle": "Connect OtoCPA to QuickBooks Online to automatically post approved transactions",
         "qbo_feat_post": "Posts approved transactions to QuickBooks",
         "qbo_feat_vendor": "Syncs vendors",
         "qbo_feat_account": "Updates accounts",
@@ -581,7 +581,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "qbo_guide_4": "Copy Client ID and Client Secret",
         "qbo_guide_5": "Click Connect to QuickBooks above",
         "folder_title": "Automatic Inbox Folder",
-        "folder_subtitle": "LedgerLink monitors a folder on your computer. Any document dropped in this folder is processed automatically. Ideal for USB scanners and OneDrive.",
+        "folder_subtitle": "OtoCPA monitors a folder on your computer. Any document dropped in this folder is processed automatically. Ideal for USB scanners and OneDrive.",
         "folder_path": "Inbox folder",
         "folder_create": "Create folder",
         "folder_enable": "Enable folder watcher",
@@ -597,7 +597,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "digest_lang": "Language",
         "digest_preview": "Preview",
         "backup_title": "Automatic Backup",
-        "backup_subtitle": "LedgerLink automatically backs up your database. Configure where to store your backups.",
+        "backup_subtitle": "OtoCPA automatically backs up your database. Configure where to store your backups.",
         "backup_folder": "Backup folder",
         "backup_freq": "Frequency",
         "backup_freq_daily": "Daily",
@@ -636,7 +636,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "security_https": "Force HTTPS",
         "security_https_auto": "Auto-enabled if Cloudflare is configured",
         "staff_title": "Add Your Team",
-        "staff_subtitle": "Add the staff members who will use LedgerLink",
+        "staff_subtitle": "Add the staff members who will use OtoCPA",
         "staff_fullname": "Full name",
         "staff_username": "Username",
         "staff_role": "Role",
@@ -679,7 +679,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "review_configured": "Configured",
         "review_skipped": "Not configured",
         "complete_title": "Installation Complete!",
-        "complete_subtitle": "Your LedgerLink system is ready to use.",
+        "complete_subtitle": "Your OtoCPA system is ready to use.",
         "complete_dashboard": "Dashboard URL",
         "complete_portal": "Client Portal URL",
         "complete_copy": "Copy",
@@ -708,11 +708,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "already_complete": "Setup Already Complete",
         "already_complete_msg": "The system has already been configured. Access the dashboard.",
         "setup_complete_title": "Setup Complete!",
-        "setup_complete_msg": "Your LedgerLink system is ready to use.",
+        "setup_complete_msg": "Your OtoCPA system is ready to use.",
         "network_heading": "Network Setup",
         "local_url": "Local network URL",
         "remote_url": "Remote access URL",
-        "network_info": "Your LedgerLink server will be accessible at",
+        "network_info": "Your OtoCPA server will be accessible at",
         "network_info_suffix": "on your local network",
         "dashboard_url_label": "Dashboard URL",
     },
@@ -1152,7 +1152,7 @@ def _page(content: str, state: dict, current_step: int, lang: str,
 <div class="wizard-wrap">
   <div class="sidebar">
     <div class="sidebar-brand">
-      <h1>LedgerLink AI</h1>
+      <h1>OtoCPA</h1>
       <span>{_esc(_s(lang, 'title'))}</span>
     </div>
     <div class="sidebar-steps">
@@ -1203,7 +1203,7 @@ def generate_access_instructions_pdf(lang: str = "fr") -> bytes:
 
     cfg = load_config()
     firm = cfg.get("firm", {})
-    firm_name = firm.get("firm_name", "LedgerLink")
+    firm_name = firm.get("firm_name", "OtoCPA")
     local_ip = get_local_ip()
     local_url = f"http://{local_ip}:8787/"
     portal_url = f"http://{local_ip}:8788/"
@@ -1224,7 +1224,7 @@ def generate_access_instructions_pdf(lang: str = "fr") -> bytes:
     y -= 28
     c.setFont("Helvetica", 12)
     c.setFillColor(grey)
-    title = "Instructions d'acces -- LedgerLink" if lang == "fr" else "Access Instructions -- LedgerLink"
+    title = "Instructions d'acces -- OtoCPA" if lang == "fr" else "Access Instructions -- OtoCPA"
     c.drawCentredString(w / 2, y, title)
 
     y -= 16
@@ -1289,7 +1289,7 @@ def generate_access_instructions_pdf(lang: str = "fr") -> bytes:
 
     c.setFont("Helvetica", 8)
     c.setFillColor(HexColor("#94a3b8"))
-    c.drawCentredString(w / 2, 30, f"LedgerLink AI -- {firm_name}")
+    c.drawCentredString(w / 2, 30, f"OtoCPA -- {firm_name}")
     c.save()
     return buf.getvalue()
 
@@ -1637,7 +1637,7 @@ def _render_email(lang: str, state: dict, error: str = "", success: str = "") ->
     </div>
     <div class="form-group">
       <label>{_esc(_s(lang, 'smtp_display'))}</label>
-      <input type="text" name="smtp_display" value="{_esc(cfg.get('from_name','LedgerLink AI'))}">
+      <input type="text" name="smtp_display" value="{_esc(cfg.get('from_name','OtoCPA'))}">
       <div class="help">{_esc(_s(lang, 'smtp_display_help'))}</div>
     </div>
     <button type="button" class="btn btn-outline" onclick="testEmail()">{_esc(_s(lang, 'btn_test'))}</button>
@@ -1895,7 +1895,7 @@ def _render_quickbooks(lang: str, state: dict) -> str:
 
 def _render_folder(lang: str, state: dict) -> str:
     cfg = load_config().get("folder_watcher", {})
-    _default_inbox = "C:/LedgerLink/Inbox/"
+    _default_inbox = "C:/OtoCPA/Inbox/"
     default_path = cfg.get("inbox_path", _default_inbox)
     fields = f"""
     <div class="form-group">
@@ -1948,7 +1948,7 @@ def _render_digest(lang: str, state: dict) -> str:
 
 def _render_backup(lang: str, state: dict) -> str:
     cfg = load_config().get("backup", {})
-    _default_backup = "C:/LedgerLink/Backups/"
+    _default_backup = "C:/OtoCPA/Backups/"
     fields = f"""
     <div class="form-group">
       <label>{_esc(_s(lang, 'backup_folder'))}</label>
@@ -2364,7 +2364,7 @@ def _render_already_complete(lang: str, state: dict) -> str:
 # ---------------------------------------------------------------------------
 
 class SetupWizardHandler(BaseHTTPRequestHandler):
-    server_version = "LedgerLinkSetupWizard/2.0"
+    server_version = "OtoCPASetupWizard/2.0"
 
     def log_message(self, fmt: str, *args: object) -> None:  # type: ignore[override]
         pass
@@ -2501,7 +2501,7 @@ class SetupWizardHandler(BaseHTTPRequestHandler):
                     pdf_bytes = generate_access_instructions_pdf(pdf_lang)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/pdf")
-                    self.send_header("Content-Disposition", 'attachment; filename="LedgerLink_Access_Instructions.pdf"')
+                    self.send_header("Content-Disposition", 'attachment; filename="OtoCPA_Access_Instructions.pdf"')
                     self.send_header("Content-Length", str(len(pdf_bytes)))
                     self.end_headers()
                     self.wfile.write(pdf_bytes)
@@ -2684,7 +2684,7 @@ class SetupWizardHandler(BaseHTTPRequestHandler):
                     "smtp_user": form.get("smtp_email", "").strip(),
                     "smtp_password": form.get("smtp_password", ""),
                     "from_address": form.get("smtp_email", "").strip(),
-                    "from_name": form.get("smtp_display", "LedgerLink AI").strip(),
+                    "from_name": form.get("smtp_display", "OtoCPA").strip(),
                     "enabled": True,
                 }
                 save_config(cfg)
@@ -2922,7 +2922,7 @@ class SetupWizardHandler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LedgerLink Setup Wizard")
+    parser = argparse.ArgumentParser(description="OtoCPA Setup Wizard")
     parser.add_argument("--port", type=int, default=8790)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()

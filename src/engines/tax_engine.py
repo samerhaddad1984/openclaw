@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 # ---------------------------------------------------------------------------
 # Tax rates — exact, no float
@@ -376,7 +376,7 @@ def validate_tax_code(
 
         _INSURANCE_KW = {"insurance", "assurance", "insur", "prime"}
         _MEAL_KW = {"meal", "repas", "entertainment", "dining", "restaurant",
-                    "divertissement", "reception"}
+                    "divertissement", "reception", "réception"}
 
         if any(kw in gl_lower for kw in _INSURANCE_KW) and tc not in ("I", "E", "Z", "NONE"):
             warnings.append("insurance_gl_account_expects_code_i_or_exempt")

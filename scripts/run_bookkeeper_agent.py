@@ -12,7 +12,7 @@ from src.agents.core.bookkeeper_agent import BookkeeperAgent  # noqa: E402
 
 
 def main() -> int:
-    db_path = ROOT_DIR / "data" / "ledgerlink_agent.db"
+    db_path = ROOT_DIR / "data" / "otocpa_agent.db"
     agent = BookkeeperAgent(project_root=ROOT_DIR, db_path=db_path)
 
     if len(sys.argv) < 2:

@@ -13,7 +13,7 @@ function Ensure-Dir($p) {
 }
 
 $root = (Get-Location).Path
-$sys  = Join-Path $root ".ledgerlink_system"
+$sys  = Join-Path $root ".otocpa_system"
 $sysLogs = Join-Path $sys "logs"
 Ensure-Dir $sys
 Ensure-Dir $sysLogs
@@ -105,7 +105,7 @@ function Rotate-Folder($dir) {
 $targets = @(
   (Join-Path $root "logs"),
   (Join-Path $root "run_logs"),
-  (Join-Path $root ".ledgerlink_system\logs")
+  (Join-Path $root ".otocpa_system\logs")
 )
 
 foreach ($t in $targets) {

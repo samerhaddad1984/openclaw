@@ -43,7 +43,7 @@ GRAPH = "https://graph.microsoft.com/v1.0"
 class TenantConfig:
     tenant_label: str  # friendly name (e.g. "CPA_Firm_ABC")
     tenant_domain: str  # e.g. firmname.onmicrosoft.com or firm domain
-    mailbox: str  # ledgerlink@firm.com
+    mailbox: str  # otocpa@firm.com
     sharepoint_site_url: str  # https://firm.sharepoint.com/sites/AccountingAI
     folders_inbox: str = "/AI/Inbox"
     folders_processing: str = "/AI/Processing"
@@ -138,12 +138,12 @@ def _test_sharepoint(access_token: str, site_url: str) -> None:
 
 
 def run_setup_wizard():
-    print("\nLedgerLink Setup Wizard (Delegated Graph)\n")
+    print("\nOtoCPA Setup Wizard (Delegated Graph)\n")
 
     cfg = TenantConfig(
         tenant_label=_prompt("Tenant label (friendly name)", "CPA_FIRM_ABC"),
         tenant_domain=_prompt("Tenant domain (firmname.onmicrosoft.com OR firm domain)", "firmname.onmicrosoft.com"),
-        mailbox=_prompt("LedgerLink mailbox (must exist and you must have access)", "ledgerlink@firm.com"),
+        mailbox=_prompt("OtoCPA mailbox (must exist and you must have access)", "otocpa@firm.com"),
         sharepoint_site_url=_prompt("SharePoint Site URL", "https://firm.sharepoint.com/sites/AccountingAI"),
         folders_inbox=_prompt("SharePoint inbox folder", "/AI/Inbox"),
         folders_processing=_prompt("SharePoint processing folder", "/AI/Processing"),

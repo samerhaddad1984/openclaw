@@ -426,7 +426,7 @@ def test_setup_cloudflare_exists():
 def test_setup_cloudflare_has_key_symbols():
     src = (ROOT / "scripts" / "setup_cloudflare.py").read_text(encoding="utf-8")
     assert "cloudflared-windows-amd64.exe" in src
-    assert "ledgerlink.config.json" in src
+    assert "otocpa.config.json" in src
     assert "public_portal_url" in src
     assert "sc query cloudflared" in src or "SERVICE_NAME" in src
     assert "step_windows_service" in src

@@ -1,5 +1,5 @@
 """
-src/i18n/__init__.py — shared translation helper for LedgerLink dashboards.
+src/i18n/__init__.py — shared translation helper for OtoCPA dashboards.
 
 Usage:
     from src.i18n import t

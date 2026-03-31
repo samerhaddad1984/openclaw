@@ -1,4 +1,4 @@
-# LedgerLink AI --- Email Templates
+# OtoCPA --- Email Templates
 
 **Usage:** Copy, personalize (replace all `[brackets]`), and send. Never send without personalizing.
 
@@ -12,7 +12,7 @@
 
 > Bonjour [Prenom],
 >
-> Je m'appelle [votre nom], je travaille chez LedgerLink.
+> Je m'appelle [votre nom], je travaille chez OtoCPA.
 >
 > On aide les cabinets CPA du Quebec a eliminer la saisie manuelle de factures avec l'intelligence artificielle. Le calcul TPS/TVQ est 100% base sur des regles (pas d'IA) --- zero erreur.
 >
@@ -23,7 +23,7 @@
 > Bonne journee,
 > [Votre nom]
 > [Telephone]
-> ledgerlink.ca
+> otocpa.com
 
 ### English:
 
@@ -31,7 +31,7 @@
 
 > Hi [First name],
 >
-> I'm [your name] from LedgerLink.
+> I'm [your name] from OtoCPA.
 >
 > We help Quebec CPA firms eliminate manual invoice data entry using AI. GST/QST calculations are 100% rule-based (not AI) --- zero errors.
 >
@@ -42,7 +42,7 @@
 > Best,
 > [Your name]
 > [Phone]
-> ledgerlink.ca
+> otocpa.com
 
 ---
 
@@ -56,7 +56,7 @@
 >
 > Je voulais m'assurer que mon courriel de [jour] s'est bien rendu.
 >
-> En un mot: LedgerLink automatise la saisie comptable pour les cabinets CPA. Vos clients envoient une photo de leur facture, et le systeme extrait le fournisseur, le montant, les taxes, et suggere le compte GL. Votre equipe n'a qu'a cliquer Approuver.
+> En un mot: OtoCPA automatise la saisie comptable pour les cabinets CPA. Vos clients envoient une photo de leur facture, et le systeme extrait le fournisseur, le montant, les taxes, et suggere le compte GL. Votre equipe n'a qu'a cliquer Approuver.
 >
 > 15 minutes pour voir comment ca marche --- ca vous dit?
 >
@@ -70,7 +70,7 @@
 >
 > Just making sure my email from [day] came through.
 >
-> In a nutshell: LedgerLink automates bookkeeping data entry for CPA firms. Your clients send a photo of their invoice, the system extracts vendor, amount, taxes, and suggests the GL account. Your team just clicks Approve.
+> In a nutshell: OtoCPA automates bookkeeping data entry for CPA firms. Your clients send a photo of their invoice, the system extracts vendor, amount, taxes, and suggests the GL account. Your team just clicks Approve.
 >
 > 15 minutes to see how it works --- interested?
 >
@@ -174,7 +174,7 @@
 
 ### French:
 
-**Objet:** `Proposition LedgerLink pour [NomDuCabinet]`
+**Objet:** `Proposition OtoCPA pour [NomDuCabinet]`
 
 > Bonjour [Prenom],
 >
@@ -224,7 +224,7 @@
 
 ### English:
 
-**Subject:** `LedgerLink proposal for [FirmName]`
+**Subject:** `OtoCPA proposal for [FirmName]`
 
 > Hi [First name],
 >
@@ -278,11 +278,11 @@
 
 ### French:
 
-**Objet:** `Renouvellement LedgerLink --- votre licence expire le [date]`
+**Objet:** `Renouvellement OtoCPA --- votre licence expire le [date]`
 
 > Bonjour [Prenom],
 >
-> Votre licence LedgerLink [Forfait] expire le **[date d'expiration]**.
+> Votre licence OtoCPA [Forfait] expire le **[date d'expiration]**.
 >
 > Pour assurer la continuite du service, voici les etapes pour renouveler:
 >
@@ -307,11 +307,11 @@
 
 ### English:
 
-**Subject:** `LedgerLink renewal --- your license expires on [date]`
+**Subject:** `OtoCPA renewal --- your license expires on [date]`
 
 > Hi [First name],
 >
-> Your LedgerLink [Plan] license expires on **[expiry date]**.
+> Your OtoCPA [Plan] license expires on **[expiry date]**.
 >
 > To ensure service continuity, here's how to renew:
 >
@@ -352,7 +352,7 @@
 > - [Fonctionnalite 2]
 > - [Fonctionnalite 3]
 >
-> Et on a maintenant [X] cabinets CPA au Quebec qui utilisent LedgerLink au quotidien.
+> Et on a maintenant [X] cabinets CPA au Quebec qui utilisent OtoCPA au quotidien.
 >
 > Est-ce que le timing est meilleur en ce moment? Si oui, je serais ravi de vous montrer les nouveautes en 15 minutes.
 >
@@ -376,7 +376,7 @@
 > - [Feature 2]
 > - [Feature 3]
 >
-> And we now have [X] Quebec CPA firms using LedgerLink daily.
+> And we now have [X] Quebec CPA firms using OtoCPA daily.
 >
 > Is the timing better now? If so, I'd be happy to show you the updates in 15 minutes.
 >

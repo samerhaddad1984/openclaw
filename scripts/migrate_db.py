@@ -1,5 +1,5 @@
 """
-migrate_db.py — safe, additive schema migration for LedgerLink.
+migrate_db.py — safe, additive schema migration for OtoCPA.
 
 Compares every CREATE TABLE definition used across the Python codebase against
 the live database and adds any missing columns via ALTER TABLE.  No data is
@@ -16,7 +16,7 @@ import unicodedata
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT_DIR / "data" / "ledgerlink_agent.db"
+DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
 
 def open_db(path: Path) -> sqlite3.Connection:
@@ -1320,6 +1320,81 @@ def run_migration(db_path: Path = DB_PATH) -> None:
             ("reviewed_by",          "TEXT"),
             ("reviewed_at",          "TEXT"),
         ])
+
+        # ------------------------------------------------------------------ #
+        # fixed_assets — CCA schedule / asset register
+        # Expected by: src/engines/fixed_assets_engine.py
+        # ------------------------------------------------------------------ #
+        if not table_exists(conn, "fixed_assets"):
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fixed_assets (
+                    asset_id         TEXT PRIMARY KEY,
+                    client_code      TEXT NOT NULL,
+                    asset_name       TEXT NOT NULL,
+                    description      TEXT,
+                    cca_class        INTEGER NOT NULL,
+                    acquisition_date TEXT NOT NULL,
+                    cost             REAL NOT NULL,
+                    opening_ucc      REAL NOT NULL DEFAULT 0,
+                    current_ucc      REAL NOT NULL DEFAULT 0,
+                    accumulated_cca  REAL NOT NULL DEFAULT 0,
+                    status           TEXT NOT NULL DEFAULT 'active',
+                    disposal_date    TEXT,
+                    disposal_proceeds REAL,
+                    created_at       TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_fixed_assets_client
+                    ON fixed_assets(client_code)
+            """)
+            print("  CREATE  fixed_assets")
+        else:
+            changed += add_missing(conn, "fixed_assets", [
+                ("description",       "TEXT"),
+                ("disposal_proceeds", "REAL"),
+            ])
+
+        # ------------------------------------------------------------------ #
+        # ar_invoices — Accounts Receivable
+        # Expected by: src/engines/aging_engine.py
+        # ------------------------------------------------------------------ #
+        if not table_exists(conn, "ar_invoices"):
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ar_invoices (
+                    invoice_id      TEXT PRIMARY KEY,
+                    client_code     TEXT NOT NULL,
+                    customer_name   TEXT NOT NULL,
+                    customer_email  TEXT,
+                    invoice_number  TEXT,
+                    invoice_date    TEXT NOT NULL,
+                    due_date        TEXT NOT NULL,
+                    amount_ht       REAL NOT NULL DEFAULT 0,
+                    gst_amount      REAL NOT NULL DEFAULT 0,
+                    qst_amount      REAL NOT NULL DEFAULT 0,
+                    total_amount    REAL NOT NULL DEFAULT 0,
+                    currency        TEXT NOT NULL DEFAULT 'CAD',
+                    status          TEXT NOT NULL DEFAULT 'draft',
+                    amount_paid     REAL NOT NULL DEFAULT 0,
+                    payment_date    TEXT,
+                    description     TEXT,
+                    created_at      TEXT,
+                    created_by      TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ar_invoices_client
+                    ON ar_invoices(client_code)
+            """)
+            print("  CREATE  ar_invoices")
+        else:
+            changed += add_missing(conn, "ar_invoices", [
+                ("customer_email", "TEXT"),
+                ("currency",       "TEXT NOT NULL DEFAULT 'CAD'"),
+                ("amount_paid",    "REAL NOT NULL DEFAULT 0"),
+                ("payment_date",   "TEXT"),
+                ("created_by",     "TEXT"),
+            ])
 
         conn.commit()
 

@@ -502,8 +502,8 @@ class TestSendComm:
             "smtp_port": 587,
             "smtp_user": "user@example.com",
             "smtp_password": "secret",
-            "from_address": "ledgerlink@example.com",
-            "from_name": "LedgerLink AI",
+            "from_address": "otocpa@example.com",
+            "from_name": "OtoCPA",
         }
 
     def test_marks_sent_at_after_send(self):

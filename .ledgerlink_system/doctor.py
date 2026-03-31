@@ -40,7 +40,7 @@ def main() -> int:
 
     # 2) Disk I/O probe
     try:
-        probe = root / ".ledgerlink_system" / "doctor_probe.tmp"
+        probe = root / ".otocpa_system" / "doctor_probe.tmp"
         probe.parent.mkdir(exist_ok=True)
         probe.write_text("ok", encoding="utf-8")
         assert probe.read_text(encoding="utf-8") == "ok"
@@ -65,7 +65,7 @@ def main() -> int:
     results.append(Check("python_version", rc == 0, out or err))
 
     # 5) Validator exists + blocks numbers
-    validator = root / ".ledgerlink_system" / "validator.py"
+    validator = root / ".otocpa_system" / "validator.py"
     if not validator.exists():
         results.append(Check("validator_present", False, "validator.py missing"))
         return report(results)
@@ -92,7 +92,7 @@ def main() -> int:
     results.append(Check("node_version", rc == 0, out or err))
 
     # 7) Run log rotation once (safe)
-    rot = root / ".ledgerlink_system" / "log_rotate.ps1"
+    rot = root / ".otocpa_system" / "log_rotate.ps1"
     if rot.exists():
         rc, out, err = run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(rot)],
@@ -106,7 +106,7 @@ def main() -> int:
 
 
 def report(results: List[Check]) -> int:
-    print("LedgerLink Doctor Report")
+    print("OtoCPA Doctor Report")
     print("=" * 28)
     ok_all = True
     for r in results:

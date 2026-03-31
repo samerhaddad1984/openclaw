@@ -573,7 +573,7 @@ def _build_email(attachments: list[tuple[bytes, str, str]]) -> bytes:
     """
     msg = email.mime.multipart.MIMEMultipart()
     msg["From"]    = "sender@example.com"
-    msg["To"]      = "ledgerlink@firm.com"
+    msg["To"]      = "otocpa@firm.com"
     msg["Subject"] = "Documents"
     msg.attach(email.mime.text.MIMEText("Please find attached.", "plain"))
 

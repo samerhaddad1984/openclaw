@@ -1,8 +1,8 @@
-# LedgerLink AI
+# OtoCPA
 
 ## La comptabilite intelligente pour les cabinets CPA du Quebec
 
-**LedgerLink elimine la saisie manuelle de factures. Vos clients envoient une photo. L'IA extrait les donnees. Votre equipe approuve en un clic. Les taxes sont calculees automatiquement.**
+**OtoCPA elimine la saisie manuelle de factures. Vos clients envoient une photo. L'IA extrait les donnees. Votre equipe approuve en un clic. Les taxes sont calculees automatiquement.**
 
 ---
 
@@ -55,14 +55,14 @@ Installation: 500 $ -- 1 000 $ (une fois). Pilote gratuit de 30 jours.
 - Piste d'audit complete (qui, quoi, quand)
 - Sauvegardes automatiques quotidiennes
 - Acces distant securise via Cloudflare Tunnel (HTTPS)
-- Aucun acces de LedgerLink a vos donnees clients
+- Aucun acces de OtoCPA a vos donnees clients
 
 ---
 
 ### Coordonnees
 
-**LedgerLink AI**
-support@ledgerlink.ca
-ledgerlink.ca
+**OtoCPA**
+support@otocpa.com
+otocpa.com
 
 Reservez une demo de 15 minutes --- on vous montre le logiciel avec vos vrais documents.
