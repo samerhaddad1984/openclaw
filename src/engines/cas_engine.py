@@ -76,7 +76,8 @@ def ensure_cas_tables(conn: sqlite3.Connection) -> None:
             clearly_trivial      REAL NOT NULL,
             calculated_at        TEXT NOT NULL,
             calculated_by        TEXT,
-            notes                TEXT
+            notes                TEXT,
+            materiality_locked   INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE INDEX IF NOT EXISTS idx_mat_engagement
@@ -94,7 +95,8 @@ def ensure_cas_tables(conn: sqlite3.Connection) -> None:
             significant_risk INTEGER NOT NULL DEFAULT 0,
             assessed_by      TEXT,
             assessed_at      TEXT,
-            notes            TEXT
+            notes            TEXT,
+            signed_at        TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_risk_engagement
@@ -183,6 +185,60 @@ def ensure_cas_tables(conn: sqlite3.Connection) -> None:
             ON related_party_transactions(party_id);
     """)
     conn.commit()
+
+    # --- Immutability triggers (FIX 1-4) ---
+    conn.executescript("""
+        -- FIX 2: Only one materiality assessment per engagement
+        CREATE TRIGGER IF NOT EXISTS trg_materiality_one_per_engagement
+        BEFORE INSERT ON materiality_assessments
+        WHEN (SELECT COUNT(*) FROM materiality_assessments
+              WHERE engagement_id = NEW.engagement_id) > 0
+        BEGIN
+            SELECT RAISE(ABORT, 'Only one materiality assessment allowed per engagement');
+        END;
+
+        -- FIX 2: Materiality locked after working papers signed
+        CREATE TRIGGER IF NOT EXISTS trg_materiality_locked_immutable
+        BEFORE UPDATE ON materiality_assessments
+        WHEN OLD.materiality_locked = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'Materiality is locked — working papers have been signed');
+        END;
+
+        -- FIX 4: Risk assessment locked after working paper sign-off
+        CREATE TRIGGER IF NOT EXISTS trg_risk_assessment_locked
+        BEFORE UPDATE ON risk_assessments
+        WHEN OLD.signed_at IS NOT NULL
+        BEGIN
+            SELECT RAISE(ABORT, 'Risk assessment is locked after working paper sign-off');
+        END;
+
+        -- FIX 2: Cascade lock materiality when WP is signed
+        CREATE TRIGGER IF NOT EXISTS trg_cascade_lock_materiality
+        AFTER UPDATE ON working_papers
+        WHEN NEW.sign_off_at IS NOT NULL AND OLD.sign_off_at IS NULL
+        BEGIN
+            UPDATE materiality_assessments SET materiality_locked = 1
+            WHERE engagement_id IN (
+                SELECT engagement_id FROM engagements
+                WHERE LOWER(client_code) = LOWER(NEW.client_code)
+                  AND period = NEW.period
+            );
+        END;
+
+        -- FIX 4: Cascade lock risk assessments when WP is signed
+        CREATE TRIGGER IF NOT EXISTS trg_cascade_lock_risk_assessments
+        AFTER UPDATE ON working_papers
+        WHEN NEW.sign_off_at IS NOT NULL AND OLD.sign_off_at IS NULL
+        BEGIN
+            UPDATE risk_assessments SET signed_at = NEW.sign_off_at
+            WHERE signed_at IS NULL AND engagement_id IN (
+                SELECT engagement_id FROM engagements
+                WHERE LOWER(client_code) = LOWER(NEW.client_code)
+                  AND period = NEW.period
+            );
+        END;
+    """)
 
 
 # ---------------------------------------------------------------------------
@@ -634,6 +690,52 @@ def assess_risk(
     ).fetchone())
 
 
+def create_risk_assessment(
+    conn: sqlite3.Connection,
+    engagement_id: str,
+    client_code: str = "",
+    period: str = "",
+    assertion: str = "",
+    account_area: str = "",
+    inherent_risk: str = "medium",
+    control_risk: str = "medium",
+    assessed_by: str = "",
+) -> dict[str, Any]:
+    """Create a single risk assessment row for an engagement."""
+    ensure_cas_tables(conn)
+    # Validate risk levels
+    if inherent_risk not in VALID_RISK_LEVELS:
+        raise ValueError(f"Invalid inherent_risk: {inherent_risk!r}. Must be one of {VALID_RISK_LEVELS}")
+    if control_risk not in VALID_RISK_LEVELS:
+        raise ValueError(f"Invalid control_risk: {control_risk!r}. Must be one of {VALID_RISK_LEVELS}")
+
+    combined = _combine_risk(inherent_risk, control_risk)
+    sig = 1 if _is_significant(inherent_risk, control_risk) else 0
+    now = _utc_now()
+    risk_id = f"risk_{secrets.token_hex(8)}"
+
+    conn.execute(
+        """INSERT INTO risk_assessments
+           (risk_id, engagement_id, account_code, account_name,
+            assertion, inherent_risk, control_risk, combined_risk,
+            significant_risk, assessed_by, assessed_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (risk_id, engagement_id, account_area, account_area,
+         assertion, inherent_risk, control_risk, combined,
+         sig, assessed_by, now),
+    )
+    conn.commit()
+    return {
+        "risk_id": risk_id,
+        "engagement_id": engagement_id,
+        "assertion": assertion,
+        "inherent_risk": inherent_risk,
+        "control_risk": control_risk,
+        "combined_risk": combined,
+        "significant_risk": bool(sig),
+    }
+
+
 def get_risk_assessment(
     conn: sqlite3.Connection,
     engagement_id: str,
@@ -1003,6 +1105,16 @@ def add_related_party(
 ) -> str:
     """Add a related party. Returns party_id."""
     ensure_cas_tables(conn)
+    # FIX 3: Check period lock
+    try:
+        locked = conn.execute(
+            "SELECT 1 FROM period_close_locks WHERE LOWER(client_code) = LOWER(?)",
+            (client_code,),
+        ).fetchone()
+        if locked:
+            raise ValueError("Period is locked — cannot modify related parties after period close")
+    except sqlite3.OperationalError:
+        pass  # period_close_locks table may not exist
     if relationship_type not in VALID_RELATIONSHIP_TYPES:
         relationship_type = "affiliated_company"
     party_id = f"rp_{secrets.token_hex(8)}"
@@ -1046,6 +1158,19 @@ def flag_related_party_transaction(
 ) -> str:
     """Flag a document as a related party transaction. Returns rpt_id."""
     ensure_cas_tables(conn)
+    # FIX 3: Check period lock
+    try:
+        from src.engines.audit_engine import get_engagement
+        eng = get_engagement(conn, engagement_id)
+        if eng:
+            locked = conn.execute(
+                "SELECT 1 FROM period_close_locks WHERE LOWER(client_code) = LOWER(?) AND period = ?",
+                (eng["client_code"], eng["period"]),
+            ).fetchone()
+            if locked:
+                raise ValueError("Period is locked — cannot modify related parties after period close")
+    except sqlite3.OperationalError:
+        pass  # period_close_locks table may not exist
     if measurement_basis not in VALID_MEASUREMENT_BASES:
         measurement_basis = "exchange_amount"
     rpt_id = f"rpt_{secrets.token_hex(8)}"

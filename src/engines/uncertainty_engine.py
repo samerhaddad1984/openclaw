@@ -15,6 +15,7 @@ evaluate_posting_readiness — determine if document is safe to post
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -129,18 +130,33 @@ def evaluate_uncertainty(
     - If all fields >= 0.80: can_post=True
     - NEVER return a clean result when underlying evidence is incomplete
     """
+    # FIX 5: Sanitize NaN/Inf confidence values — treat as 0.0 and force block
+    sanitized = {}
+    has_invalid = False
+    for k, v in confidence_by_field.items():
+        if not math.isfinite(v):
+            sanitized[k] = 0.0
+            has_invalid = True
+        else:
+            sanitized[k] = v
+
     state = UncertaintyState(
-        confidence_by_field=dict(confidence_by_field),
+        confidence_by_field=dict(sanitized),
         unresolved_reasons=list(reasons) if reasons else [],
     )
 
-    if not confidence_by_field:
+    if has_invalid:
         state.must_block = True
         state.posting_recommendation = BLOCK_PENDING_REVIEW
         return state
 
-    min_confidence = min(confidence_by_field.values())
-    has_medium = any(0.60 <= v < 0.80 for v in confidence_by_field.values())
+    if not sanitized:
+        state.must_block = True
+        state.posting_recommendation = BLOCK_PENDING_REVIEW
+        return state
+
+    min_confidence = min(sanitized.values())
+    has_medium = any(0.60 <= v < 0.80 for v in sanitized.values())
 
     if min_confidence < 0.60:
         state.must_block = True
@@ -191,6 +207,16 @@ class DateResolutionState:
             "date_confidence": self.date_confidence,
             "date_affects": list(self.date_affects),
         }
+
+
+def detect_date_ambiguity(a: int, b: int) -> bool:
+    """Return True when a DD/MM or MM/DD date is format-ambiguous.
+
+    Both components must be valid as either day-or-month (i.e. <= 12).
+    Even when a == b (e.g. 12/12) the format is still ambiguous because
+    the *intent* (DD/MM vs MM/DD) cannot be determined from the value alone.
+    """
+    return 1 <= a <= 12 and 1 <= b <= 12
 
 
 def build_date_resolution(

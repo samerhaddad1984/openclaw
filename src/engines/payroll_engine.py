@@ -358,3 +358,239 @@ def validate_cnesst_rate(
             f"Taux attendu: {expected}."
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Mid-year province crossing (employee moves QC ↔ ROC)
+# ---------------------------------------------------------------------------
+
+def prorate_province_deductions(
+    months_in_qc: int,
+    months_outside_qc: int,
+    annual_gross: float | Decimal,
+) -> dict:
+    """
+    Pro-rate pension and EI/QPIP deductions when an employee crosses
+    provinces mid-year (e.g. moves from QC to ON in July).
+
+    Parameters
+    ----------
+    months_in_qc       : months the employee worked in QC (0-12)
+    months_outside_qc  : months the employee worked outside QC (0-12)
+    annual_gross        : total annual gross earnings
+
+    Returns dict with pro-rated QPP/CPP, EI, QPIP amounts and validation info.
+    """
+    gross = _to_decimal(annual_gross)
+    total_months = months_in_qc + months_outside_qc
+
+    if total_months <= 0 or total_months > 12:
+        return {
+            "valid": False,
+            "error_type": "invalid_months",
+            "description_en": f"Total months ({total_months}) must be between 1 and 12.",
+            "description_fr": f"Le total des mois ({total_months}) doit être entre 1 et 12.",
+        }
+
+    qc_fraction = Decimal(str(months_in_qc)) / Decimal("12")
+    roc_fraction = Decimal(str(months_outside_qc)) / Decimal("12")
+
+    qc_gross = _round(gross * qc_fraction)
+    roc_gross = _round(gross * roc_fraction)
+
+    # QPP applies to QC portion, CPP to non-QC portion
+    qpp_deduction = _round(qc_gross * QPP_RATE_EMPLOYEE)
+    cpp_deduction = _round(roc_gross * CPP_RATE_EMPLOYEE)
+
+    # EI: reduced rate for QC months, full rate for ROC months
+    ei_qc = _round(qc_gross * EI_RATE_QUEBEC)
+    ei_roc = _round(roc_gross * EI_RATE_REGULAR)
+
+    # QPIP only for QC months
+    qpip_employee = _round(qc_gross * QPIP_RATE_EMPLOYEE)
+    qpip_employer = _round(qc_gross * QPIP_RATE_EMPLOYER)
+
+    return {
+        "valid": True,
+        "months_in_qc": months_in_qc,
+        "months_outside_qc": months_outside_qc,
+        "qc_gross": str(qc_gross),
+        "roc_gross": str(roc_gross),
+        "qpp_deduction": str(qpp_deduction),
+        "cpp_deduction": str(cpp_deduction),
+        "total_pension": str(_round(qpp_deduction + cpp_deduction)),
+        "ei_qc_portion": str(ei_qc),
+        "ei_roc_portion": str(ei_roc),
+        "total_ei": str(_round(ei_qc + ei_roc)),
+        "qpip_employee": str(qpip_employee),
+        "qpip_employer": str(qpip_employer),
+        "rl1_required": months_in_qc > 0,
+        "t4_required": True,  # always required federally
+        "error_type": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Taxable benefit misclassification
+# ---------------------------------------------------------------------------
+# Benefits that are taxable at both federal and Quebec level
+TAXABLE_BENEFITS: dict[str, dict[str, Any]] = {
+    "personal_vehicle_use": {
+        "label_en": "Personal use of company vehicle",
+        "label_fr": "Usage personnel d'un véhicule de l'entreprise",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": True,  # QPP/CPP
+        "insurable": True,    # EI/QPIP
+        "rl1_box": "L",
+    },
+    "group_life_insurance": {
+        "label_en": "Group term life insurance (employer-paid)",
+        "label_fr": "Assurance-vie collective (payée par l'employeur)",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": False,
+        "insurable": True,
+        "rl1_box": "J",
+    },
+    "parking": {
+        "label_en": "Employer-paid parking",
+        "label_fr": "Stationnement payé par l'employeur",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": True,
+        "insurable": True,
+        "rl1_box": "L",
+    },
+    "housing_allowance": {
+        "label_en": "Housing / lodging benefit",
+        "label_fr": "Avantage en logement",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": True,
+        "insurable": True,
+        "rl1_box": "L",
+    },
+    "stock_option": {
+        "label_en": "Stock option benefit",
+        "label_fr": "Avantage lié aux options d'achat d'actions",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": False,
+        "insurable": False,
+        "rl1_box": "A",  # included in box A employment income
+    },
+    "low_interest_loan": {
+        "label_en": "Low-interest or interest-free loan",
+        "label_fr": "Prêt à faible taux ou sans intérêt",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": False,
+        "insurable": True,
+        "rl1_box": "L",
+    },
+    "cell_phone_personal": {
+        "label_en": "Personal use of employer cell phone",
+        "label_fr": "Utilisation personnelle du téléphone de l'employeur",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": True,
+        "insurable": True,
+        "rl1_box": "L",
+    },
+    "gifts_awards_over_500": {
+        "label_en": "Gifts/awards exceeding $500 threshold",
+        "label_fr": "Cadeaux/récompenses dépassant le seuil de 500$",
+        "taxable_federal": True,
+        "taxable_quebec": True,
+        "pensionable": True,
+        "insurable": True,
+        "rl1_box": "L",
+    },
+}
+
+
+def validate_taxable_benefit(
+    benefit_type: str,
+    reported_as_taxable: bool,
+    amount: float | Decimal,
+    included_in_pensionable: bool = False,
+    included_in_insurable: bool = False,
+) -> dict:
+    """
+    Validate that a taxable benefit is correctly classified.
+
+    Parameters
+    ----------
+    benefit_type            : key from TAXABLE_BENEFITS
+    reported_as_taxable     : whether the employer reported it as taxable
+    amount                  : benefit dollar amount
+    included_in_pensionable : whether it was included in pensionable earnings
+    included_in_insurable   : whether it was included in insurable earnings
+
+    Returns dict with validation result and any misclassification errors.
+    """
+    amt = _to_decimal(amount)
+    info = TAXABLE_BENEFITS.get(benefit_type)
+
+    if not info:
+        return {
+            "valid": False,
+            "error_type": "unknown_benefit_type",
+            "description_en": f"Unknown benefit type: {benefit_type}",
+            "description_fr": f"Type d'avantage inconnu: {benefit_type}",
+        }
+
+    errors: list[dict[str, Any]] = []
+
+    if info["taxable_federal"] and not reported_as_taxable:
+        errors.append({
+            "error_type": "benefit_not_reported_taxable",
+            "description_en": (
+                f"{info['label_en']} of ${amt} is a taxable benefit but was not "
+                f"reported as taxable income. Must be included on T4 and RL-1."
+            ),
+            "description_fr": (
+                f"{info['label_fr']} de {amt}$ est un avantage imposable mais "
+                f"n'a pas été déclaré comme revenu imposable. "
+                f"Doit être inclus sur le T4 et le RL-1."
+            ),
+        })
+
+    if info["pensionable"] and not included_in_pensionable:
+        errors.append({
+            "error_type": "benefit_not_in_pensionable",
+            "description_en": (
+                f"{info['label_en']} of ${amt} is pensionable but was not "
+                f"included in QPP/CPP pensionable earnings."
+            ),
+            "description_fr": (
+                f"{info['label_fr']} de {amt}$ est cotisable mais n'a pas "
+                f"été inclus dans les gains admissibles au RRQ/RPC."
+            ),
+        })
+
+    if info["insurable"] and not included_in_insurable:
+        errors.append({
+            "error_type": "benefit_not_in_insurable",
+            "description_en": (
+                f"{info['label_en']} of ${amt} is insurable but was not "
+                f"included in EI/QPIP insurable earnings."
+            ),
+            "description_fr": (
+                f"{info['label_fr']} de {amt}$ est assurable mais n'a pas "
+                f"été inclus dans les gains assurables d'AE/RQAP."
+            ),
+        })
+
+    return {
+        "valid": len(errors) == 0,
+        "benefit_type": benefit_type,
+        "amount": str(amt),
+        "expected_taxable": info["taxable_federal"],
+        "expected_pensionable": info["pensionable"],
+        "expected_insurable": info["insurable"],
+        "rl1_box": info["rl1_box"],
+        "errors": errors,
+        "error_type": errors[0]["error_type"] if errors else None,
+    }

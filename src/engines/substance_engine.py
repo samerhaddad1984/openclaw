@@ -51,10 +51,15 @@ _CAPEX_KEYWORDS = re.compile(
     r"logiciels?|software|generators?|génératrices?|"
     r"immeubles?|buildings?|terrains?|land|rénovations?|renovations?|"
     r"mobiliers?|furniture|outillage|tooling|imprimantes?|printers?|"
-    r"construction|amélioration locative|leasehold improvement|"
+    r"construction|amélioration locative|amelioration locative|leasehold improvement|"
     # FIX 2 (nightmare): HVAC / climate control CapEx keywords
     r"hvac|système hvac|systeme hvac|remplacement hvac|"
-    r"air climatisé|air climatise|chauffage|ventilation|climatisation"
+    r"air climatisé|air climatise|chauffage|ventilation|climatisation|"
+    # FIX 2 (AZ-L): Accented French CapEx keywords (accent-stripped variants)
+    r"machinerie lourde|machinerie|materiel roulant|matériel roulant|"
+    r"amenagement|aménagement|renovation majeure|rénovation majeure|"
+    r"installation permanente|"
+    r"equipement|équipement"
     r")\b",
     re.IGNORECASE,
 )
@@ -85,7 +90,7 @@ _PREPAID_KEYWORDS = re.compile(
     r"\b("
     r"assurance|insurance|"
     r"loyer.*avance|advance.*rent|prepaid.*rent|"
-    r"abonnement annuel|annual subscription|"
+    r"abonnement annuel|annual subscription|annual plan|plan annuel|"
     r"abonnement|subscription|"
     r"prime d'assurance|insurance premium|"
     r"prépayé|prepaid"
@@ -128,7 +133,9 @@ _TAX_REMITTANCE_KEYWORDS = re.compile(
     r"tps|gst|tvq|qst|hst|tvh|"
     r"das|source deductions|retenues à la source|"
     r"cnesst|csst|hsf|fss|"
-    r"remise|remittance|acompte provisionnel|instalment"
+    r"remise|remittance|acompte provisionnel|instalment|installment|"
+    r"canada revenue|agence du revenu|revenu québec|revenu quebec|"
+    r"\bcra\b|corporate tax"
     r")\b",
     re.IGNORECASE,
 )
@@ -636,6 +643,16 @@ def substance_classifier(
                 # Multi-word name: all parts must appear as whole words in vendor
                 # Also try reversed order: "Tremblay Jean-Pierre" matches "Jean-Pierre Tremblay"
                 all_parts_match = _owner_name_matches_vendor(name_parts, vendor_lower)
+                # FIX 13: Partial match — if the surname (last name part) appears
+                # as a word in the vendor name, flag it (e.g. "Tremblay Holdings Inc."
+                # matches owner "Jean Tremblay" via surname)
+                if not all_parts_match:
+                    _biz_suffixes_partial = {"inc", "ltd", "ltée", "ltee", "corp", "llc", "enr", "senc", "holdings"}
+                    meaningful_vendor_parts = [w for w in vendor_lower.split() if w not in _biz_suffixes_partial]
+                    for part in name_parts:
+                        if re.search(r'\b' + re.escape(part) + r'\b', vendor_lower) and part in meaningful_vendor_parts:
+                            all_parts_match = True
+                            break
             if all_parts_match:
                 flags["potential_personal_expense"] = True
                 flags["block_auto_approval"] = True
@@ -730,6 +747,31 @@ def substance_classifier(
                     flags["block_auto_approval"] = True
         except Exception as exc:
             log.debug("AI substance classification fallback failed: %s", exc)
+
+    # -----------------------------------------------------------------------
+    # Canonical is_* keys — always present, default False
+    # Tests and downstream consumers expect these normalized keys.
+    # -----------------------------------------------------------------------
+    flags["is_capex"] = bool(flags.get("potential_capex"))
+    flags["is_prepaid"] = bool(flags.get("potential_prepaid"))
+    flags["is_loan"] = bool(flags.get("potential_loan"))
+    flags["is_deposit"] = bool(flags.get("potential_customer_deposit"))
+    flags["is_intercompany"] = bool(flags.get("potential_intercompany"))
+    flags["is_personal"] = bool(flags.get("potential_personal_expense"))
+    flags["is_tax_remittance"] = bool(flags.get("potential_tax_remittance"))
+    flags["is_shareholder_related"] = bool(flags.get("potential_personal_expense"))
+    flags["substance_type"] = (
+        "capex" if flags["is_capex"]
+        else "prepaid" if flags["is_prepaid"]
+        else "loan" if flags["is_loan"]
+        else "deposit" if flags["is_deposit"]
+        else "intercompany" if flags["is_intercompany"]
+        else "personal_expense" if flags["is_personal"]
+        else "tax_remittance" if flags["is_tax_remittance"]
+        else "operating_expense"
+    )
+    flags.setdefault("confidence", 0.5 if not keyword_matched else 0.8)
+    flags.setdefault("notes", flags.get("review_notes", []))
 
     return flags
 
@@ -1040,3 +1082,28 @@ def calculate_net_itc_from_personal_use(
             f"ITR: ${gross_itr:.2f} × {rate:.2%} = ${net_itr:.2f}."
         ),
     }
+
+
+def classify_substance(
+    *,
+    vendor: str = "",
+    vendor_name: str = "",
+    memo: str = "",
+    doc_type: str = "",
+    amount: Any = None,
+    owner_names: list[str] | None = None,
+    province: str = "",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Backward-compatible alias for substance_classifier.
+
+    Accepts vendor_name as alias for vendor and ignores extra kwargs.
+    """
+    return substance_classifier(
+        vendor=vendor or vendor_name,
+        memo=memo,
+        doc_type=doc_type,
+        amount=amount,
+        owner_names=owner_names,
+        province=province,
+    )

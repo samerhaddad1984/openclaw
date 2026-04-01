@@ -9,7 +9,7 @@ All monetary arithmetic uses Python Decimal.
 """
 from __future__ import annotations
 
-import secrets
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -175,7 +175,9 @@ def add_asset(
     opening_ucc = cost_d
     current_ucc = _round(cost_d - first_year_cca)
 
-    asset_id = f"FA-{secrets.token_hex(6).upper()}"
+    # Stable asset_id derived from inputs — deterministic across runs
+    _hash_input = f"{client_code}|{asset_name}|{acquisition_date}|{float(cost_d)}|{cls_key}"
+    asset_id = "FA-" + hashlib.sha256(_hash_input.encode()).hexdigest()[:12].upper()
 
     conn.execute(
         """INSERT INTO fixed_assets
@@ -277,8 +279,14 @@ def calculate_annual_cca(
             })
             continue
 
-        # CCA = UCC * rate (half-year rule already applied on first add)
-        cca_amount = _round(opening_ucc * rate * proration)
+        # Half-year rule: for new acquisitions where add_asset already
+        # pre-applied half-year CCA, report that amount instead of
+        # recalculating on the reduced UCC.
+        accumulated = _to_decimal(r["accumulated_cca"])
+        if is_new and accumulated > _ZERO:
+            cca_amount = accumulated
+        else:
+            cca_amount = _round(opening_ucc * rate * proration)
         # Don't allow CCA to exceed UCC
         if cca_amount > opening_ucc:
             cca_amount = opening_ucc
@@ -307,6 +315,8 @@ def calculate_annual_cca(
         })
 
     conn.commit()
+    # FIX 6 (AZ): Deterministic output — sort by asset_id for stable ordering
+    results.sort(key=lambda r: r["asset_id"])
     return results
 
 
@@ -527,7 +537,8 @@ def create_draft_asset_from_capex(
     if cost_d <= _ZERO:
         return None
 
-    asset_id = f"FA-DRAFT-{secrets.token_hex(6).upper()}"
+    _hash_input = f"DRAFT|{client_code}|{asset_name}|{float(cost_d)}|{document_date}"
+    asset_id = "FA-DRAFT-" + hashlib.sha256(_hash_input.encode()).hexdigest()[:12].upper()
 
     # Default to class 8 (miscellaneous) — accountant will reclassify
     conn.execute(
