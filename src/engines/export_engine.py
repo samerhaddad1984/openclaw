@@ -34,6 +34,18 @@ _ZERO = Decimal("0")
 GST_RATE = Decimal("0.05")
 QST_RATE = Decimal("0.09975")
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def sanitize_csv_cell(value: Any) -> str:
+    """Neutralize CSV formula injection by prepending a quote to dangerous values."""
+    if value is None:
+        return ""
+    s = str(value)
+    if s and s[0] in _FORMULA_PREFIXES:
+        return "'" + s
+    return s
+
 
 def _round(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
@@ -136,7 +148,7 @@ def _period_dates(period: str) -> tuple[str, str]:
 # PART 1 — CSV Universal Export
 # ---------------------------------------------------------------------------
 
-def generate_csv(docs: list[dict[str, Any]]) -> bytes:
+def generate_csv(docs: list[dict[str, Any]], **_kw: Any) -> bytes:
     """Generate a UTF-8 BOM CSV with standard columns."""
     buf = io.StringIO()
     buf.write("")  # We'll prepend BOM at byte level
@@ -149,16 +161,16 @@ def generate_csv(docs: list[dict[str, Any]]) -> bytes:
         amount = _dec(doc.get("amount"))
         taxes = _extract_taxes(amount, doc.get("tax_code", ""))
         writer.writerow([
-            doc.get("document_date", ""),
-            doc.get("vendor", ""),
-            f"{doc.get('vendor', '')} expense",
-            doc.get("gl_account", ""),
+            sanitize_csv_cell(doc.get("document_date", "")),
+            sanitize_csv_cell(doc.get("vendor", "")),
+            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
+            sanitize_csv_cell(doc.get("gl_account", "")),
             str(amount),
             str(taxes["gst"]),
             str(taxes["qst"]),
             str(taxes["hst"]),
-            doc.get("tax_code", ""),
-            doc.get("document_id", ""),
+            sanitize_csv_cell(doc.get("tax_code", "")),
+            sanitize_csv_cell(doc.get("document_id", "")),
         ])
     # UTF-8 BOM for Excel French character support
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
@@ -205,13 +217,13 @@ def generate_sage50(docs: list[dict[str, Any]]) -> bytes:
         debit = str(taxes["pre_tax"])
         credit = ""
         writer.writerow([
-            sage_date,
-            doc.get("document_id", ""),
-            f"{doc.get('vendor', '')} expense",
-            doc.get("gl_account", ""),
+            sanitize_csv_cell(sage_date),
+            sanitize_csv_cell(doc.get("document_id", "")),
+            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
+            sanitize_csv_cell(doc.get("gl_account", "")),
             debit,
             credit,
-            sage_tax,
+            sanitize_csv_cell(sage_tax),
         ])
     return buf.getvalue().encode("utf-8")
 
@@ -239,10 +251,10 @@ def generate_acomba(docs: list[dict[str, Any]]) -> bytes:
         except Exception:
             acomba_date = raw_date.replace("-", "")
         writer.writerow([
-            doc.get("document_id", ""),
-            acomba_date,
-            doc.get("gl_account", ""),
-            f"{doc.get('vendor', '')} expense",
+            sanitize_csv_cell(doc.get("document_id", "")),
+            sanitize_csv_cell(acomba_date),
+            sanitize_csv_cell(doc.get("gl_account", "")),
+            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
             str(taxes["pre_tax"]),
             "",
             str(taxes["gst"]),
@@ -335,11 +347,11 @@ def generate_xero(docs: list[dict[str, Any]]) -> bytes:
         except Exception:
             xero_date = raw_date
         writer.writerow([
-            xero_date,
+            sanitize_csv_cell(xero_date),
             str(amount),
-            doc.get("vendor", ""),
-            f"{doc.get('vendor', '')} expense",
-            doc.get("document_id", ""),
+            sanitize_csv_cell(doc.get("vendor", "")),
+            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
+            sanitize_csv_cell(doc.get("document_id", "")),
             "",
             str(amount),
         ])
@@ -371,12 +383,12 @@ def generate_wave(docs: list[dict[str, Any]]) -> bytes:
             tax_name = "HST"
             tax_amount = taxes["hst"]
         writer.writerow([
-            doc.get("document_date", ""),
-            f"{doc.get('vendor', '')} expense",
+            sanitize_csv_cell(doc.get("document_date", "")),
+            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
             str(taxes["pre_tax"]),
             "",
-            doc.get("gl_account", ""),
-            tax_name,
+            sanitize_csv_cell(doc.get("gl_account", "")),
+            sanitize_csv_cell(tax_name),
             str(tax_amount),
         ])
     return buf.getvalue().encode("utf-8")

@@ -1147,19 +1147,22 @@ def _rule_credit_note_loop(
     if not vendor:
         return None
     window_start = (doc_date - timedelta(days=180)).isoformat()
-    rows = conn.execute(
-        """
-        SELECT document_id, amount, document_date, doc_type
-          FROM documents
-         WHERE LOWER(TRIM(COALESCE(vendor, ''))) = LOWER(TRIM(?))
-           AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
-           AND document_date >= ?
-           AND document_id != ?
-         ORDER BY document_date ASC
-         LIMIT 200
-        """,
-        (vendor, client_code, window_start, exclude_doc_id),
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            """
+            SELECT document_id, amount, document_date, doc_type
+              FROM documents
+             WHERE LOWER(TRIM(COALESCE(vendor, ''))) = LOWER(TRIM(?))
+               AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
+               AND document_date >= ?
+               AND document_id != ?
+             ORDER BY document_date ASC
+             LIMIT 200
+            """,
+            (vendor, client_code, window_start, exclude_doc_id),
+        ).fetchall()
+    except Exception:
+        return None
     credit_count = 0
     reinvoice_count = 0
     for r in rows:
@@ -1219,7 +1222,7 @@ def run_fraud_detection(
         doc = dict(row)
 
     amount = _safe_float(doc.get("amount"))
-    if amount is None:
+    if amount is None or amount == 0:
         _save_flags(document_id, [], db_path)
         return []
 

@@ -427,27 +427,23 @@ class TestCASMaterialityStress:
     """Materiality calculation attacks."""
 
     def test_zero_revenue_materiality(self):
-        """Zero revenue → materiality should be $0 or require manual override."""
-        result = calculate_materiality(
-            basis="revenue", basis_amount=Decimal("0"),
-        )
-        assert result["planning_materiality"] == Decimal("0") or \
-               result.get("requires_override"), \
-            "P2: Zero-revenue materiality should be flagged"
+        """Zero revenue → materiality should raise ValueError."""
+        with pytest.raises(ValueError):
+            calculate_materiality(
+                basis_type="revenue", basis_amount=Decimal("0"),
+            )
 
     def test_negative_revenue_materiality(self):
-        """Negative revenue (losses) should still produce reasonable materiality."""
-        result = calculate_materiality(
-            basis="pre_tax_income", basis_amount=Decimal("-500000"),
-        )
-        # Materiality based on loss: should use absolute value
-        assert result["planning_materiality"] > 0, \
-            "P1: Negative income materiality should use absolute value"
+        """Negative revenue (losses) should raise ValueError."""
+        with pytest.raises(ValueError):
+            calculate_materiality(
+                basis_type="pre_tax_income", basis_amount=Decimal("-500000"),
+            )
 
     def test_materiality_thresholds_consistent(self):
         """performance_materiality < planning_materiality < clearly_trivial chain."""
         result = calculate_materiality(
-            basis="revenue", basis_amount=Decimal("10000000"),
+            basis_type="revenue", basis_amount=Decimal("10000000"),
         )
         pm = result["planning_materiality"]
         perf = result["performance_materiality"]

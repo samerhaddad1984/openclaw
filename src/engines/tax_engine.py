@@ -1089,6 +1089,379 @@ def validate_quebec_tax_compliance(document: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Quick Method traps — prevent ITC double-claims and unsupported overlap
+# ---------------------------------------------------------------------------
+
+# Quick Method GST remittance rates (CRA / Revenu Québec)
+QUICK_METHOD_GST_RATES: dict[str, Decimal] = {
+    "retail":   Decimal("0.018"),   # 1.8%
+    "services": Decimal("0.036"),   # 3.6%
+}
+# Quick Method QST remittance rates
+QUICK_METHOD_QST_RATES: dict[str, Decimal] = {
+    "retail":   Decimal("0.034"),   # 3.4%
+    "services": Decimal("0.066"),   # 6.6%
+}
+
+# PST provinces are NOT eligible for the Quick Method — it only covers
+# GST/HST and QST.  PST is a separate provincial charge.
+_QM_UNSUPPORTED_PROVINCES: frozenset[str] = frozenset(PST_PROVINCES.keys())
+
+
+def validate_quick_method_traps(
+    document: dict,
+    *,
+    client_config: dict | None = None,
+    filing_history: list[dict] | None = None,
+) -> list[dict]:
+    """
+    Validate Quick Method–specific traps that go beyond the single-document
+    rate check in :func:`validate_quebec_tax_compliance`.
+
+    Trap catalogue
+    --------------
+    QM-1  itc_double_claim
+          Registrant on Quick Method is also claiming ITC/ITR on the same
+          document.  Under QM, input-tax recovery is NOT permitted (with
+          narrow capital-property exceptions out of scope here).
+
+    QM-2  mixed_taxable_exempt_overlap
+          Quick Method registrant has a document with both taxable and
+          exempt line items.  The QM remittance rate is applied to
+          *taxable* revenue only; exempt lines must be carved out.
+          When line-level split is unavailable, flag for human review.
+
+    QM-3  pst_province_activity
+          Quick Method covers GST/HST and QST only.  A QM registrant
+          with vendor activity in a PST province (BC/MB/SK) must track
+          PST separately — the QM rate does NOT absorb PST.
+
+    QM-4  input_tax_exclusion
+          Certain expense types (capital property > $30 000, real property)
+          are excluded from Quick Method simplification and require
+          separate ITC/ITR tracking.  Flag when detected.
+
+    QM-5  mid_year_method_change
+          CRA/RQ require a full fiscal year on one method.  If
+          ``filing_history`` shows a method change within the same
+          fiscal year, flag as unsupported.
+
+    QM-6  credit_note_after_filing
+          A credit note (negative amount) issued after the filing period
+          must adjust the *next* filing, not retroactively reduce a
+          QM remittance already filed.
+
+    Parameters
+    ----------
+    document : dict
+        Keys used: ``quick_method``, ``quick_method_type``,
+        ``subtotal``, ``amount``, ``tax_code``, ``category``,
+        ``itc_claimed``, ``itr_claimed``, ``gst_recoverable``,
+        ``qst_recoverable``, ``hst_recoverable``,
+        ``vendor_province``, ``expense_type``, ``expense_amount``,
+        ``line_items`` (list[dict] with ``tax_code`` per line),
+        ``document_date``, ``filing_period_end``, ``is_credit_note``.
+    client_config : dict | None
+        From ``get_client_config()`` — keys ``quick_method``,
+        ``quick_method_type``, ``fiscal_year_end``.
+    filing_history : list[dict] | None
+        Chronological list of prior filings with keys:
+        ``period_start``, ``period_end``, ``quick_method`` (bool),
+        ``filed_at``.
+
+    Returns
+    -------
+    list[dict] — each dict has keys: trap_code, severity,
+                 description_en, description_fr, detail (dict or None).
+    """
+    traps: list[dict] = []
+
+    # Merge document-level and client_config-level QM flags
+    cfg = client_config or {}
+    qm_active = bool(
+        document.get("quick_method")
+        or cfg.get("quick_method")
+    )
+    if not qm_active:
+        return traps  # Nothing to check — client is on normal method
+
+    qm_type = (
+        str(document.get("quick_method_type") or cfg.get("quick_method_type") or "retail")
+        .strip().lower()
+    )
+    subtotal = _to_decimal_safe(document.get("subtotal", 0))
+    amount = _to_decimal_safe(document.get("amount", 0))
+    vendor_province = str(document.get("vendor_province", "")).strip().upper()
+
+    # ------------------------------------------------------------------
+    # QM-1: ITC double-claim
+    # ------------------------------------------------------------------
+    itc_claimed = _to_decimal_safe(document.get("itc_claimed", 0))
+    itr_claimed = _to_decimal_safe(document.get("itr_claimed", 0))
+    gst_rec = _to_decimal_safe(document.get("gst_recoverable", 0))
+    qst_rec = _to_decimal_safe(document.get("qst_recoverable", 0))
+    hst_rec = _to_decimal_safe(document.get("hst_recoverable", 0))
+
+    total_input_claims = itc_claimed + itr_claimed + gst_rec + qst_rec + hst_rec
+    if total_input_claims > _ZERO:
+        traps.append({
+            "trap_code": "QM-1",
+            "error_type": "itc_double_claim",
+            "severity": "critical",
+            "description_en": (
+                f"Quick Method registrant is claiming ${total_input_claims} "
+                f"in ITC/ITR.  Under the Quick Method, input-tax credits "
+                f"are NOT permitted (except narrow capital-property "
+                f"exceptions).  These claims must be removed."
+            ),
+            "description_fr": (
+                f"L'inscrit à la méthode rapide réclame {total_input_claims}$ "
+                f"en CTI/RTI.  Sous la méthode rapide, les crédits de taxe "
+                f"sur les intrants ne sont PAS permis (sauf exceptions "
+                f"étroites pour biens en immobilisation).  Ces réclamations "
+                f"doivent être retirées."
+            ),
+            "detail": {
+                "itc_claimed": str(itc_claimed),
+                "itr_claimed": str(itr_claimed),
+                "gst_recoverable": str(gst_rec),
+                "qst_recoverable": str(qst_rec),
+                "hst_recoverable": str(hst_rec),
+                "total_blocked": str(total_input_claims),
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # QM-2: Mixed taxable / exempt overlap
+    # ------------------------------------------------------------------
+    line_items = document.get("line_items") or []
+    if line_items:
+        codes = {_normalize_code(li.get("tax_code", "")) for li in line_items}
+        taxable_codes = codes & {"T", "GST_QST", "HST", "HST_ATL", "GST_ONLY", "M"}
+        exempt_codes = codes & {"E", "Z"}
+        if taxable_codes and exempt_codes:
+            traps.append({
+                "trap_code": "QM-2",
+                "error_type": "mixed_taxable_exempt_overlap",
+                "severity": "high",
+                "description_en": (
+                    "Quick Method invoice contains both taxable and "
+                    f"exempt/zero-rated line items (taxable: {taxable_codes}, "
+                    f"exempt/zero: {exempt_codes}).  The QM remittance rate "
+                    "applies only to taxable supplies — exempt revenue must "
+                    "be carved out.  Manual review required."
+                ),
+                "description_fr": (
+                    "La facture sous méthode rapide contient des postes "
+                    f"taxables et exonérés/détaxés (taxables: {taxable_codes}, "
+                    f"exonérés/détaxés: {exempt_codes}).  Le taux de versement "
+                    "de la MR s'applique uniquement aux fournitures taxables — "
+                    "les revenus exonérés doivent être exclus.  Révision "
+                    "manuelle requise."
+                ),
+                "detail": {
+                    "taxable_codes": sorted(taxable_codes),
+                    "exempt_codes": sorted(exempt_codes),
+                    "line_count": len(line_items),
+                },
+            })
+    else:
+        # No line items — check document-level category for exempt hints
+        category = str(document.get("category", "")).strip().lower()
+        tax_code_doc = _normalize_code(document.get("tax_code", ""))
+        if category in _EXEMPT_CATEGORIES and tax_code_doc in (
+            "T", "GST_QST", "HST", "HST_ATL", "GST_ONLY", "M",
+        ):
+            traps.append({
+                "trap_code": "QM-2",
+                "error_type": "mixed_taxable_exempt_overlap",
+                "severity": "high",
+                "description_en": (
+                    f"Quick Method document is coded as taxable ({tax_code_doc}) "
+                    f"but category '{category}' is exempt.  Verify whether this "
+                    "supply is taxable or exempt before applying QM rate."
+                ),
+                "description_fr": (
+                    f"Document sous méthode rapide codé taxable ({tax_code_doc}) "
+                    f"mais la catégorie '{category}' est exonérée.  Vérifier si "
+                    "cette fourniture est taxable ou exonérée avant d'appliquer "
+                    "le taux de la MR."
+                ),
+                "detail": {
+                    "tax_code": tax_code_doc,
+                    "category": category,
+                },
+            })
+
+    # ------------------------------------------------------------------
+    # QM-3: PST province activity
+    # ------------------------------------------------------------------
+    if vendor_province in _QM_UNSUPPORTED_PROVINCES:
+        pst_rate = PST_PROVINCES.get(vendor_province, _ZERO)
+        traps.append({
+            "trap_code": "QM-3",
+            "error_type": "pst_province_activity",
+            "severity": "high",
+            "description_en": (
+                f"Vendor in {vendor_province} (PST province — "
+                f"PST rate {pst_rate * 100}%).  The Quick Method does NOT "
+                f"cover PST.  Provincial sales tax in {vendor_province} must "
+                f"be tracked separately from the QM remittance."
+            ),
+            "description_fr": (
+                f"Fournisseur en {vendor_province} (province avec TVP — "
+                f"taux TVP {pst_rate * 100}%).  La méthode rapide ne couvre "
+                f"PAS la TVP.  La taxe de vente provinciale du "
+                f"{vendor_province} doit être suivie séparément du versement "
+                f"de la MR."
+            ),
+            "detail": {
+                "vendor_province": vendor_province,
+                "pst_rate": str(pst_rate),
+                "quick_method_type": qm_type,
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # QM-4: Input tax exclusion (capital property > $30,000)
+    # ------------------------------------------------------------------
+    expense_type = str(document.get("expense_type", "")).strip().lower()
+    expense_amount = _to_decimal_safe(document.get("expense_amount", 0))
+    _CAPITAL_KW = {
+        "capital", "immobilisation", "real_property", "immeuble",
+        "building", "bâtiment", "land", "terrain",
+    }
+    _CAPITAL_THRESHOLD = Decimal("30000")
+    is_capital = any(kw in expense_type for kw in _CAPITAL_KW)
+    if is_capital or expense_amount > _CAPITAL_THRESHOLD:
+        traps.append({
+            "trap_code": "QM-4",
+            "error_type": "input_tax_exclusion",
+            "severity": "high",
+            "description_en": (
+                f"Expense type '{expense_type}' / amount ${expense_amount} "
+                f"may qualify as capital property.  Capital property over "
+                f"$30,000 is excluded from Quick Method simplification — "
+                f"ITC/ITR must be tracked separately using normal rules."
+            ),
+            "description_fr": (
+                f"Type de dépense '{expense_type}' / montant {expense_amount}$ "
+                f"peut être un bien en immobilisation.  Les biens en "
+                f"immobilisation de plus de 30 000$ sont exclus de la "
+                f"méthode rapide — les CTI/RTI doivent être calculés "
+                f"séparément selon les règles normales."
+            ),
+            "detail": {
+                "expense_type": expense_type,
+                "expense_amount": str(expense_amount),
+                "threshold": str(_CAPITAL_THRESHOLD),
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # QM-5: Mid-year method change
+    # ------------------------------------------------------------------
+    if filing_history:
+        # Sort by period_start to detect transitions
+        sorted_hist = sorted(filing_history, key=lambda f: f.get("period_start", ""))
+        for i in range(1, len(sorted_hist)):
+            prev = sorted_hist[i - 1]
+            curr = sorted_hist[i]
+            prev_qm = bool(prev.get("quick_method"))
+            curr_qm = bool(curr.get("quick_method"))
+            if prev_qm != curr_qm:
+                # Check if they share the same fiscal year
+                prev_end = str(prev.get("period_end", ""))
+                curr_start = str(curr.get("period_start", ""))
+                fiscal_ye = str(cfg.get("fiscal_year_end", "12-31"))
+                # Simple check: same calendar year
+                prev_year = prev_end[:4] if len(prev_end) >= 4 else ""
+                curr_year = curr_start[:4] if len(curr_start) >= 4 else ""
+                if prev_year and curr_year and prev_year == curr_year:
+                    direction = (
+                        "normal → Quick Method" if curr_qm
+                        else "Quick Method → normal"
+                    )
+                    traps.append({
+                        "trap_code": "QM-5",
+                        "error_type": "mid_year_method_change",
+                        "severity": "critical",
+                        "description_en": (
+                            f"Method change detected mid–fiscal year {curr_year}: "
+                            f"{direction}.  CRA/Revenu Québec require a full "
+                            f"fiscal year on one method.  This change is not "
+                            f"permitted until the start of the next fiscal year."
+                        ),
+                        "description_fr": (
+                            f"Changement de méthode détecté en cours d'exercice "
+                            f"{curr_year}: {direction}.  L'ARC/Revenu Québec "
+                            f"exigent un exercice complet sous une seule méthode. "
+                            f"Ce changement n'est pas permis avant le début du "
+                            f"prochain exercice."
+                        ),
+                        "detail": {
+                            "previous_period": f"{prev.get('period_start')}–{prev_end}",
+                            "current_period": f"{curr_start}–{curr.get('period_end', '')}",
+                            "previous_method": "quick_method" if prev_qm else "normal",
+                            "current_method": "quick_method" if curr_qm else "normal",
+                            "fiscal_year": curr_year,
+                        },
+                    })
+                    break  # One trap per validation pass is enough
+
+    # ------------------------------------------------------------------
+    # QM-6: Credit note after filing
+    # ------------------------------------------------------------------
+    is_credit = bool(document.get("is_credit_note"))
+    if not is_credit and amount < _ZERO:
+        is_credit = True  # Negative amount implies credit note
+
+    if is_credit:
+        doc_date = str(document.get("document_date", "")).strip()
+        filing_end = str(document.get("filing_period_end", "")).strip()
+        if doc_date and filing_end and doc_date > filing_end:
+            traps.append({
+                "trap_code": "QM-6",
+                "error_type": "credit_note_after_filing",
+                "severity": "high",
+                "description_en": (
+                    f"Credit note dated {doc_date} is after the filing "
+                    f"period ending {filing_end}.  Under Quick Method, "
+                    f"this adjustment must be applied to the NEXT filing "
+                    f"period — do NOT retroactively reduce the already-filed "
+                    f"QM remittance."
+                ),
+                "description_fr": (
+                    f"Note de crédit datée du {doc_date} est postérieure à "
+                    f"la période de déclaration se terminant le {filing_end}.  "
+                    f"Sous la méthode rapide, cet ajustement doit être appliqué "
+                    f"à la PROCHAINE période de déclaration — ne PAS réduire "
+                    f"rétroactivement le versement MR déjà produit."
+                ),
+                "detail": {
+                    "document_date": doc_date,
+                    "filing_period_end": filing_end,
+                    "amount": str(amount),
+                },
+            })
+
+    return traps
+
+
+def _to_decimal_safe(value: Any) -> Decimal:
+    """Like _to_decimal but returns _ZERO on bad input instead of raising."""
+    try:
+        if isinstance(value, Decimal):
+            return _ZERO if (value.is_nan() or value.is_infinite()) else value
+        if value is None or str(value).strip() == "":
+            return _ZERO
+        d = Decimal(str(value))
+        return _ZERO if (d.is_nan() or d.is_infinite()) else d
+    except Exception:
+        return _ZERO
+
+
+# ---------------------------------------------------------------------------
 # Cross-provincial ITC/ITR — QST self-assessment for Quebec registrants
 # ---------------------------------------------------------------------------
 

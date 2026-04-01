@@ -425,6 +425,32 @@ def run_migration(db_path: Path = DB_PATH) -> None:
             ("created_at",     "TEXT    NOT NULL DEFAULT ''"),
         ])
 
+        # FIX 5 (AZ-I): Audit trail tamper-proofing — immutable rows
+        conn.executescript("""
+            CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_delete
+            BEFORE DELETE ON audit_log
+            BEGIN
+                SELECT RAISE(ABORT, 'Audit log entries are permanent and cannot be deleted');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update
+            BEFORE UPDATE ON audit_log
+            BEGIN
+                SELECT RAISE(ABORT, 'Audit log entries are immutable and cannot be modified');
+            END;
+        """)
+
+        # FIX 12 (AZ-I): Auto-create audit log on document insertion
+        if table_exists(conn, "documents"):
+            conn.executescript("""
+                CREATE TRIGGER IF NOT EXISTS trg_document_insert_audit
+                AFTER INSERT ON documents
+                BEGIN
+                    INSERT INTO audit_log (event_type, document_id, username, created_at)
+                    VALUES ('document_created', NEW.document_id, 'system', datetime('now'));
+                END;
+            """)
+
         # ------------------------------------------------------------------ #
         # bank_statements / bank_transactions — bank statement import
         # Expected by: src/engines/bank_parser.py
@@ -942,10 +968,16 @@ def run_migration(db_path: Path = DB_PATH) -> None:
                 canonical_vendor_key TEXT NOT NULL,
                 alias_name           TEXT NOT NULL,
                 alias_key            TEXT NOT NULL,
+                client_code          TEXT NOT NULL DEFAULT '',
                 created_by           TEXT,
-                created_at           TEXT NOT NULL DEFAULT ''
+                created_at           TEXT NOT NULL DEFAULT '',
+                UNIQUE(canonical_vendor_key, alias_key, client_code)
             )
         """)
+        # FIX 1: Add client_code column if missing
+        changed += add_missing(conn, "vendor_aliases", [
+            ("client_code", "TEXT NOT NULL DEFAULT ''"),
+        ])
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_vendor_alias_key "
             "ON vendor_aliases(alias_key)"
@@ -953,6 +985,10 @@ def run_migration(db_path: Path = DB_PATH) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_vendor_alias_canonical "
             "ON vendor_aliases(canonical_vendor_key)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vendor_alias_client "
+            "ON vendor_aliases(client_code)"
         )
 
         # ------------------------------------------------------------------ #
@@ -1395,6 +1431,119 @@ def run_migration(db_path: Path = DB_PATH) -> None:
                 ("payment_date",   "TEXT"),
                 ("created_by",     "TEXT"),
             ])
+
+        # ------------------------------------------------------------------ #
+        # FIX 2: materiality_assessments — materiality_locked column
+        # ------------------------------------------------------------------ #
+        changed += add_missing(conn, "materiality_assessments", [
+            ("materiality_locked", "INTEGER NOT NULL DEFAULT 0"),
+        ])
+
+        # ------------------------------------------------------------------ #
+        # FIX 4: risk_assessments — signed_at column
+        # ------------------------------------------------------------------ #
+        changed += add_missing(conn, "risk_assessments", [
+            ("signed_at", "TEXT"),
+        ])
+
+        # ------------------------------------------------------------------ #
+        # Immutability triggers (FIX 1–4)
+        # ------------------------------------------------------------------ #
+        print("  TRIGGERS  Creating immutability triggers …")
+        conn.executescript("""
+            -- FIX 1: Prevent deletion of items from signed working papers
+            CREATE TRIGGER IF NOT EXISTS trg_wp_items_no_delete_when_signed
+            BEFORE DELETE ON working_paper_items
+            BEGIN
+                SELECT CASE
+                    WHEN (SELECT sign_off_at FROM working_papers WHERE paper_id = OLD.paper_id) IS NOT NULL
+                    THEN RAISE(ABORT, 'Cannot delete items from a signed working paper')
+                END;
+            END;
+
+            -- FIX 2: Only one materiality assessment per engagement
+            CREATE TRIGGER IF NOT EXISTS trg_materiality_one_per_engagement
+            BEFORE INSERT ON materiality_assessments
+            WHEN (SELECT COUNT(*) FROM materiality_assessments
+                  WHERE engagement_id = NEW.engagement_id) > 0
+            BEGIN
+                SELECT RAISE(ABORT, 'Only one materiality assessment allowed per engagement');
+            END;
+
+            -- FIX 2: Materiality locked after working papers signed
+            CREATE TRIGGER IF NOT EXISTS trg_materiality_locked_immutable
+            BEFORE UPDATE ON materiality_assessments
+            WHEN OLD.materiality_locked = 1
+            BEGIN
+                SELECT RAISE(ABORT, 'Materiality is locked — working papers have been signed');
+            END;
+
+            -- FIX 4: Risk assessment locked after working paper sign-off
+            CREATE TRIGGER IF NOT EXISTS trg_risk_assessment_locked
+            BEFORE UPDATE ON risk_assessments
+            WHEN OLD.signed_at IS NOT NULL
+            BEGIN
+                SELECT RAISE(ABORT, 'Risk assessment is locked after working paper sign-off');
+            END;
+
+            -- FIX 2: Cascade lock materiality when WP is signed
+            CREATE TRIGGER IF NOT EXISTS trg_cascade_lock_materiality
+            AFTER UPDATE ON working_papers
+            WHEN NEW.sign_off_at IS NOT NULL AND OLD.sign_off_at IS NULL
+            BEGIN
+                UPDATE materiality_assessments SET materiality_locked = 1
+                WHERE engagement_id IN (
+                    SELECT engagement_id FROM engagements
+                    WHERE LOWER(client_code) = LOWER(NEW.client_code)
+                      AND period = NEW.period
+                );
+            END;
+
+            -- FIX 4: Cascade lock risk assessments when WP is signed
+            CREATE TRIGGER IF NOT EXISTS trg_cascade_lock_risk_assessments
+            AFTER UPDATE ON working_papers
+            WHEN NEW.sign_off_at IS NOT NULL AND OLD.sign_off_at IS NULL
+            BEGIN
+                UPDATE risk_assessments SET signed_at = NEW.sign_off_at
+                WHERE signed_at IS NULL AND engagement_id IN (
+                    SELECT engagement_id FROM engagements
+                    WHERE LOWER(client_code) = LOWER(NEW.client_code)
+                      AND period = NEW.period
+                );
+            END;
+        """)
+
+        # Backfill: lock materiality for engagements that already have signed WPs
+        if table_exists(conn, "materiality_assessments") and table_exists(conn, "engagements"):
+            conn.execute("""
+                UPDATE materiality_assessments SET materiality_locked = 1
+                WHERE materiality_locked = 0 AND engagement_id IN (
+                    SELECT DISTINCT e.engagement_id FROM engagements e
+                    JOIN working_papers wp
+                      ON LOWER(wp.client_code) = LOWER(e.client_code)
+                     AND wp.period = e.period
+                    WHERE wp.sign_off_at IS NOT NULL
+                )
+            """)
+        # Backfill: set signed_at on risk_assessments for signed engagements
+        if table_exists(conn, "risk_assessments") and table_exists(conn, "engagements"):
+            conn.execute("""
+                UPDATE risk_assessments SET signed_at = (
+                    SELECT MIN(wp.sign_off_at) FROM working_papers wp
+                    JOIN engagements e
+                      ON LOWER(wp.client_code) = LOWER(e.client_code)
+                     AND wp.period = e.period
+                    WHERE e.engagement_id = risk_assessments.engagement_id
+                      AND wp.sign_off_at IS NOT NULL
+                )
+                WHERE signed_at IS NULL AND engagement_id IN (
+                    SELECT DISTINCT e.engagement_id FROM engagements e
+                    JOIN working_papers wp
+                      ON LOWER(wp.client_code) = LOWER(e.client_code)
+                     AND wp.period = e.period
+                    WHERE wp.sign_off_at IS NOT NULL
+                )
+            """)
 
         conn.commit()
 

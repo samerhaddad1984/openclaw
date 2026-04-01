@@ -157,7 +157,8 @@ def ensure_audit_tables(conn: sqlite3.Connection) -> None:
         -- P0-2: Signed-off working papers are immutable
         CREATE TRIGGER IF NOT EXISTS trg_wp_signed_off_immutable
         BEFORE UPDATE ON working_papers
-        WHEN OLD.status = 'complete' AND OLD.sign_off_at IS NOT NULL
+        WHEN OLD.sign_off_at IS NOT NULL
+             AND (OLD.status = 'complete' OR OLD.status = 'signed_off')
         BEGIN
             SELECT RAISE(ABORT, 'working paper is signed off and immutable');
         END;
@@ -165,7 +166,6 @@ def ensure_audit_tables(conn: sqlite3.Connection) -> None:
         CREATE TRIGGER IF NOT EXISTS trg_wpi_signed_off_immutable
         BEFORE UPDATE ON working_paper_items
         WHEN (SELECT sign_off_at FROM working_papers WHERE paper_id = OLD.paper_id) IS NOT NULL
-             AND (SELECT status FROM working_papers WHERE paper_id = OLD.paper_id) = 'complete'
         BEGIN
             SELECT RAISE(ABORT, 'working paper is signed off and immutable');
         END;
@@ -173,9 +173,18 @@ def ensure_audit_tables(conn: sqlite3.Connection) -> None:
         CREATE TRIGGER IF NOT EXISTS trg_wpi_insert_signed_off
         BEFORE INSERT ON working_paper_items
         WHEN (SELECT sign_off_at FROM working_papers WHERE paper_id = NEW.paper_id) IS NOT NULL
-             AND (SELECT status FROM working_papers WHERE paper_id = NEW.paper_id) = 'complete'
         BEGIN
             SELECT RAISE(ABORT, 'working paper is signed off and immutable');
+        END;
+
+        -- FIX 1: Prevent deletion of items from signed working papers
+        CREATE TRIGGER IF NOT EXISTS trg_wp_items_no_delete_when_signed
+        BEFORE DELETE ON working_paper_items
+        BEGIN
+            SELECT CASE
+                WHEN (SELECT sign_off_at FROM working_papers WHERE paper_id = OLD.paper_id) IS NOT NULL
+                THEN RAISE(ABORT, 'Cannot delete items from a signed working paper')
+            END;
         END;
     """)
     conn.commit()

@@ -395,9 +395,11 @@ def _build_cluster_key(
     vendor: str,
     invoice_number: str,
     amount: float | None,
+    client_code: str = "",
 ) -> str:
-    """Build a deterministic cluster key from vendor+invoice+amount."""
+    """Build a deterministic cluster key from client+vendor+invoice+amount."""
     parts = [
+        (client_code or "").strip().lower(),
         _normalize_invoice_number(vendor or ""),
         _normalize_invoice_number(invoice_number or ""),
         str(round(abs(amount or 0), 2)),
@@ -436,20 +438,22 @@ def cluster_documents(
     if not docs:
         return {"error": "No documents found"}
 
-    # Build cluster key from first document
+    # Build cluster key from first document (includes client_code for isolation)
     first = docs[0]
     cluster_key = _build_cluster_key(
         first.get("vendor", ""),
         first.get("invoice_number", ""),
         first.get("amount"),
+        client_code=client_code,
     )
 
     now = _utc_now()
 
-    # Check if cluster already exists
+    # Check if cluster already exists for THIS client
     existing = conn.execute(
-        "SELECT cluster_id, cluster_head_id FROM document_clusters WHERE cluster_key = ?",
-        (cluster_key,),
+        "SELECT cluster_id, cluster_head_id FROM document_clusters "
+        "WHERE cluster_key = ? AND client_code = ?",
+        (cluster_key, client_code),
     ).fetchone()
 
     if existing:
