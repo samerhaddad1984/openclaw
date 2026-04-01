@@ -4575,7 +4575,7 @@ def render_working_papers(
                     f"<td>{tested_by}</td>"
                     f"<td>"
                     f"<form method='POST' action='/working_papers/signoff' style='display:inline;'>"
-                    f"<input type='hidden' name='paper_id' value='{esc(str(p['id']))}'>"
+                    f"<input type='hidden' name='paper_id' value='{esc(str(p['paper_id']))}'>"
                     f"<input type='hidden' name='client_code' value='{esc(client_code)}'>"
                     f"<input type='hidden' name='period' value='{esc(period)}'>"
                     f"<input type='hidden' name='engagement_type' value='{esc(engagement_type)}'>"
@@ -5280,14 +5280,14 @@ def render_engagements(
         rows_html = ""
         for eng in engagements:
             with open_db() as conn:
-                prog = _audit.get_engagement_progress(conn, eng["id"])
+                prog = _audit.get_engagement_progress(conn, eng["engagement_id"])
             pct = int(prog.get("pct", 0))
             prog_html = (
                 f'<div style="background:#e5e7eb;border-radius:4px;height:6px;width:80px;display:inline-block;vertical-align:middle;">'
                 f'<div style="background:#6366f1;border-radius:4px;height:6px;width:{pct}%;"></div></div>'
                 f'&nbsp;{pct}%'
             )
-            _eng_id_q = urlquote(str(eng.get("id", "")))
+            _eng_id_q = urlquote(str(eng.get("engagement_id", "")))
             rows_html += (
                 f"<tr>"
                 f"<td><strong>{esc(str(eng.get('client_code', '')))}</strong></td>"
