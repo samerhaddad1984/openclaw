@@ -2375,6 +2375,26 @@ summary{cursor:pointer;font-weight:700}
 ul{margin-top:6px}
 @media(max-width:1100px){.filters{grid-template-columns:repeat(3,minmax(140px,1fr))}}
 @media(max-width:900px){.grid-2,.grid-3,.grid-4,.filters{grid-template-columns:1fr}}
+.decision-card{background:white;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:16px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.decision-card-header{padding:12px 16px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;border-bottom:1px solid #e5e7eb}
+.decision-card-header .dc-icon{font-size:20px;flex-shrink:0}
+.decision-card-header .dc-title-fr{color:#111827}
+.decision-card-header .dc-title-en{color:#6b7280;font-size:13px;font-weight:500;margin-left:4px}
+.decision-card-body{padding:14px 16px}
+.dc-section{margin-bottom:10px}
+.dc-section:last-child{margin-bottom:0}
+.dc-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:4px}
+.dc-text{font-size:13px;line-height:1.45;color:#1f2937}
+.dc-text-en{color:#6b7280;font-size:12px}
+.dc-actions{padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dc-btn-primary{background:#111827;color:white;border:0;border-radius:8px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;display:inline-block;text-decoration:none}
+.dc-btn-primary:hover{background:#1e3a5f;text-decoration:none;color:white}
+.dc-btn-alt{background:white;color:#111827;border:2px solid #d1d5db;border-radius:8px;padding:7px 14px;font-weight:600;font-size:12px;cursor:pointer;display:inline-block;text-decoration:none}
+.dc-btn-alt:hover{background:#f3f4f6;border-color:#9ca3af;text-decoration:none;color:#111827}
+.dc-severity-red .decision-card-header{background:#fef2f2;border-left:4px solid #dc2626}
+.dc-severity-amber .decision-card-header{background:#fffbeb;border-left:4px solid #d97706}
+.dc-severity-blue .decision-card-header{background:#eff6ff;border-left:4px solid #2563eb}
+@media(max-width:600px){.dc-actions{flex-direction:column}.dc-btn-primary,.dc-btn-alt{width:100%;text-align:center}}
 """
 
 
@@ -7680,6 +7700,526 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
 
 
 # ---------------------------------------------------------------------------
+# Decision cards — structured decision workflow for flagged documents
+# ---------------------------------------------------------------------------
+
+_GST_RATE = 0.05
+_QST_RATE = 0.09975
+
+
+def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
+                          document_id: str) -> list[dict[str, Any]]:
+    """Detect up to 10 blocked/uncertain scenarios and return decision card dicts.
+
+    Each card: icon, title_fr, title_en, severity ('red'|'amber'|'blue'),
+    issue_fr, issue_en, why_fr, why_en, recommended_action (dict with
+    label_fr, label_en, form_action, form_fields), alternatives (list of
+    similar dicts).
+    """
+    cards: list[dict[str, Any]] = []
+    doc_type = normalize_text(row["doc_type"]).lower() if row.get("doc_type") else ""
+    amount_str = normalize_text(row["amount"])
+    try:
+        amount_val = float(amount_str.replace(",", "").replace("$", "").strip()) if amount_str else 0.0
+    except (ValueError, TypeError):
+        amount_val = 0.0
+    abs_amount = abs(amount_val)
+    vendor = normalize_text(row["vendor"])
+    gst = raw_result.get("gst_amount")
+    qst = raw_result.get("qst_amount")
+    tax_code = normalize_text(row["tax_code"])
+    fraud_flags_raw: list[dict[str, Any]] = []
+    try:
+        ff = row["fraud_flags"]
+        if ff:
+            parsed = json.loads(ff) if isinstance(ff, str) else ff
+            if isinstance(parsed, list):
+                fraud_flags_raw = parsed
+    except Exception:
+        pass
+    fraud_keys = {str(f.get("i18n_key", "")) for f in fraud_flags_raw}
+    fraud_keys.update(str(f.get("type", "")) for f in fraud_flags_raw)
+
+    duplicate = raw_result.get("duplicate_result") or {}
+    vendor_mem = raw_result.get("vendor_memory_enrichment") or {}
+    exc_router = raw_result.get("exception_router_result") or {}
+    client_code = normalize_text(row["client_code"])
+    doc_date = normalize_text(row["document_date"])
+
+    # --- SCENARIO 1: Credit memo with no GST/QST breakdown ---
+    is_credit = doc_type in {"credit_note", "credit_memo", "refund", "chargeback",
+                             "reversal", "note de crédit"} or amount_val < 0
+    has_no_tax_breakdown = (gst is None or gst == "" or gst == 0) and (
+        qst is None or qst == "" or qst == 0)
+    if is_credit and abs_amount > 0 and has_no_tax_breakdown:
+        pretax = round(abs_amount / (1 + _GST_RATE + _QST_RATE), 2)
+        est_gst = round(pretax * _GST_RATE, 2)
+        est_qst = round(pretax * _QST_RATE, 2)
+        cards.append({
+            "icon": "\U0001f4cb", "severity": "amber",
+            "title_fr": "NOTE DE CR\u00c9DIT \u2014 TAXE NON VENTIL\u00c9E",
+            "title_en": "Credit Memo \u2014 Tax Not Itemized",
+            "issue_fr": f"La note de cr\u00e9dit de ${abs_amount:,.2f} ne montre pas la TPS/TVQ s\u00e9par\u00e9ment.",
+            "issue_en": f"Credit memo of ${abs_amount:,.2f} does not show GST/QST separately.",
+            "why_fr": f"Sans ventilation, vous ne pouvez pas r\u00e9cup\u00e9rer vos CTI/RTI. Perte potentielle: ${est_gst + est_qst:,.2f}.",
+            "why_en": f"Without breakdown you cannot claim your ITC/ITR. Potential loss: ${est_gst + est_qst:,.2f}.",
+            "recommended": {
+                "label_fr": f"Appliquer allocation proportionnelle \u2014 TPS: ${est_gst} | TVQ: ${est_qst} | Avant taxes: ${pretax}",
+                "label_en": "Apply proportional allocation",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "tax_code": "H",
+                            "amount": str(amount_str)},
+            },
+            "alternatives": [
+                {"label_fr": "Entrer manuellement", "label_en": "Enter manually",
+                 "action": f"/document/{urlquote(document_id)}#edit", "method": "GET", "fields": {}},
+                {"label_fr": "Demander au fournisseur", "label_en": "Ask supplier",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Demander ventilation TPS/TVQ au fournisseur"}},
+                {"label_fr": "Traiter sans taxes", "label_en": "Process without tax",
+                 "action": "/document/update", "method": "POST",
+                 "fields": {"document_id": document_id, "tax_code": "E"}},
+            ],
+        })
+
+    # --- SCENARIO 2: New vendor, large amount ---
+    is_new_vendor = vendor_mem.get("is_new_vendor", False) or vendor_mem.get("invoice_count", 999) <= 1
+    _new_vendor_threshold = 3000.0
+    if is_new_vendor and abs_amount >= _new_vendor_threshold:
+        cards.append({
+            "icon": "\U0001f6a8", "severity": "red",
+            "title_fr": f"NOUVEAU FOURNISSEUR \u2014 MONTANT \u00c9LEV\u00c9",
+            "title_en": "New Vendor \u2014 Large Amount",
+            "issue_fr": f"{vendor} \u2014 premi\u00e8re facture ${abs_amount:,.2f}",
+            "issue_en": f"{vendor} \u2014 first invoice ${abs_amount:,.2f}",
+            "why_fr": "Factures importantes de nouveaux fournisseurs sont une m\u00e9thode de fraude courante.",
+            "why_en": "Large invoices from new vendors are a common fraud method.",
+            "recommended": {
+                "label_fr": "Approuver \u2014 fournisseur v\u00e9rifi\u00e9",
+                "label_en": "Approve \u2014 verified vendor",
+                "action": "/qbo/approve", "method": "POST",
+                "fields": {"document_id": document_id},
+            },
+            "alternatives": [
+                {"label_fr": "Mettre en attente", "label_en": "Put on hold",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Nouveau fournisseur \u2014 v\u00e9rification requise"}},
+                {"label_fr": "Signaler \u00e0 la direction", "label_en": "Flag for management",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Signal\u00e9 \u00e0 la direction \u2014 nouveau fournisseur montant \u00e9lev\u00e9"}},
+                {"label_fr": "Rejeter", "label_en": "Reject",
+                 "action": "/document/update", "method": "POST",
+                 "fields": {"document_id": document_id, "review_status": "Ignored"}},
+            ],
+        })
+
+    # --- SCENARIO 3: Payment recipient differs from invoice vendor ---
+    payment_to = normalize_text(raw_result.get("payment_recipient") or raw_result.get("payee") or "")
+    _recipient_mismatch = any("recipient" in k or "payee_mismatch" in k or "vendor_mismatch" in k
+                              for k in fraud_keys)
+    if not _recipient_mismatch and payment_to and vendor:
+        _sim = _simple_similarity(vendor.lower(), payment_to.lower())
+        if 0 < _sim < 0.90 and payment_to.lower() != vendor.lower():
+            _recipient_mismatch = True
+    if _recipient_mismatch and payment_to:
+        _sim_pct = int(_simple_similarity(vendor.lower(), payment_to.lower()) * 100) if vendor and payment_to else 0
+        cards.append({
+            "icon": "\u26a0\ufe0f", "severity": "red",
+            "title_fr": "B\u00c9N\u00c9FICIAIRE DIFF\u00c9RENT DU FOURNISSEUR",
+            "title_en": "Payment Recipient Differs from Invoice Vendor",
+            "issue_fr": f"Facture de: {vendor}. Paiement \u00e0: {payment_to} (similarit\u00e9 {_sim_pct}%)",
+            "issue_en": f"Invoice from: {vendor}. Payment to: {payment_to} (similarity {_sim_pct}%)",
+            "why_fr": "Le paiement va \u00e0 une entit\u00e9 diff\u00e9rente. Peut indiquer une fraude ou soci\u00e9t\u00e9 affili\u00e9e.",
+            "why_en": "Payment goes to a different entity. May indicate fraud or affiliated company.",
+            "recommended": {
+                "label_fr": "C'est une filiale \u2014 m\u00eame fournisseur",
+                "label_en": "Affiliate \u2014 same vendor",
+                "action": "/qbo/approve", "method": "POST",
+                "fields": {"document_id": document_id},
+            },
+            "alternatives": [
+                {"label_fr": "Mettre en attente \u2014 v\u00e9rifier", "label_en": "Hold \u2014 verify",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "V\u00e9rifier b\u00e9n\u00e9ficiaire vs fournisseur"}},
+                {"label_fr": "Signaler comme suspect", "label_en": "Flag as suspicious",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Suspect \u2014 b\u00e9n\u00e9ficiaire diff\u00e9rent du fournisseur"}},
+            ],
+        })
+
+    # --- SCENARIO 4: CapEx detected disguised as expense ---
+    _capex_keywords = {"remplacement complet", "complete replacement", "hvac", "toiture",
+                       "roof", "syst\u00e8me", "system", "\u00e9quipement", "equipment",
+                       "machinerie", "machinery", "v\u00e9hicule", "vehicle",
+                       "b\u00e2timent", "building", "construction", "renovation"}
+    _capex_threshold = 5000.0
+    _desc_lower = (normalize_text(raw_result.get("description") or "") + " " + normalize_text(row.get("file_name") or "")).lower()
+    _is_capex_candidate = abs_amount >= _capex_threshold and any(kw in _desc_lower for kw in _capex_keywords)
+    _is_expense_gl = normalize_text(row["gl_account"]).startswith(("5", "6")) if row.get("gl_account") else False
+    if _is_capex_candidate and _is_expense_gl:
+        _cca_rate = 0.20
+        _cca_deduction = round(abs_amount * _cca_rate * 0.5, 2)  # half-year rule
+        _nbv = round(abs_amount - _cca_deduction, 2)
+        cards.append({
+            "icon": "\U0001f3d7\ufe0f", "severity": "amber",
+            "title_fr": "IMMOBILISATION POSSIBLE",
+            "title_en": "Possible Capital Asset",
+            "issue_fr": f"Facture: {_desc_lower[:60].strip()} ${abs_amount:,.2f}. Classifi\u00e9 comme: d\u00e9pense.",
+            "issue_en": f"Invoice: ${abs_amount:,.2f} classified as operating expense.",
+            "why_fr": f"Si pass\u00e9 en d\u00e9pense: actifs sous-\u00e9valu\u00e9s de ${abs_amount:,.2f}, charges sur\u00e9valu\u00e9es.",
+            "why_en": f"If expensed: assets understated by ${abs_amount:,.2f}, expenses overstated.",
+            "recommended": {
+                "label_fr": f"Cr\u00e9er immobilisation Classe 8 (20%) \u2014 DPA: ${_cca_deduction:,.2f} | VNI: ${_nbv:,.2f}",
+                "label_en": "Create capital asset Class 8 (20%)",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "gl_account": "1500",
+                            "category": "Capital Asset"},
+            },
+            "alternatives": [
+                {"label_fr": "C'est une r\u00e9paration \u2014 d\u00e9pense", "label_en": "It is a repair \u2014 expense",
+                 "action": "/qbo/approve", "method": "POST",
+                 "fields": {"document_id": document_id}},
+                {"label_fr": "D\u00e9cider plus tard", "label_en": "Decide later",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "D\u00e9cision CapEx vs OpEx en attente"}},
+            ],
+        })
+
+    # --- SCENARIO 5: Date ambiguous Q1 vs Q2 ---
+    _date_ambiguous = False
+    _interp_a = _interp_b = ""
+    if doc_date:
+        import re as _re
+        _dm = _re.match(r"^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$", doc_date.strip())
+        if _dm:
+            _p1, _p2, _yr = int(_dm.group(1)), int(_dm.group(2)), _dm.group(3)
+            if 1 <= _p1 <= 12 and 1 <= _p2 <= 12 and _p1 != _p2:
+                _date_ambiguous = True
+                _q_a = (_p2 - 1) // 3 + 1
+                _q_b = (_p1 - 1) // 3 + 1
+                _month_names_dc = ["janvier", "f\u00e9vrier", "mars", "avril", "mai", "juin",
+                                   "juillet", "ao\u00fbt", "septembre", "octobre", "novembre", "d\u00e9cembre"]
+                _interp_a = f"{_p1} {_month_names_dc[_p2 - 1]} {_yr} (T{_q_a})"
+                _interp_b = f"{_p2} {_month_names_dc[_p1 - 1]} {_yr} (T{_q_b})"
+    if _date_ambiguous:
+        cards.append({
+            "icon": "\U0001f4c5", "severity": "amber",
+            "title_fr": "DATE AMBIGU\u00cb \u2014 P\u00c9RIODE \u00c0 CONFIRMER",
+            "title_en": "Ambiguous Date \u2014 Period to Confirm",
+            "issue_fr": f"Date sur la facture: {doc_date}",
+            "issue_en": f"Date on invoice: {doc_date}",
+            "why_fr": "Affecte la p\u00e9riode TPS/TVQ et l'exercice.",
+            "why_en": "Affects GST/QST period and fiscal year.",
+            "recommended": {
+                "label_fr": f"Interpr\u00e9tation A: {_interp_a}",
+                "label_en": f"Interpretation A: {_interp_a}",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "document_date": doc_date},
+            },
+            "alternatives": [
+                {"label_fr": f"Interpr\u00e9tation B: {_interp_b}", "label_en": f"Interpretation B: {_interp_b}",
+                 "action": "/document/update", "method": "POST",
+                 "fields": {"document_id": document_id, "document_date": doc_date}},
+                {"label_fr": "Demander au client", "label_en": "Ask client",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Date ambigu\u00eb \u2014 confirmer avec le client"}},
+            ],
+        })
+
+    # --- SCENARIO 6: Loan payment not split ---
+    _loan_keywords = {"pr\u00eat", "loan", "hypoth\u00e8que", "mortgage", "emprunt",
+                      "financement", "financing", "desjardins", "banque nationale",
+                      "caisse", "versement"}
+    _is_loan = any(kw in _desc_lower or kw in vendor.lower() for kw in _loan_keywords)
+    _gl_is_single = row.get("gl_account") and not raw_result.get("line_items")
+    if _is_loan and abs_amount > 500 and _gl_is_single:
+        _est_interest = round(abs_amount * 0.21, 2)  # rough estimate
+        _est_principal = round(abs_amount - _est_interest, 2)
+        cards.append({
+            "icon": "\U0001f4b3", "severity": "blue",
+            "title_fr": "PAIEMENT DE PR\u00caT \u2014 VENTILATION REQUISE",
+            "title_en": "Loan Payment \u2014 Split Required",
+            "issue_fr": f"Paiement: ${abs_amount:,.2f} \u00e0 {vendor}. D\u00e9tect\u00e9 comme paiement de pr\u00eat.",
+            "issue_en": f"Payment: ${abs_amount:,.2f} to {vendor}. Detected as loan payment.",
+            "why_fr": "Capital (GL 2500) et int\u00e9r\u00eats (GL 5480) doivent \u00eatre s\u00e9par\u00e9s. Les int\u00e9r\u00eats sont d\u00e9ductibles.",
+            "why_en": "Principal (GL 2500) and interest (GL 5480) must be separated. Interest is deductible.",
+            "recommended": {
+                "label_fr": f"Confirmer: Capital ${_est_principal:,.2f} \u2192 GL 2500 | Int\u00e9r\u00eats ${_est_interest:,.2f} \u2192 GL 5480",
+                "label_en": "Confirm estimated split",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "gl_account": "2500",
+                            "category": "Loan Payment"},
+            },
+            "alternatives": [
+                {"label_fr": "Entrer les vrais montants", "label_en": "Enter actual amounts",
+                 "action": f"/document/{urlquote(document_id)}#edit", "method": "GET", "fields": {}},
+                {"label_fr": "Tout au capital", "label_en": "All to principal",
+                 "action": "/document/update", "method": "POST",
+                 "fields": {"document_id": document_id, "gl_account": "2500"}},
+            ],
+        })
+
+    # --- SCENARIO 7: GST/QST from unregistered supplier ---
+    _gst_number = normalize_text(raw_result.get("gst_number") or raw_result.get("tax_registration") or "")
+    _has_tax_charged = (gst and float(str(gst).replace(",", "").replace("$", "") or "0") > 0) or (
+        qst and float(str(qst).replace(",", "").replace("$", "") or "0") > 0)
+    _unregistered = any("unregistered" in k or "non_inscrit" in k or "missing_gst" in k
+                        for k in fraud_keys)
+    if not _gst_number and _has_tax_charged or _unregistered:
+        _tax_gst = float(str(gst).replace(",", "").replace("$", "") or "0") if gst else 0
+        _tax_qst = float(str(qst).replace(",", "").replace("$", "") or "0") if qst else 0
+        cards.append({
+            "icon": "\u274c", "severity": "red",
+            "title_fr": "FOURNISSEUR NON INSCRIT \u2014 TPS/TVQ INVALIDE",
+            "title_en": "Unregistered Supplier \u2014 GST/QST Invalid",
+            "issue_fr": f"{vendor}: TPS factur\u00e9e ${_tax_gst:,.2f} | TVQ factur\u00e9e ${_tax_qst:,.2f}. Num\u00e9ro TPS: Absent.",
+            "issue_en": f"{vendor}: GST charged ${_tax_gst:,.2f} | QST charged ${_tax_qst:,.2f}. GST number: Missing.",
+            "why_fr": "Un fournisseur non inscrit ne peut pas facturer la TPS/TVQ. CTI/RTI non r\u00e9clamables.",
+            "why_en": "Unregistered supplier cannot charge GST/QST. ITC/ITR not claimable. CRA/RQ audit risk.",
+            "recommended": {
+                "label_fr": "Traiter \u2014 aucun CTI/RTI",
+                "label_en": "Process \u2014 no ITC/ITR",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "tax_code": "E"},
+            },
+            "alternatives": [
+                {"label_fr": "Demander num\u00e9ro TPS au fournisseur", "label_en": "Request GST number",
+                 "action": "/document/hold", "method": "POST",
+                 "fields": {"document_id": document_id,
+                             "hold_reason": "Demander num\u00e9ro TPS/TVQ au fournisseur"}},
+                {"label_fr": "Fournisseur inscrit \u2014 entrer num\u00e9ro", "label_en": "Is registered \u2014 enter number",
+                 "action": f"/document/{urlquote(document_id)}#edit", "method": "GET", "fields": {}},
+            ],
+        })
+
+    # --- SCENARIO 8: Personal expense flagged ---
+    _personal_keywords = {"cottage", "personnel", "personal", "maison", "r\u00e9sidence",
+                          "vacances", "vacation", "familial", "family", "priv\u00e9"}
+    _is_personal = any(kw in _desc_lower for kw in _personal_keywords) or any(
+        "personal" in k for k in fraud_keys)
+    if _is_personal:
+        cards.append({
+            "icon": "\U0001f3e0", "severity": "amber",
+            "title_fr": "D\u00c9PENSE PERSONNELLE POSSIBLE",
+            "title_en": "Possible Personal Expense",
+            "issue_fr": f"Facture: {_desc_lower[:50].strip()} ${abs_amount:,.2f}. Usage personnel probable.",
+            "issue_en": f"Invoice: ${abs_amount:,.2f}. Likely personal use detected.",
+            "why_fr": "Les d\u00e9penses personnelles ne sont pas d\u00e9ductibles. CTI/RTI non r\u00e9clamables.",
+            "why_en": "Personal expenses are not deductible. ITC/ITR not claimable.",
+            "recommended": {
+                "label_fr": "D\u00e9pense personnelle \u2014 retirer",
+                "label_en": "Personal \u2014 remove",
+                "action": "/document/update", "method": "POST",
+                "fields": {"document_id": document_id, "review_status": "Ignored",
+                            "category": "Personal"},
+            },
+            "alternatives": [
+                {"label_fr": "Usage mixte \u2014 quelle proportion?", "label_en": "Mixed use \u2014 what %?",
+                 "action": f"/document/{urlquote(document_id)}#edit", "method": "GET", "fields": {}},
+                {"label_fr": "C'est une d\u00e9pense d'entreprise", "label_en": "Business expense",
+                 "action": "/qbo/approve", "method": "POST",
+                 "fields": {"document_id": document_id}},
+            ],
+        })
+
+    # --- SCENARIO 9: Duplicate invoice suspected ---
+    _dup_risk = normalize_key(duplicate.get("risk_level", ""))
+    _dup_match_id = normalize_text(duplicate.get("matched_document_id") or duplicate.get("match_id") or "")
+    _dup_score = duplicate.get("similarity_score") or duplicate.get("score") or 0
+    if _dup_risk in {"medium", "high"} or _dup_match_id:
+        _sim_display = int(float(_dup_score) * 100) if isinstance(_dup_score, (int, float)) and _dup_score <= 1 else int(_dup_score)
+        cards.append({
+            "icon": "\U0001f504", "severity": "red",
+            "title_fr": "FACTURE EN DOUBLE POSSIBLE",
+            "title_en": "Possible Duplicate Invoice",
+            "issue_fr": f"{vendor} ${abs_amount:,.2f}. Facture similaire: {_dup_match_id} (similarit\u00e9 {_sim_display}%)",
+            "issue_en": f"{vendor} ${abs_amount:,.2f}. Similar invoice: {_dup_match_id} (similarity {_sim_display}%)",
+            "why_fr": "Payer deux fois la m\u00eame facture = perte directe pour le client.",
+            "why_en": "Paying the same invoice twice = direct loss for the client.",
+            "recommended": {
+                "label_fr": "Voir la facture originale",
+                "label_en": "View original",
+                "action": f"/document/{urlquote(_dup_match_id)}", "method": "GET",
+                "fields": {},
+            },
+            "alternatives": [
+                {"label_fr": "C'est un doublon \u2014 rejeter", "label_en": "Duplicate \u2014 reject",
+                 "action": "/document/update", "method": "POST",
+                 "fields": {"document_id": document_id, "review_status": "Ignored"}},
+                {"label_fr": "Factures diff\u00e9rentes \u2014 approuver", "label_en": "Different \u2014 approve",
+                 "action": "/qbo/approve", "method": "POST",
+                 "fields": {"document_id": document_id}},
+            ],
+        })
+
+    # --- SCENARIO 10: Period locked ---
+    if client_code and doc_date:
+        _period = get_document_period(doc_date)
+        if _period:
+            try:
+                with open_db() as _conn:
+                    if is_period_locked(_conn, client_code, _period):
+                        _lock_info = get_lock_info(_conn, client_code, _period)
+                        _locked_date = _lock_info.get("locked_at", "") if _lock_info else ""
+                        # Suggest next open period
+                        import re as _re2
+                        _pm = _re2.match(r"(\d{4})-(\d{2})", _period)
+                        if _pm:
+                            _yr, _mo = int(_pm.group(1)), int(_pm.group(2))
+                            _next_mo = _mo + 1 if _mo < 12 else 1
+                            _next_yr = _yr if _mo < 12 else _yr + 1
+                            _next_period = f"{_next_yr}-{_next_mo:02d}"
+                        else:
+                            _next_period = ""
+                        _month_names = "janvier f\u00e9vrier mars avril mai juin juillet ao\u00fbt septembre octobre novembre d\u00e9cembre".split()
+                        _period_label = _period
+                        if _pm:
+                            _period_label = f"{_month_names[int(_pm.group(2)) - 1]} {_pm.group(1)}"
+                        cards.append({
+                            "icon": "\U0001f512", "severity": "blue",
+                            "title_fr": "P\u00c9RIODE VERROUILL\u00c9E",
+                            "title_en": "Period is Locked",
+                            "issue_fr": f"Document dat\u00e9: {_period_label}. P\u00e9riode verrouill\u00e9e{(' le ' + _locked_date) if _locked_date else ''}.",
+                            "issue_en": f"Document dated: {_period_label}. Period locked{(' on ' + _locked_date) if _locked_date else ''}.",
+                            "why_fr": "Modifier des p\u00e9riodes ferm\u00e9es cr\u00e9e des \u00e9carts dans les rapprochements.",
+                            "why_en": "Modifying closed periods creates discrepancies in reconciliations.",
+                            "recommended": {
+                                "label_fr": f"Reporter en {_next_period}",
+                                "label_en": f"Post to {_next_period}",
+                                "action": "/document/update", "method": "POST",
+                                "fields": {"document_id": document_id,
+                                            "document_date": f"{_next_period}-01" if _next_period else doc_date},
+                            },
+                            "alternatives": [
+                                {"label_fr": "D\u00e9verrouiller \u2014 gestionnaire requis", "label_en": "Unlock \u2014 manager required",
+                                 "action": "/document/hold", "method": "POST",
+                                 "fields": {"document_id": document_id,
+                                             "hold_reason": f"Demande d\u00e9verrouillage p\u00e9riode {_period}"}},
+                                {"label_fr": "Mettre en attente", "label_en": "Hold",
+                                 "action": "/document/hold", "method": "POST",
+                                 "fields": {"document_id": document_id,
+                                             "hold_reason": f"P\u00e9riode {_period} verrouill\u00e9e"}},
+                            ],
+                        })
+            except Exception:
+                pass
+
+    return cards
+
+
+def _simple_similarity(a: str, b: str) -> float:
+    """Quick bigram similarity (Dice coefficient) for vendor name matching."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+
+    def _bigrams(s: str) -> set[str]:
+        return {s[i:i+2] for i in range(len(s) - 1)} if len(s) > 1 else {s}
+
+    ba, bb = _bigrams(a), _bigrams(b)
+    if not ba or not bb:
+        return 0.0
+    return 2.0 * len(ba & bb) / (len(ba) + len(bb))
+
+
+def _render_decision_cards(cards: list[dict[str, Any]], document_id: str) -> str:
+    """Render decision cards as HTML, placed at the top of the document page."""
+    if not cards:
+        return ""
+    parts: list[str] = []
+    for card in cards:
+        severity = card.get("severity", "amber")
+        icon = card.get("icon", "")
+        # Header
+        header = (
+            f'<div class="decision-card-header">'
+            f'<span class="dc-icon">{icon}</span>'
+            f'<span class="dc-title-fr">{esc(card["title_fr"])}</span>'
+            f'<span class="dc-title-en">\u2014 {esc(card["title_en"])}</span>'
+            f'</div>'
+        )
+        # Body
+        body_parts = []
+        # Issue
+        body_parts.append(
+            f'<div class="dc-section">'
+            f'<div class="dc-label">Probl\u00e8me / Issue</div>'
+            f'<div class="dc-text">{esc(card["issue_fr"])}</div>'
+            f'<div class="dc-text-en">{esc(card["issue_en"])}</div>'
+            f'</div>'
+        )
+        # Why
+        body_parts.append(
+            f'<div class="dc-section">'
+            f'<div class="dc-label">Pourquoi / Why it matters</div>'
+            f'<div class="dc-text">{esc(card["why_fr"])}</div>'
+            f'<div class="dc-text-en">{esc(card["why_en"])}</div>'
+            f'</div>'
+        )
+        body = f'<div class="decision-card-body">{"".join(body_parts)}</div>'
+
+        # Actions
+        rec = card.get("recommended", {})
+        alts = card.get("alternatives", [])
+        action_parts = []
+
+        # Recommended action button
+        if rec:
+            if rec.get("method", "POST") == "GET":
+                action_parts.append(
+                    f'<a class="dc-btn-primary" href="{esc(rec["action"])}">'
+                    f'\u2705 {esc(rec["label_fr"])}</a>'
+                )
+            else:
+                fields_html = "".join(
+                    f'<input type="hidden" name="{esc(k)}" value="{esc(v)}">'
+                    for k, v in rec.get("fields", {}).items()
+                )
+                action_parts.append(
+                    f'<form method="POST" action="{esc(rec["action"])}" style="display:inline;">'
+                    f'{fields_html}'
+                    f'<button class="dc-btn-primary" type="submit">'
+                    f'\u2705 {esc(rec["label_fr"])}</button></form>'
+                )
+
+        # Alternative buttons
+        for alt in alts:
+            if alt.get("method", "POST") == "GET":
+                action_parts.append(
+                    f'<a class="dc-btn-alt" href="{esc(alt["action"])}">'
+                    f'{esc(alt["label_fr"])}</a>'
+                )
+            else:
+                fields_html = "".join(
+                    f'<input type="hidden" name="{esc(k)}" value="{esc(v)}">'
+                    for k, v in alt.get("fields", {}).items()
+                )
+                action_parts.append(
+                    f'<form method="POST" action="{esc(alt["action"])}" style="display:inline;">'
+                    f'{fields_html}'
+                    f'<button class="dc-btn-alt" type="submit">'
+                    f'{esc(alt["label_fr"])}</button></form>'
+                )
+
+        actions = f'<div class="dc-actions">{"".join(action_parts)}</div>'
+
+        parts.append(
+            f'<div class="decision-card dc-severity-{severity}">'
+            f'{header}{body}{actions}</div>'
+        )
+
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Document detail page
 # ---------------------------------------------------------------------------
 
@@ -7706,6 +8246,8 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     review_reason = get_plain_review_reason(row)
     blocking_issues = compute_blocking_issues(row)
     blocking_html = "".join(f"<li>{esc(x)}</li>" for x in blocking_issues) or f"<li>{esc(t('badge_none', lang))}</li>"
+    decision_cards = _build_decision_cards(row, raw_result, document_id)
+    decision_cards_html = _render_decision_cards(decision_cards, document_id)
     assigned = normalize_text(row["assigned_to"])
 
     try:
@@ -7925,6 +8467,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     </div>
     {hallucination_banner}
     {handwriting_banner}
+    {decision_cards_html}
     {_handwriting_side_by_side if _show_handwriting_review else pdf_viewer_html}
     <div class="card"><h3>{esc(t("doc_section_summary", lang))}</h3>
         <div class="grid-4">
