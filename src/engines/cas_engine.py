@@ -473,11 +473,12 @@ def account_is_significant(
         return False
 
     wp_row = conn.execute(
-        """SELECT net_balance FROM working_papers
+        """SELECT COALESCE(balance_per_books, 0) AS net_balance FROM working_papers
            WHERE LOWER(client_code) = LOWER(?) AND period = ?
              AND account_code = ?""",
         (eng["client_code"], eng["period"], account_code),
     ).fetchone()
+    wp_row = dict(wp_row) if wp_row else None
     balance = abs(float(wp_row["net_balance"])) if wp_row else 0.0
 
     code = account_code.strip()
@@ -1404,30 +1405,30 @@ def detect_going_concern_indicators(
     indicators: list[dict[str, Any]] = []
 
     # Get latest trial balance for this client
-    periods = conn.execute(
+    periods = [dict(r) for r in conn.execute(
         """SELECT DISTINCT period FROM trial_balance
            WHERE LOWER(client_code) = LOWER(?)
            ORDER BY period DESC LIMIT 3""",
         (client_code,),
-    ).fetchall()
+    ).fetchall()]
 
     if not periods:
         return {"indicators": [], "assessment_required": False, "indicator_count": 0}
 
-    latest_period = periods[0]["period"] if isinstance(periods[0], dict) else periods[0][0]
+    latest_period = periods[0]["period"]
 
     # Load trial balance for latest period
-    tb_rows = conn.execute(
-        """SELECT account_code, account_name, net_balance
+    tb_rows = [dict(r) for r in conn.execute(
+        """SELECT account_code, account_name, (debit_total - credit_total) AS net_balance
            FROM trial_balance
            WHERE LOWER(client_code) = LOWER(?) AND period = ?""",
         (client_code, latest_period),
-    ).fetchall()
+    ).fetchall()]
 
     tb: dict[str, float] = {}
     for r in tb_rows:
-        code = r["account_code"] if isinstance(r, dict) else r[0]
-        bal = float(r["net_balance"] if isinstance(r, dict) else r[2])
+        code = r["account_code"]
+        bal = float(r["net_balance"])
         tb[str(code)] = bal
 
     # Check 1: Current ratio < 1.0
@@ -1449,18 +1450,18 @@ def detect_going_concern_indicators(
     # Revenue: 4000-4999, Expenses: 5000-9999
     loss_count = 0
     for p_row in periods:
-        p = p_row["period"] if isinstance(p_row, dict) else p_row[0]
-        p_rows = conn.execute(
-            """SELECT account_code, net_balance FROM trial_balance
+        p = p_row["period"]
+        p_rows = [dict(r) for r in conn.execute(
+            """SELECT account_code, (debit_total - credit_total) AS net_balance FROM trial_balance
                WHERE LOWER(client_code) = LOWER(?) AND period = ?""",
             (client_code, p),
-        ).fetchall()
-        revenue = sum(abs(float(r["net_balance"] if isinstance(r, dict) else r[1]))
+        ).fetchall()]
+        revenue = sum(abs(float(r["net_balance"]))
                       for r in p_rows
-                      if str(r["account_code"] if isinstance(r, dict) else r[0]).startswith("4"))
-        expenses = sum(abs(float(r["net_balance"] if isinstance(r, dict) else r[1]))
+                      if str(r["account_code"]).startswith("4"))
+        expenses = sum(abs(float(r["net_balance"]))
                        for r in p_rows
-                       if str(r["account_code"] if isinstance(r, dict) else r[0]).startswith(("5", "6", "7", "8", "9")))
+                       if str(r["account_code"]).startswith(("5", "6", "7", "8", "9")))
         if expenses > revenue:
             loss_count += 1
 
