@@ -711,6 +711,73 @@ def bool_badge(flag: bool, true_text: str = "Yes", false_text: str = "No") -> st
     return f'<span class="badge badge-muted">{esc(false_text)}</span>'
 
 
+def queue_fraud_badges(row: dict) -> str:
+    """Return inline HTML badges for fraud/substance flags shown in the queue table."""
+    badges: list[str] = []
+
+    # --- Fraud flags ---
+    raw_ff = row.get("fraud_flags") or ""
+    if raw_ff and raw_ff not in ("{}", "[]", "null"):
+        try:
+            flags = json.loads(raw_ff) if isinstance(raw_ff, str) else raw_ff
+        except Exception:
+            flags = []
+        if isinstance(flags, list) and flags:
+            # flags can be list of dicts or list of plain strings
+            severities: list[str] = []
+            rules: list[str] = []
+            for f in flags:
+                if isinstance(f, dict):
+                    severities.append(str(f.get("severity", "")).upper())
+                    rules.append(str(f.get("rule", "")))
+                elif isinstance(f, str):
+                    rules.append(f)
+            tooltip = esc(", ".join(r for r in rules if r))
+            sev_set = set(severities)
+            if "CRITICAL" in sev_set:
+                badges.append(
+                    f'<span class="badge" style="background:#fee2e2;color:#991b1b;" '
+                    f'title="{tooltip}">\U0001f6a8 Fraude</span>')
+            elif "HIGH" in sev_set:
+                badges.append(
+                    f'<span class="badge" style="background:#ffedd5;color:#9a3412;" '
+                    f'title="{tooltip}">\u26a0\ufe0f Risque</span>')
+            elif sev_set:
+                badges.append(
+                    f'<span class="badge" style="background:#fef9c3;color:#854d0e;" '
+                    f'title="{tooltip}">\u26a1 Attention</span>')
+            elif rules:
+                # Plain string flags with no severity — show generic fraud badge
+                badges.append(
+                    f'<span class="badge" style="background:#fee2e2;color:#991b1b;" '
+                    f'title="{tooltip}">\U0001f6a8 Fraude / Fraud</span>')
+
+    # --- Substance flags (block_auto_approval) ---
+    raw_sf = row.get("substance_flags") or ""
+    if raw_sf and raw_sf not in ("{}", "[]", "null"):
+        try:
+            sf = json.loads(raw_sf) if isinstance(raw_sf, str) else raw_sf
+        except Exception:
+            sf = {}
+        if isinstance(sf, dict) and sf.get("block_auto_approval"):
+            badges.append(
+                '<span class="badge" style="background:#dbeafe;color:#1e40af;">Substance</span>')
+
+    # --- Uncertainty badge ---
+    review_status = normalize_text(row.get("review_status", ""))
+    confidence = row.get("confidence")
+    if review_status in ("NeedsReview", "Needs Review") and not badges:
+        try:
+            conf_val = float(confidence) if confidence is not None else 1.0
+        except (TypeError, ValueError):
+            conf_val = 1.0
+        if conf_val < 0.5:
+            badges.append(
+                '<span class="badge" style="background:#fef3c7;color:#92400e;">Incertain / Uncertain</span>')
+
+    return " ".join(badges)
+
+
 # ---------------------------------------------------------------------------
 # Business logic
 # ---------------------------------------------------------------------------
@@ -846,6 +913,7 @@ def get_documents(
             d.created_at, d.updated_at,
             d.assigned_to AS document_assigned_to,
             d.manual_hold_reason, d.manual_hold_by, d.manual_hold_at,
+            d.fraud_flags, d.substance_flags,
             COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
             da.assigned_by, da.assigned_at, da.note AS assignment_note,
             pj.posting_id, pj.posting_status, pj.approval_state,
@@ -7631,7 +7699,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             <td>{esc(row["category"])}</td><td>{esc(row["gl_account"])}</td>
             <td>{review_status_badge(status_display)}</td>
             <td>{assign_ctrl}</td>
-            <td class="reason-cell">{esc(reason)}</td>
+            <td class="reason-cell">{queue_fraud_badges(row)} {esc(reason)}</td>
             <td>{next_action_display}</td></tr>""")
 
     no_docs_cell = f'<tr><td colspan=11 class=muted>{esc(t("no_documents_found", lang))}</td></tr>'
@@ -7739,6 +7807,7 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
         pass
     fraud_keys = {str(f.get("i18n_key", "")) for f in fraud_flags_raw}
     fraud_keys.update(str(f.get("type", "")) for f in fraud_flags_raw)
+    fraud_keys.update(str(f.get("rule", "")) for f in fraud_flags_raw)
 
     duplicate = raw_result.get("duplicate_result") or {}
     vendor_mem = raw_result.get("vendor_memory_enrichment") or {}
