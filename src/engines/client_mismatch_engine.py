@@ -237,6 +237,8 @@ def detect_client_mismatch(
     own_conn = conn is None
     if own_conn:
         conn = _open_db()
+    elif conn.row_factory is None:
+        conn.row_factory = sqlite3.Row
 
     result: dict[str, Any] = {
         "mismatch_detected": False,

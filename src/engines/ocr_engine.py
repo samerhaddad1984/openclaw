@@ -1358,7 +1358,11 @@ def process_file(
             amount = cad_amount
 
     # 4b. AI enrichment — classify complexity and call AI only if needed
-    _complexity = classify_extraction_complexity(raw_ocr_text or "", _parsed_fields) if raw_ocr_text else None
+    # Use whatever text we have
+    _text_for_ai = raw_ocr_text or _parsed_fields.get('raw_text', '') or ''
+
+    # Always classify — even if text is empty, missing fields should trigger AI
+    _complexity = classify_extraction_complexity(_text_for_ai, _parsed_fields)
 
     if _complexity is not None:
         _ai_fields = call_ai_for_extraction(raw_ocr_text, _complexity, document_id=doc_id)
@@ -1869,21 +1873,27 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     None means high confidence — no AI needed.
     """
     confidence = parsed_result.get("confidence", 0)
-    text_lower = text.lower()
+    text_lower = text.lower() if text else ''
 
-    # If critical fields missing, always call AI (at minimum simple tier)
-    if parsed_result.get("needs_ai") or not parsed_result.get("vendor_name") or not parsed_result.get("amount"):
-        if confidence < 0.50:
-            return "simple"
+    # CRITICAL: if vendor or amount missing — always call AI
+    vendor = parsed_result.get("vendor_name") or parsed_result.get("vendor")
+    amount = parsed_result.get("amount")
 
-    # Proration invoices need reasoning — complex
-    proration = ["remaining time on", "unused time on", "proration", "prorated"]
-    if any(w in text_lower for w in proration):
-        return "complex"
+    if not vendor or not amount or float(amount or 0) == 0:
+        # Missing critical fields — determine tier based on document complexity
+        if any(w in text_lower for w in ["remaining time on", "unused time on", "proration"]):
+            return "complex"
+        if any(c in text for c in ["USD", "EUR", "GBP"]):
+            return "medium"
+        return "simple"  # At minimum use simple tier
 
-    # Very low confidence — use best model
+    # Fields present — check if confidence is low
     if confidence < 0.50:
         return "very_complex"
+
+    # Proration invoices need reasoning — complex
+    if any(w in text_lower for w in ["remaining time on", "unused time on", "proration", "prorated"]):
+        return "complex"
 
     # Foreign currency — medium
     if any(c in text for c in ["USD", "EUR", "GBP"]):
@@ -1898,7 +1908,7 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     if confidence < 0.85:
         return "simple"
 
-    # High confidence — no AI needed
+    # High confidence AND all fields present — no AI needed
     return None
 
 
