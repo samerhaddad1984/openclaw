@@ -513,8 +513,10 @@ class TestStartFolderWatcher:
     def test_reads_config_for_defaults(self, tmp_path: Path):
         inbox = tmp_path / "ConfigInbox"
         cfg = {
-            "inbox_folder": str(inbox),
-            "default_client_code": "TESTCLIENT",
+            "folder_watcher": {
+                "inbox_folder": str(inbox),
+                "default_client_code": "TESTCLIENT",
+            },
         }
         with patch("scripts.folder_watcher._load_config", return_value=cfg), \
              patch("scripts.folder_watcher._run_watcher"):

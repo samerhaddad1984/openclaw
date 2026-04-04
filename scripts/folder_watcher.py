@@ -560,16 +560,17 @@ def start_folder_watcher(
     true and ``inbox_folder`` is set in the config.
     """
     cfg = _load_config()
+    fw_cfg = cfg.get("folder_watcher", {})
 
     if inbox_folder is None:
-        folder_str = cfg.get("inbox_folder", "")
+        folder_str = fw_cfg.get("inbox_folder", "") or cfg.get("inbox_folder", "")
         if not folder_str:
             logging.info("folder_watcher: inbox_folder not configured — watcher skipped")
             return None
         inbox_folder = Path(folder_str)
 
     if default_client_code is None:
-        default_client_code = cfg.get("default_client_code", "")
+        default_client_code = fw_cfg.get("default_client_code", "") or cfg.get("default_client_code", "")
 
     # Ensure the inbox folder exists
     inbox_folder.mkdir(parents=True, exist_ok=True)

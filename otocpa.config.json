@@ -72,10 +72,10 @@
     "note": "Set OPENROUTER_API_KEY environment variable"
   },
   "fx_rates": {
-    "usd_cad_last_known": 1.3718,
+    "usd_cad_last_known": 1.379,
     "eur_cad_last_known": 1.5,
     "gbp_cad_last_known": 1.75,
-    "last_updated": "2026-04-04T14:48:23+00:00"
+    "last_updated": "2026-04-04T15:22:09+00:00"
   },
   "learning": {
     "auto_approve_after_n_approvals": 5,
@@ -85,7 +85,7 @@
   },
   "folder_watcher": {
     "enabled": true,
-    "inbox_folder": "inbox",
+    "inbox_folder": "C:\\Users\\shaddad\\OneDrive - Basement Systems Quebec\\Desktop\\samer Haddad\\LedgerLinkAi\\inbox",
     "watch_subfolders": true,
     "default_client_code": "UNASSIGNED",
     "supported_extensions": [
@@ -94,8 +94,10 @@
       ".jpeg",
       ".png",
       ".tiff",
-      ".heic"
-    ]
+      ".heic",
+      ".webp"
+    ],
+    "poll_interval_seconds": 10
   },
   "demo_mode": false,
   "database_path": "data/otocpa_agent.db",
