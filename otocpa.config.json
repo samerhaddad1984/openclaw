@@ -1,121 +1,25 @@
 {
-  "host": "0.0.0.0",
-  "port": 8787,
-  "network": {
-    "local_ip": "auto",
-    "local_port": 8787,
-    "bind_all_interfaces": true
-  },
-  "session_hours": 12,
-  "ai_router": {
-    "routine_provider": {
-      "base_url": "https://api.deepseek.com/v1",
-      "api_key": "",
-      "model": "deepseek-chat"
-    },
-    "premium_provider": {
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "",
-      "model": "anthropic/claude-sonnet-4-6"
-    },
-    "routine_tasks": [
-      "classify_document",
-      "extract_vendor",
-      "suggest_gl"
-    ],
-    "complex_tasks": [
-      "explain_anomaly",
-      "escalation_decision",
-      "compliance_narrative",
-      "working_paper",
-      "substance_classification",
-      "related_party_check",
-      "mixed_tax_detection"
-    ]
-  },
-  "digest": {
-    "enabled": false,
-    "smtp_host": "smtp.gmail.com",
-    "smtp_port": 587,
-    "smtp_user": "yourfirm@gmail.com",
-    "smtp_password": "your-app-password",
-    "from_address": "otocpa@yourfirm.com",
-    "from_name": "OtoCPA"
-  },
-  "security": {
-    "bcrypt_rounds": 12,
-    "audit_log": true,
-    "api_key_encryption": true
-  },
-  "client_portal": {
-    "enabled": true,
-    "port": 8788,
-    "max_upload_mb": 20,
-    "daily_upload_limit_by_tier": {
-      "essentiel": 20,
-      "professionnel": 50,
-      "cabinet": 200,
-      "entreprise": 9999
-    },
-    "testing_mode_limit": 200
-  },
-  "ingest": {
-    "port": 8789,
-    "api_key": ""
-  },
-  "openrouter": {
-    "api_key": "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",
-    "api_key_env": "OPENROUTER_API_KEY",
-    "enabled": true,
-    "base_url": "https://openrouter.ai/api/v1",
-    "url": "https://openrouter.ai/api/v1/chat/completions",
-    "note": "Set OPENROUTER_API_KEY environment variable"
-  },
   "fx_rates": {
     "usd_cad_last_known": 1.3718,
-    "eur_cad_last_known": 1.5,
-    "gbp_cad_last_known": 1.75,
-    "last_updated": "2026-04-04T22:48:11+00:00"
+    "last_updated": "2026-04-04T23:23:46+00:00"
   },
-  "learning": {
-    "auto_approve_after_n_approvals": 5,
-    "auto_approve_confidence_threshold": 0.85,
-    "auto_approve_max_amount": 5000,
-    "auto_approve_enabled": false
-  },
-  "folder_watcher": {
-    "enabled": true,
-    "inbox_folder": "C:\\Users\\shaddad\\OneDrive - Basement Systems Quebec\\Desktop\\samer Haddad\\LedgerLinkAi\\inbox",
-    "watch_subfolders": true,
-    "default_client_code": "UNASSIGNED",
-    "supported_extensions": [
-      ".pdf",
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".tiff",
-      ".heic",
-      ".webp"
-    ],
-    "poll_interval_seconds": 10
-  },
-  "demo_mode": false,
+  "host": "0.0.0.0",
+  "port": 8787,
   "database_path": "data/otocpa_agent.db",
   "ai_complexity_models": {
     "simple": "deepseek/deepseek-chat",
-    "medium": "google/gemini-2.0-flash-001",
+    "medium": "google/gemini-flash-1.5",
     "complex": "anthropic/claude-haiku-4-5",
     "very_complex": "anthropic/claude-sonnet-4-6"
   },
-  "cloudflare": {
-    "api_token": "cfut_oenx18ehJCBZxL2sfIfGLKsUMZKDMSK6ReUQM3f282b867d7",
-    "account_id": "a35f22f67d1d97a9e4bc6c45ec1d9147",
-    "zone_id": "c3d83d379edd5e49207c06bf8a209ae3",
-    "tunnel_id": "759d69d5-1391-481e-8dc9-d90b2a6a1ec2",
-    "tunnel_name": "otocpa-demo",
-    "domain": "otocpa.com",
-    "dashboard_url": "https://demo.otocpa.com",
-    "portal_url": "https://demo-portal.otocpa.com",
-    "enabled": true
-  }
+  "openrouter": {
+    "enabled": true,
+    "api_key_env": "OPENROUTER_API_KEY",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "ai_router": {
+    "premium_provider": {},
+    "routine_provider": {}
+  },
+  "security": {}
 }
