@@ -146,6 +146,43 @@ def known_client_codes(db_path: Path = DB_PATH) -> list[str]:
     return sorted(codes)
 
 
+def get_client_from_subfolder(
+    file_path: Path, inbox_folder: Path, conn: sqlite3.Connection,
+) -> str | None:
+    """
+    If the file is inside a subfolder of the inbox, check whether that
+    subfolder name matches a known client code in the database.
+
+    Example: inbox/BOLDUC/invoice.pdf → returns 'BOLDUC'
+    """
+    subfolder = file_path.parent.name
+    if subfolder != inbox_folder.name:
+        row = conn.execute(
+            "SELECT client_code FROM clients WHERE client_code = ? OR UPPER(client_code) = UPPER(?)",
+            (subfolder, subfolder),
+        ).fetchone()
+        if row:
+            return row[0]
+        # Also check documents/user_portfolios for known codes
+        row = conn.execute(
+            "SELECT DISTINCT client_code FROM documents "
+            "WHERE UPPER(client_code) = UPPER(?) AND client_code IS NOT NULL AND client_code != '' "
+            "LIMIT 1",
+            (subfolder,),
+        ).fetchone()
+        if row:
+            return row[0]
+        row = conn.execute(
+            "SELECT DISTINCT client_code FROM user_portfolios "
+            "WHERE UPPER(client_code) = UPPER(?) AND client_code IS NOT NULL AND client_code != '' "
+            "LIMIT 1",
+            (subfolder,),
+        ).fetchone()
+        if row:
+            return row[0]
+    return None
+
+
 def match_client_code(filename: str, known_codes: list[str], default: str = "") -> str:
     """
     Try to match the filename prefix (before the first ``_`` or ``-``) against
@@ -262,9 +299,31 @@ def process_one(
 
     filename = file_path.name
 
-    # Resolve client code from filename prefix
-    codes = known_client_codes(db_path)
-    client_code = match_client_code(filename, codes, default_client_code)
+    # ------------------------------------------------------------------
+    # Resolve client code — priority order:
+    # 1. Subfolder name (most reliable)
+    # 2. Filename prefix (existing logic)
+    # 3. Unassigned (fallback)
+    # ------------------------------------------------------------------
+    client_code = ""
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            client_code = get_client_from_subfolder(file_path, inbox_folder, conn) or ""
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+    if not client_code:
+        codes = known_client_codes(db_path)
+        client_code = match_client_code(filename, codes, default_client_code)
+
+    # FIX 2 — If still no client code, mark as UNASSIGNED
+    is_unassigned = False
+    if not client_code:
+        client_code = "UNASSIGNED"
+        is_unassigned = True
 
     # Import here so unit tests can patch it without importing the whole engine
     from src.engines.ocr_engine import process_file  # noqa: PLC0415
@@ -293,6 +352,60 @@ def process_one(
 
     # Success path
     doc_id = result.get("document_id", "")
+
+    # Mark UNASSIGNED documents as NeedsReview
+    if is_unassigned and doc_id:
+        try:
+            conn = sqlite3.connect(str(db_path))
+            try:
+                conn.execute(
+                    "UPDATE documents SET review_status = ?, review_note = ?, updated_at = ? "
+                    "WHERE document_id = ?",
+                    (
+                        "NeedsReview",
+                        "Client non identifié — assigner manuellement / Client not identified — assign manually",
+                        _utc_now_iso(),
+                        doc_id,
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:
+            logging.warning("folder_watcher: failed to set UNASSIGNED review status: %s", exc)
+
+    # FIX 3 — Cross-client mismatch detection
+    if doc_id and client_code != "UNASSIGNED":
+        try:
+            from src.engines.client_mismatch_engine import detect_client_mismatch  # noqa: PLC0415
+            extracted_data = {
+                k: result.get(k, "")
+                for k in ("raw_ocr_text", "bill_to", "billing_email", "gst_number", "qst_number", "vendor")
+            }
+            conn = sqlite3.connect(str(db_path))
+            try:
+                mismatch = detect_client_mismatch(extracted_data, client_code, conn)
+                if mismatch.get("mismatch_detected"):
+                    conn.execute(
+                        "UPDATE documents SET review_status = ?, review_note = ?, updated_at = ? "
+                        "WHERE document_id = ?",
+                        (
+                            "NeedsReview",
+                            f"Mismatch client détecté — suggéré: {mismatch.get('suggested_client_code', '?')}",
+                            _utc_now_iso(),
+                            doc_id,
+                        ),
+                    )
+                    conn.commit()
+                    logging.info(
+                        "folder_watcher: mismatch detected for %s — suggested client: %s",
+                        filename, mismatch.get("suggested_client_code"),
+                    )
+            finally:
+                conn.close()
+        except Exception as exc:
+            logging.warning("folder_watcher: mismatch detection failed: %s", exc)
+
     _log_audit(db_path, doc_id, filename, client_code)
     _move_to_processed(file_path, inbox_folder)
     _record_success(filename)
@@ -347,8 +460,12 @@ class _FileDispatcher:
 
 def _scan_existing(inbox_folder: Path, dispatcher: _FileDispatcher) -> None:
     try:
-        for entry in inbox_folder.iterdir():
+        for entry in inbox_folder.rglob("*"):
             if entry.is_file() and _is_supported(entry):
+                # Skip files in Processed/ and Failed/ subdirectories
+                rel = entry.relative_to(inbox_folder)
+                if rel.parts and rel.parts[0] in ("Processed", "Failed"):
+                    continue
                 dispatcher.dispatch(entry)
     except Exception as exc:
         logging.warning("folder_watcher: startup scan error: %s", exc)
@@ -386,7 +503,7 @@ def _run_watcher(
                     dispatcher.dispatch(Path(event.dest_path))
 
         observer = Observer()
-        observer.schedule(_Bridge(), str(inbox_folder), recursive=False)
+        observer.schedule(_Bridge(), str(inbox_folder), recursive=True)
         observer.start()
         logging.info("folder_watcher: watchdog observer started on %s", inbox_folder)
         try:
@@ -401,13 +518,21 @@ def _run_watcher(
         logging.warning(
             "folder_watcher: watchdog not available — using 5-second polling fallback"
         )
-        seen: set[str] = {
-            str(f) for f in inbox_folder.iterdir() if f.is_file()
-        }
+        def _poll_files(folder: Path) -> set[str]:
+            result: set[str] = set()
+            for f in folder.rglob("*"):
+                if f.is_file():
+                    rel = f.relative_to(folder)
+                    if rel.parts and rel.parts[0] in ("Processed", "Failed"):
+                        continue
+                    result.add(str(f))
+            return result
+
+        seen: set[str] = _poll_files(inbox_folder)
         while True:
             time.sleep(5)
             try:
-                current = {str(f) for f in inbox_folder.iterdir() if f.is_file()}
+                current = _poll_files(inbox_folder)
                 for new_str in current - seen:
                     dispatcher.dispatch(Path(new_str))
                 seen = current
