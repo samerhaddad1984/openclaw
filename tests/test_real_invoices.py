@@ -273,3 +273,56 @@ class TestRealExtractionRegression:
         for vendor in known_vendors:
             assert _is_known_trusted_vendor(vendor), \
                 f"REGRESSION: {vendor} not in known trusted vendors list"
+
+    def test_fiverr_invoice_extraction(self):
+        """Fiverr invoice: amount and date must be extracted by regex fallback"""
+        text = """Invoice FI15715426613
+        Fiverr International Ltd
+        Date issued Feb 24, 2022
+        Desktop Applications 1 201.20 201.20
+        Service Fee 1 11.07 11.07
+        Total (CAD) 212.27"""
+        parsed = parse_invoice_fields(text)
+        assert parsed.get('amount') is not None, "REGRESSION: Fiverr amount empty"
+        assert float(parsed['amount']) == 212.27, f"Expected 212.27 got {parsed['amount']}"
+        assert parsed.get('document_date') is not None, "REGRESSION: Fiverr date empty"
+        assert parsed['document_date'] == '2022-02-24', f"Expected 2022-02-24 got {parsed['document_date']}"
+
+    def test_upwork_receipt_extraction(self):
+        """Upwork receipt: amount and date must be extracted by regex fallback"""
+        text = """RECEIPT
+        Upwork Global Inc.
+        475 Brannan St., Suite 430
+        San Francisco, CA 94107 RECEIPT # T499489032
+        USA DATE Jul 31, 2022
+        GST: 77087 6209 RT0001 TOTAL AMOUNT $165.23
+        QST: NR00029921"""
+        parsed = parse_invoice_fields(text)
+        assert parsed.get('amount') is not None, "REGRESSION: Upwork amount empty"
+        assert float(parsed['amount']) == 165.23, f"Expected 165.23 got {parsed['amount']}"
+        assert parsed.get('document_date') is not None, "REGRESSION: Upwork date empty"
+        assert parsed['document_date'] == '2022-07-31', f"Expected 2022-07-31 got {parsed['document_date']}"
+
+    def test_regex_fallback_populates_fields_when_ai_fails(self):
+        """When AI extraction fails, regex-parsed fields must still populate vendor/amount/date"""
+        text = """Invoice #12345
+        ACME Corp
+        Date: 2024-03-15
+        Total (CAD) 500.00"""
+        parsed = parse_invoice_fields(text)
+        assert parsed.get('vendor') is not None, "REGRESSION: regex vendor empty"
+        assert parsed.get('amount') == 500.00, "REGRESSION: regex amount empty"
+        assert parsed.get('document_date') == '2024-03-15', "REGRESSION: regex date empty"
+
+    def test_text_month_date_extraction(self):
+        """Dates like 'Feb 24, 2022' and 'Jul 31, 2022' must be parsed"""
+        cases = [
+            ("Date issued Feb 24, 2022", "2022-02-24"),
+            ("DATE Jul 31, 2022", "2022-07-31"),
+            ("Invoice Date March 15, 2026", "2026-03-15"),
+            ("December 1, 2025", "2025-12-01"),
+        ]
+        for text, expected in cases:
+            parsed = parse_invoice_fields(text)
+            assert parsed.get('document_date') == expected, \
+                f"REGRESSION: '{text}' -> {parsed.get('document_date')}, expected {expected}"
