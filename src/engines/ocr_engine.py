@@ -1340,6 +1340,63 @@ def process_file(
             raw["currency_note"] = f"USD {amount:.2f} converted at {fx_rate} = CAD {cad_amount:.2f}"
             amount = cad_amount
 
+    # 4b. AI enrichment — classify complexity and call AI only if needed
+    _complexity = classify_extraction_complexity(raw_ocr_text or "", _parsed_fields) if raw_ocr_text else None
+
+    if _complexity is not None:
+        _ai_fields = call_ai_for_extraction(raw_ocr_text, _complexity, document_id=doc_id)
+
+        if _ai_fields:
+            _ai_fields.pop("_ai_complexity", None)
+            _ai_fields.pop("_ai_model", None)
+            _ai_fields.pop("_ai_latency_ms", None)
+            # AI wins on key fields — regex wins on fields AI left null
+            for field in ["vendor_name", "amount", "currency", "gst_number",
+                          "qst_number", "gst_amount", "qst_amount",
+                          "document_date", "invoice_number", "is_proration",
+                          "document_type"]:
+                if _ai_fields.get(field) is not None:
+                    _parsed_fields[field] = _ai_fields[field]
+                    if field == "vendor_name" and _ai_fields[field]:
+                        vendor = _ai_fields[field]
+                        raw["vendor_name"] = _ai_fields[field]
+                    elif field == "amount" and _ai_fields[field]:
+                        amount = float(_ai_fields[field])
+                        raw["total"] = amount
+                    elif field == "document_date" and _ai_fields[field]:
+                        document_date = _ai_fields[field]
+                        raw["document_date"] = _ai_fields[field]
+                    elif field == "gst_number":
+                        raw["gst_number"] = _ai_fields[field]
+                    elif field == "qst_number":
+                        raw["qst_number"] = _ai_fields[field]
+                    elif field == "gst_amount" and _ai_fields[field]:
+                        raw["gst_amount"] = _ai_fields[field]
+                        _gst_amount = float(_ai_fields[field])
+                    elif field == "qst_amount" and _ai_fields[field]:
+                        raw["qst_amount"] = _ai_fields[field]
+                        _qst_amount = float(_ai_fields[field])
+                    elif field == "invoice_number":
+                        raw["invoice_number"] = _ai_fields[field]
+                    elif field == "is_proration":
+                        raw["is_proration"] = _ai_fields[field]
+                    elif field == "document_type" and _ai_fields[field]:
+                        doc_type = _ai_fields[field]
+                        raw["doc_type"] = _ai_fields[field]
+
+            raw["ai_used"] = True
+            raw["ai_complexity"] = _complexity
+
+            # Boost confidence when AI confirms amount + vendor
+            if _ai_fields.get("amount") and _ai_fields.get("vendor_name"):
+                confidence = max(confidence, 0.90)
+        else:
+            raw["ai_used"] = False
+            raw["ai_complexity"] = _complexity
+    else:
+        raw["ai_used"] = False
+        raw["ai_complexity"] = None
+
     # 5. Auto-flag low confidence, hallucination, or handwriting low confidence
     handwriting_low_conf = bool(raw.get("handwriting_low_confidence", False))
     review_status = raw.get("review_status") if raw.get("review_status") == "NeedsReview" else None
@@ -1729,6 +1786,138 @@ def get_ai_cost_summary(
 
 
 # ---------------------------------------------------------------------------
+# AI-enriched extraction (4-tier complexity routing via AIRouter)
+# ---------------------------------------------------------------------------
+
+_EXTRACTION_PROMPT = """Extract invoice fields from this text. Return JSON only, no explanation.
+
+CRITICAL RULES:
+1. amount = the FINAL total the customer owes
+   Look for: Amount due, Total due, Balance due, Montant dû, Solde dû
+2. For proration invoices (positive AND negative lines):
+   Use the explicit Total or Subtotal — NEVER sum individual lines
+3. Find GST/QST numbers ANYWHERE including inside line descriptions
+   GST format: 9 digits + RT + 4 digits (e.g. 805577574RT0001)
+   QST format: 10 digits (e.g. 1221825787)
+4. If currency is USD: set currency=USD, amount=USD amount
+
+Return ONLY this JSON:
+{{
+  "vendor_name": "string",
+  "amount": number,
+  "currency": "CAD" or "USD" or "EUR",
+  "document_date": "YYYY-MM-DD or null",
+  "invoice_number": "string or null",
+  "gst_number": "string or null",
+  "qst_number": "string or null",
+  "gst_amount": number or null,
+  "qst_amount": number or null,
+  "is_proration": true or false,
+  "document_type": "invoice" or "credit_card_statement" or "bank_statement" or "receipt"
+}}
+
+Invoice text:
+{text}"""
+
+
+def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> str | None:
+    """Classify extraction complexity to select the right AI tier.
+
+    Returns: 'simple', 'medium', 'complex', 'very_complex', or None.
+    None means high confidence — no AI needed.
+    """
+    confidence = parsed_result.get("confidence", 0)
+    text_lower = text.lower()
+
+    # Proration invoices need reasoning — complex
+    proration = ["remaining time on", "unused time on", "proration", "prorated"]
+    if any(w in text_lower for w in proration):
+        return "complex"
+
+    # Very low confidence — use best model
+    if confidence < 0.50:
+        return "very_complex"
+
+    # Foreign currency — medium
+    if any(c in text for c in ["USD", "EUR", "GBP"]):
+        return "medium"
+
+    # French invoice — medium
+    french = ["facture", "montant", "destinataire", "fournisseur"]
+    if any(w in text_lower for w in french):
+        return "medium"
+
+    # Low-medium confidence — simple AI assist
+    if confidence < 0.85:
+        return "simple"
+
+    # High confidence — no AI needed
+    return None
+
+
+def call_ai_for_extraction(
+    text: str,
+    complexity: str,
+    conn: sqlite3.Connection | None = None,
+    *,
+    document_id: str | None = None,
+) -> dict[str, Any]:
+    """Call AI router to enrich extraction when regex confidence is low.
+
+    Parameters
+    ----------
+    text : str
+        Raw OCR text to extract from.
+    complexity : str
+        Tier from classify_extraction_complexity ('simple', 'medium', 'complex', 'very_complex').
+    conn : sqlite3.Connection | None
+        Database connection (unused directly but kept for API consistency).
+    document_id : str | None
+        For audit logging.
+
+    Returns dict of AI-extracted fields, or empty dict on failure.
+    Never raises — all errors are caught and logged.
+    """
+    try:
+        from src.agents.core import ai_router
+
+        prompt = _EXTRACTION_PROMPT.format(text=text[:3000])
+
+        # Route to complexity-specific task type for model selection
+        task_type = f"invoice_extraction_{complexity}"
+
+        ai_response = ai_router.call(
+            task_type=task_type,
+            prompt=prompt,
+            document_id=document_id,
+        )
+
+        if ai_response.get("error") or not ai_response.get("result"):
+            return {}
+
+        # Parse JSON from response
+        result_text = ai_response["result"]
+        json_match = re.search(r"\{.*\}", result_text, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group())
+        else:
+            return {}
+
+        result["ai_used"] = True
+        result["ai_complexity"] = complexity
+        result["_ai_model"] = ai_response.get("provider", "")
+        result["_ai_complexity"] = complexity
+        result["_ai_latency_ms"] = ai_response.get("latency_ms", 0)
+        return result
+
+    except Exception as exc:
+        # Never crash extraction — AI is optional layer
+        import logging
+        logging.getLogger(__name__).warning("AI extraction failed: %s", exc)
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Cost-optimized AI pipeline
 # ---------------------------------------------------------------------------
 
@@ -1829,23 +2018,77 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             confidence += 0.1
             break
 
-    # Extract amounts — look for total, grand total, amount due patterns
-    amount_patterns = [
+    # --- Proration invoice detection ---
+    text_lower_full = text.lower()
+    _proration_keywords = [
+        "remaining time on", "unused time on",
+        "proration", "prorated", "adjustment after",
+    ]
+    is_proration = any(kw in text_lower_full for kw in _proration_keywords)
+    if is_proration:
+        result["invoice_type"] = "proration_adjustment"
+        result["is_proration"] = True
+
+    # Extract amounts — priority-based extraction
+    # PRIORITY 1: "Amount due" or "$X USD due [date]"
+    _p1_patterns = [
+        re.compile(r'\$\s*([\d,]+\.?\d*)\s*USD\s+due', re.IGNORECASE),
+        re.compile(r'amount\s+due\s+[\$USD\s]*([\d,]+\.?\d*)', re.IGNORECASE),
+        re.compile(r'montant\s+d[uû]\s+[\$CAD\s]*([\d,]+\.?\d*)', re.IGNORECASE),
+    ]
+    # PRIORITY 2: "Total: $X" (last match on page)
+    _p2_patterns = [
+        re.compile(r'(?<!\bsub)total\s+[\$USD\s]*([\d,]+\.?\d*)(?:\s*(?:USD|CAD))?$', re.IGNORECASE | re.MULTILINE),
+    ]
+    # PRIORITY 3: "Subtotal: $X"
+    _p3_patterns = [
+        re.compile(r'subtotal\s+[\$USD\s]*([\d,]+\.?\d*)', re.IGNORECASE),
+    ]
+    # PRIORITY 4: Generic amount patterns (last resort)
+    _p4_patterns = [
         re.compile(r"(?:total|montant|amount\s*due|grand\s*total|solde)\s*[:\s]*(?:\$|USD|EUR|GBP|CHF|CAD)?\s*([\d,]+\.?\d*)", re.IGNORECASE),
         re.compile(r"(?:\$|USD|EUR|GBP|CHF|CAD)\s*([\d,]+\.\d{2})\b", re.IGNORECASE),
     ]
-    amounts_found: list[float] = []
-    for line in lines:
-        for pat in amount_patterns:
-            m = pat.search(line)
-            if m:
-                try:
-                    val = float(m.group(1).replace(",", ""))
-                    amounts_found.append(val)
-                except ValueError:
-                    pass
-    if amounts_found:
-        result["amount"] = max(amounts_found)  # Largest amount is likely total
+
+    def _extract_amount_from_patterns(patterns, use_last=False):
+        found = []
+        for line in lines:
+            for pat in patterns:
+                for m in pat.finditer(line):
+                    try:
+                        val = float(m.group(1).replace(",", ""))
+                        if val > 0:
+                            found.append(val)
+                    except ValueError:
+                        pass
+        if found:
+            return found[-1] if use_last else found[0]
+        return None
+
+    extracted_amount = None
+    # Try priorities in order
+    extracted_amount = _extract_amount_from_patterns(_p1_patterns)
+    if extracted_amount is None:
+        extracted_amount = _extract_amount_from_patterns(_p2_patterns, use_last=True)
+    if extracted_amount is None:
+        extracted_amount = _extract_amount_from_patterns(_p3_patterns)
+    if extracted_amount is None and not is_proration:
+        # PRIORITY 4: Only for non-proration invoices
+        amounts_found: list[float] = []
+        for line in lines:
+            for pat in _p4_patterns:
+                m = pat.search(line)
+                if m:
+                    try:
+                        val = float(m.group(1).replace(",", ""))
+                        amounts_found.append(val)
+                    except ValueError:
+                        pass
+        if amounts_found:
+            extracted_amount = max(amounts_found)
+
+    if extracted_amount is not None:
+        result["amount"] = extracted_amount
         confidence += 0.15
 
     # Extract date
@@ -1867,7 +2110,17 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
 
     # Detect doc type
     text_lower = text.lower()
-    if "facture" in text_lower or "invoice" in text_lower:
+    _credit_card_keywords = [
+        "mastercard", "visa card", "carte de crédit", "carte de credit",
+        "credit card", "limite de credit", "limite de crédit",
+        "paiement minimum", "minimum payment",
+    ]
+    _is_credit_card = any(kw in text_lower for kw in _credit_card_keywords)
+
+    if _is_credit_card:
+        result["doc_type"] = "credit_card_statement"
+        confidence += 0.05
+    elif "facture" in text_lower or "invoice" in text_lower:
         result["doc_type"] = "invoice"
         confidence += 0.05
     elif "reçu" in text_lower or "receipt" in text_lower or "recu" in text_lower:

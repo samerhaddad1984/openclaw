@@ -171,3 +171,105 @@ class TestGoToTechnologiesFullExtraction:
         assert result.get('tax_code') == 'T'
         assert result.get('gst_amount') is not None
         assert result.get('qst_amount') is not None
+
+    def test_companycam_proration_invoice(self):
+        text = """CompanyCam
+    Nebraska United States
+    support@companycam.com
+
+    Invoice number FBBD891C-0081
+    Date of issue December 9 2025
+
+    Bill to
+    Systemes Soussol Quebec
+    accounting@soussol.com
+
+    $21.78 USD due December 9 2025
+
+    Remaining time on 55 Premium after 09 Dec 2025 55 1197.42
+    Unused time on 54 Premium after 09 Dec 2025 54 -1175.64
+    Subtotal 21.78
+    Total 21.78
+    Amount due 21.78 USD"""
+
+        result = parse_invoice_fields(text)
+
+        # CRITICAL: amount must be 21.78 not 1657.71
+        amount = float(result.get('foreign_amount') or result.get('amount') or 0)
+        assert amount == 21.78, f"Expected 21.78 got {amount}"
+
+        # Currency must be USD
+        assert result.get('currency') == 'USD', f"Expected USD got {result.get('currency')}"
+
+        # Vendor must be CompanyCam
+        assert 'companycam' in result.get('vendor_name', '').lower()
+
+        # Must be detected as proration
+        assert result.get('invoice_type') == 'proration_adjustment' or result.get('is_proration') == True
+
+
+class TestRealExtractionRegression:
+    """These tests use real invoice text and test real extraction.
+    If any of these fail it means a code change broke a previous fix.
+    These must NEVER be deleted or modified to pass — fix the code instead."""
+
+    def test_companycam_proration_amount(self):
+        """CompanyCam proration invoice must extract $21.78 not $1657.71"""
+        text = """CompanyCam Nebraska United States
+        Invoice number FBBD891C-0081
+        Date of issue December 9 2025
+        Bill to Systemes Soussol Quebec accounting@soussol.com
+        $21.78 USD due December 9 2025
+        Remaining time on 55 Premium 55 1197.42
+        Unused time on 54 Premium 54 -1175.64
+        Subtotal 21.78
+        Total 21.78
+        Amount due 21.78 USD"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('foreign_amount') or result.get('amount') or 0)
+        assert amount == 21.78, f"REGRESSION: Expected 21.78 got {amount} — proration fix was lost"
+
+    def test_goto_gst_extraction(self):
+        """GoTo Technologies GST number must be extracted from line item text"""
+        text = """GoTo Technologies Canada Ltd Quebec City QC
+        Invoice Date 24-Jan-2022
+        LastPass Premium 1 CAD 51.00
+        CANADA GST/TPS # 805577574 RT0001 (5.00%) CAD 2.55
+        QUEBEC QST/TVQ # 1221825787 (9.975%) CAD 5.09
+        Total Including Tax CAD 58.64"""
+        result = parse_invoice_fields(text)
+        assert result.get('gst_number') is not None, "REGRESSION: GoTo GST extraction was lost"
+        assert result.get('qst_number') is not None, "REGRESSION: GoTo QST extraction was lost"
+        assert result.get('tax_code') == 'T', "REGRESSION: GoTo tax code T was lost"
+
+    def test_usd_invoice_converts_to_cad(self):
+        """USD invoices must be converted to CAD"""
+        text = """ACME Software Inc New York NY USA
+        Invoice Date March 15 2026
+        Software License 1 600.00
+        Total Due USD 600.00"""
+        result = parse_invoice_fields(text)
+        assert result.get('currency') == 'USD', "REGRESSION: USD detection was lost"
+        assert result.get('currency_converted') == True, "REGRESSION: USD conversion was lost"
+
+    def test_cibc_is_credit_card_statement(self):
+        """CIBC statements must be detected as credit_card_statement not invoice"""
+        text = """CIBC Costco World Mastercard
+        Apercu de votre compte
+        Solde total 6899.17
+        Montant exigible 6899.17
+        Paiement minimum 344.96
+        Limite de credit 23000.00"""
+        result = parse_invoice_fields(text)
+        doc_type = result.get('document_type') or result.get('doc_type') or result.get('category')
+        assert doc_type in ['credit_card_statement', 'bank_statement'], \
+            f"REGRESSION: CIBC statement type detection was lost, got {doc_type}"
+
+    def test_known_vendor_not_flagged_as_new(self):
+        """CompanyCam must be recognized as a known trusted vendor"""
+        from src.engines.fraud_engine import _is_known_trusted_vendor
+        known_vendors = ['CompanyCam', 'GoTo Technologies', 'LastPass',
+                         'OpenAI', 'CIBC', 'Bell Canada', 'Videotron']
+        for vendor in known_vendors:
+            assert _is_known_trusted_vendor(vendor), \
+                f"REGRESSION: {vendor} not in known trusted vendors list"
