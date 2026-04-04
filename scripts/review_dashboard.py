@@ -13460,23 +13460,26 @@ def main() -> int:
     print(f"Login    : sam / admin123  (change this!)")
     print()
 
-    # Start the folder watcher if configured
-    try:
-        _fw_cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
-        _fw_section = _fw_cfg.get("folder_watcher", {})
-        _fw_enabled = _fw_section.get("enabled", False) or _fw_cfg.get("folder_watcher_enabled", False)
-        _fw_inbox = _fw_section.get("inbox_folder", "") or _fw_cfg.get("inbox_folder", "")
-        if _fw_enabled and _fw_inbox:
-            from scripts.folder_watcher import start_folder_watcher as _start_fw
-            _start_fw()
-            print(f"Folder watcher : {_fw_inbox}")
-            print()
-        elif not _fw_enabled:
-            print("Folder watcher : disabled in config")
-            print()
-    except Exception as _fw_exc:
-        print(f"Folder watcher : failed to start — {_fw_exc}")
-        print()
+    # Auto-start folder watcher as background daemon thread
+    def start_watcher_thread():
+        try:
+            import threading
+            from scripts.folder_watcher import start_folder_watcher
+
+            def run_watcher():
+                try:
+                    start_folder_watcher()
+                except Exception as e:
+                    import logging
+                    logging.error(f'Folder watcher crashed: {e}')
+
+            t = threading.Thread(target=run_watcher, daemon=True, name='FolderWatcher')
+            t.start()
+            print('✅ Folder watcher started automatically')
+        except Exception as e:
+            print(f'⚠️ Folder watcher not started: {e}')
+
+    start_watcher_thread()
 
     server = ThreadingHTTPServer((HOST, PORT), ReviewDashboardHandler)
     try:

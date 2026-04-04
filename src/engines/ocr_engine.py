@@ -975,6 +975,11 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("gl_account",                 "TEXT"),
     ("tax_code",                   "TEXT"),
     ("category",                   "TEXT"),
+    ("ai_used",                    "INTEGER DEFAULT 0"),
+    ("ai_complexity",              "TEXT"),
+    ("ai_model_used",              "TEXT"),
+    ("ai_cost",                    "REAL DEFAULT 0"),
+    ("raw_ai_response",            "TEXT"),
 ]
 
 
@@ -1001,6 +1006,11 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         "gl_account":                None,
         "tax_code":                  None,
         "category":                  None,
+        "ai_used":                   0,
+        "ai_complexity":             None,
+        "ai_model_used":             None,
+        "ai_cost":                   0,
+        "raw_ai_response":           None,
         **record,
     }
     conn = sqlite3.connect(str(db_path))
@@ -1017,7 +1027,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 currency, subtotal, tax_total,
                 extraction_method, ingest_source,
                 raw_ocr_text, hallucination_suspected,
-                handwriting_low_confidence
+                handwriting_low_confidence,
+                ai_used, ai_complexity, ai_model_used, ai_cost, raw_ai_response
             ) VALUES (
                 :document_id, :file_name, :file_path, :client_code,
                 :vendor, :doc_type, :amount, :document_date,
@@ -1027,7 +1038,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 :currency, :subtotal, :tax_total,
                 :extraction_method, :ingest_source,
                 :raw_ocr_text, :hallucination_suspected,
-                :handwriting_low_confidence
+                :handwriting_low_confidence,
+                :ai_used, :ai_complexity, :ai_model_used, :ai_cost, :raw_ai_response
             )
             ON CONFLICT(document_id) DO UPDATE SET
                 vendor                      = excluded.vendor,
@@ -1048,7 +1060,12 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 ingest_source               = excluded.ingest_source,
                 raw_ocr_text                = excluded.raw_ocr_text,
                 hallucination_suspected     = excluded.hallucination_suspected,
-                handwriting_low_confidence  = excluded.handwriting_low_confidence
+                handwriting_low_confidence  = excluded.handwriting_low_confidence,
+                ai_used                     = excluded.ai_used,
+                ai_complexity               = excluded.ai_complexity,
+                ai_model_used               = excluded.ai_model_used,
+                ai_cost                     = excluded.ai_cost,
+                raw_ai_response             = excluded.raw_ai_response
             """,
             record,
         )
@@ -1397,6 +1414,26 @@ def process_file(
         raw["ai_used"] = False
         raw["ai_complexity"] = None
 
+    # 4c. Regex fallback — use parse_invoice_fields results for any field still None
+    if _parsed_fields:
+        if vendor is None and _parsed_fields.get("vendor"):
+            vendor = _parsed_fields["vendor"]
+            raw["vendor_name"] = vendor
+        if amount is None and _parsed_fields.get("amount") is not None:
+            amount = float(_parsed_fields["amount"])
+            raw["total"] = amount
+        if document_date is None and _parsed_fields.get("document_date"):
+            document_date = _parsed_fields["document_date"]
+            raw["document_date"] = document_date
+        if doc_type == "unknown" and _parsed_fields.get("doc_type") not in (None, "unknown"):
+            doc_type = _parsed_fields["doc_type"]
+            raw["doc_type"] = doc_type
+        if _parsed_fields.get("invoice_number") and not raw.get("invoice_number"):
+            raw["invoice_number"] = _parsed_fields["invoice_number"]
+        # Boost confidence when regex found key fields
+        if vendor and amount is not None and confidence < 0.5:
+            confidence = max(confidence, 0.55)
+
     # 5. Auto-flag low confidence, hallucination, or handwriting low confidence
     handwriting_low_conf = bool(raw.get("handwriting_low_confidence", False))
     review_status = raw.get("review_status") if raw.get("review_status") == "NeedsReview" else None
@@ -1517,6 +1554,11 @@ def process_file(
         "raw_ocr_text":           raw_ocr_text,
         "hallucination_suspected": 1 if hallucination_suspected else 0,
         "handwriting_low_confidence": 1 if handwriting_low_conf else 0,
+        "ai_used":               1 if raw.get("ai_used") else 0,
+        "ai_complexity":         raw.get("ai_complexity"),
+        "ai_model_used":         raw.get("ai_model_used"),
+        "ai_cost":               raw.get("ai_cost", 0),
+        "raw_ai_response":       raw.get("raw_ai_response"),
     }
     upsert_document(record, db_path=db_path)
 
@@ -1829,6 +1871,11 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     confidence = parsed_result.get("confidence", 0)
     text_lower = text.lower()
 
+    # If critical fields missing, always call AI (at minimum simple tier)
+    if parsed_result.get("needs_ai") or not parsed_result.get("vendor_name") or not parsed_result.get("amount"):
+        if confidence < 0.50:
+            return "simple"
+
     # Proration invoices need reasoning — complex
     proration = ["remaining time on", "unused time on", "proration", "prorated"]
     if any(w in text_lower for w in proration):
@@ -1989,6 +2036,38 @@ def extract_with_pdfplumber(file_path: str) -> dict[str, Any]:
         return {"text": "", "confidence": 0.0, "word_count": 0}
 
 
+def _calculate_field_confidence(result: dict[str, Any]) -> float:
+    """Calculate confidence based on actual fields extracted, not just regex hits."""
+    score = 0.0
+
+    # Each critical field found adds to confidence
+    if result.get("vendor_name") and len(str(result.get("vendor_name", ""))) > 2:
+        score += 0.35
+    else:
+        score -= 0.20  # Penalize missing vendor
+
+    if result.get("amount") and float(result.get("amount", 0)) > 0:
+        score += 0.35
+    else:
+        score -= 0.20  # Penalize missing amount
+
+    if result.get("document_date"):
+        score += 0.15
+    else:
+        score -= 0.10  # Penalize missing date
+
+    if result.get("gst_amount") or result.get("qst_amount"):
+        score += 0.10
+
+    if result.get("invoice_number"):
+        score += 0.10
+
+    if result.get("gst_number") or result.get("qst_number"):
+        score += 0.05
+
+    return max(0.0, min(1.0, round(score, 4)))
+
+
 def parse_invoice_fields(text: str) -> dict[str, Any]:
     """
     Parse structured invoice fields from extracted text without AI.
@@ -2036,9 +2115,10 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         re.compile(r'amount\s+due\s+[\$USD\s]*([\d,]+\.?\d*)', re.IGNORECASE),
         re.compile(r'montant\s+d[uû]\s+[\$CAD\s]*([\d,]+\.?\d*)', re.IGNORECASE),
     ]
-    # PRIORITY 2: "Total: $X" (last match on page)
+    # PRIORITY 2: "Total: $X" or "Total (CAD) X" (last match on page)
     _p2_patterns = [
         re.compile(r'(?<!\bsub)total\s+[\$USD\s]*([\d,]+\.?\d*)(?:\s*(?:USD|CAD))?$', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'(?<!\bsub)total\s*\(?\s*(?:USD|CAD|EUR)\s*\)?\s*([\d,]+\.?\d*)$', re.IGNORECASE | re.MULTILINE),
     ]
     # PRIORITY 3: "Subtotal: $X"
     _p3_patterns = [
@@ -2092,10 +2172,22 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         confidence += 0.15
 
     # Extract date
+    _MONTH_MAP = {
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+        "may": "05", "jun": "06", "jul": "07", "aug": "08",
+        "sep": "09", "oct": "10", "nov": "11", "dec": "12",
+    }
     date_patterns = [
         re.compile(r"(\d{4}[-/]\d{1,2}[-/]\d{1,2})"),
         re.compile(r"(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})"),
     ]
+    # Text-month pattern: "Feb 24, 2022" or "24 Feb 2022" or "February 24, 2022"
+    _text_month_pat = re.compile(
+        r"(?:(\d{1,2})\s+)?"
+        r"(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+        r"[.,]?\s+(\d{1,2}),?\s+(\d{4})",
+        re.IGNORECASE,
+    )
     for line in lines:
         for pat in date_patterns:
             m = pat.search(line)
@@ -2107,6 +2199,18 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
                     break
         if result["document_date"]:
             break
+    # Fallback: text-month dates
+    if not result["document_date"]:
+        for line in lines:
+            m = _text_month_pat.search(line)
+            if m:
+                day_before, month_str, day_after, year = m.groups()
+                day = day_before or day_after
+                mm = _MONTH_MAP.get(month_str[:3].lower())
+                if mm and day:
+                    result["document_date"] = f"{year}-{mm}-{day.zfill(2)}"
+                    confidence += 0.1
+                    break
 
     # Detect doc type
     text_lower = text.lower()
@@ -2310,6 +2414,15 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         result["currency"] = "CAD"
 
     result["confidence"] = min(1.0, round(confidence, 4))
+
+    # --- Field-aware confidence recalculation ---
+    result["confidence"] = _calculate_field_confidence(result)
+
+    # Force low confidence if critical fields missing — ensures AI is called
+    if not result.get("vendor_name") or not result.get("amount"):
+        result["confidence"] = min(result.get("confidence", 0), 0.45)
+        result["needs_ai"] = True
+
     return result
 
 

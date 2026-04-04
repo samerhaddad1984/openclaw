@@ -1334,6 +1334,18 @@ def run_migration(db_path: Path = DB_PATH) -> None:
         ])
 
         # ------------------------------------------------------------------ #
+        # AI extraction columns
+        # Expected by: src/engines/ocr_engine.py (AI pipeline)
+        # ------------------------------------------------------------------ #
+        changed += add_missing(conn, "documents", [
+            ("ai_used",          "INTEGER DEFAULT 0"),
+            ("ai_complexity",    "TEXT"),
+            ("ai_model_used",    "TEXT"),
+            ("ai_cost",          "REAL DEFAULT 0.0"),
+            ("raw_ai_response",  "TEXT"),
+        ])
+
+        # ------------------------------------------------------------------ #
         # Trap 9: gst_filings — amendment tracking columns
         # Expected by: src/engines/amendment_engine.py
         # ------------------------------------------------------------------ #
