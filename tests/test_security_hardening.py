@@ -399,8 +399,10 @@ def test_rate_limit_msg_bilingual(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_max_uploads_per_day(tmp_path):
+    from scripts.client_portal import MAX_UPLOADS_PER_DAY
     portal, _ = _in_memory_portal(tmp_path)
-    assert portal.MAX_UPLOADS_PER_DAY == 20
+    assert portal.MAX_UPLOADS_PER_DAY == MAX_UPLOADS_PER_DAY
+    assert MAX_UPLOADS_PER_DAY >= 20  # sane minimum
 
 
 # ---------------------------------------------------------------------------

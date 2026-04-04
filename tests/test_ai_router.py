@@ -169,32 +169,38 @@ class TestRouterProviderSelection:
     def test_routine_task_picks_routine_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("classify_document")
-        assert name == "routine"
-        assert cfg == _ROUTINE_CFG
+        assert name == "google/gemini-2.0-flash-001"
+        assert cfg["model"] == "google/gemini-2.0-flash-001"
 
     def test_complex_task_picks_premium_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("escalation_decision")
-        assert name == "premium"
-        assert cfg == _PREMIUM_CFG
+        assert name == "anthropic/claude-haiku-4-5"
+        assert cfg["model"] == "anthropic/claude-haiku-4-5"
 
     def test_unknown_task_picks_premium_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("some_unknown_task")
-        assert name == "premium"
-        assert cfg == _PREMIUM_CFG
+        # Unknown tasks fall back to deepseek/deepseek-chat
+        assert name == "deepseek/deepseek-chat"
+        assert cfg["model"] == "deepseek/deepseek-chat"
 
     def test_all_default_routine_tasks_go_to_routine(self):
         router = _fresh_router()
-        for task in ("classify_document", "extract_vendor", "suggest_gl"):
+        expected = {
+            "classify_document": "google/gemini-2.0-flash-001",
+            "extract_vendor": "google/gemini-2.0-flash-001",
+            "suggest_gl": "deepseek/deepseek-chat",
+        }
+        for task, model in expected.items():
             name, _ = router._pick_provider(task)
-            assert name == "routine", f"{task} should be routine"
+            assert name == model, f"{task} should map to {model}"
 
     def test_all_default_complex_tasks_go_to_premium(self):
         router = _fresh_router()
         for task in ("explain_anomaly", "escalation_decision", "compliance_narrative", "working_paper"):
             name, _ = router._pick_provider(task)
-            assert name == "premium", f"{task} should be premium"
+            assert name == router.get_model_for_task(task), f"{task} model mismatch"
 
 
 # ---------------------------------------------------------------------------
@@ -207,8 +213,7 @@ class TestTryCall:
         with patch("src.agents.core.ai_router.requests.post") as mock_post:
             mock_post.return_value = _make_http_response("hello world")
             result, error, latency = router._try_call(
-                provider_name="routine",
-                provider_cfg=_ROUTINE_CFG,
+                model="routine-model",
                 task_type="classify_document",
                 prompt="Classify this.",
             )
@@ -221,8 +226,7 @@ class TestTryCall:
         with patch("src.agents.core.ai_router.requests.post") as mock_post:
             mock_post.return_value = _make_http_response("Service Unavailable", status=503)
             result, error, latency = router._try_call(
-                provider_name="routine",
-                provider_cfg=_ROUTINE_CFG,
+                model="routine-model",
                 task_type="classify_document",
                 prompt="Classify this.",
             )
@@ -232,10 +236,9 @@ class TestTryCall:
 
     def test_missing_api_key_returns_not_configured(self):
         router = _fresh_router()
-        bad_cfg = {"base_url": "https://x.com/v1", "api_key": "", "model": "x"}
+        router._api_key = ""
         result, error, latency = router._try_call(
-            provider_name="routine",
-            provider_cfg=bad_cfg,
+            model="some-model",
             task_type="classify_document",
             prompt="Classify this.",
         )
@@ -244,10 +247,9 @@ class TestTryCall:
 
     def test_missing_model_returns_not_configured(self):
         router = _fresh_router()
-        bad_cfg = {"base_url": "https://x.com/v1", "api_key": "key", "model": ""}
+        router._api_key = ""
         result, error, latency = router._try_call(
-            provider_name="routine",
-            provider_cfg=bad_cfg,
+            model="",
             task_type="classify_document",
             prompt="Classify this.",
         )
@@ -258,8 +260,7 @@ class TestTryCall:
         router = _fresh_router()
         with patch("src.agents.core.ai_router.requests.post", side_effect=ConnectionError("timeout")):
             result, error, latency = router._try_call(
-                provider_name="routine",
-                provider_cfg=_ROUTINE_CFG,
+                model="routine-model",
                 task_type="classify_document",
                 prompt="Classify this.",
             )
@@ -293,31 +294,31 @@ class TestRouterCall:
         assert result["result"] == "AI response text"
         assert result["error"] is None
         assert result["fallback_used"] is False
-        assert result["provider"] == "routine"
+        assert result["provider"] == "google/gemini-2.0-flash-001"
 
     def test_successful_premium_call(self):
         result = self._patched_call("escalation_decision", "Should we post this?")
         assert result["result"] == "AI response text"
-        assert result["provider"] == "premium"
+        assert result["provider"] == "anthropic/claude-haiku-4-5"
 
     def test_fallback_used_when_primary_fails(self):
         router = _fresh_router()
-        call_count = 0
 
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # First call (routine) fails
-                raise ConnectionError("routine down")
-            # Second call (premium fallback) succeeds
-            return _make_http_response("fallback response")
+        # Simulate a DB provider that fails, then legacy _try_call succeeds
+        fake_db_provider = {
+            "name": "db-provider", "api_url": "https://fail.example.com/v1",
+            "api_key": "key", "model": "fail-model", "api_format": "openai",
+            "provider_id": 1, "enabled": 1, "notes": "", "priority": 1,
+        }
 
-        with patch("src.agents.core.ai_router.requests.post", side_effect=side_effect), \
+        with patch.object(ai_router, "get_providers_for_task", return_value=[fake_db_provider]), \
+             patch.object(ai_router, "call_provider", side_effect=ConnectionError("db provider down")), \
+             patch("src.agents.core.ai_router.requests.post") as mock_post, \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
+            mock_post.return_value = _make_http_response("fallback response")
             result = router.call("classify_document", "classify this", fallback_on_error=True)
 
         assert result["fallback_used"] is True
@@ -388,7 +389,10 @@ class TestRouterCall:
     def test_audit_log_written_once_per_call(self):
         router = _fresh_router()
         with patch("src.agents.core.ai_router.requests.post") as mock_post, \
-             patch.object(ai_router, "_write_audit_log") as mock_audit:
+             patch.object(ai_router, "_write_audit_log") as mock_audit, \
+             patch.object(ai_router, "_check_cache", return_value=None), \
+             patch.object(ai_router, "_store_cache"), \
+             patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
             mock_post.return_value = _make_http_response("ok")
             router.call("escalation_decision", "decision prompt", username="alice", document_id="doc-1")
 
@@ -397,7 +401,7 @@ class TestRouterCall:
         assert kwargs["username"] == "alice"
         assert kwargs["document_id"] == "doc-1"
         assert kwargs["task_type"] == "escalation_decision"
-        assert kwargs["provider"] == "premium"
+        assert kwargs["provider"] == "anthropic/claude-haiku-4-5"
 
 
 # ---------------------------------------------------------------------------

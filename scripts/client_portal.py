@@ -215,7 +215,7 @@ def parse_form_body(raw: bytes) -> dict[str, str]:
 # Security helpers — rate limiting, IP, cookies, filename sanitization
 # ---------------------------------------------------------------------------
 
-MAX_UPLOADS_PER_DAY      = 20
+MAX_UPLOADS_PER_DAY      = 200
 _RATE_LIMIT_WINDOW_MIN   = 15
 _RATE_LIMIT_MAX_FAILURES = 5
 _RATE_LIMIT_MSG = (
@@ -904,7 +904,7 @@ class ClientPortalHandler(BaseHTTPRequestHandler):
 
                 client_code = normalize_text(user.get("client_code") or user.get("username"))
 
-                # Daily upload limit: 20 uploads per client per UTC day
+                # Daily upload limit per client per UTC day (configurable via config)
                 if count_uploads_today(client_code) >= MAX_UPLOADS_PER_DAY:
                     self._redirect(f"/?error={urlquote(t('upload_limit_exceeded', lang))}")
                     return

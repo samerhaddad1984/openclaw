@@ -715,6 +715,15 @@ def queue_fraud_badges(row: dict) -> str:
     """Return inline HTML badges for fraud/substance flags shown in the queue table."""
     badges: list[str] = []
 
+    # --- Bank statement badge ---
+    _cat = normalize_text(row.get("category", ""))
+    _dtype = normalize_text(row.get("doc_type", ""))
+    if _cat == "bank_statement" or _dtype == "bank_statement":
+        badges.append(
+            '<span class="badge" style="background:#dbeafe;color:#1e40af;">'
+            'Relevé bancaire / Bank Statement</span>')
+        return "".join(badges)  # No fraud badges for bank statements
+
     # --- Fraud flags ---
     raw_ff = row.get("fraud_flags") or ""
     if raw_ff and raw_ff not in ("{}", "[]", "null"):
@@ -2463,6 +2472,97 @@ ul{margin-top:6px}
 .dc-severity-amber .decision-card-header{background:#fffbeb;border-left:4px solid #d97706}
 .dc-severity-blue .decision-card-header{background:#eff6ff;border-left:4px solid #2563eb}
 @media(max-width:600px){.dc-actions{flex-direction:column}.dc-btn-primary,.dc-btn-alt{width:100%;text-align:center}}
+.queue-cards{display:none}
+.queue-card{background:white;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.queue-card:active{background:#f9fafb}
+.queue-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.queue-card-header .vendor-name{font-weight:700;font-size:14px;color:#111827}
+.queue-card-header .amount{font-weight:700;font-size:14px;color:#059669}
+.queue-card-meta{font-size:12px;color:#6b7280;margin-bottom:8px;display:flex;gap:12px}
+.queue-card-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.queue-card-footer .btn-sm{font-size:11px;padding:4px 10px;border-radius:6px;background:#2563eb;color:white;text-decoration:none;font-weight:600}
+.mobile-action-bar{display:none}
+.collapsible-section{margin-bottom:16px}
+.section-header{cursor:pointer;font-weight:700;font-size:14px;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
+.section-header:hover{background:#f3f4f6}
+.section-content{padding:0}
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+    .nav-links{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:4px;padding:6px 8px}
+    .nav-links a{white-space:nowrap;font-size:11px;padding:4px 8px}
+    .queue-table{display:none}
+    .queue-cards{display:block}
+    .summary-grid{grid-template-columns:1fr 1fr}
+    .edit-fields-grid{grid-template-columns:1fr}
+    .action-buttons .btn{width:100%;margin-bottom:8px;padding:12px;font-size:14px}
+    .stats-cards{grid-template-columns:1fr 1fr}
+    .hide-mobile{display:none}
+    button,a.btn,input,select{min-height:44px}
+    .header-right{flex-direction:column;gap:4px;align-items:flex-end}
+    .header-right span{font-size:12px}
+    .decision-card{margin:8px 0;padding:12px}
+    .fraud-badge{font-size:10px;padding:2px 6px}
+    .mobile-action-bar{display:flex;position:fixed;bottom:0;left:0;right:0;background:#1F3864;padding:8px;gap:8px;z-index:1000}
+    .mobile-action-bar button{flex:1;padding:10px;color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:12px;background:rgba(255,255,255,0.1)}
+    .page-content{padding-bottom:80px}
+    .grid-3,.grid-4{grid-template-columns:1fr}
+    .grid-2{grid-template-columns:1fr}
+    .filters{grid-template-columns:1fr}
+    .stats{flex-direction:column}
+    .stat{min-width:auto}
+    main{padding:10px 12px 80px}
+    header{padding:10px 12px}
+    header h1{font-size:16px}
+    .card{padding:12px;margin-bottom:10px}
+    .topbar{flex-direction:column;gap:8px}
+    .actions{justify-content:center}
+}
+@media (max-width: 480px) {
+    .summary-grid{grid-template-columns:1fr}
+    .stats-cards{grid-template-columns:1fr 1fr}
+    h1{font-size:18px}
+    h2{font-size:16px}
+}
+/* ===== HAMBURGER MENU ===== */
+@media (max-width: 768px) {
+    .nav-bar {
+        display: none;
+        flex-direction: column;
+        padding: 8px;
+        background: #1a2e4a;
+    }
+    .nav-bar.open {
+        display: flex;
+    }
+    .nav-bar a {
+        padding: 10px 12px;
+        font-size: 14px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        display: block;
+    }
+    .nav-bar .nav-bar-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .nav-bar .nav-bar-controls form {
+        display: block;
+    }
+    .nav-bar .nav-bar-controls button {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+    .header-controls-inline {
+        display: none;
+    }
+}
+
+@media (min-width: 769px) {
+    .nav-bar { display: block !important; }
+    .nav-bar-mobile-only { display: none; }
+}
 """
 
 
@@ -4064,6 +4164,132 @@ def render_reconciliation_detail(
     )
     return page_layout(
         t("recon_detail_title", lang), body,
+        user=user, flash=flash, flash_error=flash_error, lang=lang,
+    )
+
+
+def render_ai_costs(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    """Owner-only AI cost optimization dashboard."""
+    from src.engines.ocr_engine import get_ai_cost_summary
+
+    stats = get_ai_cost_summary(period="month")
+    if "error" in stats:
+        return page_layout(
+            "AI Costs" if lang == "en" else "Coûts IA",
+            f'<div class="card"><h2>Error</h2><p>{esc(str(stats["error"]))}</p></div>',
+            user=user, flash=flash, flash_error=flash_error, lang=lang,
+        )
+
+    total = stats.get("total_documents", 0)
+    cache_n = stats.get("cache_count", 0)
+    text_n = stats.get("text_extraction_count", 0)
+    ai_s = stats.get("ai_simple_count", 0)
+    ai_m = stats.get("ai_medium_count", 0)
+    ai_c = stats.get("ai_complex_count", 0)
+    cost = stats.get("total_cost_usd", 0.0)
+    est = stats.get("estimated_without_optimization", 0.0)
+    saved = stats.get("savings_usd", 0.0)
+    pct = stats.get("savings_pct", 0.0)
+
+    def pct_of(n: int) -> str:
+        return f"{n / total * 100:.1f}" if total > 0 else "0.0"
+
+    title_text = "AI Cost Optimization" if lang == "en" else "Optimisation des coûts IA"
+    month_label = "This month" if lang == "en" else "Ce mois-ci"
+    docs_label = "Documents processed" if lang == "en" else "Documents traités"
+    cache_label = "From cache (free)" if lang == "en" else "Depuis le cache (gratuit)"
+    text_label = "Text extraction (free)" if lang == "en" else "Extraction de texte (gratuit)"
+    simple_label = "AI simple model" if lang == "en" else "Modèle IA simple"
+    medium_label = "AI medium model" if lang == "en" else "Modèle IA moyen"
+    complex_label = "AI complex model" if lang == "en" else "Modèle IA complexe"
+    total_cost_label = "Total AI cost" if lang == "en" else "Coût total IA"
+    est_label = "Estimated without optimization" if lang == "en" else "Estimé sans optimisation"
+    saved_label = "You saved" if lang == "en" else "Vous avez économisé"
+
+    body = f"""
+    <div class="card">
+      <h2>{esc(title_text)}</h2>
+      <p style="color:#888;margin-bottom:1em;">{esc(month_label)}</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:8px 4px;"><strong>{esc(docs_label)}</strong></td>
+          <td style="text-align:right;padding:8px 4px;"><strong>{total:,}</strong></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 4px 4px 2em;">├── {esc(cache_label)}</td>
+          <td style="text-align:right;padding:4px;">{cache_n:,}</td>
+          <td style="text-align:right;padding:4px;color:#4ade80;">({pct_of(cache_n)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 4px 4px 2em;">├── {esc(text_label)}</td>
+          <td style="text-align:right;padding:4px;">{text_n:,}</td>
+          <td style="text-align:right;padding:4px;color:#4ade80;">({pct_of(text_n)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 4px 4px 2em;">├── {esc(simple_label)}</td>
+          <td style="text-align:right;padding:4px;">{ai_s:,}</td>
+          <td style="text-align:right;padding:4px;color:#facc15;">({pct_of(ai_s)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 4px 4px 2em;">├── {esc(medium_label)}</td>
+          <td style="text-align:right;padding:4px;">{ai_m:,}</td>
+          <td style="text-align:right;padding:4px;color:#fb923c;">({pct_of(ai_m)}%)</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:4px 4px 4px 2em;">└── {esc(complex_label)}</td>
+          <td style="text-align:right;padding:4px;">{ai_c:,}</td>
+          <td style="text-align:right;padding:4px;color:#f87171;">({pct_of(ai_c)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 4px;"><strong>{esc(total_cost_label)}</strong></td>
+          <td style="text-align:right;padding:8px 4px;" colspan="2"><strong>${cost:.2f}</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:4px;color:#888;">{esc(est_label)}</td>
+          <td style="text-align:right;padding:4px;color:#888;" colspan="2">${est:.2f}</td>
+        </tr>
+        <tr style="background:#1a3a1a;">
+          <td style="padding:8px 4px;"><strong>{esc(saved_label)}</strong></td>
+          <td style="text-align:right;padding:8px 4px;color:#4ade80;" colspan="2">
+            <strong>${saved:.2f} ({pct:.1f}%)</strong>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="card" style="margin-top:1em;">
+      <h3>{"Model Configuration" if lang == "en" else "Configuration des modèles"}</h3>
+      <p style="color:#888;">{"Edit otocpa.config.json → ai_complexity_models to change models." if lang == "en" else "Modifier otocpa.config.json → ai_complexity_models pour changer les modèles."}</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="text-align:left;padding:6px;">{"Complexity" if lang == "en" else "Complexité"}</th>
+          <th style="text-align:left;padding:6px;">{"Model" if lang == "en" else "Modèle"}</th>
+        </tr></thead>
+        <tbody>"""
+
+    from src.engines.ocr_engine import get_model_for_complexity
+    for level in ("simple", "medium", "complex", "very_complex"):
+        model = get_model_for_complexity(level)
+        body += f"""
+          <tr>
+            <td style="padding:4px 6px;">{esc(level)}</td>
+            <td style="padding:4px 6px;font-family:monospace;">{esc(model)}</td>
+          </tr>"""
+
+    body += """
+        </tbody>
+      </table>
+    </div>
+    """
+
+    return page_layout(
+        title_text, body,
         user=user, flash=flash, flash_error=flash_error, lang=lang,
     )
 
@@ -7122,15 +7348,19 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
 <head>
 <meta charset="utf-8">
 <title>{esc(title)}</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <style>{CSS}</style>
 </head>
 <body>
 <header>
     <h1>{esc(t("dashboard_header", lang))}</h1>
-    <div style="display:flex;gap:12px;align-items:center;">{right_controls}</div>
+    <div class="header-controls-inline" style="display:flex;gap:12px;align-items:center;">{right_controls}</div>
 </header>
-{audit_nav_html}
+<div class="nav-bar">
+    <div class="nav-bar-mobile-only nav-bar-controls">{right_controls}</div>
+    {audit_nav_html}
+</div>
+<script>function toggleNav(){{const n=document.querySelector('.nav-bar');n.classList.toggle('open');}}</script>
 <main>
     {flash_html}
     {body_html}
@@ -7138,6 +7368,151 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
 <footer style="text-align:center;padding:12px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;margin-top:24px;">
     OtoCPA v{_get_app_version()}
 </footer>
+<script>
+// Mobile detection and layout fix
+function isMobile() {{
+    return window.innerWidth <= 768;
+}}
+
+function fixMobileLayout() {{
+    if (!isMobile()) return;
+
+    // Fix 1: Collapse navigation into hamburger
+    var navRows = document.querySelectorAll('div');
+    var navContainer = null;
+    for (var i = 0; i < navRows.length; i++) {{
+        var links = navRows[i].querySelectorAll('a');
+        if (links.length > 5 && navRows[i].offsetHeight < 200) {{
+            navContainer = navRows[i];
+            break;
+        }}
+    }}
+
+    if (navContainer && !navContainer.dataset.mobileFixed) {{
+        navContainer.dataset.mobileFixed = '1';
+        // Only add hamburger if one doesn't already exist
+        if (!document.querySelector('.hamburger-btn') && !document.querySelector('[data-hamburger]')) {{
+            var hamburger = document.createElement('button');
+            hamburger.setAttribute('data-hamburger', 'true');
+            hamburger.innerHTML = '\u2630 Menu';
+            hamburger.style.cssText = 'background:#2a4a7a;color:white;border:none;padding:8px 14px;border-radius:6px;font-size:14px;cursor:pointer;margin:4px;';
+            hamburger.onclick = function() {{
+                navContainer.style.display = navContainer.style.display === 'none' ? 'block' : 'none';
+            }};
+            navContainer.style.display = 'none';
+            var header = document.querySelector('header');
+            if (header) {{
+                header.appendChild(hamburger);
+            }} else {{
+                navContainer.parentNode.insertBefore(hamburger, navContainer);
+            }}
+        }}
+    }}
+
+    // Fix 2: Convert queue table to cards
+    var tables = document.querySelectorAll('table');
+    tables.forEach(function(table) {{
+        if (table.dataset.mobileFixed) return;
+        if (table.querySelector('th')) {{
+            var headers = Array.from(table.querySelectorAll('th')).map(function(th) {{ return th.textContent.trim(); }});
+            var rows = table.querySelectorAll('tr:not(:first-child)');
+
+            if (rows.length === 0) return;
+
+            var cardContainer = document.createElement('div');
+            cardContainer.style.cssText = 'padding:8px;';
+
+            rows.forEach(function(row) {{
+                var cells = row.querySelectorAll('td');
+                if (cells.length === 0) return;
+
+                // Get cells by position - skip dropdown cells
+                var docCell = cells[0];
+                var clientCell = cells[1];
+                var vendorCell = cells[2];
+                var amountCell = cells[3];
+                var dateCell = cells[4];
+                var statusCell = cells[8];  // Status badge cell
+                var reasonCell = cells[10]; // Reason cell
+
+                var docLink = docCell ? docCell.querySelector('a') : null;
+                var vendor = vendorCell ? vendorCell.textContent.trim() : '';
+                var amount = amountCell ? amountCell.textContent.trim() : '';
+                var date = dateCell ? dateCell.textContent.trim() : '';
+                var client = clientCell ? clientCell.textContent.trim() : '';
+                var href = docLink ? docLink.href : '#';
+
+                // Get status badge HTML (keep existing colored badge)
+                var statusHTML = statusCell ? statusCell.innerHTML : '';
+
+                // Get reason (fraud badge etc)
+                var reasonHTML = reasonCell ? reasonCell.innerHTML : '';
+
+                // Fallback: if vendor is empty try to find text from any cell
+                if (!vendor) {{
+                    for (var ci = 0; ci < cells.length; ci++) {{
+                        var text = cells[ci].textContent.trim();
+                        if (text && text.length > 2 && text.indexOf('Unassigned') === -1 &&
+                            !/^\d+\.?\d*$/.test(text) && !/^\d{{4}}-\d{{2}}-\d{{2}}$/.test(text)) {{
+                            vendor = text.substring(0, 30);
+                            break;
+                        }}
+                    }}
+                }}
+
+                if (!vendor && !amount) return;
+
+                var card = document.createElement('div');
+                card.style.cssText = 'background:white;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);';
+                card.onclick = function() {{ window.location.href = href; }};
+
+                card.innerHTML = ''
+                    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+                    + '<strong style="font-size:15px;color:#1a2e4a;flex:1;margin-right:8px;">' + (vendor || 'Document') + '</strong>'
+                    + '<strong style="font-size:16px;color:#2a4a7a;white-space:nowrap;">$' + amount + '</strong>'
+                    + '</div>'
+                    + '<div style="display:flex;justify-content:space-between;color:#666;font-size:12px;margin-bottom:8px;">'
+                    + '<span>' + client + '</span>'
+                    + '<span>' + date + '</span>'
+                    + '</div>'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">'
+                    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
+                    + statusHTML
+                    + reasonHTML
+                    + '</div>'
+                    + '<span style="color:#2a4a7a;font-size:13px;font-weight:bold;">Ouvrir \u2192</span>'
+                    + '</div>';
+
+                cardContainer.appendChild(card);
+            }});
+
+            table.dataset.mobileFixed = '1';
+            table.style.display = 'none';
+            table.parentNode.insertBefore(cardContainer, table.nextSibling);
+        }}
+    }});
+
+    // Fix 3: Make all filter dropdowns full width
+    document.querySelectorAll('select, input[type="text"]').forEach(function(el) {{
+        el.style.width = '100%';
+        el.style.marginBottom = '8px';
+        el.style.padding = '10px';
+        el.style.fontSize = '16px';
+        el.style.boxSizing = 'border-box';
+    }});
+
+    // Fix 4: Make buttons full width and larger
+    document.querySelectorAll('button:not(.hamburger-btn)').forEach(function(btn) {{
+        if (btn.parentElement.tagName !== 'TD') {{
+            btn.style.minHeight = '44px';
+        }}
+    }});
+}}
+
+// Run on load and resize
+window.addEventListener('load', fixMobileLayout);
+window.addEventListener('resize', fixMobileLayout);
+</script>
 </body>
 </html>"""
 
@@ -7638,6 +8013,31 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         <div class="stat"><div class="small muted">{esc(t("stat_visible", lang))}</div><div><strong>{total_rows}</strong></div></div>
     </div>"""
 
+    # Learning stats
+    _learning_stats_html = ""
+    try:
+        from src.engines.client_mismatch_engine import get_learning_stats
+        _lstats = get_learning_stats()
+        if _lstats.get("total", 0) > 0:
+            _pct_auto = round(100 * _lstats["auto_approved"] / _lstats["total"]) if _lstats["total"] else 0
+            _pct_suggested = round(100 * _lstats["suggested_correctly"] / _lstats["total"]) if _lstats["total"] else 0
+            _pct_correction = round(100 * _lstats["needed_correction"] / _lstats["total"]) if _lstats["total"] else 0
+            _pct_fraud = round(100 * _lstats["fraud_caught"] / _lstats["total"]) if _lstats["total"] else 0
+            _learning_stats_html = f"""
+    <div class="card" style="background:#f0fdf4;border:1px solid #86efac;">
+        <h3>\U0001f4ca Apprentissage ce mois / Learning this month</h3>
+        <div style="font-size:14px;line-height:1.8;">
+            Documents ce mois / This month: <strong>{_lstats["total"]}</strong><br>
+            \u251c\u2500\u2500 Auto-approuv\u00e9s (sans r\u00e9vision): <strong>{_lstats["auto_approved"]}</strong> ({_pct_auto}%)<br>
+            \u251c\u2500\u2500 Sugg\u00e9r\u00e9 correctement: <strong>{_lstats["suggested_correctly"]}</strong> ({_pct_suggested}%)<br>
+            \u251c\u2500\u2500 Correction n\u00e9cessaire: <strong>{_lstats["needed_correction"]}</strong> ({_pct_correction}%)<br>
+            \u2514\u2500\u2500 Fraude d\u00e9tect\u00e9e: <strong>{_lstats["fraud_caught"]}</strong> ({_pct_fraud}%)<br>
+            <br>Temps \u00e9conomis\u00e9 / Time saved: <strong>~{_lstats["time_saved_hours"]} heures</strong>
+        </div>
+    </div>"""
+    except Exception:
+        pass
+
     status_opts = "".join(
         f'<option value="{v}" {"selected" if status==v else ""}>'
         f'{esc(t(_STATUS_LABEL_KEYS.get(v, v), lang))}</option>'
@@ -7668,6 +8068,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
 
     all_usernames = get_available_usernames()
     row_html: list[str] = []
+    card_html: list[str] = []
     for row in rows:
         assigned = normalize_text(row["assigned_to"])
         is_mine = normalize_key(assigned) == normalize_key(ctx["username"])
@@ -7691,6 +8092,17 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         else:
             assign_ctrl = esc(assigned or t("unassigned_label", lang))
 
+        # Learning status icon
+        try:
+            from src.engines.client_mismatch_engine import get_learning_status_icon
+            _ls = get_learning_status_icon(row)
+            _ls_badge = (
+                f'<span class="badge {_ls["css_class"]}" title="{esc(_ls["label_fr"])}">'
+                f'{_ls["icon"]}</span> '
+            )
+        except Exception:
+            _ls_badge = ""
+
         row_html.append(f"""<tr>
             <td class="file-cell"><a href="/document?id={urlquote(row["document_id"])}">{esc(row["file_name"])}</a>
                 <div class="small muted">{esc(row["document_id"])}</div></td>
@@ -7699,8 +8111,29 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             <td>{esc(row["category"])}</td><td>{esc(row["gl_account"])}</td>
             <td>{review_status_badge(status_display)}</td>
             <td>{assign_ctrl}</td>
-            <td class="reason-cell">{queue_fraud_badges(row)} {esc(reason)}</td>
+            <td class="reason-cell">{_ls_badge}{queue_fraud_badges(row)} {esc(reason)}</td>
             <td>{next_action_display}</td></tr>""")
+
+        _fraud_badge_mobile = queue_fraud_badges(row)
+        _status_class = "badge-needsreview" if "needs" in status_display.lower() else (
+            "badge-hold" if "hold" in status_display.lower() else (
+            "badge-ready" if "ready" in status_display.lower() else (
+            "badge-posted" if "posted" in status_display.lower() else "badge-muted")))
+        card_html.append(f"""<div class="queue-card" onclick="window.location='/document?id={urlquote(row["document_id"])}'">
+            <div class="queue-card-header">
+                <span class="vendor-name">{esc(row["vendor"])}</span>
+                <span class="amount">${esc(row["amount"])}</span>
+            </div>
+            <div class="queue-card-meta">
+                <span class="client-code">{esc(row["client_code"])}</span>
+                <span class="doc-date">{esc(row["document_date"])}</span>
+            </div>
+            <div class="queue-card-footer">
+                <span class="badge {_status_class}">{esc(status_display)}</span>
+                {_fraud_badge_mobile}
+                <a href="/document?id={urlquote(row["document_id"])}" class="btn-sm">Ouvrir</a>
+            </div>
+        </div>""")
 
     no_docs_cell = f'<tr><td colspan=11 class=muted>{esc(t("no_documents_found", lang))}</td></tr>'
     table_html = f"""<div class="card"><table class="queue-table">
@@ -7713,7 +8146,9 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             <th>{esc(t("col_action", lang))}</th>
         </tr></thead>
         <tbody>{"".join(row_html) if row_html else no_docs_cell}</tbody>
-    </table></div>"""
+    </table>
+    <div class="queue-cards">{"".join(card_html) if card_html else '<p class="muted">' + esc(t("no_documents_found", lang)) + '</p>'}</div>
+    </div>"""
 
     # Pagination controls
     pagination_html = ""
@@ -7763,7 +8198,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             </div>
         </div>"""
 
-    return page_layout(t("dashboard_title", lang), stats_html + filters_html + table_html + pagination_html,
+    return page_layout(t("dashboard_title", lang), stats_html + _learning_stats_html + filters_html + table_html + pagination_html,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
@@ -8180,6 +8615,64 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             except Exception:
                 pass
 
+    # --- SCENARIO 11: Cross-client mismatch ---
+    try:
+        from src.engines.client_mismatch_engine import detect_client_mismatch
+        _mismatch_data = {
+            "raw_ocr_text": normalize_text(raw_result.get("raw_ocr_text") or raw_result.get("extracted_text", "")),
+            "bill_to": normalize_text(raw_result.get("bill_to", "")),
+            "billing_email": normalize_text(raw_result.get("billing_email", "")),
+            "gst_number": normalize_text(raw_result.get("recipient_gst", "")),
+            "qst_number": normalize_text(raw_result.get("recipient_qst", "")),
+        }
+        if client_code:
+            with open_db() as _mc:
+                _mismatch = detect_client_mismatch(_mismatch_data, client_code, _mc)
+            if _mismatch.get("mismatch_detected"):
+                _sugg_code = _mismatch.get("suggested_client_code", "")
+                _sugg_name = _mismatch.get("suggested_client_name", "")
+                _sub_name = _mismatch.get("submitted_client_name", client_code)
+                _check_detail = _mismatch["checks"][0] if _mismatch.get("checks") else {}
+                cards.append({
+                    "icon": "\u26a0\ufe0f", "severity": "red",
+                    "title_fr": "MAUVAIS CLIENT / WRONG CLIENT",
+                    "title_en": "Document may belong to another client",
+                    "issue_fr": f"Soumis par: {_sub_name or client_code}. Factur\u00e9 \u00e0: {_sugg_name or _sugg_code}.",
+                    "issue_en": f"Submitted by: {_sub_name or client_code}. Billed to: {_sugg_name or _sugg_code}.",
+                    "why_fr": "Ce document semble appartenir \u00e0 un autre client. V\u00e9rifiez avant d\u2019approuver.",
+                    "why_en": "This document appears to belong to another client. Verify before approving.",
+                    "recommended": {
+                        "label_fr": f"D\u00e9placer vers {_sugg_code} / Move to {_sugg_code}",
+                        "label_en": f"Move to {_sugg_code}",
+                        "action": "/document/update", "method": "POST",
+                        "fields": {"document_id": document_id, "client_code": _sugg_code},
+                    },
+                    "alternatives": [
+                        {"label_fr": f"Garder dans {client_code} / Keep in {client_code}",
+                         "label_en": f"Keep in {client_code}",
+                         "action": f"/document/{urlquote(document_id)}#edit", "method": "GET", "fields": {}},
+                        {"label_fr": "Demander confirmation / Ask for confirmation",
+                         "label_en": "Ask for confirmation",
+                         "action": "/document/hold", "method": "POST",
+                         "fields": {"document_id": document_id,
+                                     "hold_reason": f"V\u00e9rifier si ce document appartient \u00e0 {_sugg_code}"}},
+                    ],
+                })
+                # Update document mismatch columns
+                try:
+                    with open_db() as _mc2:
+                        from src.engines.client_mismatch_engine import ensure_mismatch_columns
+                        ensure_mismatch_columns(_mc2)
+                        _mc2.execute(
+                            "UPDATE documents SET suspected_client_mismatch = 1, suggested_client_code = ? WHERE document_id = ?",
+                            (_sugg_code, document_id),
+                        )
+                        _mc2.commit()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     return cards
 
 
@@ -8311,12 +8804,83 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 user=user, lang=lang)
 
     raw_result = safe_json_loads(row["raw_result"])
+
+    # Bank statement / Credit card statement banner
+    _cat_norm = normalize_text(row.get("category", ""))
+    _dtype_norm = normalize_text(row.get("doc_type", ""))
+    _is_bank_stmt = (_cat_norm == "bank_statement" or _dtype_norm == "bank_statement")
+    _is_cc_stmt = (_cat_norm == "credit_card_statement" or _dtype_norm == "credit_card_statement")
+    bank_stmt_banner = ""
+    if _is_cc_stmt:
+        bank_stmt_banner = (
+            '<div style="background:#fff3cd;border:1px solid #ffc107;padding:12px;border-radius:6px;margin-bottom:16px;">'
+            '\U0001f4b3 <strong>Relev\u00e9 de carte de cr\u00e9dit / Credit Card Statement</strong><br>'
+            'Ce document est un relev\u00e9 de carte de cr\u00e9dit \u2014 GL 2150 (Carte de cr\u00e9dit \u00e0 payer).<br>'
+            'Traitez les transactions individuelles via le module Rapprochement bancaire.<br>'
+            '<em>This is a credit card statement \u2014 GL 2150 (Credit card payable).<br>'
+            'Process individual transactions via the Bank Reconciliation module.</em>'
+            '</div>'
+        )
+    elif _is_bank_stmt:
+        bank_stmt_banner = (
+            '<div style="background:#cce5ff;border:1px solid #004085;padding:12px;border-radius:6px;margin-bottom:16px;">'
+            '\U0001f3e6 <strong>Relev\u00e9 bancaire / Bank Statement</strong><br>'
+            'Ce document est un relev\u00e9 bancaire \u2014 utilisez le module Rapprochement bancaire.<br>'
+            '<em>This is a bank statement \u2014 use the Bank Reconciliation module.</em>'
+            '</div>'
+        )
+
     accounting_status = get_accounting_status(row)
     review_reason = get_plain_review_reason(row)
     blocking_issues = compute_blocking_issues(row)
     blocking_html = "".join(f"<li>{esc(x)}</li>" for x in blocking_issues) or f"<li>{esc(t('badge_none', lang))}</li>"
     decision_cards = _build_decision_cards(row, raw_result, document_id)
     decision_cards_html = _render_decision_cards(decision_cards, document_id)
+
+    # Auto-approval suggestion banner and learning progress
+    _auto_approve_banner = ""
+    _learning_progress_html = ""
+    try:
+        from src.engines.client_mismatch_engine import can_auto_approve, get_vendor_learning_detail
+        _auto_check = can_auto_approve(document_id)
+        _vendor_detail = get_vendor_learning_detail(
+            normalize_text(row.get("vendor", "")),
+            normalize_text(row.get("client_code", "")),
+        )
+        if _auto_check.get("can_auto"):
+            _auto_approve_banner = (
+                '<div style="background:#d1fae5;border:2px solid #059669;border-radius:8px;'
+                'padding:14px 20px;margin-bottom:16px;">'
+                '<strong>\u2705 APPROBATION AUTOMATIQUE SUGG\u00c9R\u00c9E / AUTO-APPROVAL SUGGESTED</strong><br>'
+                f'Ce fournisseur a \u00e9t\u00e9 approuv\u00e9 {_auto_check["approval_count"]} fois sans exception pour ce client.<br>'
+                f'GL: {esc(_auto_check["suggested_gl"])} | Taxe: {esc(_auto_check["suggested_tax"])} | '
+                f'Confiance: {_auto_check["confidence"]:.0%}<br>'
+                f'<form method="POST" action="/qbo/approve" style="display:inline;margin-top:8px;">'
+                f'<input type="hidden" name="document_id" value="{esc(document_id)}">'
+                f'<button class="btn-success" type="submit">Approuver automatiquement / Auto-approve</button></form> '
+                f'<a class="btn-secondary" href="/document?id={urlquote(document_id)}">R\u00e9viser quand m\u00eame / Review anyway</a>'
+                '</div>'
+            )
+        # Learning progress (shown always when there's vendor history)
+        if _vendor_detail.get("approval_count", 0) > 0:
+            _vd = _vendor_detail
+            _next_label = "approuv\u00e9 automatiquement" if _vd["can_auto_next"] else "en apprentissage"
+            _next_label_en = "auto-approved" if _vd["can_auto_next"] else "still learning"
+            _learning_progress_html = (
+                '<div style="background:#eff6ff;border:1px solid #3b82f6;border-radius:8px;'
+                'padding:12px 18px;margin-bottom:16px;">'
+                f'<strong>\U0001f4ca Historique d\'apprentissage / Learning History</strong><br>'
+                f'Fournisseur: {esc(normalize_text(row.get("vendor", "")))} | '
+                f'Client: {esc(normalize_text(row.get("client_code", "")))}<br>'
+                f'Approbations: {_vd["approval_count"]} | '
+                f'Confiance GL: {_vd["gl_confidence"]:.0%} | '
+                f'Confiance taxe: {_vd["tax_confidence"]:.0%}<br>'
+                f'Prochain document: {_next_label} / Next document: {_next_label_en}'
+                '</div>'
+            )
+    except Exception:
+        pass
+
     assigned = normalize_text(row["assigned_to"])
 
     try:
@@ -8454,13 +9018,15 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     except (KeyError, TypeError, ValueError):
         pass
     _has_illegible_fields = False
-    if raw_result:
+    _extraction_method = row.get("extraction_method", "") or ""
+    _is_handwriting_method = "handwriting" in _extraction_method
+    if raw_result and _is_handwriting_method:
         for _fld in ("vendor_name", "amount", "date", "document_date",
                       "gst_amount", "qst_amount", "total", "payment_method"):
             if raw_result.get(_fld) is None and _fld in raw_result:
                 _has_illegible_fields = True
                 break
-    _show_handwriting_review = _handwriting_low_conf or _has_illegible_fields
+    _show_handwriting_review = _handwriting_low_conf or (_has_illegible_fields and _is_handwriting_method)
     handwriting_banner = ""
     if _show_handwriting_review:
         handwriting_banner = (
@@ -8534,9 +9100,12 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         <div class="small muted">{esc(t("doc_field_id", lang))} {esc(row["document_id"])}</div>
         {timer_badge}
     </div>
+    {bank_stmt_banner}
     {hallucination_banner}
     {handwriting_banner}
     {decision_cards_html}
+    {_auto_approve_banner}
+    {_learning_progress_html}
     {_handwriting_side_by_side if _show_handwriting_review else pdf_viewer_html}
     <div class="card"><h3>{esc(t("doc_section_summary", lang))}</h3>
         <div class="grid-4">
@@ -8555,7 +9124,12 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         <div class="field"><label>{esc(t("doc_field_blocking", lang))}</label><ul>{blocking_html}</ul></div>
     </div>
     {assign_card}
-    <div class="card"><h3>{esc(t("doc_section_edit", lang))}</h3>
+    <div class="collapsible-section">
+        <div class="section-header" onclick="toggleSection(this)">
+            \u270f\ufe0f {esc(t("doc_section_edit", lang))} <span class="toggle-icon">\u25bc</span>
+        </div>
+        <div class="section-content">
+        <div class="card" style="border-top:0;border-top-left-radius:0;border-top-right-radius:0;">
         <form method="POST" action="/document/update">
             <input type="hidden" name="document_id" value="{esc(document_id)}">
             <div class="grid-3">
@@ -8565,12 +9139,14 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 <div class="field"><label>{esc(t("field_amount", lang))}</label><input type="text" name="amount" value="{esc(row["amount"])}"></div>
                 <div class="field"><label>{esc(t("field_document_date", lang))}</label><input type="text" name="document_date" value="{esc(row["document_date"])}"></div>
                 <div class="field"><label>{esc(t("col_gl_account", lang))}</label><input type="text" name="gl_account" value="{esc(row["gl_account"])}"></div>
-                <div class="field"><label>Tax Code</label><input type="text" name="tax_code" value="{esc(row["tax_code"])}"></div>
+                <div class="field"><label>Tax Code</label><input type="text" name="tax_code" value="{esc(row.get('tax_code') or '')}"></div>
                 <div class="field"><label>{esc(t("col_category", lang))}</label><input type="text" name="category" value="{esc(row["category"])}"></div>
                 <div class="field"><label>{esc(t("field_review_status", lang))}</label><select name="review_status">{status_options}</select></div>
             </div>
             <button class="btn-primary" type="submit">{esc(t("btn_save_changes", lang))}</button>
         </form>
+        </div>
+        </div>
     </div>
     <div class="card"><h3>{esc(t("doc_section_hold", lang))}</h3><div class="grid-2">
         <form method="POST" action="/document/hold">
@@ -8614,6 +9190,31 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             <div><strong>{esc(t("field_file_path", lang))}</strong><div>{esc(row["file_path"])}</div></div>
         </div></div>
     </div></details>
+    <div class="mobile-action-bar">
+        <form method="POST" action="/document/return_ready" style="flex:1;margin:0;">
+            <input type="hidden" name="document_id" value="{esc(document_id)}">
+            <button type="submit" style="width:100%;padding:10px;color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:12px;background:rgba(255,255,255,0.1);">\u2705 Approuver</button>
+        </form>
+        <form method="POST" action="/document/hold" style="flex:1;margin:0;">
+            <input type="hidden" name="document_id" value="{esc(document_id)}">
+            <input type="hidden" name="hold_reason" value="">
+            <button type="submit" style="width:100%;padding:10px;color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:12px;background:rgba(255,255,255,0.1);">\u23f8\ufe0f Attente</button>
+        </form>
+        <button onclick="document.querySelector('.collapsible-section .section-content').style.display='block';document.querySelector('.collapsible-section').scrollIntoView({{behavior:'smooth'}});" style="flex:1;padding:10px;color:white;border:1px solid rgba(255,255,255,0.3);border-radius:6px;font-size:12px;background:rgba(255,255,255,0.1);">\u270f\ufe0f Modifier</button>
+    </div>
+    <script>
+    function toggleSection(header) {{
+        var content = header.nextElementSibling;
+        var icon = header.querySelector('.toggle-icon');
+        if (content.style.display === 'none') {{
+            content.style.display = 'block';
+            icon.textContent = '\u25bc';
+        }} else {{
+            content.style.display = 'none';
+            icon.textContent = '\u25b6';
+        }}
+    }}
+    </script>
     {timer_js}"""
 
     return page_layout(f"Document — {normalize_text(row['file_name'])}", body,
@@ -9649,6 +10250,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_analytics(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/ai_costs":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_ai_costs(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/api/ai_costs":
+                if user.get("role") != "owner":
+                    self._send_json({"error": "owner_required"}, status=403)
+                    return
+                from src.engines.ocr_engine import get_ai_cost_summary
+                self._send_json(get_ai_cost_summary(period="month"))
                 return
 
             if path == "/calendar":
@@ -10689,6 +11310,63 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     track_correction_count(document_id, before_row, submitted, db_path=DB_PATH)
                 except Exception:
                     pass
+                # --- Feed learning engines on field corrections ---
+                try:
+                    _corr_vendor = normalize_text(submitted.get("vendor") or before_row.get("vendor", ""))
+                    _corr_client = normalize_text(submitted.get("client_code") or before_row.get("client_code", ""))
+                    _old_gl_corr = normalize_text(before_row.get("gl_account", "") if before_row else "")
+                    _new_gl_corr = normalize_text(submitted.get("gl_account", ""))
+                    _old_tax_corr = normalize_text(before_row.get("tax_code", "") if before_row else "")
+                    _new_tax_corr = normalize_text(submitted.get("tax_code", ""))
+                    _old_cat_corr = normalize_text(before_row.get("category", "") if before_row else "")
+                    _new_cat_corr = normalize_text(submitted.get("category", ""))
+                    if _old_gl_corr != _new_gl_corr and _new_gl_corr:
+                        from src.agents.core.gl_account_learning_engine import record_gl_correction
+                        with open_db() as _glc:
+                            record_gl_correction(
+                                _glc, client_code=_corr_client, vendor=_corr_vendor,
+                                old_gl=_old_gl_corr, new_gl=_new_gl_corr,
+                            )
+                        from src.agents.core.vendor_memory_store import record_vendor_correction
+                        record_vendor_correction(
+                            client_code=_corr_client, vendor_name=_corr_vendor,
+                            field="gl_account", old_value=_old_gl_corr, new_value=_new_gl_corr,
+                        )
+                    if _old_tax_corr != _new_tax_corr and _new_tax_corr:
+                        from src.engines.tax_engine import record_tax_correction
+                        record_tax_correction(
+                            client_code=_corr_client, vendor=_corr_vendor,
+                            old_tax=_old_tax_corr, new_tax=_new_tax_corr,
+                        )
+                    if _old_cat_corr != _new_cat_corr and _new_cat_corr:
+                        from src.engines.substance_engine import record_substance_correction
+                        record_substance_correction(
+                            client_code=_corr_client, vendor=_corr_vendor,
+                            old_category=_old_cat_corr, new_category=_new_cat_corr,
+                        )
+                except Exception:
+                    pass
+                # IMPROVEMENT 3: Record client correction when client_code changes
+                try:
+                    _old_client = normalize_text(before_row.get("client_code", "")) if before_row else ""
+                    _new_client = normalize_text(submitted.get("client_code", ""))
+                    if _old_client and _new_client and _old_client != _new_client:
+                        from src.engines.client_mismatch_engine import record_client_correction
+                        record_client_correction(
+                            vendor=normalize_text(submitted.get("vendor") or (before_row.get("vendor", "") if before_row else "")),
+                            old_client_code=_old_client,
+                            new_client_code=_new_client,
+                            document_id=document_id,
+                        )
+                except Exception:
+                    pass
+                # IMPROVEMENT 3: Recalculate auto-approve after any correction
+                try:
+                    from src.engines.client_mismatch_engine import record_auto_approve_feedback
+                    # A correction means auto-approve was wrong — record rejection
+                    record_auto_approve_feedback(document_id, accepted=False)
+                except Exception:
+                    pass
                 # FIX 7: Update substance_flags when GL is manually changed
                 new_gl = normalize_text(submitted.get("gl_account", ""))
                 old_gl = normalize_text(before_row["gl_account"]) if before_row else ""
@@ -10859,6 +11537,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                     (fraud_override_reason, document_id),
                                 )
                             _fc.commit()
+                        # --- Feed fraud override to learning ---
+                        try:
+                            from src.engines.fraud_engine import record_trusted_vendor
+                            _fraud_rules = [
+                                f.get("rule", f.get("flag", "")) if isinstance(f, dict) else str(f)
+                                for f in blocking_fraud
+                            ]
+                            record_trusted_vendor(
+                                client_code=normalize_text(doc_row.get("client_code", "")),
+                                vendor_name=normalize_text(doc_row.get("vendor", "")),
+                                rule_overridden="; ".join(_fraud_rules),
+                                justification=fraud_override_reason,
+                            )
+                        except Exception:
+                            pass
                     # --- END FIX 1 ---
 
                     raw_doc = safe_json_loads(doc_row["raw_result"])
@@ -10901,6 +11594,41 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 payload = approve_posting_job(normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER)
                 clear_manual_hold(document_id)
                 set_document_status(document_id, "Ready")
+                # --- Feed ALL learning engines on approval ---
+                try:
+                    _appr_row = doc_row or get_document(document_id)
+                    if _appr_row:
+                        _appr_vendor = normalize_text(_appr_row.get("vendor", ""))
+                        _appr_client = normalize_text(_appr_row.get("client_code", ""))
+                        _appr_gl = normalize_text(_appr_row.get("gl_account", ""))
+                        _appr_tax = normalize_text(_appr_row.get("tax_code", ""))
+                        _appr_cat = normalize_text(_appr_row.get("category", ""))
+                        _appr_amt = None
+                        try:
+                            _appr_amt = float(_appr_row["amount"]) if _appr_row.get("amount") else None
+                        except (TypeError, ValueError):
+                            pass
+                        from src.agents.core.vendor_memory_store import record_vendor_approval
+                        record_vendor_approval(
+                            client_code=_appr_client, vendor_name=_appr_vendor,
+                            gl_account=_appr_gl, tax_code=_appr_tax, amount=_appr_amt,
+                        )
+                        if _appr_gl:
+                            from src.agents.core.gl_account_learning_engine import record_gl_decision
+                            with open_db() as _gl_conn:
+                                record_gl_decision(
+                                    _gl_conn, client_code=_appr_client,
+                                    vendor=_appr_vendor, gl_account=_appr_gl,
+                                    decided_by="human_approval",
+                                )
+                        # IMPROVEMENT 3: Record auto-approve feedback on approval
+                        try:
+                            from src.engines.client_mismatch_engine import record_auto_approve_feedback
+                            record_auto_approve_feedback(document_id, accepted=True)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
                                      flash=t("flash_approved", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
@@ -10921,6 +11649,40 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if normalize_text(result.get("status")) == "posted":
                     set_document_status(document_id, "Ready")
                     clear_manual_hold(document_id)
+                    # --- Feed learning engines on posting (highest confidence) ---
+                    try:
+                        _post_row = get_document(document_id)
+                        if _post_row:
+                            _post_vendor = normalize_text(_post_row.get("vendor", ""))
+                            _post_client = normalize_text(_post_row.get("client_code", ""))
+                            _post_gl = normalize_text(_post_row.get("gl_account", ""))
+                            _post_tax = normalize_text(_post_row.get("tax_code", ""))
+                            _post_amt = None
+                            try:
+                                _post_amt = float(_post_row["amount"]) if _post_row.get("amount") else None
+                            except (TypeError, ValueError):
+                                pass
+                            from src.agents.core.vendor_memory_store import record_posting as _vm_record_posting
+                            _vm_record_posting(
+                                client_code=_post_client, vendor_name=_post_vendor,
+                                gl_account=_post_gl, tax_code=_post_tax, amount=_post_amt,
+                            )
+                            if _post_gl:
+                                from src.agents.core.gl_account_learning_engine import record_gl_decision as _gl_post_dec
+                                with open_db() as _glp:
+                                    _gl_post_dec(
+                                        _glp, client_code=_post_client,
+                                        vendor=_post_vendor, gl_account=_post_gl,
+                                        decided_by="posting",
+                                    )
+                            # IMPROVEMENT 3: Record auto-approve feedback on posting
+                            try:
+                                from src.engines.client_mismatch_engine import record_auto_approve_feedback as _aaf
+                                _aaf(document_id, accepted=True)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     msg = t("flash_posted_to_qbo", lang)
                     ext = normalize_text(result.get("external_id"))
                     if ext:

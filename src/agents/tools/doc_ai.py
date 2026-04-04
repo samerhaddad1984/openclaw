@@ -1,5 +1,8 @@
 from __future__ import annotations
-from openrouter_client import OpenRouterClient
+try:
+    from openrouter_client import OpenRouterClient
+except ImportError:
+    from src.agents.tools.openrouter_client import OpenRouterClient
 
 SYSTEM = """You are an accounting document classifier + extractor for a Canadian bookkeeping workflow.
 Return STRICT JSON only.

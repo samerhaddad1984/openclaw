@@ -50,12 +50,53 @@
   "client_portal": {
     "enabled": true,
     "port": 8788,
-    "max_upload_mb": 20
+    "max_upload_mb": 20,
+    "daily_upload_limit_by_tier": {
+      "essentiel": 20,
+      "professionnel": 50,
+      "cabinet": 200,
+      "entreprise": 9999
+    },
+    "testing_mode_limit": 200
   },
   "ingest": {
     "port": 8789,
     "api_key": ""
   },
+  "openrouter": {
+    "api_key": "",
+    "enabled": true,
+    "base_url": "https://openrouter.ai/api/v1"
+  },
+  "fx_rates": {
+    "usd_cad_last_known": 1.3718,
+    "eur_cad_last_known": 1.5,
+    "gbp_cad_last_known": 1.75,
+    "last_updated": "2026-04-04T10:36:32+00:00"
+  },
+  "learning": {
+    "auto_approve_after_n_approvals": 5,
+    "auto_approve_confidence_threshold": 0.85,
+    "auto_approve_max_amount": 5000,
+    "auto_approve_enabled": false
+  },
   "demo_mode": false,
-  "database_path": "data/otocpa_agent.db"
+  "database_path": "data/otocpa_agent.db",
+  "ai_complexity_models": {
+    "simple": "deepseek/deepseek-chat",
+    "medium": "google/gemini-2.0-flash-001",
+    "complex": "anthropic/claude-haiku-4-5",
+    "very_complex": "anthropic/claude-sonnet-4-6"
+  },
+  "cloudflare": {
+    "api_token": "cfut_oenx18ehJCBZxL2sfIfGLKsUMZKDMSK6ReUQM3f282b867d7",
+    "account_id": "a35f22f67d1d97a9e4bc6c45ec1d9147",
+    "zone_id": "c3d83d379edd5e49207c06bf8a209ae3",
+    "tunnel_id": "759d69d5-1391-481e-8dc9-d90b2a6a1ec2",
+    "tunnel_name": "otocpa-demo",
+    "domain": "otocpa.com",
+    "dashboard_url": "https://demo.otocpa.com",
+    "portal_url": "https://demo-portal.otocpa.com",
+    "enabled": true
+  }
 }

@@ -1107,3 +1107,66 @@ def classify_substance(
         owner_names=owner_names,
         province=province,
     )
+
+
+def record_substance_correction(
+    client_code: str = "",
+    vendor: str = "",
+    old_category: str = "",
+    new_category: str = "",
+    conn=None,
+    **kwargs,
+) -> dict:
+    """Record a substance/category correction from a human reviewer.
+
+    Stores the correction so the classifier can learn from it.
+    Confidence is clamped to [0.1, 0.99].
+    """
+    import sqlite3 as _sql
+    from pathlib import Path as _Path
+
+    if not vendor or not new_category:
+        return {"ok": False, "reason": "missing_vendor_or_category"}
+
+    _db = _Path(__file__).resolve().parent.parent.parent / "data" / "otocpa_agent.db"
+    _conn = conn or _sql.connect(str(_db))
+    _own = conn is None
+    try:
+        tables = {r[0] if isinstance(r, tuple) else r["name"]
+                  for r in _conn.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table'"
+                  ).fetchall()}
+        if "learning_corrections" in tables:
+            import secrets
+            _conn.execute(
+                "INSERT INTO learning_corrections "
+                "(correction_id, document_id, field_name, field_name_key, "
+                "old_value, old_value_key, new_value, new_value_key, "
+                "vendor_key, client_code_key, doc_type_key, category_key, "
+                "support_count, reviewer, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",
+                (
+                    f"subst-{secrets.token_hex(4)}",
+                    "",
+                    "category",
+                    "category",
+                    old_category,
+                    _normalize(old_category),
+                    new_category,
+                    _normalize(new_category),
+                    _normalize(vendor),
+                    _normalize(client_code),
+                    "",
+                    _normalize(new_category),
+                    1,
+                    "human_correction",
+                ),
+            )
+            _conn.commit()
+        return {"ok": True, "old_category": old_category, "new_category": new_category}
+    except Exception as exc:
+        log.debug("record_substance_correction failed: %s", exc)
+        return {"ok": False, "reason": str(exc)}
+    finally:
+        if _own and conn is None:
+            _conn.close()
