@@ -2090,6 +2090,72 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
             f"<td>{badge}</td></tr>"
         )
 
+    # --- AI Extraction Stats ---
+    ai_stats_html = ""
+    try:
+        _diag_conn = sqlite3.connect(str(DB_PATH))
+        try:
+            _diag_total = _diag_conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            # Check if raw_result column has ai_used field
+            _diag_regex_only = 0
+            _diag_ai_assisted = 0
+            _diag_tiers = {"simple": 0, "medium": 0, "complex": 0, "very_complex": 0}
+            _diag_ai_conf_sum = 0.0
+            _diag_no_ai_conf_sum = 0.0
+            rows = _diag_conn.execute("SELECT raw_result, confidence FROM documents").fetchall()
+            for row in rows:
+                raw_json = row[0] or "{}"
+                conf = row[1] or 0.0
+                try:
+                    parsed = json.loads(raw_json)
+                except Exception:
+                    parsed = {}
+                if parsed.get("ai_used"):
+                    _diag_ai_assisted += 1
+                    _diag_ai_conf_sum += conf
+                    tier = parsed.get("ai_complexity") or "simple"
+                    if tier in _diag_tiers:
+                        _diag_tiers[tier] += 1
+                else:
+                    _diag_regex_only += 1
+                    _diag_no_ai_conf_sum += conf
+
+            # Estimate cost from ai_usage_log if available
+            _diag_cost = 0.0
+            try:
+                cost_row = _diag_conn.execute(
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage_log "
+                    "WHERE created_at >= date('now', 'start of month')"
+                ).fetchone()
+                _diag_cost = cost_row[0] if cost_row else 0.0
+            except Exception:
+                pass
+
+            avg_ai_conf = round(_diag_ai_conf_sum / _diag_ai_assisted * 100, 1) if _diag_ai_assisted else 0
+            avg_no_ai_conf = round(_diag_no_ai_conf_sum / _diag_regex_only * 100, 1) if _diag_regex_only else 0
+
+            ai_stats_html = f"""
+<div class="card">
+  <h2>AI Extraction Stats</h2>
+  <table>
+    <tbody>
+      <tr><td><strong>Free (regex only, confidence &ge; 0.85)</strong></td><td>{_diag_regex_only} docs</td></tr>
+      <tr><td><strong>AI assisted (confidence &lt; 0.85)</strong></td><td>{_diag_ai_assisted} docs</td></tr>
+      <tr><td>&nbsp;&nbsp;Simple tier (cheapest model)</td><td>{_diag_tiers['simple']} docs</td></tr>
+      <tr><td>&nbsp;&nbsp;Medium tier</td><td>{_diag_tiers['medium']} docs</td></tr>
+      <tr><td>&nbsp;&nbsp;Complex tier</td><td>{_diag_tiers['complex']} docs</td></tr>
+      <tr><td>&nbsp;&nbsp;Very complex tier (best model)</td><td>{_diag_tiers['very_complex']} docs</td></tr>
+      <tr><td><strong>Total AI cost this month</strong></td><td>${_diag_cost:.2f}</td></tr>
+      <tr><td><strong>Avg confidence with AI</strong></td><td>{avg_ai_conf}%</td></tr>
+      <tr><td><strong>Avg confidence without AI</strong></td><td>{avg_no_ai_conf}%</td></tr>
+    </tbody>
+  </table>
+</div>"""
+        finally:
+            _diag_conn.close()
+    except Exception:
+        ai_stats_html = ""
+
     body = f"""
 <div class="card">
   <h2>{esc(t("diag_title", lang))}</h2>
@@ -2136,6 +2202,7 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
   <h2>OpenClaw Bridge</h2>
   {_render_openclaw_bridge_status(lang)}
 </div>
+{ai_stats_html}
 <div class="card">
   <h2>{esc(t("diag_log_lines", lang))}</h2>
   <textarea readonly style="height:420px;font-size:12px;">{esc(log_lines)}</textarea>
@@ -7512,6 +7579,59 @@ function fixMobileLayout() {{
 // Run on load and resize
 window.addEventListener('load', fixMobileLayout);
 window.addEventListener('resize', fixMobileLayout);
+
+// --- Dark-screen safety net ---
+// FIX 1: Escape key dismisses any overlay
+document.addEventListener('keydown', function(e) {{
+    if (e.key === 'Escape') {{
+        document.querySelectorAll('.overlay, .modal, .loading-overlay, [class*="overlay"], [class*="modal"]').forEach(function(el) {{
+            el.style.display = 'none';
+            el.style.opacity = '0';
+            el.style.visibility = 'hidden';
+        }});
+        document.body.style.opacity = '1';
+        document.body.style.pointerEvents = 'auto';
+    }}
+}});
+
+// FIX 2: Click-to-dismiss on overlay
+document.addEventListener('click', function(e) {{
+    if (e.target.classList.contains('overlay') ||
+        e.target.classList.contains('modal-backdrop') ||
+        e.target.classList.contains('loading-overlay')) {{
+        e.target.style.display = 'none';
+        document.body.style.opacity = '1';
+        document.body.style.pointerEvents = 'auto';
+    }}
+}});
+
+// FIX 3: Auto-dismiss loading overlay after 10 seconds
+(function() {{
+    var _origFetch = window.fetch;
+    if (_origFetch) {{
+        window.fetch = function() {{
+            var _safetyTimer = setTimeout(function() {{
+                document.querySelectorAll('.loading-overlay, .overlay').forEach(function(el) {{
+                    el.style.display = 'none';
+                }});
+                document.body.style.opacity = '1';
+                document.body.style.pointerEvents = 'auto';
+            }}, 10000);
+            return _origFetch.apply(this, arguments).finally(function() {{
+                clearTimeout(_safetyTimer);
+            }});
+        }};
+    }}
+}})();
+
+// FIX 4: Periodic body-opacity watchdog
+setInterval(function() {{
+    var bodyOp = window.getComputedStyle(document.body).opacity;
+    if (parseFloat(bodyOp) < 0.5) {{
+        document.body.style.opacity = '1';
+        document.body.style.pointerEvents = 'auto';
+    }}
+}}, 3000);
 </script>
 </body>
 </html>"""

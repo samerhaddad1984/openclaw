@@ -117,6 +117,14 @@ KNOWN_REGISTERED_SOFTWARE_VENDORS = {
     "amazon", "amazon.ca", "amazon web services",
     "apple", "apple canada",
     "dropbox", "zoom", "zoom video",
+    "companycam", "company cam",
+}
+
+# ---------------------------------------------------------------------------
+# Known US digital services — no Canadian GST expected
+# ---------------------------------------------------------------------------
+KNOWN_US_DIGITAL_SERVICES = {
+    "companycam", "company cam",
 }
 
 # ---------------------------------------------------------------------------
@@ -268,6 +276,10 @@ def _is_known_trusted_vendor(vendor: str) -> bool:
         "canada revenue", "revenu quebec", "revenu québec",
         "cnesst", "service canada",
         "amazon", "microsoft", "google", "apple", "adobe",
+        "companycam", "company cam",
+        "goto technologies", "goto", "logmein",
+        "lastpass", "openai",
+        "intuit", "quickbooks",
     ]
     return any(tok in v for tok in _trusted_tokens)
 
