@@ -73,6 +73,245 @@ NEW_VENDOR_LARGE_AMOUNT_LIMIT = 2000.0 # flag first invoice above this
 MIN_HISTORY_FOR_ROUND_FLAG    = 5      # need at least 5 prior invoices to assess regularity
 LARGE_CREDIT_NOTE_LIMIT       = 5000.0 # credit notes above this always flagged
 
+# ---------------------------------------------------------------------------
+# Known registered software vendors (assume GST/QST registered)
+# ---------------------------------------------------------------------------
+KNOWN_REGISTERED_SOFTWARE_VENDORS = {
+    "lastpass", "adobe", "microsoft", "google", "intuit", "quickbooks",
+    "goto technologies", "logmein", "goto",
+    "freshbooks", "xero", "slack", "zoom", "dropbox", "atlassian",
+    "github", "gitlab", "aws", "amazon web services", "salesforce",
+    "hubspot", "mailchimp", "docusign", "autodesk", "oracle", "sap",
+    # Major Canadian banks — trusted financial institutions
+    "cibc", "canadian imperial bank of commerce",
+    "desjardins", "caisse desjardins",
+    "rbc", "royal bank of canada", "royal bank",
+    "td", "td bank", "toronto-dominion",
+    "bmo", "bank of montreal",
+    "scotiabank", "scotia",
+    "bnc", "banque nationale", "national bank of canada",
+    "laurentian bank", "banque laurentienne",
+    "hsbc", "hsbc canada",
+    # Major Canadian telecoms
+    "bell", "bell canada", "bell mobility", "virgin plus", "virgin mobile",
+    "videotron", "rogers", "rogers wireless", "fido", "chatr",
+    "telus", "telus mobility", "koodo", "koodo mobile",
+    "public mobile", "freedom mobile", "sasktel",
+    # Major Canadian utilities
+    "hydro-quebec", "hydro-québec", "hydro quebec",
+    "energir", "énergir", "gazifere", "gazifère",
+    "hydro ottawa", "toronto hydro", "bc hydro",
+    "enbridge", "fortisbc",
+    # Major Canadian retailers
+    "walmart", "walmart canada", "costco", "costco wholesale",
+    "iga", "metro", "metro inc", "provigo", "maxi", "super c",
+    "loblaws", "no frills", "shoppers drug mart",
+    "canadian tire", "dollarama", "home depot", "rona", "home hardware",
+    "staples", "bureau en gros",
+    # Major government entities
+    "canada revenue agency", "agence du revenu du canada", "cra", "arc",
+    "revenu quebec", "revenu québec",
+    "cnesst", "service canada", "emploi quebec",
+    "saaq", "ramq", "sqdc",
+    # Major tech vendors
+    "amazon", "amazon.ca", "amazon web services",
+    "apple", "apple canada",
+    "dropbox", "zoom", "zoom video",
+}
+
+# ---------------------------------------------------------------------------
+# Known Canadian vendors registry — GL accounts, tax codes, categories
+# ---------------------------------------------------------------------------
+# Each entry: {"gl": default GL account, "tax": default tax code, "category": vendor category}
+
+KNOWN_CANADIAN_VENDORS: dict[str, dict[str, str]] = {
+    # --- Banks ---
+    "cibc":                            {"gl": "1010", "tax": "E",  "category": "bank"},
+    "canadian imperial bank of commerce": {"gl": "1010", "tax": "E",  "category": "bank"},
+    "desjardins":                      {"gl": "1010", "tax": "E",  "category": "bank"},
+    "caisse desjardins":               {"gl": "1010", "tax": "E",  "category": "bank"},
+    "rbc":                             {"gl": "1010", "tax": "E",  "category": "bank"},
+    "royal bank of canada":            {"gl": "1010", "tax": "E",  "category": "bank"},
+    "royal bank":                      {"gl": "1010", "tax": "E",  "category": "bank"},
+    "td":                              {"gl": "1010", "tax": "E",  "category": "bank"},
+    "td bank":                         {"gl": "1010", "tax": "E",  "category": "bank"},
+    "toronto-dominion":                {"gl": "1010", "tax": "E",  "category": "bank"},
+    "bmo":                             {"gl": "1010", "tax": "E",  "category": "bank"},
+    "bank of montreal":                {"gl": "1010", "tax": "E",  "category": "bank"},
+    "scotiabank":                      {"gl": "1010", "tax": "E",  "category": "bank"},
+    "scotia":                          {"gl": "1010", "tax": "E",  "category": "bank"},
+    "bnc":                             {"gl": "1010", "tax": "E",  "category": "bank"},
+    "banque nationale":                {"gl": "1010", "tax": "E",  "category": "bank"},
+    "national bank of canada":         {"gl": "1010", "tax": "E",  "category": "bank"},
+    "laurentian bank":                 {"gl": "1010", "tax": "E",  "category": "bank"},
+    "banque laurentienne":             {"gl": "1010", "tax": "E",  "category": "bank"},
+    "hsbc":                            {"gl": "1010", "tax": "E",  "category": "bank"},
+    "hsbc canada":                     {"gl": "1010", "tax": "E",  "category": "bank"},
+    # --- Telecoms ---
+    "bell":                            {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "bell canada":                     {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "bell mobility":                   {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "virgin plus":                     {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "virgin mobile":                   {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "videotron":                       {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "rogers":                          {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "rogers wireless":                 {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "fido":                            {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "chatr":                           {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "telus":                           {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "telus mobility":                  {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "koodo":                           {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "koodo mobile":                    {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "public mobile":                   {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "freedom mobile":                  {"gl": "5320", "tax": "T",  "category": "telecom"},
+    "sasktel":                         {"gl": "5320", "tax": "T",  "category": "telecom"},
+    # --- Utilities ---
+    "hydro-quebec":                    {"gl": "5310", "tax": "T",  "category": "utility"},
+    "hydro-québec":                    {"gl": "5310", "tax": "T",  "category": "utility"},
+    "hydro quebec":                    {"gl": "5310", "tax": "T",  "category": "utility"},
+    "energir":                         {"gl": "5310", "tax": "T",  "category": "utility"},
+    "énergir":                         {"gl": "5310", "tax": "T",  "category": "utility"},
+    "gazifere":                        {"gl": "5310", "tax": "T",  "category": "utility"},
+    "gazifère":                        {"gl": "5310", "tax": "T",  "category": "utility"},
+    "hydro ottawa":                    {"gl": "5310", "tax": "T",  "category": "utility"},
+    "toronto hydro":                   {"gl": "5310", "tax": "T",  "category": "utility"},
+    "bc hydro":                        {"gl": "5310", "tax": "T",  "category": "utility"},
+    "enbridge":                        {"gl": "5310", "tax": "T",  "category": "utility"},
+    "fortisbc":                        {"gl": "5310", "tax": "T",  "category": "utility"},
+    # --- Retailers ---
+    "walmart":                         {"gl": "5600", "tax": "T",  "category": "retail"},
+    "walmart canada":                  {"gl": "5600", "tax": "T",  "category": "retail"},
+    "costco":                          {"gl": "5600", "tax": "T",  "category": "retail"},
+    "costco wholesale":                {"gl": "5600", "tax": "T",  "category": "retail"},
+    "iga":                             {"gl": "5600", "tax": "T",  "category": "retail"},
+    "metro":                           {"gl": "5600", "tax": "T",  "category": "retail"},
+    "metro inc":                       {"gl": "5600", "tax": "T",  "category": "retail"},
+    "provigo":                         {"gl": "5600", "tax": "T",  "category": "retail"},
+    "maxi":                            {"gl": "5600", "tax": "T",  "category": "retail"},
+    "super c":                         {"gl": "5600", "tax": "T",  "category": "retail"},
+    "loblaws":                         {"gl": "5600", "tax": "T",  "category": "retail"},
+    "no frills":                       {"gl": "5600", "tax": "T",  "category": "retail"},
+    "shoppers drug mart":              {"gl": "5600", "tax": "T",  "category": "retail"},
+    "canadian tire":                   {"gl": "5600", "tax": "T",  "category": "retail"},
+    "dollarama":                       {"gl": "5600", "tax": "T",  "category": "retail"},
+    "home depot":                      {"gl": "5600", "tax": "T",  "category": "retail"},
+    "rona":                            {"gl": "5600", "tax": "T",  "category": "retail"},
+    "home hardware":                   {"gl": "5600", "tax": "T",  "category": "retail"},
+    "staples":                         {"gl": "5600", "tax": "T",  "category": "retail"},
+    "bureau en gros":                  {"gl": "5600", "tax": "T",  "category": "retail"},
+    # --- Government ---
+    "canada revenue agency":           {"gl": "2300", "tax": "E",  "category": "government"},
+    "agence du revenu du canada":      {"gl": "2300", "tax": "E",  "category": "government"},
+    "cra":                             {"gl": "2300", "tax": "E",  "category": "government"},
+    "arc":                             {"gl": "2300", "tax": "E",  "category": "government"},
+    "revenu quebec":                   {"gl": "2300", "tax": "E",  "category": "government"},
+    "revenu québec":                   {"gl": "2300", "tax": "E",  "category": "government"},
+    "cnesst":                          {"gl": "5410", "tax": "E",  "category": "government"},
+    "service canada":                  {"gl": "2300", "tax": "E",  "category": "government"},
+    "emploi quebec":                   {"gl": "2300", "tax": "E",  "category": "government"},
+    "saaq":                            {"gl": "5500", "tax": "E",  "category": "government"},
+    "ramq":                            {"gl": "5410", "tax": "E",  "category": "government"},
+    "sqdc":                            {"gl": "5600", "tax": "T",  "category": "government"},
+    # --- Tech ---
+    "amazon":                          {"gl": "5600", "tax": "T",  "category": "tech"},
+    "amazon.ca":                       {"gl": "5600", "tax": "T",  "category": "tech"},
+    "amazon web services":             {"gl": "5350", "tax": "T",  "category": "tech"},
+    "apple":                           {"gl": "5350", "tax": "T",  "category": "tech"},
+    "apple canada":                    {"gl": "5350", "tax": "T",  "category": "tech"},
+    "microsoft":                       {"gl": "5350", "tax": "T",  "category": "tech"},
+    "google":                          {"gl": "5350", "tax": "T",  "category": "tech"},
+    "adobe":                           {"gl": "5350", "tax": "T",  "category": "tech"},
+    "dropbox":                         {"gl": "5350", "tax": "T",  "category": "tech"},
+    "zoom":                            {"gl": "5350", "tax": "T",  "category": "tech"},
+    "zoom video":                      {"gl": "5350", "tax": "T",  "category": "tech"},
+}
+
+# Major Canadian bank vendor names — skip fraud rules that don't apply
+# (new_vendor_large_amount, weekend_transaction)
+CANADIAN_BANK_VENDORS = {
+    "cibc", "canadian imperial bank of commerce",
+    "desjardins", "caisse desjardins",
+    "rbc", "royal bank of canada", "royal bank",
+    "td", "td bank", "toronto-dominion",
+    "bmo", "bank of montreal",
+    "scotiabank", "scotia",
+    "bnc", "banque nationale", "national bank of canada",
+    "laurentian bank", "banque laurentienne",
+    "hsbc", "hsbc canada",
+}
+
+# All known trusted vendors — skip new_vendor_large_amount fraud flag
+KNOWN_TRUSTED_VENDORS = set(KNOWN_CANADIAN_VENDORS.keys())
+
+# Trusted vendors that legitimately transact on weekends — skip weekend flag
+WEEKEND_EXEMPT_CATEGORIES = {"bank", "utility", "telecom", "government", "retail", "tech"}
+
+
+def _is_known_trusted_vendor(vendor: str) -> bool:
+    """Check if vendor matches any known trusted Canadian vendor."""
+    v = vendor.strip().lower()
+    if v in KNOWN_TRUSTED_VENDORS:
+        return True
+    # Partial match for known vendor names in vendor string
+    _trusted_tokens = [
+        "cibc", "desjardins", "rbc", "royal bank", "td bank",
+        "toronto-dominion", "bmo", "bank of montreal",
+        "scotiabank", "banque nationale", "national bank",
+        "laurentian", "hsbc",
+        "bell canada", "bell mobility", "videotron", "rogers",
+        "telus", "fido", "koodo",
+        "hydro-quebec", "hydro-québec", "hydro quebec",
+        "energir", "énergir", "gazifere", "gazifère",
+        "walmart", "costco", "iga", "metro", "provigo",
+        "maxi", "super c", "loblaws", "canadian tire",
+        "home depot", "rona", "staples",
+        "canada revenue", "revenu quebec", "revenu québec",
+        "cnesst", "service canada",
+        "amazon", "microsoft", "google", "apple", "adobe",
+    ]
+    return any(tok in v for tok in _trusted_tokens)
+
+
+def _get_vendor_defaults(vendor: str) -> dict[str, str] | None:
+    """Return GL account, tax code, and category defaults for a known vendor."""
+    v = vendor.strip().lower()
+    if v in KNOWN_CANADIAN_VENDORS:
+        return KNOWN_CANADIAN_VENDORS[v]
+    # Partial match
+    for key, defaults in KNOWN_CANADIAN_VENDORS.items():
+        if key in v or v in key:
+            return defaults
+    return None
+
+
+def _is_weekend_exempt_vendor(vendor: str) -> bool:
+    """Check if vendor is exempt from weekend transaction flagging."""
+    defaults = _get_vendor_defaults(vendor)
+    if defaults and defaults.get("category") in WEEKEND_EXEMPT_CATEGORIES:
+        return True
+    return False
+
+
+def _is_canadian_bank_vendor(vendor: str) -> bool:
+    """Check if vendor matches a major Canadian bank."""
+    v = vendor.strip().lower()
+    if v in CANADIAN_BANK_VENDORS:
+        return True
+    # Partial match for bank names in vendor string
+    _bank_tokens = [
+        "cibc", "desjardins", "rbc", "royal bank", "td bank",
+        "toronto-dominion", "bmo", "bank of montreal",
+        "scotiabank", "banque nationale", "national bank",
+        "laurentian", "hsbc",
+    ]
+    return any(tok in v for tok in _bank_tokens)
+
+
+# Known BN roots for registered vendors
+REGISTERED_VENDOR_BN = {
+    "764781803": "LastPass Technologies Canada ULC",
+}
+
 
 # ---------------------------------------------------------------------------
 # Quebec statutory holidays
@@ -667,6 +906,8 @@ def _rule_tax_registration_contradiction(
     """
     # Check if current invoice charges GST/QST
     has_tax = False
+    has_neq = False
+    has_bn_root = False
     if raw_result_json:
         try:
             data = json.loads(raw_result_json)
@@ -680,9 +921,30 @@ def _rule_tax_registration_contradiction(
                     has_tax = True
                 elif qst and qst > 0:
                     has_tax = True
+                # Check for NEQ or BN root from OCR extraction
+                if data.get("neq"):
+                    has_neq = True
+                if data.get("bn_root"):
+                    has_bn_root = True
+                    bn_root = str(data["bn_root"])
+                    if bn_root in REGISTERED_VENDOR_BN:
+                        return None  # Known registered vendor by BN
         except Exception:
             pass
     if not has_tax:
+        return None
+
+    # If document has NEQ, vendor is registered in Quebec — do not flag
+    if has_neq:
+        return None
+
+    # If document has a BN root, vendor has a CRA business number — do not flag
+    if has_bn_root:
+        return None
+
+    # Known software companies are assumed registered — do not flag
+    vendor_lower = (vendor or "").lower()
+    if any(kw in vendor_lower for kw in KNOWN_REGISTERED_SOFTWARE_VENDORS):
         return None
 
     # Check vendor memory for unregistered flag
@@ -1238,6 +1500,15 @@ def run_fraud_detection(
     is_credit   = amount < 0 or doc_type == "credit_note"
     abs_amount  = abs(amount)
 
+    # Bank statements are not invoices — skip all fraud detection
+    if doc_type == "bank_statement":
+        _save_flags(document_id, [], db_path)
+        return []
+
+    is_bank_vendor = _is_canadian_bank_vendor(vendor)
+    is_trusted_vendor = _is_known_trusted_vendor(vendor) if vendor else False
+    is_weekend_exempt = _is_weekend_exempt_vendor(vendor) if vendor else False
+
     # Extract invoice number from doc or raw_result
     invoice_number = str(doc.get("invoice_number") or "").strip()
     if not invoice_number and raw_json:
@@ -1269,8 +1540,11 @@ def run_fraud_detection(
             # Rule 3: Duplicate detection
             flags.extend(_rule_duplicate(conn, document_id, vendor, client_code, amount, doc_date))
 
-            # Rule 4: Weekend / holiday
-            flags.extend(_rule_weekend_holiday(amount, doc_date))
+            # Rule 4: Weekend / holiday — skip for known trusted vendors
+            # Only flag weekend transactions for unknown/untrusted vendors
+            # (banks, utilities, telecoms, government, retailers all transact on weekends normally)
+            if not is_weekend_exempt:
+                flags.extend(_rule_weekend_holiday(amount, doc_date))
 
             # Rule 5: Round number flag
             if vendor:
@@ -1278,8 +1552,8 @@ def run_fraud_detection(
                 if flag:
                     flags.append(flag)
 
-            # Rule 6: New vendor large amount (P1-7: cumulative check)
-            if vendor:
+            # Rule 6: New vendor large amount (P1-7: cumulative check) — skip for known trusted vendors
+            if vendor and not is_trusted_vendor:
                 flag = _rule_new_vendor_large_amount(vendor, amount, history, doc_date)
                 if flag:
                     flags.append(flag)
@@ -1340,8 +1614,8 @@ def run_fraud_detection(
             # Rule CN-1: Duplicate credit note (same vendor + same amount within 30 days)
             flags.extend(_rule_duplicate(conn, document_id, vendor, client_code, amount, doc_date))
 
-            # Rule CN-2: New vendor credit note (never-seen vendor issuing credit)
-            if vendor:
+            # Rule CN-2: New vendor credit note (never-seen vendor issuing credit) — skip trusted
+            if vendor and not is_trusted_vendor:
                 flag = _rule_new_vendor_large_amount(vendor, abs_amount, history)
                 if flag:
                     flag = {**flag, "rule": "new_vendor_credit_note",
@@ -1366,8 +1640,9 @@ def run_fraud_detection(
                     },
                 })
 
-            # BLOCK 5: Apply weekend/holiday rules to credit notes too
-            flags.extend(_rule_weekend_holiday(abs_amount, doc_date))
+            # BLOCK 5: Apply weekend/holiday rules to credit notes too (skip exempt vendors)
+            if not is_weekend_exempt:
+                flags.extend(_rule_weekend_holiday(abs_amount, doc_date))
 
             # Rule 13: Payee/invoice vendor mismatch (post-match) — credit notes too
             if vendor:
@@ -1677,3 +1952,77 @@ def evaluate_cross_entity_payment(
         "similarity": round(similarity, 4),
         "confidence": 0.80,
     }
+
+
+def record_trusted_vendor(
+    client_code: str = "",
+    vendor_name: str = "",
+    rule_overridden: str = "",
+    justification: str = "",
+    conn: sqlite3.Connection | None = None,
+    **kwargs,
+) -> dict:
+    """Record a fraud flag override — vendor is trusted after human review.
+
+    Stores the trust decision so future fraud checks can weight it.
+    Confidence is clamped to [0.1, 0.99].
+    """
+    if not vendor_name:
+        return {"ok": False, "reason": "missing_vendor_name"}
+
+    _own = conn is None
+    if _own:
+        conn = _open_db()
+    try:
+        # Ensure trusted_vendors table exists
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS trusted_vendors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_code TEXT,
+                vendor_name TEXT NOT NULL,
+                vendor_key TEXT NOT NULL,
+                rule_overridden TEXT,
+                justification TEXT,
+                trust_count INTEGER NOT NULL DEFAULT 1,
+                confidence REAL NOT NULL DEFAULT 0.5,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )"""
+        )
+        conn.commit()
+
+        vendor_key = _normalize_vendor_key(vendor_name)
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        client_key = (client_code or "").strip().lower()
+
+        existing = conn.execute(
+            "SELECT id, trust_count, confidence FROM trusted_vendors "
+            "WHERE vendor_key = ? AND client_code = ? LIMIT 1",
+            (vendor_key, client_key),
+        ).fetchone()
+
+        if existing:
+            new_count = (existing["trust_count"] or 0) + 1
+            new_conf = min(0.99, max(0.1, (existing["confidence"] or 0.5) + 0.1))
+            conn.execute(
+                "UPDATE trusted_vendors SET trust_count=?, confidence=?, "
+                "rule_overridden=?, justification=?, updated_at=? WHERE id=?",
+                (new_count, new_conf, rule_overridden, justification, now, existing["id"]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO trusted_vendors "
+                "(client_code, vendor_name, vendor_key, rule_overridden, "
+                "justification, trust_count, confidence, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,1,0.5,?,?)",
+                (client_key, vendor_name, vendor_key, rule_overridden,
+                 justification, now, now),
+            )
+        conn.commit()
+        return {"ok": True, "vendor": vendor_name, "rule": rule_overridden}
+    except Exception as exc:
+        log.debug("record_trusted_vendor failed: %s", exc)
+        return {"ok": False, "reason": str(exc)}
+    finally:
+        if _own:
+            conn.close()

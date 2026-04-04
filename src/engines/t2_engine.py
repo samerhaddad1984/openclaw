@@ -50,7 +50,7 @@ def _sum_gl_range(client_code: str, gl_start: int, gl_end: int,
              AND CAST(SUBSTR(COALESCE(gl_account, '0'), 1, 4) AS INTEGER) BETWEEN ? AND ?""",
         (client_code, period_start, period_end, gl_start, gl_end),
     ).fetchone()
-    return _to_decimal(row.get("total", 0) if row else 0)
+    return _to_decimal(row["total"] if row else 0)
 
 
 def _sum_gl_range_balance(client_code: str, gl_start: int, gl_end: int,
@@ -64,7 +64,7 @@ def _sum_gl_range_balance(client_code: str, gl_start: int, gl_end: int,
              AND CAST(SUBSTR(COALESCE(gl_account, '0'), 1, 4) AS INTEGER) BETWEEN ? AND ?""",
         (client_code, as_of, gl_start, gl_end),
     ).fetchone()
-    return _to_decimal(row.get("total", 0) if row else 0)
+    return _to_decimal(row["total"] if row else 0)
 
 
 def _sum_tax_code_expenses(client_code: str, tax_code: str,
@@ -80,7 +80,7 @@ def _sum_tax_code_expenses(client_code: str, tax_code: str,
              AND UPPER(COALESCE(tax_code, '')) = ?""",
         (client_code, period_start, period_end, tax_code.upper()),
     ).fetchone()
-    return _to_decimal(row.get("total", 0) if row else 0)
+    return _to_decimal(row["total"] if row else 0)
 
 
 def _gl_accounts_for_range(client_code: str, gl_start: int, gl_end: int,
@@ -97,7 +97,7 @@ def _gl_accounts_for_range(client_code: str, gl_start: int, gl_end: int,
            ORDER BY gl_account""",
         (client_code, period_start, period_end, gl_start, gl_end),
     ).fetchall()
-    return [r.get("gl_account", "") for r in rows if r.get("gl_account")]
+    return [r["gl_account"] for r in rows if r["gl_account"]]
 
 
 def _make_line(line_number: int | str, description: str, amount: Decimal,
@@ -141,7 +141,7 @@ def generate_schedule_1(client_code: str, fiscal_year_end: str,
                FROM fixed_assets WHERE client_code = ?""",
             (client_code,),
         ).fetchone()
-        depreciation = _to_decimal(row.get("total", 0) if row else 0)
+        depreciation = _to_decimal(row["total"] if row else 0)
     except Exception:
         pass
 
@@ -281,7 +281,7 @@ def generate_schedule_100(client_code: str, fiscal_year_end: str,
                WHERE client_code = ? AND status = 'active'""",
             (client_code,),
         ).fetchone()
-        capital_assets_net = _to_decimal(row.get("total", 0) if row else 0)
+        capital_assets_net = _to_decimal(row["total"] if row else 0)
     except Exception:
         pass
 

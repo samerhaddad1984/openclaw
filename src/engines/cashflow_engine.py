@@ -50,7 +50,7 @@ def _sum_gl_range(client_code: str, gl_start: int, gl_end: int,
              AND CAST(SUBSTR(COALESCE(gl_account, '0'), 1, 4) AS INTEGER) BETWEEN ? AND ?""",
         (client_code, period_start, period_end, gl_start, gl_end),
     ).fetchone()
-    return _to_decimal(row.get("total", 0) if row else 0)
+    return _to_decimal(row["total"] if row else 0)
 
 
 def _sum_gl_range_at_date(client_code: str, gl_start: int, gl_end: int,
@@ -64,7 +64,7 @@ def _sum_gl_range_at_date(client_code: str, gl_start: int, gl_end: int,
              AND CAST(SUBSTR(COALESCE(gl_account, '0'), 1, 4) AS INTEGER) BETWEEN ? AND ?""",
         (client_code, as_of, gl_start, gl_end),
     ).fetchone()
-    return _to_decimal(row.get("total", 0) if row else 0)
+    return _to_decimal(row["total"] if row else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ def get_depreciation(client_code: str, period_start: str, period_end: str,
                WHERE client_code = ? AND status IN ('active', 'disposed')""",
             (client_code,),
         ).fetchone()
-        return _to_decimal(row.get("total", 0) if row else 0)
+        return _to_decimal(row["total"] if row else 0)
     except Exception:
         return _ZERO
 

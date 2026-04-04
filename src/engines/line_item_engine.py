@@ -40,6 +40,8 @@ _ONE = Decimal("1")
 _HALF = Decimal("0.5")
 CENT = Decimal("0.01")
 
+MAX_LINE_ITEMS = 20
+
 GST_RATE = Decimal("0.05")
 QST_RATE = Decimal("0.09975")
 HST_RATE_ON = Decimal("0.13")
@@ -92,6 +94,13 @@ def _utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 # TAX-INCLUDED DETECTION
 # ---------------------------------------------------------------------------
+
+_PRORATION_KW = re.compile(
+    r"remaining\s+time|unused\s+time|proration|prorated|"
+    r"credit\s+for|adjustment|ajustement",
+    re.IGNORECASE,
+)
+
 
 _TAX_INCLUDED_KW = re.compile(
     r"tax\s*incl|taxes?\s*incluses?|ttc|incl\.?\s*hst|incl\.?\s*tax|"
@@ -428,6 +437,51 @@ def extract_invoice_lines(
     # Clear previous lines for this document
     conn.execute("DELETE FROM invoice_lines WHERE document_id = ?", (document_id,))
 
+    # ── Proration / credit-memo detection ──
+    all_negative = bool(lines) and all(
+        float(l.get("quantity", 1)) < 0 or float(l.get("line_total", 0)) < 0
+        for l in lines
+    )
+    has_proration = any(
+        _PRORATION_KW.search(str(l.get("description", "")))
+        for l in lines
+    )
+    is_proration_invoice = has_proration or all_negative
+
+    if is_proration_invoice:
+        # Collapse proration lines into a single net-amount summary line
+        net_total = sum(float(l.get("line_total", 0)) for l in lines)
+        invoice_type = "credit_memo" if all_negative else "proration_adjustment"
+        summary_desc_parts = [str(l.get("description", "")) for l in lines[:5]]
+        summary_desc = f"{invoice_type.replace('_', ' ').title()}: {'; '.join(summary_desc_parts)}"
+        if len(lines) > 5:
+            summary_desc += f" (+{len(lines) - 5} more)"
+        lines = [{
+            "line_number": 1,
+            "description": summary_desc,
+            "quantity": 1,
+            "unit_price": net_total,
+            "line_total": net_total,
+            "tax_indicator": "taxable",
+            "notes": f"Net of {len(result.get('lines', []))} proration/adjustment lines. "
+                     f"invoice_type={invoice_type}",
+        }]
+
+    # ── Cap at MAX_LINE_ITEMS ──
+    truncated_count = 0
+    if len(lines) > MAX_LINE_ITEMS:
+        truncated_count = len(lines) - MAX_LINE_ITEMS
+        lines = lines[:MAX_LINE_ITEMS]
+        lines.append({
+            "line_number": MAX_LINE_ITEMS + 1,
+            "description": f"{truncated_count} additional lines — see original invoice",
+            "quantity": None,
+            "unit_price": None,
+            "line_total": None,
+            "tax_indicator": "exempt",
+            "notes": "Truncated summary row",
+        })
+
     stored_lines: list[dict[str, Any]] = []
 
     for raw_line in lines:
@@ -704,6 +758,16 @@ def process_line_items(
             # Calculate tax
             tax = calculate_line_tax(line, regime, is_tax_included)
 
+            # Build deduplicated notes: keep existing + add regime note once
+            regime_note = regime.get("notes", "")
+            existing_notes = str(line.get("line_notes", "") or "")
+            parts = [p.strip() for p in existing_notes.split("|") if p.strip()]
+            if regime_note:
+                parts.append(regime_note)
+            # Deduplicate while preserving order
+            parts = list(dict.fromkeys(parts))
+            updated_notes = " | ".join(parts)
+
             # Update invoice_lines row
             conn.execute(
                 """UPDATE invoice_lines
@@ -714,7 +778,7 @@ def process_line_items(
                        hst_amount = ?,
                        province_of_supply = ?,
                        line_total_pretax = ?,
-                       line_notes = COALESCE(line_notes, '') || ?
+                       line_notes = ?
                    WHERE document_id = ? AND line_number = ?""",
                 (
                     regime.get("tax_code", ""),
@@ -724,7 +788,7 @@ def process_line_items(
                     float(tax["hst"]),
                     pos,
                     float(tax["pretax_amount"]),
-                    (f" | {regime.get('notes', '')}" if regime.get("notes") else ""),
+                    updated_notes,
                     document_id,
                     line.get("line_number", 0),
                 ),

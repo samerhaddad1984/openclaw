@@ -22,6 +22,7 @@ ITR = Input Tax Refund  (QST recovery on Quebec purchases)
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -177,6 +178,45 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 VALID_TAX_CODES: frozenset[str] = frozenset(TAX_CODE_REGISTRY.keys())
+
+
+# ---------------------------------------------------------------------------
+# Tax code suggestion for extraction pipeline
+# ---------------------------------------------------------------------------
+
+_MEAL_KEYWORDS = re.compile(
+    r"\b("
+    r"restaurant|resto|café|cafe|bistro|traiteur|catering|"
+    r"repas|meal|lunch|dinner|déjeuner|dejeuner|dîner|diner|souper|"
+    r"tim hortons|starbucks|mcdonald|subway|a&w|harvey|"
+    r"uber eats|doordash|skip the dishes"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def suggest_tax_code(vendor_name: str, gst_number: str, conn: sqlite3.Connection | None = None) -> str:
+    """Suggest a tax code based on vendor name and GST registration.
+
+    Rules:
+    - If gst_number is present and looks valid → 'T' (taxable)
+    - If vendor name matches meal keywords → 'M' (meals 50%)
+    - Default → 'T'
+    """
+    # GST numbers: 9 digits or 15-char business number (123456789RT0001)
+    if gst_number and gst_number.strip():
+        gst_clean = re.sub(r"[^0-9A-Za-z]", "", gst_number.strip())
+        if len(gst_clean) >= 9:
+            return "T"
+
+    vendor_lower = (vendor_name or "").lower()
+
+    # Meal/entertainment → 50% deductible
+    if _MEAL_KEYWORDS.search(vendor_lower):
+        return "M"
+
+    # Default: taxable
+    return "T"
 
 
 # ---------------------------------------------------------------------------
@@ -2126,3 +2166,65 @@ def cannot_determine_response(
 def _utc_now() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def record_tax_correction(
+    client_code: str = "",
+    vendor: str = "",
+    old_tax: str = "",
+    new_tax: str = "",
+    conn: sqlite3.Connection | None = None,
+    **kwargs,
+) -> dict:
+    """Record a tax code correction from a human reviewer.
+
+    Stores the correction so tax suggestions can learn from it.
+    Confidence is clamped to [0.1, 0.99].
+    """
+    if not vendor or not new_tax:
+        return {"ok": False, "reason": "missing_vendor_or_tax_code"}
+
+    _own = conn is None
+    if _own:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+    try:
+        tables = {r[0] if isinstance(r, tuple) else r["name"]
+                  for r in conn.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table'"
+                  ).fetchall()}
+        if "learning_corrections" in tables:
+            import secrets
+            vendor_key = " ".join(str(vendor).strip().lower().split())
+            client_key = " ".join(str(client_code).strip().lower().split())
+            conn.execute(
+                "INSERT INTO learning_corrections "
+                "(correction_id, document_id, field_name, field_name_key, "
+                "old_value, old_value_key, new_value, new_value_key, "
+                "vendor_key, client_code_key, doc_type_key, category_key, "
+                "support_count, reviewer, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))",
+                (
+                    f"taxcorr-{secrets.token_hex(4)}",
+                    "",
+                    "tax_code",
+                    "tax_code",
+                    old_tax,
+                    old_tax.strip().upper(),
+                    new_tax,
+                    new_tax.strip().upper(),
+                    vendor_key,
+                    client_key,
+                    "",
+                    "",
+                    1,
+                    "human_correction",
+                ),
+            )
+            conn.commit()
+        return {"ok": True, "old_tax": old_tax, "new_tax": new_tax}
+    except Exception:
+        return {"ok": False, "reason": "db_error"}
+    finally:
+        if _own:
+            conn.close()

@@ -84,6 +84,136 @@ def _ingest_api_key() -> str:
     return _load_config().get("ingest", {}).get("api_key", "")
 
 
+def _save_config(config: dict[str, Any]) -> None:
+    try:
+        CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Foreign-currency constants & FX rate helpers
+# ---------------------------------------------------------------------------
+
+FOREIGN_REGISTERED_DIGITAL_SERVICES = frozenset({
+    "netflix", "spotify", "adobe", "amazon aws", "google cloud",
+    "microsoft azure", "apple app store", "google play",
+    "meta", "facebook ads", "linkedin", "twitter", "x ads",
+    "amazon web services", "aws", "microsoft 365", "office 365",
+    "github", "dropbox", "slack", "zoom", "canva", "shopify",
+    "mailchimp", "hubspot", "salesforce", "twilio", "stripe",
+    "google ads", "google workspace",
+})
+
+_DEFAULT_FALLBACK_RATES: dict[str, float] = {
+    "USD": 1.38,
+    "EUR": 1.50,
+    "GBP": 1.75,
+    "CHF": 1.55,
+}
+
+_BOC_SERIES: dict[str, str] = {
+    "USD": "FXUSDCAD",
+    "EUR": "FXEURCAD",
+    "GBP": "FXGBPCAD",
+}
+
+
+def _is_foreign_registered_digital(vendor_name: str) -> bool:
+    """Check if vendor is a known foreign digital service registered for GST."""
+    if not vendor_name:
+        return False
+    v = vendor_name.lower().strip()
+    for name in FOREIGN_REGISTERED_DIGITAL_SERVICES:
+        if name in v or v in name:
+            return True
+    return False
+
+
+def get_fx_rate(currency: str, invoice_date: str | None = None,
+                invoice_text: str | None = None) -> Decimal:
+    """Get FX rate to CAD for a given currency and date.
+
+    Priority:
+      1. Explicit rate stated on invoice text (most accurate)
+      2. Bank of Canada Valet API for the date
+      3. Last known rate from otocpa.config.json
+      4. Hardcoded fallback
+    """
+    currency = currency.upper().strip()
+    if currency == "CAD":
+        return Decimal("1.0")
+
+    # 1. Check if invoice states the rate explicitly
+    if invoice_text:
+        rate_match = re.search(
+            r"(?:exchange\s*rate|taux\s*de\s*change|fx\s*rate|rate)\s*[:=]?\s*(\d+\.\d{2,6})",
+            invoice_text, re.IGNORECASE,
+        )
+        if rate_match:
+            try:
+                return Decimal(rate_match.group(1))
+            except Exception:
+                pass
+
+    # 2. Try Bank of Canada Valet API
+    series = _BOC_SERIES.get(currency)
+    if series and invoice_date:
+        try:
+            date_str = invoice_date[:10]  # YYYY-MM-DD
+            url = (
+                f"https://www.bankofcanada.ca/valet/observations/{series}/json"
+                f"?start_date={date_str}&end_date={date_str}"
+            )
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                obs = data.get("observations", [])
+                if obs:
+                    rate_str = obs[0].get(series, {}).get("v")
+                    if rate_str:
+                        rate = Decimal(rate_str)
+                        # Save as last known rate
+                        _update_last_known_rate(currency, float(rate))
+                        return rate
+        except Exception:
+            pass
+
+    # 3. Last known rate from config
+    config = _load_config()
+    fx_config = config.get("fx_rates", {})
+    last_known_key = f"{currency.lower()}_cad_last_known"
+    last_known = fx_config.get(last_known_key)
+    if last_known:
+        try:
+            return Decimal(str(last_known))
+        except Exception:
+            pass
+
+    # 4. Hardcoded fallback
+    fallback = _DEFAULT_FALLBACK_RATES.get(currency, 1.38)
+    return Decimal(str(fallback))
+
+
+def get_usd_cad_rate(invoice_date: str | None = None,
+                     invoice_text: str | None = None) -> Decimal:
+    """Convenience wrapper for USD -> CAD rate."""
+    return get_fx_rate("USD", invoice_date, invoice_text)
+
+
+def _update_last_known_rate(currency: str, rate: float) -> None:
+    """Persist the latest fetched rate to config for offline fallback."""
+    try:
+        config = _load_config()
+        if "fx_rates" not in config:
+            config["fx_rates"] = {}
+        config["fx_rates"][f"{currency.lower()}_cad_last_known"] = round(rate, 6)
+        config["fx_rates"]["last_updated"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        _save_config(config)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Misc helpers
 # ---------------------------------------------------------------------------
@@ -151,6 +281,96 @@ _SUPPORTED_FORMATS: frozenset[str] = frozenset(
 
 
 # ---------------------------------------------------------------------------
+# Document type detection (bank statement, pay stub, credit memo, etc.)
+# ---------------------------------------------------------------------------
+
+_BANK_STATEMENT_PATTERNS = re.compile(
+    r"("
+    r"statement of account|relevé de compte|"
+    r"opening balance|solde d'ouverture|"
+    r"closing balance|solde de clôture|"
+    r"\bdeposits\b.*\bwithdrawals\b|\bwithdrawals\b.*\bdeposits\b|"
+    r"\bCIBC\b|Desjardins relevé|TD Bank statement|"
+    r"RBC statement|BMO statement|Scotia statement"
+    r")",
+    re.IGNORECASE,
+)
+
+_CREDIT_CARD_STATEMENT_PATTERNS = re.compile(
+    r"("
+    r"credit card statement|relevé de carte|"
+    r"minimum payment|paiement minimum|"
+    r"credit limit|limite de crédit|"
+    r"(?:Visa|Mastercard).*statement|statement.*(?:Visa|Mastercard)"
+    r")",
+    re.IGNORECASE,
+)
+
+_PAY_STUB_PATTERNS = re.compile(
+    r"("
+    r"pay stub|talón de paga|\bpaie\b|"
+    r"\bearnings\b.*\bdéductions\b|\bdéductions\b.*\bearnings\b|"
+    r"\bnet pay\b|salaire net|"
+    r"\bROE\b|\bT4\b"
+    r")",
+    re.IGNORECASE,
+)
+
+_CREDIT_MEMO_PATTERNS = re.compile(
+    r"("
+    r"credit note|note de crédit|credit memo|\bavoir\b"
+    r")",
+    re.IGNORECASE,
+)
+
+_PURCHASE_ORDER_PATTERNS = re.compile(
+    r"("
+    r"purchase order|bon de commande|"
+    r"\bP\.?O\.?\s*#|\bPO\s*number|numéro de commande|"
+    r"order confirmation|confirmation de commande"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def detect_document_type(text: str, filename: str = "") -> str:
+    """Classify document type from extracted text and filename.
+
+    Returns one of: invoice, bank_statement, credit_card_statement,
+    pay_stub, receipt, credit_memo, purchase_order.
+    """
+    if not text:
+        return "invoice"
+
+    combined = f"{text} {filename}"
+
+    # Credit card statement before bank statement (more specific)
+    if _CREDIT_CARD_STATEMENT_PATTERNS.search(combined):
+        return "credit_card_statement"
+
+    if _BANK_STATEMENT_PATTERNS.search(combined):
+        return "bank_statement"
+
+    if _PAY_STUB_PATTERNS.search(combined):
+        return "pay_stub"
+
+    if _CREDIT_MEMO_PATTERNS.search(combined):
+        return "credit_memo"
+
+    if _PURCHASE_ORDER_PATTERNS.search(combined):
+        return "purchase_order"
+
+    # Receipt: short document with a total amount
+    lines = [ln for ln in text.strip().splitlines() if ln.strip()]
+    if len(lines) < 20 and re.search(r"\btotal\b", text, re.IGNORECASE):
+        # Only classify as receipt if no GST/BN number (those are invoices)
+        if not re.search(r"\b\d{9}\s?RT\b", text):
+            return "receipt"
+
+    return "invoice"
+
+
+# ---------------------------------------------------------------------------
 # Image normalisation (HEIC → JPEG when Pillow is available)
 # ---------------------------------------------------------------------------
 
@@ -207,6 +427,11 @@ def detect_handwriting(image_bytes: bytes) -> float:
     if fmt == "pdf":
         text = extract_pdf_text(image_bytes)
     word_count = len(text.split()) if text else 0
+
+    # Digital PDF with substantial extractable text is never handwritten
+    if fmt == "pdf" and word_count >= PDF_TEXT_MIN_WORDS:
+        return 0.0
+
     if word_count < 10:
         score += 0.4
 
@@ -273,6 +498,10 @@ _QC_MONTHS: dict[str, str] = {
     "jan": "01", "fév": "02", "fev": "02", "mar": "03", "avr": "04",
     "jui": "06", "jul": "07", "aoû": "08", "sep": "09", "oct": "10",
     "nov": "11", "déc": "12", "dec": "12",
+    # English month names
+    "january": "01", "february": "02", "march": "03", "april": "04",
+    "may": "05", "june": "06", "july": "07", "august": "08",
+    "september": "09", "october": "10", "november": "11", "december": "12",
 }
 
 _CENT = Decimal("0.01")
@@ -549,6 +778,13 @@ Guidelines:
 - Set confidence < 0.7 for blurry, partial, or ambiguous documents.
 - Set confidence > 0.9 only when all key fields are clearly legible.
 - For handwritten documents extract exactly as written; flag confidence accordingly.
+
+CRITICAL - Find tax registration numbers anywhere in the document:
+- GST/HST number format: 9 digits + RT + 4 digits (e.g. 805577574RT0001 or 764831038RT9999)
+- QST number format: 10 digits (e.g. 1221825787 or 1234567890)
+- They may appear in: headers, tax breakdown lines, footer, embedded in descriptions like 'GST/TPS # 805577574 RT0001 (5.00%)'
+- Also look for BN# (Business Number) which has the same 9-digit root
+- Return all found numbers in gst_number and qst_number fields
 """
 
 
@@ -736,6 +972,9 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("correction_count",           "INTEGER"),
     ("handwriting_low_confidence", "INTEGER"),
     ("handwriting_sample",         "INTEGER"),
+    ("gl_account",                 "TEXT"),
+    ("tax_code",                   "TEXT"),
+    ("category",                   "TEXT"),
 ]
 
 
@@ -759,6 +998,9 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         "raw_ocr_text":              None,
         "hallucination_suspected":   0,
         "handwriting_low_confidence": 0,
+        "gl_account":                None,
+        "tax_code":                  None,
+        "category":                  None,
         **record,
     }
     conn = sqlite3.connect(str(db_path))
@@ -769,6 +1011,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
             INSERT INTO documents (
                 document_id, file_name, file_path, client_code,
                 vendor, doc_type, amount, document_date,
+                gl_account, tax_code, category,
                 review_status, confidence, raw_result,
                 created_at, updated_at, submitted_by, client_note,
                 currency, subtotal, tax_total,
@@ -778,6 +1021,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
             ) VALUES (
                 :document_id, :file_name, :file_path, :client_code,
                 :vendor, :doc_type, :amount, :document_date,
+                :gl_account, :tax_code, :category,
                 :review_status, :confidence, :raw_result,
                 :created_at, :updated_at, :submitted_by, :client_note,
                 :currency, :subtotal, :tax_total,
@@ -790,6 +1034,9 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 doc_type                    = excluded.doc_type,
                 amount                      = excluded.amount,
                 document_date               = excluded.document_date,
+                gl_account                  = COALESCE(excluded.gl_account, documents.gl_account),
+                tax_code                    = COALESCE(excluded.tax_code, documents.tax_code),
+                category                    = COALESCE(excluded.category, documents.category),
                 review_status               = excluded.review_status,
                 confidence                  = excluded.confidence,
                 raw_result                  = excluded.raw_result,
@@ -808,6 +1055,70 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Post-extraction enrichment — GL account, tax code, category
+# ---------------------------------------------------------------------------
+
+def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqlite3.Connection) -> dict[str, Any]:
+    """Fill gl_account, tax_code, and category from learning/substance/tax engines."""
+    vendor = result.get("vendor") or result.get("vendor_name") or ""
+    amount = result.get("amount") or 0
+
+    # GL account from learning engine
+    if not result.get("gl_account") and vendor:
+        try:
+            from src.agents.core.gl_account_learning_engine import suggest_gl_account
+            gl = suggest_gl_account(conn, client_code=client_code, vendor=vendor)
+            if gl and gl.get("confidence", 0) > 0.50:
+                result["gl_account"] = gl["gl_account"]
+                result["gl_confidence"] = gl["confidence"]
+        except Exception:
+            pass
+
+    # Category from substance engine
+    if not result.get("category"):
+        try:
+            from src.engines.substance_engine import classify_substance
+            substance = classify_substance(
+                vendor_name=vendor,
+                amount=amount,
+                memo=result.get("description") or "",
+            )
+            result["category"] = substance.get("substance_type", "expense")
+            result["is_capex"] = substance.get("potential_capex", False)
+        except Exception:
+            result["category"] = "expense"
+
+    # Tax code from tax engine
+    if not result.get("tax_code") and vendor:
+        try:
+            from src.engines.tax_engine import suggest_tax_code
+            tax = suggest_tax_code(vendor, result.get("gst_number") or "", conn)
+            if tax:
+                result["tax_code"] = tax
+        except Exception:
+            pass
+
+    # Default fallbacks if still empty
+    if not result.get("category"):
+        result["category"] = "expense"
+    if not result.get("tax_code"):
+        result["tax_code"] = "T"
+    if not result.get("gl_account"):
+        vendor_lower = vendor.lower()
+        if any(x in vendor_lower for x in ["openai", "microsoft", "google", "adobe", "software", "subscription"]):
+            result["gl_account"] = "5420"
+            result["gl_account_name"] = "Logiciels et abonnements"
+        elif any(x in vendor_lower for x in ["bell", "videotron", "rogers", "telus", "telecom"]):
+            result["gl_account"] = "5400"
+        elif any(x in vendor_lower for x in ["hydro", "gaz", "electricit"]):
+            result["gl_account"] = "5410"
+        else:
+            result["gl_account"] = "5440"
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -969,6 +1280,66 @@ def process_file(
     subtotal       = float(subtotal_raw)  if subtotal_raw  is not None else None
     tax_total      = float(tax_total_raw) if tax_total_raw is not None else None
 
+    # FIX 1: Extract GST/QST from taxes array or line items
+    _gst_amount = raw.get("gst_amount")
+    _qst_amount = raw.get("qst_amount")
+    taxes_list = raw.get("taxes") or []
+    if isinstance(taxes_list, list) and (_gst_amount is None or _qst_amount is None):
+        for tax_entry in taxes_list:
+            if not isinstance(tax_entry, dict):
+                continue
+            tax_type = (tax_entry.get("type") or "").upper()
+            tax_amt = tax_entry.get("amount")
+            if tax_amt is None:
+                continue
+            try:
+                tax_amt = float(tax_amt)
+            except (TypeError, ValueError):
+                continue
+            if tax_type in ("GST", "TPS") and _gst_amount is None:
+                _gst_amount = tax_amt
+            elif tax_type in ("QST", "TVQ") and _qst_amount is None:
+                _qst_amount = tax_amt
+    # Also scan raw_ocr_text for GST/QST lines, BN#, NEQ if still missing
+    _parsed_fields: dict[str, Any] = {}
+    if raw_ocr_text:
+        _parsed_fields = parse_invoice_fields(raw_ocr_text)
+        if _gst_amount is None and _parsed_fields.get("gst_amount") is not None:
+            _gst_amount = _parsed_fields["gst_amount"]
+        if _qst_amount is None and _parsed_fields.get("qst_amount") is not None:
+            _qst_amount = _parsed_fields["qst_amount"]
+    # Store GST/QST in raw result for downstream use
+    if _gst_amount is not None:
+        raw["gst_amount"] = _gst_amount
+    if _qst_amount is not None:
+        raw["qst_amount"] = _qst_amount
+    # Propagate BN/NEQ/GST number from parse_invoice_fields if not already set
+    for _pf_key in ("gst_number", "bn_root", "bn_full", "neq"):
+        if not raw.get(_pf_key) and _parsed_fields.get(_pf_key):
+            raw[_pf_key] = _parsed_fields[_pf_key]
+    # FIX 3: Detect foreign-currency invoices and convert to CAD
+    _text_for_currency = raw_ocr_text or json.dumps(raw)
+    for _fx_key in ("currency", "currency_converted", "currency_note", "foreign_amount",
+                     "fx_rate", "cad_amount", "tax_code", "tax_note"):
+        if _parsed_fields.get(_fx_key) is not None:
+            raw[_fx_key] = _parsed_fields[_fx_key]
+    if _parsed_fields.get("currency_converted"):
+        currency = _parsed_fields.get("currency", currency)
+        if _parsed_fields.get("cad_amount") is not None:
+            amount = _parsed_fields["cad_amount"]
+    elif re.search(r"\bUSD\b", _text_for_currency, re.IGNORECASE):
+        currency = "USD"
+        fx_rate = get_fx_rate("USD", document_date, _text_for_currency)
+        raw["currency"] = "USD"
+        raw["fx_rate"] = float(fx_rate)
+        if amount is not None:
+            raw["foreign_amount"] = amount
+            cad_amount = round(float(Decimal(str(amount)) * fx_rate), 2)
+            raw["cad_amount"] = cad_amount
+            raw["currency_converted"] = True
+            raw["currency_note"] = f"USD {amount:.2f} converted at {fx_rate} = CAD {cad_amount:.2f}"
+            amount = cad_amount
+
     # 5. Auto-flag low confidence, hallucination, or handwriting low confidence
     handwriting_low_conf = bool(raw.get("handwriting_low_confidence", False))
     review_status = raw.get("review_status") if raw.get("review_status") == "NeedsReview" else None
@@ -978,6 +1349,88 @@ def process_file(
             if confidence < LOW_CONFIDENCE_THRESHOLD or hallucination_suspected or handwriting_low_conf
             else "New"
         )
+
+    # 5b. Enrich: GL account, tax code, category
+    _enrich_data: dict[str, Any] = {
+        "vendor": vendor, "vendor_name": vendor, "amount": amount,
+        "description": raw.get("description", ""),
+        "gst_number": raw.get("gst_number", ""),
+    }
+    try:
+        _enrich_conn = sqlite3.connect(str(db_path))
+        _enrich_conn.row_factory = sqlite3.Row
+        try:
+            _enrich_data = enrich_extracted_fields(_enrich_data, client_code or "", _enrich_conn)
+        finally:
+            _enrich_conn.close()
+    except Exception:
+        pass
+    gl_account = _enrich_data.get("gl_account") or None
+    tax_code   = _enrich_data.get("tax_code") or None
+    category   = _enrich_data.get("category") or None
+
+    # 5c. Document type detection — route to correct processing module
+    _detect_text = raw_ocr_text or json.dumps(raw)
+    detected_doc_type = detect_document_type(_detect_text, filename)
+    if detected_doc_type == "bank_statement":
+        category = "bank_statement"
+        gl_account = "1010"
+        doc_type = "bank_statement"
+        review_status = "NeedsReview"
+        raw["review_note"] = (
+            "Relevé bancaire — traiter via Rapprochement bancaire / "
+            "Bank statement — process via Bank Reconciliation"
+        )
+        raw["document_type_detected"] = "bank_statement"
+        raw["routing_target"] = "reconciliation"
+    elif detected_doc_type == "credit_card_statement":
+        category = "credit_card_statement"
+        gl_account = "2150"
+        doc_type = "credit_card_statement"
+        review_status = "NeedsReview"
+        raw["review_note"] = (
+            "Relevé de carte de crédit — traiter via Rapprochement / "
+            "Credit card statement — process via Reconciliation"
+        )
+        raw["document_type_detected"] = "credit_card_statement"
+        raw["routing_target"] = "reconciliation"
+    elif detected_doc_type == "pay_stub":
+        category = "payroll"
+        gl_account = "5400"
+        doc_type = "pay_stub"
+        review_status = "NeedsReview"
+        raw["review_note"] = (
+            "Talon de paie — traiter via module Paie / "
+            "Pay stub — process via Payroll module"
+        )
+        raw["document_type_detected"] = "pay_stub"
+        raw["routing_target"] = "payroll"
+    elif detected_doc_type == "credit_memo":
+        category = "credit_memo"
+        doc_type = "credit_memo"
+        raw["document_type_detected"] = "credit_memo"
+        raw["routing_target"] = "ap_ar"
+        raw["is_credit"] = True
+    elif detected_doc_type == "purchase_order":
+        category = "purchase_order"
+        doc_type = "purchase_order"
+        review_status = "NeedsReview"
+        raw["review_note"] = (
+            "Bon de commande — traiter via Rapprochement BC / "
+            "Purchase order — process via PO Matching"
+        )
+        raw["document_type_detected"] = "purchase_order"
+        raw["routing_target"] = "po_matching"
+    elif detected_doc_type == "receipt" and doc_type not in ("invoice",):
+        # Only override to receipt if AI didn't already classify as invoice
+        # (receipt heuristic is weak — short text + "total" keyword)
+        category = "expense"
+        doc_type = "receipt"
+        raw["document_type_detected"] = "receipt"
+        raw["routing_target"] = "expense"
+    elif detected_doc_type != "invoice":
+        raw["document_type_detected"] = detected_doc_type
+        raw["routing_target"] = "expense"
 
     # 6. DB upsert
     record: dict[str, Any] = {
@@ -989,6 +1442,9 @@ def process_file(
         "doc_type":               doc_type,
         "amount":                 amount,
         "document_date":          document_date,
+        "gl_account":             gl_account,
+        "tax_code":               tax_code,
+        "category":               category,
         "review_status":          review_status,
         "confidence":             confidence,
         "raw_result":             json.dumps(raw, ensure_ascii=False),
@@ -1096,6 +1552,9 @@ def process_file(
         "doc_type":                doc_type,
         "amount":                  amount,
         "document_date":           document_date,
+        "gl_account":              gl_account,
+        "tax_code":                tax_code,
+        "category":                category,
         "confidence":              confidence,
         "review_status":           review_status,
         "currency":                currency,
@@ -1105,6 +1564,880 @@ def process_file(
         "handwriting_score":           handwriting_score,
         "error":                       error,
     }
+
+
+# ---------------------------------------------------------------------------
+# AI Usage Log — cost tracking per document
+# ---------------------------------------------------------------------------
+
+_AI_USAGE_LOG_CREATE = """
+CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id    TEXT,
+    client_code    TEXT,
+    source         TEXT    NOT NULL,
+    model_used     TEXT,
+    cost_usd       REAL    NOT NULL DEFAULT 0.0,
+    tokens_used    INTEGER NOT NULL DEFAULT 0,
+    confidence     REAL,
+    created_at     TEXT    NOT NULL
+)
+"""
+
+# Approximate per-1K-token costs (input+output blended) for cost estimation
+_MODEL_COST_PER_1K: dict[str, float] = {
+    "deepseek/deepseek-chat":        0.0002,
+    "google/gemini-2.0-flash-001":       0.0004,
+    "anthropic/claude-haiku-4-5":    0.001,
+    "anthropic/claude-sonnet-4-6":   0.003,
+}
+
+
+def _ensure_usage_log_table(conn: sqlite3.Connection) -> None:
+    conn.execute(_AI_USAGE_LOG_CREATE)
+    conn.commit()
+
+
+def _estimate_cost(model: str, tokens: int) -> float:
+    """Estimate USD cost for a given model and token count."""
+    per_1k = _MODEL_COST_PER_1K.get(model, 0.001)
+    return round(per_1k * tokens / 1000, 6)
+
+
+def log_ai_usage(
+    *,
+    document_id: str | None = None,
+    client_code: str = "",
+    source: str,
+    model_used: str = "",
+    cost_usd: float = 0.0,
+    tokens_used: int = 0,
+    confidence: float | None = None,
+    db_path: Path = DB_PATH,
+) -> None:
+    """Log a document processing event with cost tracking. Fire-and-forget."""
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            _ensure_usage_log_table(conn)
+            conn.execute(
+                """INSERT INTO ai_usage_log
+                   (document_id, client_code, source, model_used,
+                    cost_usd, tokens_used, confidence, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    document_id or "",
+                    client_code or "",
+                    source,
+                    model_used or "",
+                    cost_usd,
+                    tokens_used,
+                    confidence,
+                    _utc_now_iso(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def get_ai_cost_summary(
+    *,
+    period: str = "month",
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """
+    Return AI cost breakdown for the current period.
+
+    Returns dict with keys:
+        total_documents, cache_count, text_extraction_count,
+        ai_simple_count, ai_medium_count, ai_complex_count,
+        total_cost_usd, estimated_without_optimization,
+        savings_usd, savings_pct, breakdown (list of dicts)
+    """
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            _ensure_usage_log_table(conn)
+
+            if period == "month":
+                date_filter = datetime.now(timezone.utc).strftime("%Y-%m")
+                where = "WHERE created_at LIKE ? || '%'"
+                params: tuple = (date_filter,)
+            else:
+                where = ""
+                params = ()
+
+            rows = conn.execute(
+                f"""SELECT source, COUNT(*) as cnt,
+                           SUM(cost_usd) as total_cost,
+                           SUM(tokens_used) as total_tokens
+                    FROM ai_usage_log {where}
+                    GROUP BY source
+                    ORDER BY cnt DESC""",
+                params,
+            ).fetchall()
+
+            total_docs = 0
+            total_cost = 0.0
+            breakdown: dict[str, dict[str, Any]] = {}
+
+            for row in rows:
+                src, cnt, cost, tokens = row
+                cnt = int(cnt or 0)
+                cost = float(cost or 0.0)
+                tokens = int(tokens or 0)
+                total_docs += cnt
+                total_cost += cost
+                breakdown[src] = {
+                    "count": cnt,
+                    "cost_usd": round(cost, 4),
+                    "tokens": tokens,
+                }
+
+            cache_count = breakdown.get("cache", {}).get("count", 0)
+            text_count = breakdown.get("text_extraction", {}).get("count", 0)
+            ai_simple = breakdown.get("ai_simple", {}).get("count", 0)
+            ai_medium = breakdown.get("ai_medium", {}).get("count", 0)
+            ai_complex = breakdown.get("ai_complex", {}).get("count", 0)
+
+            # Estimate what it would cost without optimization
+            # (assume all docs would use medium model at ~$0.002/doc)
+            estimated_full = total_docs * 0.002
+            savings = max(0.0, estimated_full - total_cost)
+            savings_pct = round((savings / estimated_full * 100), 1) if estimated_full > 0 else 0.0
+
+            return {
+                "total_documents": total_docs,
+                "cache_count": cache_count,
+                "text_extraction_count": text_count,
+                "ai_simple_count": ai_simple,
+                "ai_medium_count": ai_medium,
+                "ai_complex_count": ai_complex,
+                "total_cost_usd": round(total_cost, 4),
+                "estimated_without_optimization": round(estimated_full, 4),
+                "savings_usd": round(savings, 4),
+                "savings_pct": savings_pct,
+                "breakdown": breakdown,
+            }
+        finally:
+            conn.close()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Cost-optimized AI pipeline
+# ---------------------------------------------------------------------------
+
+def check_vendor_cache(
+    client_code: str,
+    file_path: str,
+    conn: sqlite3.Connection,
+) -> dict[str, Any] | None:
+    """
+    Check learning_memory_patterns for a known vendor match.
+    Returns dict with vendor/amount/gl_account/confidence or None.
+    """
+    try:
+        # Extract filename hints for vendor matching (normalize separators)
+        fname = Path(file_path).stem.lower().replace("_", " ").replace("-", " ")
+        # Try to find a vendor pattern that matches the filename
+        rows = conn.execute(
+            """SELECT vendor_key, gl_account, tax_code, category,
+                      avg_confidence, outcome_count, success_count
+               FROM learning_memory_patterns
+               WHERE client_code_key = ? OR client_code_key = ''
+               ORDER BY outcome_count DESC
+               LIMIT 50""",
+            (client_code.strip().casefold(),),
+        ).fetchall()
+
+        for row in rows:
+            vendor_key = str(row[0] or "")
+            if vendor_key and vendor_key in fname:
+                outcome_count = int(row[5] or 0)
+                success_count = int(row[6] or 0)
+                if outcome_count >= 5:
+                    success_rate = success_count / outcome_count
+                    confidence = float(row[4] or 0.0) * success_rate
+                    return {
+                        "vendor": vendor_key,
+                        "gl_account": row[1] or "",
+                        "tax_code": row[2] or "",
+                        "category": row[3] or "",
+                        "confidence": round(confidence, 4),
+                    }
+    except Exception:
+        pass
+    return None
+
+
+def extract_with_pdfplumber(file_path: str) -> dict[str, Any]:
+    """
+    Try to extract text from a PDF using pdfplumber.
+    Returns dict with 'text' and 'confidence'.
+    """
+    try:
+        import pdfplumber  # type: ignore[import]
+        with pdfplumber.open(file_path) as pdf:
+            pages = [p.extract_text() or "" for p in pdf.pages]
+        text = "\n".join(pages).strip()
+        word_count = len(text.split()) if text else 0
+        # Confidence based on text quality
+        if word_count >= 50:
+            confidence = 0.95
+        elif word_count >= PDF_TEXT_MIN_WORDS:
+            confidence = 0.85
+        elif word_count >= 10:
+            confidence = 0.60
+        else:
+            confidence = 0.20
+        return {"text": text, "confidence": confidence, "word_count": word_count}
+    except Exception:
+        return {"text": "", "confidence": 0.0, "word_count": 0}
+
+
+def parse_invoice_fields(text: str) -> dict[str, Any]:
+    """
+    Parse structured invoice fields from extracted text without AI.
+    Returns dict with vendor, amount, gl_account, confidence, etc.
+    """
+    result: dict[str, Any] = {
+        "vendor": None,
+        "amount": None,
+        "document_date": None,
+        "gl_account": None,
+        "doc_type": "unknown",
+        "confidence": 0.0,
+    }
+
+    if not text or not text.strip():
+        return result
+
+    lines = text.strip().splitlines()
+    confidence = 0.5
+
+    # Extract vendor (usually first non-empty line)
+    for line in lines[:5]:
+        line = line.strip()
+        if line and len(line) > 2 and not line.startswith("$"):
+            result["vendor"] = line
+            result["vendor_name"] = line
+            confidence += 0.1
+            break
+
+    # Extract amounts — look for total, grand total, amount due patterns
+    amount_patterns = [
+        re.compile(r"(?:total|montant|amount\s*due|grand\s*total|solde)\s*[:\s]*(?:\$|USD|EUR|GBP|CHF|CAD)?\s*([\d,]+\.?\d*)", re.IGNORECASE),
+        re.compile(r"(?:\$|USD|EUR|GBP|CHF|CAD)\s*([\d,]+\.\d{2})\b", re.IGNORECASE),
+    ]
+    amounts_found: list[float] = []
+    for line in lines:
+        for pat in amount_patterns:
+            m = pat.search(line)
+            if m:
+                try:
+                    val = float(m.group(1).replace(",", ""))
+                    amounts_found.append(val)
+                except ValueError:
+                    pass
+    if amounts_found:
+        result["amount"] = max(amounts_found)  # Largest amount is likely total
+        confidence += 0.15
+
+    # Extract date
+    date_patterns = [
+        re.compile(r"(\d{4}[-/]\d{1,2}[-/]\d{1,2})"),
+        re.compile(r"(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})"),
+    ]
+    for line in lines:
+        for pat in date_patterns:
+            m = pat.search(line)
+            if m:
+                fixed = _fix_quebec_date(m.group(1))
+                if fixed:
+                    result["document_date"] = fixed
+                    confidence += 0.1
+                    break
+        if result["document_date"]:
+            break
+
+    # Detect doc type
+    text_lower = text.lower()
+    if "facture" in text_lower or "invoice" in text_lower:
+        result["doc_type"] = "invoice"
+        confidence += 0.05
+    elif "reçu" in text_lower or "receipt" in text_lower or "recu" in text_lower:
+        result["doc_type"] = "receipt"
+        confidence += 0.05
+    elif "relevé" in text_lower or "statement" in text_lower or "releve" in text_lower:
+        result["doc_type"] = "bank_statement"
+        confidence += 0.05
+
+    # ---- BN# / GST number extraction (comprehensive) ----
+    # Pattern 1: Keyword-prefixed GST number (GST/TPS/HST/BN#/Registration)
+    gst_num_match = re.search(
+        r"(?:GST|TPS|HST|GST/HST|GST/TPS|BN#?|Registration)\s*[#:.]?\s*(\d{9})\s*(?:RT\s*(\d{4}))?",
+        text, re.IGNORECASE
+    )
+    if gst_num_match:
+        rt_suffix = gst_num_match.group(2) or "0001"
+        result["gst_number"] = f"{gst_num_match.group(1)}RT{rt_suffix}"
+        result["bn_root"] = gst_num_match.group(1)
+        confidence += 0.1
+
+    # Pattern 2: Standalone 9-digit + RT pattern anywhere in full text
+    if not result.get("gst_number"):
+        standalone_gst = re.search(r"(\d{9})\s*RT\s*(\d{4})", text)
+        if standalone_gst:
+            result["gst_number"] = f"{standalone_gst.group(1)}RT{standalone_gst.group(2)}"
+            result["bn_root"] = standalone_gst.group(1)
+            confidence += 0.1
+
+    # ---- QST number extraction (comprehensive) ----
+    # Pattern 1: Keyword-prefixed QST number (QST/TVQ/NEQ)
+    qst_num_match = re.search(
+        r"(?:QST|TVQ|QST/TVQ|NEQ)\s*[#:.]?\s*(\d{10})",
+        text, re.IGNORECASE
+    )
+    if qst_num_match:
+        result["qst_number"] = qst_num_match.group(1)
+        confidence += 0.05
+
+    # Pattern 2: 10-digit number near tax keywords anywhere in full text
+    if not result.get("qst_number"):
+        for line in lines:
+            if re.search(r"\b(?:QST|TVQ|tax|taxe|québec|quebec)\b", line, re.IGNORECASE):
+                ten_digit = re.search(r"\b(\d{10})\b", line)
+                if ten_digit:
+                    result["qst_number"] = ten_digit.group(1)
+                    confidence += 0.05
+                    break
+
+    # Match BN# with any suffix (e.g. BC0001, RT0001, RP0001)
+    if not result.get("gst_number"):
+        bn_match = re.search(r"BN\s*#?\s*:?\s*(\d{9})\s*([A-Z]{2})\s*(\d{4})", text, re.IGNORECASE)
+        if bn_match:
+            bn_root = bn_match.group(1)
+            suffix_letters = bn_match.group(2).upper()
+            suffix_digits = bn_match.group(3)
+            result["bn_root"] = bn_root
+            result["bn_full"] = f"{bn_root}{suffix_letters}{suffix_digits}"
+            # Derive likely GST number from the 9-digit root
+            result["gst_number"] = f"{bn_root}RT0001"
+            confidence += 0.1
+
+    # ---- NEQ (Numéro d'entreprise du Québec) extraction ----
+    neq_match = re.search(r"NEQ\s*:?\s*(\d{10})", text, re.IGNORECASE)
+    if neq_match:
+        result["neq"] = neq_match.group(1)
+        # NEQ is also a valid QST number
+        if not result.get("qst_number"):
+            result["qst_number"] = neq_match.group(1)
+        confidence += 0.05
+
+    # ---- FIX 5: If GST or QST number found, mark as registered / taxable ----
+    if result.get("gst_number") or result.get("qst_number"):
+        result["is_registered"] = True
+        result["tax_code"] = "T"
+
+    # ---- FIX 1: Detect GST/QST tax lines and set document-level fields ----
+    gst_pattern = re.compile(r"\b(GST|TPS)\b", re.IGNORECASE)
+    qst_pattern = re.compile(r"\b(QST|TVQ)\b", re.IGNORECASE)
+    line_amount_pattern = re.compile(r"\$?\s*([\d,]+\.\d{2})")
+    gst_amount = None
+    qst_amount = None
+    subtotal = None
+
+    for line in lines:
+        if gst_pattern.search(line):
+            # Use last amount on line (skip percentage values like "5.00%")
+            all_amounts = line_amount_pattern.findall(line)
+            if all_amounts:
+                try:
+                    gst_amount = float(all_amounts[-1].replace(",", ""))
+                except ValueError:
+                    pass
+        elif qst_pattern.search(line):
+            all_amounts = line_amount_pattern.findall(line)
+            if all_amounts:
+                try:
+                    qst_amount = float(all_amounts[-1].replace(",", ""))
+                except ValueError:
+                    pass
+
+    if gst_amount is not None:
+        result["gst_amount"] = gst_amount
+        confidence += 0.05
+    if qst_amount is not None:
+        result["qst_amount"] = qst_amount
+        confidence += 0.05
+
+    # Compute subtotal (pre-tax) if we have total and taxes
+    total = result.get("amount")
+    if total and gst_amount is not None and qst_amount is not None:
+        subtotal = round(total - gst_amount - qst_amount, 2)
+        if subtotal > 0:
+            result["subtotal"] = subtotal
+            result["pre_tax_amount"] = subtotal
+
+    # ---- FIX 3: Detect foreign currency and convert to CAD ----
+    _currency_patterns = {
+        "USD": re.compile(r"\bUSD\b", re.IGNORECASE),
+        "EUR": re.compile(r"\bEUR\b", re.IGNORECASE),
+        "GBP": re.compile(r"\bGBP\b", re.IGNORECASE),
+        "CHF": re.compile(r"\bCHF\b", re.IGNORECASE),
+    }
+    detected_foreign: str | None = None
+    for curr_code, curr_pat in _currency_patterns.items():
+        if curr_pat.search(text):
+            detected_foreign = curr_code
+            break
+
+    if detected_foreign:
+        result["currency"] = detected_foreign
+        usd_amount = result.get("amount")
+
+        # Get FX rate (invoice-stated > BoC API > config fallback > hardcoded)
+        invoice_date = result.get("document_date")
+        fx_rate = get_fx_rate(detected_foreign, invoice_date, text)
+        result["fx_rate"] = float(fx_rate)
+
+        if usd_amount is not None:
+            cad_amount = float(Decimal(str(usd_amount)) * fx_rate)
+            cad_amount = round(cad_amount, 2)
+            result["foreign_amount"] = usd_amount
+            result["cad_amount"] = cad_amount
+            result["amount"] = cad_amount  # Always store in CAD
+            result["currency_converted"] = True
+            result["currency_note"] = (
+                f"{detected_foreign} {usd_amount:.2f} converted at {fx_rate} "
+                f"= CAD {cad_amount:.2f}"
+            )
+        else:
+            result["currency_converted"] = False
+
+        # Tax treatment for foreign vendors
+        # If the invoice already lists explicit GST/QST amounts, respect them
+        _has_explicit_tax = (
+            result.get("gst_amount") is not None and result["gst_amount"] > 0
+        )
+        has_gst_number = bool(result.get("gst_number"))
+        vendor_name = result.get("vendor") or ""
+        is_digital_registered = _is_foreign_registered_digital(vendor_name)
+
+        if _has_explicit_tax:
+            # Invoice explicitly lists GST/QST — vendor is collecting tax
+            result["tax_code"] = "T"
+        elif has_gst_number or is_digital_registered:
+            # Vendor registered in Canada — taxable
+            result["tax_code"] = "T"
+            if usd_amount is not None:
+                cad_for_tax = result.get("cad_amount", 0)
+                result["gst_amount"] = round(cad_for_tax * 0.05, 2)
+                result["qst_amount"] = round(cad_for_tax * 0.09975, 2)
+            if is_digital_registered and not has_gst_number:
+                result["tax_note"] = (
+                    "Fournisseur numérique étranger inscrit à la TPS (>30k$/an au Canada) "
+                    "/ Foreign digital service provider registered for GST"
+                )
+        else:
+            # Foreign vendor not registered — exempt
+            result["tax_code"] = "E"
+            result["gst_amount"] = 0
+            result["qst_amount"] = 0
+            result["tax_note"] = (
+                "Fournisseur étranger non inscrit \u2014 TPS/TVQ non applicable "
+                "/ Foreign vendor not registered \u2014 GST/QST not applicable"
+            )
+    else:
+        result["currency"] = "CAD"
+
+    result["confidence"] = min(1.0, round(confidence, 4))
+    return result
+
+
+def assess_image_quality(file_path: str) -> float:
+    """
+    Assess image quality on a 0.0-1.0 scale.
+    Higher = clearer image, easier to OCR.
+    """
+    try:
+        from PIL import Image, ImageStat  # type: ignore[import]
+        img = Image.open(file_path)
+        grey = img.convert("L")
+        stat = ImageStat.Stat(grey)
+
+        # Factors: resolution, contrast (stddev), not too dark/bright
+        width, height = img.size
+        resolution_score = min(1.0, (width * height) / (1920 * 1080))
+
+        stddev = stat.stddev[0]
+        contrast_score = min(1.0, stddev / 60.0)
+
+        mean_val = stat.mean[0]
+        brightness_score = 1.0 - abs(mean_val - 128) / 128
+
+        quality = (resolution_score * 0.3 + contrast_score * 0.4 + brightness_score * 0.3)
+        return round(min(1.0, max(0.0, quality)), 4)
+    except Exception:
+        return 0.5  # default: unknown quality
+
+
+def classify_complexity(file_path: str, text_result: dict[str, Any] | None = None) -> str:
+    """
+    Classify document complexity for model routing.
+
+    Returns: 'simple', 'medium', or 'complex'
+    """
+    if text_result and text_result.get("confidence", 0) > 0.70:
+        return "simple"
+    if file_path.lower().endswith(".pdf"):
+        return "simple"
+
+    image_quality = assess_image_quality(file_path)
+    if image_quality > 0.70:
+        return "medium"
+    return "complex"
+
+
+def get_model_for_complexity(complexity: str) -> str:
+    """
+    Return the AI model for a given complexity level.
+    Reads from otocpa.config.json ai_complexity_models, with defaults.
+    """
+    defaults = {
+        "simple": "deepseek/deepseek-chat",
+        "medium": "google/gemini-2.0-flash-001",
+        "complex": "anthropic/claude-haiku-4-5",
+        "very_complex": "anthropic/claude-sonnet-4-6",
+    }
+    cfg = _load_config()
+    models = cfg.get("ai_complexity_models", {})
+    if isinstance(models, dict) and complexity in models:
+        return str(models[complexity])
+    return defaults.get(complexity, "deepseek/deepseek-chat")
+
+
+def _build_extraction_prompt(file_path: str, text_result: dict[str, Any] | None = None) -> str:
+    """Build an extraction prompt for the AI model."""
+    prompt = _VISION_PROMPT
+    if text_result and text_result.get("text"):
+        prompt += f"\n\nExtracted text from document:\n{text_result['text'][:3000]}"
+    return prompt
+
+
+def _call_openrouter_for_extraction(
+    model: str,
+    prompt: str,
+    file_path: str,
+    *,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """
+    Call OpenRouter with the specified model for document extraction.
+    Returns dict with extracted fields, tokens_used, and cost_usd.
+    """
+    cfg = _load_config()
+    prov = cfg.get("ai_router", {}).get("premium_provider", {})
+    base_url = prov.get("base_url", "").rstrip("/")
+    api_key = prov.get("api_key", "")
+
+    if not base_url or not api_key:
+        raise RuntimeError("ai_provider_not_configured")
+
+    url = f"{base_url}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    # Build message content
+    messages_content: list[dict[str, Any]] = [
+        {"type": "text", "text": prompt},
+    ]
+
+    # Add image if it's an image file
+    fmt = "unknown"
+    try:
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
+        fmt = detect_format(file_bytes)
+    except Exception:
+        file_bytes = b""
+
+    if fmt in ("jpeg", "png", "webp", "tiff"):
+        norm_bytes, mime_type = _normalise_image(file_bytes, fmt)
+        b64 = base64.b64encode(norm_bytes).decode("ascii")
+        messages_content.insert(0, {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{b64}"},
+        })
+    elif fmt == "pdf":
+        images = _pdf_to_images(file_bytes)
+        if images:
+            b64 = base64.b64encode(images[0][0]).decode("ascii")
+            messages_content.insert(0, {
+                "type": "image_url",
+                "image_url": {"url": f"data:{images[0][1]};base64,{b64}"},
+            })
+
+    payload = {
+        "model": model,
+        "temperature": 0.0,
+        "messages": [
+            {"role": "system", "content": _VISION_SYSTEM},
+            {"role": "user", "content": messages_content},
+        ],
+    }
+
+    r = requests.post(url, headers=headers, json=payload, timeout=120)
+    if r.status_code != 200:
+        raise RuntimeError(f"AI API HTTP {r.status_code}: {r.text[:400]}")
+
+    data = r.json()
+    content = data["choices"][0]["message"]["content"].strip()
+
+    # Extract token usage
+    usage = data.get("usage", {})
+    tokens_used = int(usage.get("total_tokens", 0))
+    if tokens_used == 0:
+        tokens_used = int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
+
+    # Estimate cost
+    cost_usd = _estimate_cost(model, tokens_used)
+
+    # Parse JSON response
+    if content.startswith("```"):
+        lines = content.splitlines()
+        inner = lines[1:] if len(lines) < 3 else lines[1:-1]
+        content = "\n".join(inner)
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        parsed = {
+            "confidence": 0.3,
+            "doc_type": "unknown",
+            "notes": f"AI returned non-JSON: {content[:200]}",
+        }
+
+    parsed["tokens_used"] = tokens_used
+    parsed["cost_usd"] = cost_usd
+    parsed["model_used"] = model
+    return parsed
+
+
+def save_vendor_cache(
+    client_code: str,
+    result: dict[str, Any],
+    conn: sqlite3.Connection,
+) -> None:
+    """Save extraction result to learning_memory_patterns for future cache hits."""
+    vendor = str(result.get("vendor") or result.get("vendor_name") or "").strip()
+    if not vendor:
+        return
+    try:
+        vendor_key = vendor.casefold()
+        client_key = (client_code or "").strip().casefold()
+        gl_account = result.get("gl_account", "")
+        tax_code = result.get("tax_code", "")
+        category = result.get("category", "")
+        doc_type = result.get("doc_type", "")
+        confidence = float(result.get("confidence", 0.0))
+
+        existing = conn.execute(
+            """SELECT outcome_count, success_count, avg_confidence
+               FROM learning_memory_patterns
+               WHERE vendor_key = ? AND client_code_key = ?""",
+            (vendor_key, client_key),
+        ).fetchone()
+
+        if existing:
+            new_count = int(existing[0] or 0) + 1
+            new_success = int(existing[1] or 0) + 1
+            old_avg = float(existing[2] or 0.0)
+            new_avg = round((old_avg * (new_count - 1) + confidence) / new_count, 4)
+            conn.execute(
+                """UPDATE learning_memory_patterns
+                   SET outcome_count = ?, success_count = ?, avg_confidence = ?,
+                       gl_account = COALESCE(NULLIF(?, ''), gl_account),
+                       tax_code = COALESCE(NULLIF(?, ''), tax_code),
+                       category = COALESCE(NULLIF(?, ''), category),
+                       doc_type = COALESCE(NULLIF(?, ''), doc_type)
+                   WHERE vendor_key = ? AND client_code_key = ?""",
+                (new_count, new_success, new_avg,
+                 gl_account, tax_code, category, doc_type,
+                 vendor_key, client_key),
+            )
+        else:
+            conn.execute(
+                """INSERT OR IGNORE INTO learning_memory_patterns
+                   (vendor_key, client_code_key, gl_account, tax_code,
+                    category, doc_type, avg_confidence,
+                    outcome_count, success_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)""",
+                (vendor_key, client_key, gl_account, tax_code,
+                 category, doc_type, confidence),
+            )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def process_document_optimized(
+    document_id: str,
+    file_path: str,
+    client_code: str,
+    conn: sqlite3.Connection,
+    *,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """
+    Cost-optimized document processing pipeline.
+
+    Tries FREE methods first (cache, text extraction) before
+    falling back to AI with complexity-based model routing.
+
+    Steps:
+        1. Check vendor cache (FREE)
+        2. Try pdfplumber text extraction (FREE)
+        3. Classify document complexity
+        4. Call appropriate AI model via OpenRouter
+        5. Cache result for future use
+
+    Returns dict with source, cost, model_used, and extracted fields.
+    """
+    # STEP 1 — Check vendor cache (FREE)
+    try:
+        known = check_vendor_cache(client_code, file_path, conn)
+        if known and known.get("confidence", 0) > 0.85:
+            result = {
+                "source": "cache",
+                "cost": 0.0,
+                "tokens_used": 0,
+                "model_used": "",
+                "vendor": known["vendor"],
+                "amount": known.get("amount"),
+                "gl_account": known.get("gl_account", ""),
+                "confidence": known["confidence"],
+                "document_id": document_id,
+            }
+            log_ai_usage(
+                document_id=document_id,
+                client_code=client_code,
+                source="cache",
+                cost_usd=0.0,
+                confidence=known["confidence"],
+                db_path=db_path,
+            )
+            return result
+    except Exception:
+        pass
+
+    # STEP 2 — Try pdfplumber text extraction (FREE)
+    text_result: dict[str, Any] | None = None
+    if file_path.lower().endswith(".pdf"):
+        text_result = extract_with_pdfplumber(file_path)
+        if text_result["confidence"] > 0.85:
+            parsed = parse_invoice_fields(text_result["text"])
+            if parsed["confidence"] > 0.80:
+                result = {
+                    "source": "text_extraction",
+                    "cost": 0.0,
+                    "tokens_used": 0,
+                    "model_used": "",
+                    "document_id": document_id,
+                    **parsed,
+                }
+                log_ai_usage(
+                    document_id=document_id,
+                    client_code=client_code,
+                    source="text_extraction",
+                    cost_usd=0.0,
+                    confidence=parsed["confidence"],
+                    db_path=db_path,
+                )
+                # Cache for future
+                if parsed["confidence"] > 0.80:
+                    try:
+                        save_vendor_cache(client_code, parsed, conn)
+                    except Exception:
+                        pass
+                return result
+
+    # STEP 3 — Classify document complexity
+    complexity = classify_complexity(file_path, text_result)
+
+    # STEP 4 — Call appropriate AI model
+    model = get_model_for_complexity(complexity)
+    prompt = _build_extraction_prompt(file_path, text_result)
+
+    try:
+        ai_result = _call_openrouter_for_extraction(model, prompt, file_path, db_path=db_path)
+    except Exception as exc:
+        # If the selected model fails, try upgrading complexity
+        if complexity == "simple":
+            model = get_model_for_complexity("medium")
+        elif complexity == "medium":
+            model = get_model_for_complexity("complex")
+        else:
+            model = get_model_for_complexity("very_complex")
+        try:
+            ai_result = _call_openrouter_for_extraction(model, prompt, file_path, db_path=db_path)
+        except Exception as exc2:
+            return {
+                "source": f"ai_{complexity}",
+                "cost": 0.0,
+                "tokens_used": 0,
+                "model_used": model,
+                "confidence": 0.0,
+                "document_id": document_id,
+                "error": str(exc2),
+            }
+
+    source = f"ai_{complexity}"
+    cost_usd = float(ai_result.get("cost_usd", 0.0))
+    tokens_used = int(ai_result.get("tokens_used", 0))
+
+    result = {
+        "source": source,
+        "cost": cost_usd,
+        "tokens_used": tokens_used,
+        "model_used": model,
+        "document_id": document_id,
+        "vendor": ai_result.get("vendor_name"),
+        "amount": ai_result.get("total") or ai_result.get("subtotal"),
+        "gl_account": ai_result.get("gl_account", ""),
+        "doc_type": ai_result.get("doc_type", "unknown"),
+        "document_date": ai_result.get("document_date"),
+        "confidence": float(ai_result.get("confidence", 0.0)),
+        "currency": ai_result.get("currency", "CAD"),
+    }
+
+    # STEP 5 — Log usage
+    log_ai_usage(
+        document_id=document_id,
+        client_code=client_code,
+        source=source,
+        model_used=model,
+        cost_usd=cost_usd,
+        tokens_used=tokens_used,
+        confidence=result["confidence"],
+        db_path=db_path,
+    )
+
+    # Cache result for future
+    if result["confidence"] > 0.80:
+        try:
+            save_vendor_cache(client_code, {**result, "vendor_name": result.get("vendor")}, conn)
+        except Exception:
+            pass
+
+    return result
 
 
 # ---------------------------------------------------------------------------
