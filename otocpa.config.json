@@ -72,13 +72,27 @@
     "usd_cad_last_known": 1.3718,
     "eur_cad_last_known": 1.5,
     "gbp_cad_last_known": 1.75,
-    "last_updated": "2026-04-04T10:36:32+00:00"
+    "last_updated": "2026-04-04T10:51:06+00:00"
   },
   "learning": {
     "auto_approve_after_n_approvals": 5,
     "auto_approve_confidence_threshold": 0.85,
     "auto_approve_max_amount": 5000,
     "auto_approve_enabled": false
+  },
+  "folder_watcher": {
+    "enabled": true,
+    "inbox_folder": "inbox",
+    "watch_subfolders": true,
+    "default_client_code": "UNASSIGNED",
+    "supported_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".tiff",
+      ".heic"
+    ]
   },
   "demo_mode": false,
   "database_path": "data/otocpa_agent.db",

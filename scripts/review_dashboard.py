@@ -8067,6 +8067,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
     </div>"""
 
     all_usernames = get_available_usernames()
+    _unassigned_badge = '<span class="badge badge-needsreview">\U0001F4C1 Non assign\u00e9</span>'
     row_html: list[str] = []
     card_html: list[str] = []
     for row in rows:
@@ -8106,7 +8107,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         row_html.append(f"""<tr>
             <td class="file-cell"><a href="/document?id={urlquote(row["document_id"])}">{esc(row["file_name"])}</a>
                 <div class="small muted">{esc(row["document_id"])}</div></td>
-            <td>{esc(row["client_code"])}</td><td>{esc(row["vendor"])}</td>
+            <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td><td>{esc(row["vendor"])}</td>
             <td>{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
             <td>{esc(row["category"])}</td><td>{esc(row["gl_account"])}</td>
             <td>{review_status_badge(status_display)}</td>
@@ -13342,10 +13343,16 @@ def main() -> int:
     # Start the folder watcher if configured
     try:
         _fw_cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
-        if _fw_cfg.get("folder_watcher_enabled") and _fw_cfg.get("inbox_folder"):
+        _fw_section = _fw_cfg.get("folder_watcher", {})
+        _fw_enabled = _fw_section.get("enabled", False) or _fw_cfg.get("folder_watcher_enabled", False)
+        _fw_inbox = _fw_section.get("inbox_folder", "") or _fw_cfg.get("inbox_folder", "")
+        if _fw_enabled and _fw_inbox:
             from scripts.folder_watcher import start_folder_watcher as _start_fw
             _start_fw()
-            print(f"Folder watcher : {_fw_cfg['inbox_folder']}")
+            print(f"Folder watcher : {_fw_inbox}")
+            print()
+        elif not _fw_enabled:
+            print("Folder watcher : disabled in config")
             print()
     except Exception as _fw_exc:
         print(f"Folder watcher : failed to start — {_fw_exc}")
