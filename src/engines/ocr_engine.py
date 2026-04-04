@@ -1943,6 +1943,10 @@ def call_ai_for_extraction(
         # Route to complexity-specific task type for model selection
         task_type = f"invoice_extraction_{complexity}"
 
+        logging.getLogger(__name__).debug(
+            "call_ai_for_extraction: complexity=%s doc=%s", complexity, document_id,
+        )
+
         ai_response = ai_router.call(
             task_type=task_type,
             prompt=prompt,
@@ -1950,6 +1954,10 @@ def call_ai_for_extraction(
         )
 
         if ai_response.get("error") or not ai_response.get("result"):
+            logging.getLogger(__name__).warning(
+                "AI extraction returned empty: complexity=%s error=%s doc=%s",
+                complexity, ai_response.get("error"), document_id,
+            )
             return {}
 
         # Parse JSON from response
@@ -2098,12 +2106,26 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
     lines = text.strip().splitlines()
     confidence = 0.5
 
-    # Extract vendor (usually first non-empty line)
-    for line in lines[:5]:
+    # Extract vendor (usually first non-empty line, skipping document headers)
+    _SKIP_AS_VENDOR = {
+        'billing summary', 'invoice', 'receipt', 'statement',
+        'facture', 'recu', 'releve', 'sommaire', 'summary',
+        'tax invoice', 'credit note', 'purchase order',
+    }
+    for line in lines[:8]:
         line = line.strip()
-        if line and len(line) > 2 and not line.startswith("$"):
-            result["vendor"] = line
-            result["vendor_name"] = line
+        if not line or len(line) <= 2 or line.startswith("$"):
+            continue
+        if line.lower() in _SKIP_AS_VENDOR:
+            continue
+        # Strip trailing document-type words (e.g. "Microsoft Canada Inc. Summary")
+        vendor_line = re.sub(
+            r'\s+(?:Summary|Invoice|Receipt|Statement|Facture|Sommaire)$',
+            '', line, flags=re.IGNORECASE,
+        ).strip()
+        if vendor_line:
+            result["vendor"] = vendor_line
+            result["vendor_name"] = vendor_line
             confidence += 0.1
             break
 
@@ -2129,6 +2151,7 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
     _p2_patterns = [
         re.compile(r'(?<!\bsub)total\s+[\$USD\s]*([\d,]+\.?\d*)(?:\s*(?:USD|CAD))?$', re.IGNORECASE | re.MULTILINE),
         re.compile(r'(?<!\bsub)total\s*\(?\s*(?:USD|CAD|EUR)\s*\)?\s*([\d,]+\.?\d*)$', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'(?<!\bsub)total\s+(?:amount|including\s+tax)\s+(?:USD|CAD|EUR)\s+([\d,]+\.?\d*)$', re.IGNORECASE | re.MULTILINE),
     ]
     # PRIORITY 3: "Subtotal: $X"
     _p3_patterns = [

@@ -314,6 +314,28 @@ class TestRealExtractionRegression:
         assert parsed.get('amount') == 500.00, "REGRESSION: regex amount empty"
         assert parsed.get('document_date') == '2024-03-15', "REGRESSION: regex date empty"
 
+    def test_microsoft_invoice_extraction(self):
+        """Microsoft billing: vendor must not be 'Billing Summary', amount must be 11.40"""
+        text = """Billing Summary
+        Microsoft Canada Inc. Summary
+        4400-81 Bay St.
+        Toronto ON M5J 0E7
+        GST/HST: 877845941 RT0001
+        QST: 1021036966 TQ0001
+        Document Date 09/07/2022
+        Total Amount CAD 11.40
+        Charges 9.91
+        GST/HST 5.00% 0.50
+        PST/QST 9.98% 0.99
+        Total including Tax CAD 11.40"""
+        parsed = parse_invoice_fields(text)
+        vendor = parsed.get('vendor_name') or parsed.get('vendor') or ''
+        assert 'microsoft' in vendor.lower(), f"REGRESSION: Vendor wrong: {vendor}"
+        assert 'billing summary' not in vendor.lower(), f"REGRESSION: Vendor is header: {vendor}"
+        amount = float(parsed.get('amount') or 0)
+        assert amount == 11.40, f"REGRESSION: Amount wrong: {amount}"
+        assert parsed.get('document_date') is not None, "REGRESSION: Date empty"
+
     def test_text_month_date_extraction(self):
         """Dates like 'Feb 24, 2022' and 'Jul 31, 2022' must be parsed"""
         cases = [
