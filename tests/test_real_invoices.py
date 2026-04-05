@@ -370,3 +370,45 @@ class TestAmountVerification:
         text = '100 GB Google One Total 32.18'
         complexity = classify_extraction_complexity(text, parsed)
         assert complexity is not None, 'AI should always be called for amount verification'
+
+    def test_upwork_tax_code_T(self):
+        """Upwork has Canadian GST registration → tax_code must be T."""
+        text = """Upwork Global Inc.
+        GST: 77087 6209 RT0001
+        QST: NR00029921
+        Amount charged to card: 217.96 CAD"""
+        result = parse_invoice_fields(text)
+        assert result.get('tax_code') == 'T', \
+            f"Upwork has GST number, expected tax_code=T got {result.get('tax_code')}"
+
+    def test_fiverr_tax_code_E(self):
+        """Fiverr is Israeli with no Canadian GST → tax_code must be E."""
+        text = """Fiverr International Ltd.
+        Tel Aviv Israel
+        Total CAD 212.27
+        No Canadian GST number"""
+        result = parse_invoice_fields(text)
+        assert result.get('tax_code') == 'E', \
+            f"Fiverr has no GST, expected tax_code=E got {result.get('tax_code')}"
+
+    def test_google_paypal_amount_not_storage(self):
+        """Google PayPal receipt: amount must be $32.18 not 100 (storage size)."""
+        text = """Google
+        100 GB Google One
+        $32.18
+        Total $32.18"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('amount') or 0)
+        assert amount == 32.18, f'Got {amount} instead of 32.18'
+
+    def test_google_storage_not_amount_permanent(self):
+        """This test must NEVER be deleted or modified to pass.
+        The 100 GB mistake has been fixed 3 times.
+        If this test fails - fix the CODE not the test."""
+        text = """Google
+        100 GB Google One
+        Total $32.18
+        Amount due $32.18"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('amount') or 0)
+        assert amount == 32.18, f'REGRESSION: 100 GB wrongly used as amount. Got {amount}. Fix the extraction code.'

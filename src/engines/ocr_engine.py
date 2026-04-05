@@ -1912,12 +1912,32 @@ AMOUNT RULES:
 - NEVER use storage sizes (100 GB, 50 MB) as amounts
 - NEVER use quantities (100 users, 12 months) as amounts
 - Amount must be a number preceded by $ or CAD or USD
+- RULE: Numbers followed by GB/MB/TB/users/seats/months are NEVER amounts
 
-TAX RULES:
-- Find GST/TPS number anywhere: format 999999999RT9999
-- Find QST/TVQ number anywhere: format 9999999999 or NR99999999
-- If GST number found: tax_code = T (recoverable)
-- If foreign vendor no Canadian GST: tax_code = E (exempt)
+CRITICAL AMOUNT EXAMPLES:
+- '100 GB Google One $32.18' → amount = 32.18 (100 GB is storage, $32.18 is price)
+- 'Total $32.18' → amount = 32.18
+- '55 × Premium $1197.42 / Unused 54 × Premium -$1175.64 / Total $21.78' → amount = 21.78
+
+COMMON MISTAKE TO AVOID:
+Text: '100 GB Google One $32.18'
+WRONG: amount = 100 (100 is gigabytes of storage, not dollars)
+CORRECT: amount = 32.18 (the price shown after the product name)
+
+Text: '55 seats Premium $1197.42 / credit -$1175.64 / Total $21.78'
+WRONG: amount = 1197.42 (this is gross before credits)
+CORRECT: amount = 21.78 (the explicit Total after all credits)
+
+RULE: Numbers followed by GB/MB/TB/KB/seats/users/months are NEVER dollar amounts.
+RULE: Always use the number preceded by $ or labeled Total/Amount due.
+
+TAX CODE DETERMINATION:
+1. Find GST/TPS number (format: 9 digits RT 4 digits, may have spaces) anywhere in document
+2. Find QST/TVQ number (format: 10 digits or NR + 8 digits) anywhere in document
+3. If GST number found → tax_code = T (taxes recoverable)
+4. If vendor is foreign with NO Canadian GST number → tax_code = E
+5. Check: 'GST: 77087 6209 RT0001' = Canadian GST registration = T
+6. Check: Israeli company no RT number = E
 - Quebec meals/entertainment: tax_code = M (50% restriction)
 
 GL ACCOUNT RULES (Quebec chart of accounts):
@@ -1925,6 +1945,7 @@ GL ACCOUNT RULES (Quebec chart of accounts):
 - Utilities (Hydro, Gaz, Electricite): GL 5410
 - Software/SaaS (Microsoft, Google, Adobe, OpenAI): GL 5420
 - Office supplies: GL 5430
+- Freelance platforms (Fiverr, Upwork, Toptal, 99designs): GL 5420
 - General expenses: GL 5440
 - Insurance: GL 5450
 - Meals/restaurants (50% deductible): GL 5640
@@ -1978,10 +1999,18 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
     # Get learning examples from approved documents
     examples = get_learning_examples(conn, client_code)
 
+    # Mark storage sizes so AI ignores them
+    text_for_ai = re.sub(
+        r'(\d+)\s*(GB|MB|TB|KB|GHz)',
+        r'[\1\2-NOT-A-PRICE]',
+        raw_text,
+        flags=re.IGNORECASE
+    )
+
     # Build prompt with examples
     prompt = SMART_EXTRACTION_PROMPT.format(
         learning_examples=examples,
-        text=raw_text[:4000]
+        text=text_for_ai[:4000]
     )
 
     # Call AI - always, for every document
@@ -2083,6 +2112,24 @@ GENERAL AMOUNT RULES:
 - Never use quantities (100 users, 12 months) as amounts
 - Always prefer: Total, Amount due, Montant de la présente facture
 - The correct amount is always preceded by $ or currency symbol
+- RULE: Numbers followed by GB/MB/TB/users/seats/months are NEVER amounts
+
+CRITICAL AMOUNT EXAMPLES:
+- '100 GB Google One $32.18' → amount = 32.18 (100 GB is storage, $32.18 is price)
+- 'Total $32.18' → amount = 32.18
+- '55 × Premium $1197.42 / Unused 54 × Premium -$1175.64 / Total $21.78' → amount = 21.78
+
+COMMON MISTAKE TO AVOID:
+Text: '100 GB Google One $32.18'
+WRONG: amount = 100 (100 is gigabytes of storage, not dollars)
+CORRECT: amount = 32.18 (the price shown after the product name)
+
+Text: '55 seats Premium $1197.42 / credit -$1175.64 / Total $21.78'
+WRONG: amount = 1197.42 (this is gross before credits)
+CORRECT: amount = 21.78 (the explicit Total after all credits)
+
+RULE: Numbers followed by GB/MB/TB/KB/seats/users/months are NEVER dollar amounts.
+RULE: Always use the number preceded by $ or labeled Total/Amount due.
 
 EXAMPLES:
 Example 1 - Utility bill with overdue:
@@ -2092,6 +2139,13 @@ Example 1 - Utility bill with overdue:
 Example 2 - Storage plan:
   "100 GB Google One" → IGNORE (storage, not price)
   "Total 32.18" → USE THIS
+
+TAX CODE DETERMINATION:
+1. Find GST/TPS number (format: 9 digits RT 4 digits, may have spaces) anywhere in document
+2. If found → tax_code = T (taxes recoverable)
+3. If vendor is foreign with NO Canadian GST number → tax_code = E
+4. Check: 'GST: 77087 6209 RT0001' = Canadian GST registration = T
+5. Check: Israeli company no RT number = E
 
 Return ONLY this JSON, no explanation:
 {{
@@ -2414,6 +2468,9 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         result["invoice_type"] = "proration_adjustment"
         result["is_proration"] = True
 
+    # Pre-filter: strip storage size patterns from lines to avoid confusing amount extraction
+    lines = [re.sub(r'\d+\s*(?:GB|MB|TB|KB)\s+\w', '', line) for line in lines]
+
     # Extract amounts — priority-based extraction
     # PRIORITY 0: Quebec utility "Montant de la présente facture" (current invoice)
     _p0_patterns = [
@@ -2583,30 +2640,50 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
 
     # ---- BN# / GST number extraction (comprehensive) ----
     # Pattern 1: Keyword-prefixed GST number (GST/TPS/HST/BN#/Registration)
+    # Digits may contain spaces (e.g. "77087 6209 RT0001")
     gst_num_match = re.search(
-        r"(?:GST|TPS|HST|GST/HST|GST/TPS|BN#?|Registration)\s*[#:.]?\s*(\d{9})\s*(?:RT\s*(\d{4}))?",
+        r"(?:GST|TPS|HST|GST/HST|GST/TPS|BN#?|Registration)\s*[#:.]?\s*([\d\s]{9,18}?)\s*RT\s*(\d{4})",
         text, re.IGNORECASE
     )
+    if not gst_num_match:
+        # Fallback: keyword + 9 consecutive digits (no RT suffix)
+        gst_num_match = re.search(
+            r"(?:GST|TPS|HST|GST/HST|GST/TPS|BN#?|Registration)\s*[#:.]?\s*(\d{9})\s*(?:RT\s*(\d{4}))?",
+            text, re.IGNORECASE
+        )
     if gst_num_match:
-        rt_suffix = gst_num_match.group(2) or "0001"
-        result["gst_number"] = f"{gst_num_match.group(1)}RT{rt_suffix}"
-        result["bn_root"] = gst_num_match.group(1)
-        confidence += 0.1
-
-    # Pattern 2: Standalone 9-digit + RT pattern anywhere in full text
-    if not result.get("gst_number"):
-        standalone_gst = re.search(r"(\d{9})\s*RT\s*(\d{4})", text)
-        if standalone_gst:
-            result["gst_number"] = f"{standalone_gst.group(1)}RT{standalone_gst.group(2)}"
-            result["bn_root"] = standalone_gst.group(1)
+        bn_digits = re.sub(r'\s', '', gst_num_match.group(1))
+        if len(bn_digits) == 9 and bn_digits.isdigit():
+            rt_suffix = gst_num_match.group(2) or "0001"
+            result["gst_number"] = f"{bn_digits}RT{rt_suffix}"
+            result["bn_root"] = bn_digits
             confidence += 0.1
 
+    # Pattern 2: Standalone 9-digit (possibly spaced) + RT pattern anywhere in full text
+    if not result.get("gst_number"):
+        standalone_gst = re.search(r"([\d\s]{9,18}?)\s*RT\s*(\d{4})", text)
+        if standalone_gst:
+            bn_digits = re.sub(r'\s', '', standalone_gst.group(1))
+            if len(bn_digits) == 9 and bn_digits.isdigit():
+                result["gst_number"] = f"{bn_digits}RT{standalone_gst.group(2)}"
+                result["bn_root"] = bn_digits
+                confidence += 0.1
+
     # ---- QST number extraction (comprehensive) ----
-    # Pattern 1: Keyword-prefixed QST number (QST/TVQ/NEQ)
+    # Pattern 1: Keyword-prefixed QST number (QST/TVQ/NEQ) — 10 digits or NR + 8 digits
     qst_num_match = re.search(
         r"(?:QST|TVQ|QST/TVQ|NEQ)\s*[#:.]?\s*(\d{10})",
         text, re.IGNORECASE
     )
+    if not qst_num_match:
+        # NR-prefixed QST numbers (e.g. NR00029921)
+        qst_nr_match = re.search(
+            r"(?:QST|TVQ|QST/TVQ)\s*[#:.]?\s*(NR\d{8})",
+            text, re.IGNORECASE
+        )
+        if qst_nr_match:
+            result["qst_number"] = qst_nr_match.group(1).upper()
+            confidence += 0.05
     if qst_num_match:
         result["qst_number"] = qst_num_match.group(1)
         confidence += 0.05
@@ -2759,6 +2836,17 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             )
     else:
         result["currency"] = "CAD"
+
+    # ---- Foreign vendor without GST: tax_code = E ----
+    if not result.get("gst_number") and not result.get("tax_code"):
+        _foreign_country_indicators = [
+            'israel', 'usa', 'united states', 'united kingdom', 'uk',
+            'ireland', 'germany', 'france', 'netherlands', 'australia',
+            'india', 'philippines', 'san francisco', 'new york',
+            'tel aviv', 'london', 'dublin',
+        ]
+        if any(ind in text_lower_check for ind in _foreign_country_indicators):
+            result["tax_code"] = "E"
 
     result["confidence"] = min(1.0, round(confidence, 4))
 
