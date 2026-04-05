@@ -313,7 +313,7 @@ class TestKnownCanadianUtilities:
     """All major Canadian utilities should be in the registry."""
 
     @pytest.mark.parametrize("vendor", [
-        "hydro-quebec", "hydro-québec", "hydro quebec",
+        "hydro-quebec", "hydro-québec", "hydro quebec", "hydro qc",
         "energir", "énergir",
         "gazifere", "gazifère",
         "hydro ottawa", "toronto hydro", "bc hydro",
@@ -322,7 +322,7 @@ class TestKnownCanadianUtilities:
     def test_utility_in_registry(self, vendor):
         assert vendor in KNOWN_CANADIAN_VENDORS
         defaults = KNOWN_CANADIAN_VENDORS[vendor]
-        assert defaults["gl"] == "5310"
+        assert defaults["gl"] == "5410"
         assert defaults["tax"] == "T"
         assert defaults["category"] == "utility"
 
@@ -452,7 +452,7 @@ class TestVendorDefaults:
     def test_utility_defaults(self):
         d = _get_vendor_defaults("Hydro-Quebec")
         assert d is not None
-        assert d["gl"] == "5310"
+        assert d["gl"] == "5410"
 
     def test_retailer_defaults(self):
         d = _get_vendor_defaults("Walmart")

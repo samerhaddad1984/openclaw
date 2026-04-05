@@ -781,3 +781,62 @@ class TestEmailIngestHandler:
             resp = json.loads(captured.read())
             assert statuses[0] == 401
             assert resp["error"] == "unauthorized"
+
+
+# ---------------------------------------------------------------------------
+# Hydro-Québec regression tests
+# ---------------------------------------------------------------------------
+
+class TestHydroQuebecExtraction:
+    """Regression: Hydro-Québec vendor & amount extraction."""
+
+    def test_hydro_quebec_vendor_not_tariff_code(self):
+        """DEF is a tariff code, not a vendor — should extract Hydro-Québec."""
+        text = """DEF
+Hydro-Québec
+Numéro de facture 638 803 173 454
+Date 26 novembre 2025
+TPS (nº 11944 9775 RT0001) 5.0% 40.87
+TVQ (nº 1000042605 TQ0020) 9.975% 81.54
+Montant de la présente facture 960.38
+Montant dû immédiatement 3854.43"""
+        result = ocr.parse_invoice_fields(text)
+        vendor = result.get("vendor_name") or result.get("vendor") or ""
+        assert "hydro" in vendor.lower(), f"Vendor wrong: {vendor}"
+
+    def test_hydro_quebec_amount_present_invoice(self):
+        """Must pick 'présente facture' amount, not 'dû immédiatement'."""
+        text = """Hydro-Québec
+Numéro de facture 638 803 173 454
+Date 26 novembre 2025
+TPS (nº 11944 9775 RT0001) 5.0% 40.87
+TVQ (nº 1000042605 TQ0020) 9.975% 81.54
+Montant de la présente facture 960.38
+Montant dû immédiatement 3854.43"""
+        result = ocr.parse_invoice_fields(text)
+        amount = float(result.get("amount") or 0)
+        assert amount == 960.38, f"Amount wrong: {amount} should be 960.38"
+
+    def test_short_caps_tariff_codes_skipped(self):
+        """Short all-caps codes like DEF, GD, MT should be skipped as vendor."""
+        for code in ("DEF", "GD", "MT", "DT"):
+            text = f"""{code}
+Real Vendor Inc
+Total $100.00"""
+            result = ocr.parse_invoice_fields(text)
+            vendor = result.get("vendor_name") or result.get("vendor") or ""
+            assert vendor != code, f"Tariff code {code} used as vendor"
+
+    def test_hydro_quebec_current_amount(self):
+        """Hydro-Québec: use présente facture amount, not overdue balance."""
+        text = """Hydro-Québec
+    Montant dû immédiatement 3 854,43
+    Montant de la présente facture 960,38
+    TPS (nº 11944 9775 RT0001) 5.0% 40.87
+    TVQ (nº 1000042605 TQ0020) 9.975% 81.54"""
+
+        result = ocr.parse_invoice_fields(text)
+        amount = float(result.get("amount") or 0)
+        assert amount == 960.38, f"Should use présente facture 960.38 not {amount}"
+        vendor = result.get("vendor_name") or result.get("vendor") or ""
+        assert "hydro" in vendor.lower(), f"Vendor wrong: {vendor}"

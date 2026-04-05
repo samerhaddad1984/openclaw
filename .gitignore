@@ -167,3 +167,10 @@ __pycache__/
 # OS
 Thumbs.db
 .DS_Store
+
+# Uploaded documents - never commit
+data/ocr_uploads/
+data/uploads/
+inbox/
+data/*.db
+data/backups/

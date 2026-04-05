@@ -1882,6 +1882,33 @@ CRITICAL RULES:
 
 5. If currency is USD: set currency=USD, amount=USD amount
 
+VENDOR RULES:
+- NEVER use 2-3 letter codes as vendor (DEF, GD, MT, BT are tariff codes)
+- For Hydro-Québec bills: vendor = "Hydro-Québec"
+- For Bell bills: vendor = "Bell Canada"
+- Vendor is always a company name, never a code
+
+AMOUNT RULES for Quebec utility bills:
+- "Montant de la présente facture" = THIS invoice amount — USE THIS
+- "Montant dû immédiatement" = overdue from previous bill — IGNORE
+- "Montant total dû" = total including past due — IGNORE
+- Always use the CURRENT invoice amount not past due balance
+
+GENERAL AMOUNT RULES:
+- Never use storage sizes (100 GB, 50 MB) as amounts
+- Never use quantities (100 users, 12 months) as amounts
+- Always prefer: Total, Amount due, Montant de la présente facture
+- The correct amount is always preceded by $ or currency symbol
+
+EXAMPLES:
+Example 1 - Utility bill with overdue:
+  "Montant dû immédiatement 3,854.43" → IGNORE (past due)
+  "Montant de la présente facture 960.38" → USE THIS
+
+Example 2 - Storage plan:
+  "100 GB Google One" → IGNORE (storage, not price)
+  "Total 32.18" → USE THIS
+
 Return ONLY this JSON, no explanation:
 {{
   "vendor_name": "string",
@@ -2158,6 +2185,9 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             continue
         if _NOT_VENDOR_RE.search(line):
             continue
+        # Skip short all-caps codes (tariff codes like DEF, GD, MT)
+        if len(line) <= 4 and line.isupper() and line.isalpha():
+            continue
         # Strip trailing document-type words (e.g. "Microsoft Canada Inc. Summary")
         vendor_line = re.sub(
             r'\s+(?:Summary|Invoice|Receipt|Statement|Facture|Sommaire)$',
@@ -2167,6 +2197,26 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             result["vendor"] = vendor_line
             result["vendor_name"] = vendor_line
             confidence += 0.1
+            break
+
+    # --- Quebec utility vendor override ---
+    _KNOWN_UTILITY_PATTERNS = {
+        'hydro': 'Hydro-Québec',
+        'hydro-québec': 'Hydro-Québec',
+        'hydro-quebec': 'Hydro-Québec',
+        'énergir': 'Énergir',
+        'energir': 'Énergir',
+        'gazifère': 'Gazifère',
+        'gazifere': 'Gazifère',
+        'bell canada': 'Bell Canada',
+        'videotron': 'Vidéotron',
+        'vidéotron': 'Vidéotron',
+    }
+    text_lower_check = text.lower()
+    for pattern, canonical_name in _KNOWN_UTILITY_PATTERNS.items():
+        if pattern in text_lower_check:
+            result["vendor"] = canonical_name
+            result["vendor_name"] = canonical_name
             break
 
     # --- Proration invoice detection ---
@@ -2181,6 +2231,11 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         result["is_proration"] = True
 
     # Extract amounts — priority-based extraction
+    # PRIORITY 0: Quebec utility "Montant de la présente facture" (current invoice)
+    _p0_patterns = [
+        re.compile(r'pr[ée]sente\s+facture\s+([\d\s,]+(?:\.\d{1,2})?)\s*\$', re.IGNORECASE),
+        re.compile(r'Montant\s+de\s+la\s+pr[ée]sente\s+facture\s+([\d\s,]+(?:\.\d{1,2})?)', re.IGNORECASE),
+    ]
     # PRIORITY 1: "Amount due" or "$X USD due [date]"
     _p1_patterns = [
         re.compile(r'\$\s*([\d,]+\.?\d*)\s*USD\s+due', re.IGNORECASE),
@@ -2224,13 +2279,24 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
                     pass
         return False
 
+    def _parse_amount_string(raw: str) -> float:
+        """Parse amount string handling both English (1,234.56) and Quebec (1 234,56) formats."""
+        s = raw.strip()
+        # Quebec format: comma as decimal separator (e.g. "960,38" or "3 854,43")
+        # Detect: ends with ,DD and has no period
+        if re.match(r'^[\d\s]+,\d{2}$', s):
+            s = s.replace(" ", "").replace(",", ".")
+        else:
+            s = s.replace(",", "").replace(" ", "")
+        return float(s)
+
     def _extract_amount_from_patterns(patterns, use_last=False):
         found = []
         for line in lines:
             for pat in patterns:
                 for m in pat.finditer(line):
                     try:
-                        val = float(m.group(1).replace(",", ""))
+                        val = _parse_amount_string(m.group(1))
                         if val > 0 and not _line_has_only_unit_amount(line, val):
                             found.append(val)
                     except ValueError:
@@ -2241,7 +2307,9 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
 
     extracted_amount = None
     # Try priorities in order
-    extracted_amount = _extract_amount_from_patterns(_p1_patterns)
+    extracted_amount = _extract_amount_from_patterns(_p0_patterns)
+    if extracted_amount is None:
+        extracted_amount = _extract_amount_from_patterns(_p1_patterns)
     if extracted_amount is None:
         extracted_amount = _extract_amount_from_patterns(_p2_patterns, use_last=True)
     if extracted_amount is None:

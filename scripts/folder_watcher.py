@@ -235,13 +235,27 @@ def _log_audit(
 # File move helpers
 # ---------------------------------------------------------------------------
 
+def _safe_dest_name(file_path: Path, dest_dir: Path) -> Path:
+    """Return a destination path that avoids collisions and Windows 260-char limit."""
+    import hashlib
+    clean_name = re.sub(r'(_\d{12,})+', '', file_path.stem) + file_path.suffix
+    dest = dest_dir / clean_name
+    if len(str(dest)) > 240:
+        # Keep first 50 chars of name for readability instead of MD5 hash
+        truncated_stem = re.sub(r'(_\d{12,})+', '', file_path.stem)[:50].rstrip('_')
+        clean_name = f"{truncated_stem}{file_path.suffix}"
+        dest = dest_dir / clean_name
+    if dest.exists():
+        short = hashlib.md5(file_path.name.encode()).hexdigest()[:8]
+        dest = dest_dir / f"{Path(clean_name).stem}_{short}{file_path.suffix}"
+    return dest
+
+
 def _move_to_processed(file_path: Path, inbox_folder: Path) -> None:
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     dest_dir = inbox_folder / "Processed" / date_str
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / file_path.name
-    if dest.exists():
-        dest = dest_dir / f"{file_path.stem}_{int(time.monotonic_ns())}{file_path.suffix}"
+    dest = _safe_dest_name(file_path, dest_dir)
     try:
         shutil.move(str(file_path), str(dest))
     except Exception as exc:
@@ -252,9 +266,7 @@ def _move_to_processed(file_path: Path, inbox_folder: Path) -> None:
 def _move_to_failed(file_path: Path, inbox_folder: Path) -> None:
     dest_dir = inbox_folder / "Failed"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / file_path.name
-    if dest.exists():
-        dest = dest_dir / f"{file_path.stem}_{int(time.monotonic_ns())}{file_path.suffix}"
+    dest = _safe_dest_name(file_path, dest_dir)
     try:
         shutil.move(str(file_path), str(dest))
     except Exception as exc:
@@ -306,7 +318,7 @@ def process_one(
 
     # ------------------------------------------------------------------
     # Dedup guard — skip if a document with the same base filename
-    # already exists in the database (prevents re-processing on restart)
+    # or logical fingerprint already exists in the database
     # ------------------------------------------------------------------
     try:
         conn = sqlite3.connect(str(db_path))
@@ -315,6 +327,14 @@ def process_one(
                 "SELECT document_id FROM documents WHERE file_name = ? LIMIT 1",
                 (filename,),
             ).fetchone()
+            if not existing:
+                # Also check by logical_fingerprint built from filename
+                from src.agents.tools.fingerprint_utils import physical_fingerprint  # noqa: PLC0415
+                phys_fp = physical_fingerprint(file_bytes)
+                existing = conn.execute(
+                    "SELECT document_id FROM documents WHERE physical_fingerprint = ? LIMIT 1",
+                    (phys_fp,),
+                ).fetchone()
             if existing:
                 logging.debug("folder_watcher: skipping %s — already in DB as %s", raw_name, existing[0])
                 conn.close()
