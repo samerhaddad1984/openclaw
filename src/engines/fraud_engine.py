@@ -67,6 +67,19 @@ TIMING_ANOMALY_DAYS           = 14     # days from normal billing day
 MIN_HISTORY_FOR_ANOMALY       = 5      # P1-8: reduced from 10 — 5 transactions is enough for basic anomaly
 DUPLICATE_SAME_VENDOR_DAYS    = 14     # days window — same vendor duplicate (30 was too wide, flagged monthly recurring)
 DUPLICATE_CROSS_VENDOR_DAYS   = 7      # days window — cross-vendor same amount
+DUPLICATE_MAX_DAYS            = 32     # never flag duplicates more than 32 days apart (monthly bills are legitimate)
+
+# Recurring vendors — utilities, telecoms, subscriptions that bill monthly with same amounts.
+# Only flag as duplicate if same invoice number.
+RECURRING_VENDOR_KEYWORDS = {
+    "hydro", "bell", "videotron", "rogers", "telus", "fido", "koodo",
+    "microsoft", "google", "adobe", "zoom", "shopify",
+    "amazon prime", "netflix", "spotify", "dropbox", "slack",
+    "virgin", "chatr", "freedom mobile", "sasktel", "public mobile",
+    "energir", "énergir", "gazifere", "gazifère", "enbridge", "fortisbc",
+    "hydro-quebec", "hydro-québec", "hydro quebec", "hydro ottawa",
+    "toronto hydro", "bc hydro",
+}
 WEEKEND_HOLIDAY_AMOUNT_LIMIT  = 200.0  # P2-3: $200 balances detection vs false positives
 ROUND_NUMBER_STDEV_RATIO      = 0.10   # irregular = std_dev > 10 % of mean
 NEW_VENDOR_LARGE_AMOUNT_LIMIT = 2000.0 # flag first invoice above this
@@ -622,6 +635,15 @@ def _rule_vendor_timing_anomaly(
 # Rule 3: Duplicate detection
 # ---------------------------------------------------------------------------
 
+def _is_recurring_vendor(vendor: str) -> bool:
+    """Check if vendor matches a known recurring billing vendor."""
+    v = vendor.lower().strip()
+    for kw in RECURRING_VENDOR_KEYWORDS:
+        if kw in v:
+            return True
+    return False
+
+
 def _rule_duplicate(
     conn: sqlite3.Connection,
     document_id: str,
@@ -632,15 +654,62 @@ def _rule_duplicate(
 ) -> list[dict[str, Any]]:
     flags: list[dict[str, Any]] = []
 
+    # --- FIX 1: Fingerprint-based true duplicate detection ---
+    # Check if this document has a logical_fingerprint
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(documents)").fetchall()}
+    has_fingerprint = "logical_fingerprint" in cols
+
+    if has_fingerprint:
+        own_fp = conn.execute(
+            "SELECT logical_fingerprint FROM documents WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+        own_fingerprint = own_fp["logical_fingerprint"] if own_fp else None
+
+        if own_fingerprint:
+            # True duplicates: same fingerprint = same document uploaded multiple times
+            fp_rows = conn.execute(
+                """
+                SELECT document_id, vendor, document_date
+                  FROM documents
+                 WHERE logical_fingerprint = ?
+                   AND document_id != ?
+                   AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
+                 LIMIT 5
+                """,
+                (own_fingerprint, document_id, client_code),
+            ).fetchall()
+            for r in fp_rows:
+                days_diff = (doc_date - (_parse_date(r["document_date"]) or doc_date)).days
+                flags.append({
+                    "rule":     "duplicate_exact",
+                    "severity": HIGH,
+                    "i18n_key": "fraud_duplicate_exact",
+                    "params": {
+                        "amount": f"${amount:,.2f}",
+                        "vendor": str(vendor),
+                        "days":   str(abs(days_diff)),
+                        "doc_id": str(r["document_id"]),
+                    },
+                })
+            # If we found true fingerprint duplicates, that's definitive — return early
+            if flags:
+                return flags
+
+    # --- FIX 3: Recurring vendors only flagged if same invoice number ---
+    if _is_recurring_vendor(vendor):
+        return flags  # recurring vendors: skip amount-based duplicate check
+
     window_start_same = (doc_date - timedelta(days=DUPLICATE_SAME_VENDOR_DAYS)).isoformat()
     window_end_same   = (doc_date + timedelta(days=DUPLICATE_SAME_VENDOR_DAYS)).isoformat()
     window_start_cross = (doc_date - timedelta(days=DUPLICATE_CROSS_VENDOR_DAYS)).isoformat()
     window_end_cross   = (doc_date + timedelta(days=DUPLICATE_CROSS_VENDOR_DAYS)).isoformat()
 
     # Same vendor + same amount within window (both directions)
+    fp_col = ", logical_fingerprint" if has_fingerprint else ""
     rows = conn.execute(
-        """
-        SELECT document_id, vendor, document_date
+        f"""
+        SELECT document_id, vendor, document_date{fp_col}
           FROM documents
          WHERE LOWER(TRIM(COALESCE(vendor, ''))) = LOWER(TRIM(?))
            AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
@@ -653,7 +722,27 @@ def _rule_duplicate(
         (vendor, client_code, amount, window_start_same, window_end_same, document_id),
     ).fetchall()
     for r in rows:
-        days_diff = (doc_date - (_parse_date(r["document_date"]) or doc_date)).days
+        days_diff = abs((doc_date - (_parse_date(r["document_date"]) or doc_date)).days)
+        # FIX 2: Skip if more than 32 days apart
+        if days_diff > DUPLICATE_MAX_DAYS:
+            continue
+        # FIX 1: Different fingerprint = MEDIUM (possible duplicate), not HIGH
+        if has_fingerprint and own_fingerprint:
+            other_fp = r["logical_fingerprint"] if has_fingerprint else None
+            if other_fp and other_fp != own_fingerprint:
+                # Same vendor+amount+date but different content = possible duplicate only
+                flags.append({
+                    "rule":     "duplicate_exact",
+                    "severity": MEDIUM,
+                    "i18n_key": "fraud_duplicate_exact",
+                    "params": {
+                        "amount": f"${amount:,.2f}",
+                        "vendor": str(vendor),
+                        "days":   str(days_diff),
+                        "doc_id": str(r["document_id"]),
+                    },
+                })
+                continue
         flags.append({
             "rule":     "duplicate_exact",
             "severity": HIGH,
@@ -661,7 +750,7 @@ def _rule_duplicate(
             "params": {
                 "amount": f"${amount:,.2f}",
                 "vendor": str(vendor),
-                "days":   str(abs(days_diff)),
+                "days":   str(days_diff),
                 "doc_id": str(r["document_id"]),
             },
         })
@@ -682,7 +771,10 @@ def _rule_duplicate(
         (vendor, client_code, amount, window_start_cross, window_end_cross, document_id),
     ).fetchall()
     for r in cross_rows:
-        days_diff = (doc_date - (_parse_date(r["document_date"]) or doc_date)).days
+        days_diff = abs((doc_date - (_parse_date(r["document_date"]) or doc_date)).days)
+        # FIX 2: Skip if more than 32 days apart
+        if days_diff > DUPLICATE_MAX_DAYS:
+            continue
         flags.append({
             "rule":     "duplicate_cross_vendor",
             "severity": MEDIUM,
@@ -690,7 +782,7 @@ def _rule_duplicate(
             "params": {
                 "amount":       f"${amount:,.2f}",
                 "other_vendor": str(r["vendor"] or "Unknown"),
-                "days":         str(abs(days_diff)),
+                "days":         str(days_diff),
                 "doc_id":       str(r["document_id"]),
             },
         })
