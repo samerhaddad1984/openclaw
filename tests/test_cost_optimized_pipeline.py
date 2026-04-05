@@ -315,6 +315,18 @@ Amount Due: $1,234.56
         result = ocr.parse_invoice_fields(text)
         assert result["amount"] == pytest.approx(1234.56)
 
+    def test_paypal_google_amount(self):
+        """Storage sizes like '100 GB' must not be extracted as amounts."""
+        text = """Google -32.18
+100 GB Google One
+Total 32.18
+Transaction ID 0JE97521J5871591M"""
+        result = ocr.parse_invoice_fields(text)
+        amount = float(result.get("amount") or 0)
+        assert amount == pytest.approx(32.18), (
+            f"Expected 32.18 got {amount} - picked up 100 GB as amount"
+        )
+
 
 # ---------------------------------------------------------------------------
 # assess_image_quality

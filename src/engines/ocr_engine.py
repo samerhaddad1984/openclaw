@@ -1372,8 +1372,35 @@ def process_file(
             _ai_fields.pop("_ai_complexity", None)
             _ai_fields.pop("_ai_model", None)
             _ai_fields.pop("_ai_latency_ms", None)
-            # AI wins on key fields — regex wins on fields AI left null
-            for field in ["vendor_name", "amount", "currency", "gst_number",
+
+            # --- Amount verification: compare AI vs regex ---
+            _regex_amount = amount  # amount from regex (may be None)
+            _ai_amount = _ai_fields.get("amount")
+            if _ai_amount is not None and _regex_amount is not None:
+                try:
+                    _ai_amt_f = float(_ai_amount)
+                    _regex_amt_f = float(_regex_amount)
+                    if abs(_regex_amt_f - _ai_amt_f) / max(_regex_amt_f, 0.01) > 0.05:
+                        # More than 5% difference — trust AI
+                        amount = _ai_amt_f
+                        raw["total"] = _ai_amt_f
+                        raw["amount_source"] = "ai_corrected"
+                        _parsed_fields["amount"] = _ai_amt_f
+                        logging.getLogger(__name__).info(
+                            "AI corrected amount: regex=%.2f ai=%.2f doc=%s",
+                            _regex_amt_f, _ai_amt_f, doc_id,
+                        )
+                    # else: amounts agree, keep regex amount
+                except (ValueError, TypeError):
+                    pass
+            elif _ai_amount is not None:
+                # Regex had no amount — use AI
+                amount = float(_ai_amount)
+                raw["total"] = amount
+                _parsed_fields["amount"] = amount
+
+            # AI wins on non-amount fields — regex wins on fields AI left null
+            for field in ["vendor_name", "currency", "gst_number",
                           "qst_number", "gst_amount", "qst_amount",
                           "document_date", "invoice_number", "is_proration",
                           "document_type"]:
@@ -1382,9 +1409,6 @@ def process_file(
                     if field == "vendor_name" and _ai_fields[field]:
                         vendor = _ai_fields[field]
                         raw["vendor_name"] = _ai_fields[field]
-                    elif field == "amount" and _ai_fields[field]:
-                        amount = float(_ai_fields[field])
-                        raw["total"] = amount
                     elif field == "document_date" and _ai_fields[field]:
                         document_date = _ai_fields[field]
                         raw["document_date"] = _ai_fields[field]
@@ -1836,23 +1860,33 @@ def get_ai_cost_summary(
 # AI-enriched extraction (4-tier complexity routing via AIRouter)
 # ---------------------------------------------------------------------------
 
-_EXTRACTION_PROMPT = """Extract invoice fields from this text. Return JSON only, no explanation.
+_EXTRACTION_PROMPT = """You are a CPA accounting assistant.
+Extract and VERIFY invoice fields from this text.
 
 CRITICAL RULES:
-1. amount = the FINAL total the customer owes
-   Look for: Amount due, Total due, Balance due, Montant dû, Solde dû
-2. For proration invoices (positive AND negative lines):
-   Use the explicit Total or Subtotal — NEVER sum individual lines
-3. Find GST/QST numbers ANYWHERE including inside line descriptions
+1. amount = the FINAL total the customer owes in dollars
+   - Look for: Amount due, Total due, Total, Balance due, Montant dû, Solde dû
+   - NEVER use quantities like "100 GB", "50 users", "12 months" as amounts
+   - Numbers followed by GB/MB/TB/users/seats/months are NOT dollar amounts
+   - The correct amount is always preceded by $ or currency symbol
+   - For PayPal receipts: use the "Total" line amount
+
+2. If you see conflicting amounts pick the one labeled:
+   "Total", "Amount due", "Balance due", "Grand total"
+
+3. For proration invoices use explicit Total/Subtotal never sum lines
+
+4. Find GST/QST registration numbers anywhere in document
    GST format: 9 digits + RT + 4 digits (e.g. 805577574RT0001)
    QST format: 10 digits (e.g. 1221825787)
-4. If currency is USD: set currency=USD, amount=USD amount
 
-Return ONLY this JSON:
+5. If currency is USD: set currency=USD, amount=USD amount
+
+Return ONLY this JSON, no explanation:
 {{
   "vendor_name": "string",
   "amount": number,
-  "currency": "CAD" or "USD" or "EUR",
+  "currency": "CAD" or "USD",
   "document_date": "YYYY-MM-DD or null",
   "invoice_number": "string or null",
   "gst_number": "string or null",
@@ -1871,24 +1905,22 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     """Classify extraction complexity to select the right AI tier.
 
     Returns: 'simple', 'medium', 'complex', 'very_complex', or None.
-    None means high confidence — no AI needed.
+    None means high confidence from trusted vendor cache — no AI needed.
+
+    ALWAYS calls AI to verify the amount even when regex found something.
+    A wrong amount is worse than a missing amount.
     """
+    source = parsed_result.get("source", "")
+
+    # Only skip AI if result came from trusted vendor memory cache
+    if source == "vendor_memory" and parsed_result.get("confidence", 0) >= 0.95:
+        return None
+
+    # All other documents — classify tier but always call AI
+    text_lower = text.lower() if text else ""
     confidence = parsed_result.get("confidence", 0)
-    text_lower = text.lower() if text else ''
 
-    # CRITICAL: if vendor or amount missing — always call AI
-    vendor = parsed_result.get("vendor_name") or parsed_result.get("vendor")
-    amount = parsed_result.get("amount")
-
-    if not vendor or not amount or float(amount or 0) == 0:
-        # Missing critical fields — determine tier based on document complexity
-        if any(w in text_lower for w in ["remaining time on", "unused time on", "proration"]):
-            return "complex"
-        if any(c in text for c in ["USD", "EUR", "GBP"]):
-            return "medium"
-        return "simple"  # At minimum use simple tier
-
-    # Fields present — check if confidence is low
+    # Very low confidence — very complex
     if confidence < 0.50:
         return "very_complex"
 
@@ -1905,19 +1937,7 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     if any(w in text_lower for w in french):
         return "medium"
 
-    # Vendor quality check — if vendor looks like a document ID, treat as missing
-    if vendor and re.search(
-        r'(?:invoice|receipt|facture|document|order)\s+(?:number|no|#)',
-        str(vendor), re.IGNORECASE,
-    ):
-        return "simple"
-
-    # Low-medium confidence — simple AI assist
-    if confidence <= 0.85:
-        return "simple"
-
-    # High confidence AND all fields present — no AI needed
-    return None
+    return "simple"
 
 
 def call_ai_for_extraction(
@@ -2169,6 +2189,7 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
     ]
     # PRIORITY 2: "Total: $X" or "Total (CAD) X" (last match on page)
     _p2_patterns = [
+        re.compile(r'(?<!\bsub)total\s+\$\s*([\d,]+\.\d{2})\s*$', re.IGNORECASE | re.MULTILINE),  # "Total $32.18"
         re.compile(r'(?<!\bsub)total\s+[\$USD\s]*([\d,]+\.?\d*)(?:\s*(?:USD|CAD))?$', re.IGNORECASE | re.MULTILINE),
         re.compile(r'(?<!\bsub)total\s*\(?\s*(?:USD|CAD|EUR)\s*\)?\s*([\d,]+\.?\d*)$', re.IGNORECASE | re.MULTILINE),
         re.compile(r'(?<!\bsub)total\s+(?:amount|including\s+tax)\s+(?:USD|CAD|EUR)\s+([\d,]+\.?\d*)$', re.IGNORECASE | re.MULTILINE),
@@ -2183,6 +2204,26 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         re.compile(r"(?:\$|USD|EUR|GBP|CHF|CAD)\s*([\d,]+\.\d{2})\b", re.IGNORECASE),
     ]
 
+    # Patterns for numbers that are NOT monetary amounts (storage sizes, seat counts, etc.)
+    _SKIP_AMOUNT_RE = re.compile(
+        r'\b\d+\s*(?:GB|MB|TB|KB|GHz|MHz)\b'       # storage/speed units
+        r'|\b\d+\s*(?:users?|seats?|licenses?)\b'   # seat counts
+        r'|\b\d+\s*(?:months?|years?|days?)\b',     # time periods
+        re.IGNORECASE,
+    )
+
+    def _line_has_only_unit_amount(line, match_val):
+        """Return True if the matched number on this line is actually a unit size, not a price."""
+        if _SKIP_AMOUNT_RE.search(line):
+            # Check if the skip-pattern number matches the extracted value
+            for um in re.finditer(r'(\d+)\s*(?:GB|MB|TB|KB|GHz|MHz|users?|seats?|licenses?|months?|years?|days?)\b', line, re.IGNORECASE):
+                try:
+                    if float(um.group(1)) == match_val:
+                        return True
+                except ValueError:
+                    pass
+        return False
+
     def _extract_amount_from_patterns(patterns, use_last=False):
         found = []
         for line in lines:
@@ -2190,7 +2231,7 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
                 for m in pat.finditer(line):
                     try:
                         val = float(m.group(1).replace(",", ""))
-                        if val > 0:
+                        if val > 0 and not _line_has_only_unit_amount(line, val):
                             found.append(val)
                     except ValueError:
                         pass
@@ -2214,7 +2255,8 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
                 if m:
                     try:
                         val = float(m.group(1).replace(",", ""))
-                        amounts_found.append(val)
+                        if not _line_has_only_unit_amount(line, val):
+                            amounts_found.append(val)
                     except ValueError:
                         pass
         if amounts_found:

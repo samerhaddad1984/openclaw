@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.engines.ocr_engine import parse_invoice_fields
+from src.engines.ocr_engine import parse_invoice_fields, classify_extraction_complexity
 
 
 class TestGSTNumberExtraction:
@@ -348,3 +348,25 @@ class TestRealExtractionRegression:
             parsed = parse_invoice_fields(text)
             assert parsed.get('document_date') == expected, \
                 f"REGRESSION: '{text}' -> {parsed.get('document_date')}, expected {expected}"
+
+
+class TestAmountVerification:
+    """Tests for amount verification and AI-always-called logic."""
+
+    def test_paypal_google_storage_not_amount(self):
+        """100 GB should not be picked up as an amount — $32.18 is the total."""
+        text = """Google -32.18
+    100 GB Google One
+    32.18
+    Total 32.18
+    Need help contact seller"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('amount') or 0)
+        assert amount == 32.18, f'Storage size 100GB wrongly used as amount, got {amount}'
+
+    def test_ai_always_called_for_verification(self):
+        """Even with vendor and amount found, AI should be called for verification."""
+        parsed = {'vendor_name': 'Google', 'amount': 100.0, 'confidence': 0.9, 'source': ''}
+        text = '100 GB Google One Total 32.18'
+        complexity = classify_extraction_complexity(text, parsed)
+        assert complexity is not None, 'AI should always be called for amount verification'

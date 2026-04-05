@@ -65,7 +65,7 @@ LOW      = "low"
 AMOUNT_ANOMALY_SIGMA          = 2.0    # standard deviations
 TIMING_ANOMALY_DAYS           = 14     # days from normal billing day
 MIN_HISTORY_FOR_ANOMALY       = 5      # P1-8: reduced from 10 — 5 transactions is enough for basic anomaly
-DUPLICATE_SAME_VENDOR_DAYS    = 30     # days window — same vendor duplicate
+DUPLICATE_SAME_VENDOR_DAYS    = 14     # days window — same vendor duplicate (30 was too wide, flagged monthly recurring)
 DUPLICATE_CROSS_VENDOR_DAYS   = 7      # days window — cross-vendor same amount
 WEEKEND_HOLIDAY_AMOUNT_LIMIT  = 200.0  # P2-3: $200 balances detection vs false positives
 ROUND_NUMBER_STDEV_RATIO      = 0.10   # irregular = std_dev > 10 % of mean
@@ -631,10 +631,12 @@ def _rule_duplicate(
 ) -> list[dict[str, Any]]:
     flags: list[dict[str, Any]] = []
 
-    window_start_30 = (doc_date - timedelta(days=DUPLICATE_SAME_VENDOR_DAYS)).isoformat()
-    window_start_7  = (doc_date - timedelta(days=DUPLICATE_CROSS_VENDOR_DAYS)).isoformat()
+    window_start_same = (doc_date - timedelta(days=DUPLICATE_SAME_VENDOR_DAYS)).isoformat()
+    window_end_same   = (doc_date + timedelta(days=DUPLICATE_SAME_VENDOR_DAYS)).isoformat()
+    window_start_cross = (doc_date - timedelta(days=DUPLICATE_CROSS_VENDOR_DAYS)).isoformat()
+    window_end_cross   = (doc_date + timedelta(days=DUPLICATE_CROSS_VENDOR_DAYS)).isoformat()
 
-    # Same vendor + same amount within 30 days
+    # Same vendor + same amount within window (both directions)
     rows = conn.execute(
         """
         SELECT document_id, vendor, document_date
@@ -643,10 +645,11 @@ def _rule_duplicate(
            AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
            AND ABS(COALESCE(amount, -1) - ?) < 0.005
            AND document_date >= ?
+           AND document_date <= ?
            AND document_id != ?
          LIMIT 5
         """,
-        (vendor, client_code, amount, window_start_30, document_id),
+        (vendor, client_code, amount, window_start_same, window_end_same, document_id),
     ).fetchall()
     for r in rows:
         days_diff = (doc_date - (_parse_date(r["document_date"]) or doc_date)).days
@@ -662,7 +665,7 @@ def _rule_duplicate(
             },
         })
 
-    # Same amount + different vendor within 7 days
+    # Same amount + different vendor within 7 days (both directions)
     cross_rows = conn.execute(
         """
         SELECT document_id, vendor, document_date
@@ -671,10 +674,11 @@ def _rule_duplicate(
            AND LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
            AND ABS(COALESCE(amount, -1) - ?) < 0.005
            AND document_date >= ?
+           AND document_date <= ?
            AND document_id != ?
          LIMIT 5
         """,
-        (vendor, client_code, amount, window_start_7, document_id),
+        (vendor, client_code, amount, window_start_cross, window_end_cross, document_id),
     ).fetchall()
     for r in cross_rows:
         days_diff = (doc_date - (_parse_date(r["document_date"]) or doc_date)).days
@@ -1565,10 +1569,19 @@ def run_fraud_detection(
                     flags.append(flag)
 
             # Rule 6: New vendor large amount (P1-7: cumulative check) — skip for known trusted vendors
+            # Also check cross-client history: vendor known to ANY client is not "new"
             if vendor and not is_trusted_vendor:
-                flag = _rule_new_vendor_large_amount(vendor, amount, history, doc_date)
-                if flag:
-                    flags.append(flag)
+                _cross_client_count = conn.execute(
+                    "SELECT COUNT(*) FROM documents "
+                    "WHERE LOWER(TRIM(COALESCE(vendor, ''))) = LOWER(TRIM(?)) "
+                    "AND document_id != ? "
+                    "AND review_status IN ('Posted', 'Ready to Post', 'Ready', 'Approved')",
+                    (vendor, document_id),
+                ).fetchone()[0]
+                if _cross_client_count < 3:
+                    flag = _rule_new_vendor_large_amount(vendor, amount, history, doc_date)
+                    if flag:
+                        flags.append(flag)
 
             # Rule 7: Bank account change
             if vendor and history:
