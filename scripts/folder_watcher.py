@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import sqlite3
 import sys
@@ -297,7 +298,32 @@ def process_one(
         _move_to_failed(file_path, inbox_folder)
         return
 
-    filename = file_path.name
+    # Strip accumulated monotonic_ns timestamps from filename
+    raw_name = file_path.name
+    stem, suffix = Path(raw_name).stem, Path(raw_name).suffix
+    clean_stem = re.sub(r'(_\d{15,})+', '', stem)
+    filename = f"{clean_stem}{suffix}" if clean_stem else raw_name
+
+    # ------------------------------------------------------------------
+    # Dedup guard — skip if a document with the same base filename
+    # already exists in the database (prevents re-processing on restart)
+    # ------------------------------------------------------------------
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            existing = conn.execute(
+                "SELECT document_id FROM documents WHERE file_name = ? LIMIT 1",
+                (filename,),
+            ).fetchone()
+            if existing:
+                logging.debug("folder_watcher: skipping %s — already in DB as %s", raw_name, existing[0])
+                conn.close()
+                _move_to_processed(file_path, inbox_folder)
+                return
+        finally:
+            conn.close()
+    except Exception:
+        pass
 
     # ------------------------------------------------------------------
     # Resolve client code — priority order:
@@ -439,10 +465,12 @@ class _FileDispatcher:
 
     def dispatch(self, file_path: Path) -> None:
         if not _is_supported(file_path):
+            logging.debug("folder_watcher: file skipped (unsupported): %s", file_path)
             return
         key = str(file_path.resolve())
         with self._lock:
             if key in self._seen:
+                logging.debug("folder_watcher: file skipped (already seen): %s", file_path)
                 return
             self._seen.add(key)
         thread = threading.Thread(
@@ -496,10 +524,12 @@ def _run_watcher(
         class _Bridge(_WDBase):
             def on_created(self, event: Any) -> None:  # type: ignore[override]
                 if not event.is_directory:
+                    logging.info("folder_watcher: file detected (watchdog): %s", event.src_path)
                     dispatcher.dispatch(Path(event.src_path))
 
             def on_moved(self, event: Any) -> None:  # type: ignore[override]
                 if not event.is_directory:
+                    logging.info("folder_watcher: file moved (watchdog): %s", event.dest_path)
                     dispatcher.dispatch(Path(event.dest_path))
 
         observer = Observer()
@@ -531,10 +561,14 @@ def _run_watcher(
         seen: set[str] = _poll_files(inbox_folder)
         while True:
             time.sleep(5)
+            logging.info("folder_watcher: polling %s", inbox_folder)
             try:
                 current = _poll_files(inbox_folder)
-                for new_str in current - seen:
-                    dispatcher.dispatch(Path(new_str))
+                new_files = current - seen
+                if new_files:
+                    for new_str in new_files:
+                        logging.info("folder_watcher: file detected (poll): %s", new_str)
+                        dispatcher.dispatch(Path(new_str))
                 seen = current
             except Exception as exc:
                 logging.error("folder_watcher: polling error: %s", exc)
@@ -568,6 +602,8 @@ def start_folder_watcher(
             logging.info("folder_watcher: inbox_folder not configured — watcher skipped")
             return None
         inbox_folder = Path(folder_str)
+        if not inbox_folder.is_absolute():
+            inbox_folder = ROOT_DIR / inbox_folder
 
     if default_client_code is None:
         default_client_code = fw_cfg.get("default_client_code", "") or cfg.get("default_client_code", "")

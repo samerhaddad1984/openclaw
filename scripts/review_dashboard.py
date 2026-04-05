@@ -13460,26 +13460,32 @@ def main() -> int:
     print(f"Login    : sam / admin123  (change this!)")
     print()
 
-    # Auto-start folder watcher as background daemon thread
-    def start_watcher_thread():
-        try:
-            import threading
-            from scripts.folder_watcher import start_folder_watcher
+    # Auto-start folder watcher with auto-restart on crash
+    def keep_watcher_alive():
+        import time as _time
+        import logging as _logging
+        from scripts.folder_watcher import start_folder_watcher
+        while True:
+            try:
+                watcher_thread = start_folder_watcher()
+                if watcher_thread is None:
+                    _logging.warning('Folder watcher: inbox_folder not configured — skipping')
+                    return
+                print('✅ Folder watcher started automatically')
+                # Monitor the watcher thread; restart if it dies
+                while watcher_thread.is_alive():
+                    _time.sleep(5)
+                _logging.error('Folder watcher thread died — restarting in 10s')
+                _time.sleep(10)
+            except Exception as e:
+                _logging.error(f'Folder watcher crashed: {e} — restarting in 10s')
+                _time.sleep(10)
 
-            def run_watcher():
-                try:
-                    start_folder_watcher()
-                except Exception as e:
-                    import logging
-                    logging.error(f'Folder watcher crashed: {e}')
-
-            t = threading.Thread(target=run_watcher, daemon=True, name='FolderWatcher')
-            t.start()
-            print('✅ Folder watcher started automatically')
-        except Exception as e:
-            print(f'⚠️ Folder watcher not started: {e}')
-
-    start_watcher_thread()
+    try:
+        import threading
+        threading.Thread(target=keep_watcher_alive, daemon=True, name='FolderWatcherSupervisor').start()
+    except Exception as e:
+        print(f'⚠️ Folder watcher not started: {e}')
 
     server = ThreadingHTTPServer((HOST, PORT), ReviewDashboardHandler)
     try:
