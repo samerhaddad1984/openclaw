@@ -412,3 +412,23 @@ class TestAmountVerification:
         result = parse_invoice_fields(text)
         amount = float(result.get('amount') or 0)
         assert amount == 32.18, f'REGRESSION: 100 GB wrongly used as amount. Got {amount}. Fix the extraction code.'
+
+    def test_strict_currency_context(self):
+        """Strict currency rule: numbers need currency context to be amounts."""
+        # PayPal Google receipt format
+        text = """Google
+        100 GB Google One
+        $32.18
+        Total $32.18
+        Amount due $32.18"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('amount') or 0)
+        assert amount == 32.18, f'Strict currency rule failed: got {amount}'
+
+        # Hydro-Quebec kWh should not be amount
+        text2 = """Hydro-Quebec
+        6601 kWh consumed
+        Montant de la présente facture 960,38"""
+        result2 = parse_invoice_fields(text2)
+        amount2 = float(result2.get('amount') or 0)
+        assert amount2 == 960.38, f'kWh wrongly used as amount: got {amount2}'

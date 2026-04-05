@@ -1933,6 +1933,16 @@ CORRECT: amount = 21.78 (the explicit Total after all credits)
 RULE: Numbers followed by GB/MB/TB/KB/seats/users/months are NEVER dollar amounts.
 RULE: Always use the number preceded by $ or labeled Total/Amount due.
 
+STRICT CURRENCY RULE:
+A number is ONLY a dollar amount when it has currency context:
+✅ VALID: '$32.18', 'CAD 32.18', 'Total 32.18', 'Amount due 32.18'
+❌ INVALID: '100 GB' (storage), '55 seats' (quantity), '12 months' (duration)
+❌ INVALID: '6601 kWh' (electricity units), '60 days' (time period)
+
+For this PayPal receipt:
+- '100 GB Google One' → 100 is storage size, NOT an amount
+- '$32.18' and 'Total $32.18' → 32.18 IS the amount
+
 TAX CODE DETERMINATION:
 1. Find GST/TPS number (format: 9 digits RT 4 digits, may have spaces) anywhere in document
 2. Find QST/TVQ number (format: 10 digits or NR + 8 digits) anywhere in document
@@ -2001,10 +2011,10 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
     # Get learning examples from approved documents
     examples = get_learning_examples(conn, client_code)
 
-    # Mark storage sizes so AI ignores them
+    # Tag non-currency numbers so AI ignores them
     text_for_ai = re.sub(
-        r'(\d+)\s*(GB|MB|TB|KB|GHz)',
-        r'[\1\2-NOT-A-PRICE]',
+        r'(\d+(?:\.\d+)?)\s*(GB|MB|TB|KB|GHz|kWh|users?|seats?|months?)',
+        r'[\1\2-NOT-MONEY]',
         raw_text,
         flags=re.IGNORECASE
     )
@@ -2132,6 +2142,16 @@ CORRECT: amount = 21.78 (the explicit Total after all credits)
 
 RULE: Numbers followed by GB/MB/TB/KB/seats/users/months are NEVER dollar amounts.
 RULE: Always use the number preceded by $ or labeled Total/Amount due.
+
+STRICT CURRENCY RULE:
+A number is ONLY a dollar amount when it has currency context:
+✅ VALID: '$32.18', 'CAD 32.18', 'Total 32.18', 'Amount due 32.18'
+❌ INVALID: '100 GB' (storage), '55 seats' (quantity), '12 months' (duration)
+❌ INVALID: '6601 kWh' (electricity units), '60 days' (time period)
+
+For this PayPal receipt:
+- '100 GB Google One' → 100 is storage size, NOT an amount
+- '$32.18' and 'Total $32.18' → 32.18 IS the amount
 
 EXAMPLES:
 Example 1 - Utility bill with overdue:
@@ -2380,6 +2400,66 @@ def _calculate_field_confidence(result: dict[str, Any]) -> float:
     return max(0.0, min(1.0, round(score, 4)))
 
 
+# ---------------------------------------------------------------------------
+# Strict currency-context amount extraction
+# ---------------------------------------------------------------------------
+CURRENCY_PRECEDED = re.compile(
+    r'(?:CAD|USD|EUR|GBP|\$|€|£)\s*([\d,\s]+\.?\d*)',
+    re.IGNORECASE
+)
+
+CURRENCY_LABELED = re.compile(
+    r'(?:total|amount\s+due|subtotal|balance\s+due|montant|solde|'
+    r'présente\s+facture|amount\s+paid|grand\s+total|invoice\s+total)'
+    r'[\s:]*(?:CAD|USD|\$)?\s*([\d,\s]+\.?\d+)',
+    re.IGNORECASE
+)
+
+NOT_CURRENCY = re.compile(
+    r'([\d,]+\.?\d*)\s*(?:GB|MB|TB|KB|GHz|MHz|kWh|km|kg|'
+    r'litres?|users?|seats?|licenses?|months?|days?|years?|'
+    r'items?|units?|pieces?)',
+    re.IGNORECASE
+)
+
+
+def _parse_currency_amount(raw: str) -> float | None:
+    """Parse amount string handling both English (1,234.56) and Quebec (1 234,56) formats."""
+    s = raw.strip()
+    if not s:
+        return None
+    # Quebec format: ends with ,DD and has no period → comma is decimal separator
+    if re.match(r'^[\d\s]+,\d{2}$', s):
+        s = s.replace(" ", "").replace(",", ".")
+    else:
+        s = s.replace(",", "").replace(" ", "")
+    try:
+        val = float(s)
+        return val if val > 0 else None
+    except (ValueError, OverflowError):
+        return None
+
+
+def extract_valid_amounts(text: str) -> list[float]:
+    """Return amounts that have currency context, excluding unit quantities."""
+    not_currency = set()
+    for m in NOT_CURRENCY.finditer(text):
+        not_currency.add(m.group(1).replace(',', '').replace(' ', ''))
+
+    candidates: list[float] = []
+    for pattern in [CURRENCY_LABELED, CURRENCY_PRECEDED]:
+        for m in pattern.finditer(text):
+            raw_str = m.group(1)
+            num_str_norm = raw_str.replace(',', '').replace(' ', '')
+            if num_str_norm in not_currency:
+                continue
+            val = _parse_currency_amount(raw_str)
+            if val is not None:
+                candidates.append(val)
+
+    return candidates
+
+
 def parse_invoice_fields(text: str) -> dict[str, Any]:
     """
     Parse structured invoice fields from extracted text without AI.
@@ -2549,8 +2629,15 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         return None
 
     extracted_amount = None
-    # Try priorities in order
-    extracted_amount = _extract_amount_from_patterns(_p0_patterns)
+
+    # Strict currency-context pre-check: only accept numbers with currency context
+    _strict_amounts = extract_valid_amounts(text)
+    if _strict_amounts:
+        extracted_amount = max(_strict_amounts)  # largest labeled amount (Total > Subtotal)
+
+    # Fall back to priority-based extraction if strict check found nothing
+    if extracted_amount is None:
+        extracted_amount = _extract_amount_from_patterns(_p0_patterns)
     if extracted_amount is None:
         extracted_amount = _extract_amount_from_patterns(_p1_patterns)
     if extracted_amount is None:
