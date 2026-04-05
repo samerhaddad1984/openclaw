@@ -1,7 +1,7 @@
 {
   "fx_rates": {
     "usd_cad_last_known": 1.3718,
-    "last_updated": "2026-04-05T03:56:46+00:00"
+    "last_updated": "2026-04-05T11:48:04+00:00"
   },
   "host": "0.0.0.0",
   "port": 8787,
@@ -14,7 +14,7 @@
   },
   "openrouter": {
     "enabled": true,
-    "api_key": "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",
+    "api_key": "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",
     "api_key_env": "OPENROUTER_API_KEY",
     "url": "https://openrouter.ai/api/v1/chat/completions"
   },
