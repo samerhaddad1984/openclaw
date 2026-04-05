@@ -30,6 +30,7 @@ import email
 import email.policy
 import io
 import json
+import logging
 import secrets
 import sqlite3
 import sys
@@ -1904,8 +1905,15 @@ def classify_extraction_complexity(text: str, parsed_result: dict[str, Any]) -> 
     if any(w in text_lower for w in french):
         return "medium"
 
+    # Vendor quality check — if vendor looks like a document ID, treat as missing
+    if vendor and re.search(
+        r'(?:invoice|receipt|facture|document|order)\s+(?:number|no|#)',
+        str(vendor), re.IGNORECASE,
+    ):
+        return "simple"
+
     # Low-medium confidence — simple AI assist
-    if confidence < 0.85:
+    if confidence <= 0.85:
         return "simple"
 
     # High confidence AND all fields present — no AI needed
@@ -1977,7 +1985,6 @@ def call_ai_for_extraction(
 
     except Exception as exc:
         # Never crash extraction — AI is optional layer
-        import logging
         logging.getLogger(__name__).warning("AI extraction failed: %s", exc)
         return {}
 
@@ -2111,12 +2118,25 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         'billing summary', 'invoice', 'receipt', 'statement',
         'facture', 'recu', 'releve', 'sommaire', 'summary',
         'tax invoice', 'credit note', 'purchase order',
+        'reçu', 'relevé',
     }
+    # Patterns that look like document IDs, metadata, or non-vendor content
+    _NOT_VENDOR_RE = re.compile(
+        r'^(?:invoice\s+(?:number|no|#|num))|'
+        r'^(?:receipt|facture|reçu|relevé)\s+(?:number|no|#|num)|'
+        r'^(?:document|doc|order)\s+(?:number|no|#|num|id)|'
+        r'^(?:ref(?:erence)?|confirmation)\s*(?:number|no|#|:)|'
+        r'^(?:date|amount|total|subtotal|tax|gst|qst|hst|service\s+period|billing\s+period|period)\s*[:\s]|'
+        r'^\d{1,2}/\d{1,2}/\d{2,4}',  # date lines
+        re.IGNORECASE,
+    )
     for line in lines[:8]:
         line = line.strip()
         if not line or len(line) <= 2 or line.startswith("$"):
             continue
         if line.lower() in _SKIP_AS_VENDOR:
+            continue
+        if _NOT_VENDOR_RE.search(line):
             continue
         # Strip trailing document-type words (e.g. "Microsoft Canada Inc. Summary")
         vendor_line = re.sub(
