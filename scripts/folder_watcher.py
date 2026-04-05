@@ -599,9 +599,11 @@ def start_folder_watcher(
     if inbox_folder is None:
         folder_str = fw_cfg.get("inbox_folder", "") or cfg.get("inbox_folder", "")
         if not folder_str:
-            logging.info("folder_watcher: inbox_folder not configured — watcher skipped")
-            return None
-        inbox_folder = Path(folder_str)
+            # Fallback: use default inbox folder relative to project root
+            inbox_folder = ROOT_DIR / "inbox"
+            logging.warning("folder_watcher inbox_folder not in config — using default: %s", inbox_folder)
+        else:
+            inbox_folder = Path(folder_str)
         if not inbox_folder.is_absolute():
             inbox_folder = ROOT_DIR / inbox_folder
 

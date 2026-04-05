@@ -476,10 +476,13 @@ class TestStartupScan:
 # ---------------------------------------------------------------------------
 
 class TestStartFolderWatcher:
-    def test_returns_none_when_no_inbox_configured(self, tmp_path: Path):
-        with patch("scripts.folder_watcher._load_config", return_value={}):
+    def test_falls_back_to_default_inbox_when_not_configured(self, tmp_path: Path):
+        with patch("scripts.folder_watcher._load_config", return_value={}), \
+             patch("scripts.folder_watcher._run_watcher"):
             result = fw.start_folder_watcher()
-        assert result is None
+        # With resilient fallback, watcher should start using default inbox
+        assert result is not None
+        result.join(timeout=0.5)
 
     def test_creates_inbox_folder_if_missing(self, tmp_path: Path):
         inbox = tmp_path / "NewInbox"
