@@ -1133,7 +1133,7 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
         result["tax_code"] = "T"
     if not result.get("gl_account"):
         vendor_lower = vendor.lower()
-        if any(x in vendor_lower for x in ["openai", "microsoft", "google", "adobe", "software", "subscription"]):
+        if any(x in vendor_lower for x in ["openai", "microsoft", "google", "adobe", "software", "subscription", "fiverr", "upwork"]):
             result["gl_account"] = "5420"
             result["gl_account_name"] = "Logiciels et abonnements"
         elif any(x in vendor_lower for x in ["bell", "videotron", "rogers", "telus", "telecom"]):
@@ -1482,6 +1482,8 @@ def process_file(
         "vendor": vendor, "vendor_name": vendor, "amount": amount,
         "description": raw.get("description", ""),
         "gst_number": raw.get("gst_number", ""),
+        "gl_account": raw.get("gl_account", ""),
+        "tax_code": raw.get("tax_code", ""),
     }
     try:
         _enrich_conn = sqlite3.connect(str(db_path))

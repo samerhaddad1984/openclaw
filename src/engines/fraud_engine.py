@@ -131,6 +131,8 @@ KNOWN_REGISTERED_SOFTWARE_VENDORS = {
     "apple", "apple canada",
     "dropbox", "zoom", "zoom video",
     "companycam", "company cam",
+    # Freelance platforms & Google variants
+    "google one", "google llc", "fiverr", "upwork",
 }
 
 # ---------------------------------------------------------------------------
