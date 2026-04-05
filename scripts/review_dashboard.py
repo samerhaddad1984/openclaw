@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import hashlib
 import html
 import bcrypt

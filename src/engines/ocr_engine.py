@@ -31,6 +31,7 @@ import email.policy
 import io
 import json
 import logging
+import os
 import secrets
 import sqlite3
 import sys
@@ -42,6 +43,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -696,7 +703,7 @@ def call_vision_handwriting(image_bytes: bytes, mime_type: str) -> dict[str, Any
     """
     prov = _vision_provider()
     base_url = prov.get("base_url", "").rstrip("/")
-    api_key  = prov.get("api_key", "")
+    api_key  = os.environ.get("OPENROUTER_API_KEY", "").strip() or prov.get("api_key", "")
     model    = prov.get("model", "")
 
     if not base_url or not api_key or not model:
@@ -798,7 +805,7 @@ def call_vision(image_bytes: bytes, mime_type: str) -> dict[str, Any]:
     """
     prov = _vision_provider()
     base_url = prov.get("base_url", "").rstrip("/")
-    api_key  = prov.get("api_key", "")
+    api_key  = os.environ.get("OPENROUTER_API_KEY", "").strip() or prov.get("api_key", "")
     model    = prov.get("model", "")
 
     if not base_url or not api_key or not model:
@@ -1358,90 +1365,87 @@ def process_file(
             raw["currency_note"] = f"USD {amount:.2f} converted at {fx_rate} = CAD {cad_amount:.2f}"
             amount = cad_amount
 
-    # 4b. AI enrichment — classify complexity and call AI only if needed
-    # Use whatever text we have
+    # 4b. AI-PRIMARY extraction — AI first, regex fills gaps
     _text_for_ai = raw_ocr_text or _parsed_fields.get('raw_text', '') or ''
 
-    # Always classify — even if text is empty, missing fields should trigger AI
-    _complexity = classify_extraction_complexity(_text_for_ai, _parsed_fields)
+    if _text_for_ai:
+        try:
+            _ai_conn = sqlite3.connect(str(db_path))
+            _ai_conn.row_factory = sqlite3.Row
+            try:
+                _ai_primary = extract_with_ai_primary(
+                    _text_for_ai, doc_id, client_code or '', _ai_conn
+                )
+            finally:
+                _ai_conn.close()
 
-    if _complexity is not None:
-        _ai_fields = call_ai_for_extraction(raw_ocr_text, _complexity, document_id=doc_id)
+            # Apply AI-primary results
+            if _ai_primary.get('ai_used'):
+                # AI succeeded — use its results, regex already merged inside
+                if _ai_primary.get('vendor_name'):
+                    vendor = _ai_primary['vendor_name']
+                    raw['vendor_name'] = vendor
+                if _ai_primary.get('amount') is not None:
+                    amount = float(_ai_primary['amount'])
+                    raw['total'] = amount
+                    _parsed_fields['amount'] = amount
+                if _ai_primary.get('document_date'):
+                    document_date = _ai_primary['document_date']
+                    raw['document_date'] = document_date
+                if _ai_primary.get('currency'):
+                    currency = _ai_primary['currency']
+                    raw['currency'] = currency
+                if _ai_primary.get('invoice_number'):
+                    raw['invoice_number'] = _ai_primary['invoice_number']
+                if _ai_primary.get('gst_number'):
+                    raw['gst_number'] = _ai_primary['gst_number']
+                if _ai_primary.get('qst_number'):
+                    raw['qst_number'] = _ai_primary['qst_number']
+                if _ai_primary.get('gst_amount') is not None:
+                    raw['gst_amount'] = _ai_primary['gst_amount']
+                    _gst_amount = float(_ai_primary['gst_amount'])
+                if _ai_primary.get('qst_amount') is not None:
+                    raw['qst_amount'] = _ai_primary['qst_amount']
+                    _qst_amount = float(_ai_primary['qst_amount'])
+                if _ai_primary.get('gl_account'):
+                    raw['gl_account'] = _ai_primary['gl_account']
+                if _ai_primary.get('tax_code'):
+                    raw['tax_code'] = _ai_primary['tax_code']
+                if _ai_primary.get('category'):
+                    raw['category'] = _ai_primary['category']
+                if _ai_primary.get('document_type'):
+                    doc_type = _ai_primary['document_type']
+                    raw['doc_type'] = doc_type
+                if _ai_primary.get('is_proration') is not None:
+                    raw['is_proration'] = _ai_primary['is_proration']
 
-        if _ai_fields:
-            _ai_fields.pop("_ai_complexity", None)
-            _ai_fields.pop("_ai_model", None)
-            _ai_fields.pop("_ai_latency_ms", None)
-
-            # --- Amount verification: compare AI vs regex ---
-            _regex_amount = amount  # amount from regex (may be None)
-            _ai_amount = _ai_fields.get("amount")
-            if _ai_amount is not None and _regex_amount is not None:
-                try:
-                    _ai_amt_f = float(_ai_amount)
-                    _regex_amt_f = float(_regex_amount)
-                    if abs(_regex_amt_f - _ai_amt_f) / max(_regex_amt_f, 0.01) > 0.05:
-                        # More than 5% difference — trust AI
-                        amount = _ai_amt_f
-                        raw["total"] = _ai_amt_f
-                        raw["amount_source"] = "ai_corrected"
-                        _parsed_fields["amount"] = _ai_amt_f
-                        logging.getLogger(__name__).info(
-                            "AI corrected amount: regex=%.2f ai=%.2f doc=%s",
-                            _regex_amt_f, _ai_amt_f, doc_id,
-                        )
-                    # else: amounts agree, keep regex amount
-                except (ValueError, TypeError):
-                    pass
-            elif _ai_amount is not None:
-                # Regex had no amount — use AI
-                amount = float(_ai_amount)
-                raw["total"] = amount
-                _parsed_fields["amount"] = amount
-
-            # AI wins on non-amount fields — regex wins on fields AI left null
-            for field in ["vendor_name", "currency", "gst_number",
-                          "qst_number", "gst_amount", "qst_amount",
-                          "document_date", "invoice_number", "is_proration",
-                          "document_type"]:
-                if _ai_fields.get(field) is not None:
-                    _parsed_fields[field] = _ai_fields[field]
-                    if field == "vendor_name" and _ai_fields[field]:
-                        vendor = _ai_fields[field]
-                        raw["vendor_name"] = _ai_fields[field]
-                    elif field == "document_date" and _ai_fields[field]:
-                        document_date = _ai_fields[field]
-                        raw["document_date"] = _ai_fields[field]
-                    elif field == "gst_number":
-                        raw["gst_number"] = _ai_fields[field]
-                    elif field == "qst_number":
-                        raw["qst_number"] = _ai_fields[field]
-                    elif field == "gst_amount" and _ai_fields[field]:
-                        raw["gst_amount"] = _ai_fields[field]
-                        _gst_amount = float(_ai_fields[field])
-                    elif field == "qst_amount" and _ai_fields[field]:
-                        raw["qst_amount"] = _ai_fields[field]
-                        _qst_amount = float(_ai_fields[field])
-                    elif field == "invoice_number":
-                        raw["invoice_number"] = _ai_fields[field]
-                    elif field == "is_proration":
-                        raw["is_proration"] = _ai_fields[field]
-                    elif field == "document_type" and _ai_fields[field]:
-                        doc_type = _ai_fields[field]
-                        raw["doc_type"] = _ai_fields[field]
-
-            raw["ai_used"] = True
-            raw["ai_complexity"] = _complexity
-
-            # Boost confidence when AI confirms amount + vendor
-            if _ai_fields.get("amount") and _ai_fields.get("vendor_name"):
-                confidence = max(confidence, 0.90)
-        else:
-            raw["ai_used"] = False
-            raw["ai_complexity"] = _complexity
+                raw['ai_used'] = True
+                raw['ai_complexity'] = _ai_primary.get('ai_complexity')
+                raw['ai_model_used'] = _ai_primary.get('ai_model_used')
+                confidence = max(confidence, _ai_primary.get('confidence', 0.92))
+            else:
+                # AI failed — use regex fallback results from extract_with_ai_primary
+                if _ai_primary.get('vendor_name') and vendor is None:
+                    vendor = _ai_primary['vendor_name']
+                    raw['vendor_name'] = vendor
+                if _ai_primary.get('amount') is not None and amount is None:
+                    amount = float(_ai_primary['amount'])
+                    raw['total'] = amount
+                if _ai_primary.get('document_date') and document_date is None:
+                    document_date = _ai_primary['document_date']
+                    raw['document_date'] = document_date
+                if _ai_primary.get('invoice_number') and not raw.get('invoice_number'):
+                    raw['invoice_number'] = _ai_primary['invoice_number']
+                raw['ai_used'] = False
+                raw['ai_complexity'] = None
+                confidence = max(confidence, _ai_primary.get('confidence', 0.70))
+        except Exception:
+            # Complete failure — fall back to existing parsed fields
+            raw['ai_used'] = False
+            raw['ai_complexity'] = None
     else:
-        raw["ai_used"] = False
-        raw["ai_complexity"] = None
+        raw['ai_used'] = False
+        raw['ai_complexity'] = None
 
     # 4c. Regex fallback — use parse_invoice_fields results for any field still None
     if _parsed_fields:
@@ -1854,6 +1858,186 @@ def get_ai_cost_summary(
             conn.close()
     except Exception as exc:
         return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# AI-primary extraction — learning examples, smart prompt, primary extractor
+# ---------------------------------------------------------------------------
+
+def get_learning_examples(conn: sqlite3.Connection, client_code: str | None = None, limit: int = 5) -> str:
+    """Query the learning database for recent approved documents as AI prompt examples."""
+    try:
+        examples = conn.execute('''
+            SELECT vendor, amount, gl_account, tax_code, category,
+                   document_date, currency
+            FROM documents
+            WHERE review_status IN ('Posted', 'ReadyToPost')
+            AND vendor IS NOT NULL
+            AND vendor != ''
+            AND gl_account IS NOT NULL
+            AND amount > 0
+            ORDER BY updated_at DESC
+            LIMIT ?
+        ''', (limit,)).fetchall()
+
+        if not examples:
+            return ''
+
+        lines = ['EXAMPLES FROM YOUR ACCOUNTING HISTORY:']
+        for ex in examples:
+            lines.append(
+                f'- {ex[0]}: amount={ex[1]}, GL={ex[2]}, '
+                f'tax={ex[3]}, category={ex[4]}'
+            )
+        return '\n'.join(lines)
+    except Exception:
+        return ''
+
+
+SMART_EXTRACTION_PROMPT = """You are an expert Quebec CPA accountant.
+Extract invoice fields from the text below.
+
+VENDOR RULES:
+- Vendor = the company sending the invoice (top of document)
+- NEVER use tariff codes (DEF, GD, BT, MT) as vendor name
+- NEVER use document headers (Invoice, Receipt, Statement, Summary) as vendor
+- For Hydro-Québec bills: vendor = "Hydro-Québec"
+- For Bell/Videotron/Rogers: use full company name
+- If vendor unclear use the most prominent company name
+
+AMOUNT RULES:
+- Use the FINAL amount the customer must pay NOW
+- For Quebec utility bills: use "Montant de la présente facture" NOT "Montant dû immédiatement"
+- For proration invoices: use explicit Total/Subtotal, NEVER sum lines
+- NEVER use storage sizes (100 GB, 50 MB) as amounts
+- NEVER use quantities (100 users, 12 months) as amounts
+- Amount must be a number preceded by $ or CAD or USD
+
+TAX RULES:
+- Find GST/TPS number anywhere: format 999999999RT9999
+- Find QST/TVQ number anywhere: format 9999999999 or NR99999999
+- If GST number found: tax_code = T (recoverable)
+- If foreign vendor no Canadian GST: tax_code = E (exempt)
+- Quebec meals/entertainment: tax_code = M (50% restriction)
+
+GL ACCOUNT RULES (Quebec chart of accounts):
+- Telecommunications (Bell, Videotron, Rogers, Telus): GL 5400
+- Utilities (Hydro, Gaz, Electricite): GL 5410
+- Software/SaaS (Microsoft, Google, Adobe, OpenAI): GL 5420
+- Office supplies: GL 5430
+- General expenses: GL 5440
+- Insurance: GL 5450
+- Meals/restaurants (50% deductible): GL 5640
+- Travel/transport: GL 5650
+- Bank charges: GL 5500
+
+{learning_examples}
+
+Return ONLY this JSON, no explanation, no markdown:
+{{
+  "vendor_name": "exact company name",
+  "amount": number,
+  "currency": "CAD" or "USD" or "EUR",
+  "document_date": "YYYY-MM-DD",
+  "invoice_number": "string or null",
+  "gst_number": "string or null",
+  "qst_number": "string or null",
+  "gst_amount": number or null,
+  "qst_amount": number or null,
+  "gl_account": "4 digit GL code",
+  "tax_code": "T" or "E" or "M" or "Z",
+  "category": "operating_expense" or "utilities" or "telecom" or "software" or "meals" or "travel",
+  "document_type": "invoice" or "credit_card_statement" or "bank_statement" or "receipt",
+  "is_proration": true or false
+}}
+
+INVOICE TEXT:
+{text}"""
+
+
+def _classify_complexity_for_model(text: str) -> str:
+    """Choose AI model based on document complexity."""
+    text_lower = text.lower()
+
+    # Proration needs reasoning
+    if any(w in text_lower for w in ['remaining time', 'unused time', 'proration']):
+        return 'complex'
+
+    # Foreign currency needs conversion
+    if 'USD' in text or 'EUR' in text:
+        return 'medium'
+
+    # Default: simple cheap model
+    return 'simple'
+
+
+def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
+                            conn: sqlite3.Connection) -> dict[str, Any]:
+    """AI is primary extractor. Regex is fallback only."""
+
+    # Get learning examples from approved documents
+    examples = get_learning_examples(conn, client_code)
+
+    # Build prompt with examples
+    prompt = SMART_EXTRACTION_PROMPT.format(
+        learning_examples=examples,
+        text=raw_text[:4000]
+    )
+
+    # Call AI - always, for every document
+    ai_result: dict[str, Any] = {}
+    try:
+        from src.agents.core import ai_router
+
+        # Classify complexity for model selection
+        complexity = _classify_complexity_for_model(raw_text)
+
+        task_type = f'invoice_extraction_{complexity}'
+
+        response = ai_router.call(
+            task_type=task_type,
+            prompt=prompt,
+            document_id=doc_id,
+        )
+
+        if response and response.get('result'):
+            result_text = response['result']
+            # Clean markdown code blocks
+            result_text = re.sub(r'```json\s*', '', result_text)
+            result_text = re.sub(r'```\s*', '', result_text)
+            match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if match:
+                ai_result = json.loads(match.group())
+                ai_result['ai_used'] = True
+                ai_result['ai_complexity'] = complexity
+                ai_result['ai_model_used'] = response.get('provider', '')
+    except Exception as e:
+        logging.getLogger(__name__).warning('AI primary extraction failed for %s: %s', doc_id, e)
+
+    # Regex fallback for any fields AI missed
+    regex_result = parse_invoice_fields(raw_text)
+
+    # Merge: AI wins, regex fills gaps
+    final: dict[str, Any] = {}
+    for field in ['vendor_name', 'amount', 'currency', 'document_date',
+                  'invoice_number', 'gst_number', 'qst_number',
+                  'gst_amount', 'qst_amount', 'gl_account', 'tax_code',
+                  'category', 'document_type', 'is_proration']:
+        # AI result takes priority
+        if ai_result.get(field) is not None:
+            final[field] = ai_result[field]
+        # Regex fills what AI missed — map regex 'vendor' to 'vendor_name'
+        elif field == 'vendor_name' and regex_result.get('vendor') is not None:
+            final[field] = regex_result['vendor']
+        elif regex_result.get(field) is not None:
+            final[field] = regex_result[field]
+
+    final['ai_used'] = bool(ai_result)
+    final['ai_complexity'] = ai_result.get('ai_complexity')
+    final['ai_model_used'] = ai_result.get('ai_model_used')
+    final['confidence'] = 0.92 if ai_result else 0.70
+
+    return final
 
 
 # ---------------------------------------------------------------------------
@@ -2673,7 +2857,7 @@ def _call_openrouter_for_extraction(
     cfg = _load_config()
     prov = cfg.get("ai_router", {}).get("premium_provider", {})
     base_url = prov.get("base_url", "").rstrip("/")
-    api_key = prov.get("api_key", "")
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip() or prov.get("api_key", "")
 
     if not base_url or not api_key:
         raise RuntimeError("ai_provider_not_configured")

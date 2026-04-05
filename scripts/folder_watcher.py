@@ -21,6 +21,12 @@ Supported formats (detected by magic bytes, same as ocr_engine):
 """
 from __future__ import annotations
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import json
 import logging
 import re

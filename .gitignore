@@ -160,9 +160,14 @@ __pycache__/
 *.pyc
 .hypothesis/
 
-# Environment
+# Environment & secrets - NEVER commit these
 .env
+.env.local
+.env.production
 *.env
+secrets.json
+*.key
+api_keys.txt
 
 # OS
 Thumbs.db
