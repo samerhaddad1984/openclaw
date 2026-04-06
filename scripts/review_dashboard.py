@@ -9363,6 +9363,13 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             Path(file_path).resolve(strict=True)
             _file_exists = True
         except (OSError, RuntimeError):
+            # Try relative to ROOT_DIR
+            try:
+                (ROOT_DIR / file_path).resolve(strict=True)
+                _file_exists = True
+            except (OSError, RuntimeError):
+                pass
+        if not _file_exists:
             _fname = Path(file_path).name
             for _candidate in (
                 ROOT_DIR / "tests" / "documents_real" / _fname,
@@ -9375,6 +9382,14 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                     break
                 except (OSError, RuntimeError):
                     continue
+        if not _file_exists:
+            _fname = Path(file_path).name
+            _uploads = ROOT_DIR / "data" / "ocr_uploads"
+            if _uploads.is_dir():
+                for _match in _uploads.rglob(_fname):
+                    if _match.exists():
+                        _file_exists = True
+                        break
         if not _file_exists:
             pdf_viewer_html = (
                 f'<div class="card"><h3>{preview_title}</h3>'
@@ -9390,7 +9405,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             pdf_viewer_html = f"""<div class="card"><h3>{preview_title}</h3>
                 <iframe src="{pdf_url}" style="width:100%;height:800px;border:1px solid #e5e7eb;border-radius:8px;" title="{preview_title}"></iframe>
             </div>"""
-        elif suffix in {".png", ".jpg", ".jpeg"}:
+        elif suffix in {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".heic", ".webp"}:
             pdf_viewer_html = f"""<div class="card"><h3>{preview_title}</h3>
                 <img src="{pdf_url}" style="max-width:100%;border:1px solid #e5e7eb;border-radius:8px;" alt="Document image">
             </div>"""
@@ -9508,7 +9523,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
         _suffix = Path(file_path).suffix.lower() if file_path else ""
         if _suffix == ".pdf":
             _hw_preview = f'<iframe src="{_hw_pdf_url}" style="width:100%;height:600px;border:1px solid #e5e7eb;border-radius:8px;"></iframe>'
-        elif _suffix in {".png", ".jpg", ".jpeg"}:
+        elif _suffix in {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".heic", ".webp"}:
             _hw_preview = f'<img src="{_hw_pdf_url}" style="max-width:100%;border:1px solid #e5e7eb;border-radius:8px;">'
         else:
             _hw_preview = '<p class="muted">Preview not available</p>'
@@ -10260,6 +10275,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         # Fallback: if absolute path doesn't exist, try to find the file
         # relative to ROOT_DIR (handles DB paths from a different machine)
         if resolved is None:
+            # Try relative to ROOT_DIR first (handles relative DB paths)
+            _rel = ROOT_DIR / file_path
+            try:
+                resolved = _rel.resolve(strict=True)
+            except (OSError, RuntimeError):
+                pass
+        if resolved is None:
             _fname = Path(file_path).name
             # Try common relative locations
             for _candidate in (
@@ -10273,6 +10295,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 except (OSError, RuntimeError):
                     continue
         if resolved is None:
+            # Search in ocr_uploads by filename
+            _fname = Path(file_path).name
+            _uploads = ROOT_DIR / "data" / "ocr_uploads"
+            if _uploads.is_dir():
+                for _match in _uploads.rglob(_fname):
+                    try:
+                        resolved = _match.resolve(strict=True)
+                        break
+                    except (OSError, RuntimeError):
+                        continue
+        if resolved is None:
             _pdf_error(
                 "Document de test / Test document",
                 "<p>Document de test — aucun fichier PDF disponible / Test document — no PDF file available</p>"
@@ -10283,11 +10316,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             )
             return
         suffix = resolved.suffix.lower()
-        if suffix == ".pdf":
-            content_type = "application/pdf"
-        elif suffix in {".png", ".jpg", ".jpeg"}:
-            content_type = f"image/{'jpeg' if suffix in {'.jpg', '.jpeg'} else 'png'}"
-        else:
+        _CONTENT_TYPES = {
+            ".pdf": "application/pdf",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".tiff": "image/tiff",
+            ".tif": "image/tiff",
+            ".heic": "image/heic",
+            ".webp": "image/webp",
+        }
+        content_type = _CONTENT_TYPES.get(suffix)
+        if not content_type:
             self._send_html(page_layout("Unsupported", '<div class="card"><h2>Preview not supported for this file type</h2></div>', user=user), status=415)
             return
         data = resolved.read_bytes()
