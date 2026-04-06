@@ -920,12 +920,23 @@ def get_next_action(row: sqlite3.Row, ctx: dict[str, Any]) -> str:
 
 
 def get_status_counts(ctx: dict[str, Any]) -> dict[str, int]:
-    rows = get_documents(ctx=ctx, include_ignored=True, limit=5000)
+    where_sql, params = _build_documents_where(
+        ctx=ctx, include_ignored=True,
+    )
+    if where_sql == "WHERE 1=0":
+        return {"Needs Review": 0, "On Hold": 0, "Ready to Post": 0, "Posted": 0, "Ignored": 0}
+    sql = f"""
+        SELECT ({_ACCOUNTING_STATUS_CASE_SQL}) AS acct_status, COUNT(*) AS cnt
+        {_DOCUMENTS_FROM_SQL}
+        {where_sql}
+        GROUP BY acct_status
+    """
     counts = {"Needs Review": 0, "On Hold": 0, "Ready to Post": 0, "Posted": 0, "Ignored": 0}
-    for row in rows:
-        s = get_accounting_status(row)
-        if s in counts:
-            counts[s] += 1
+    with open_db() as conn:
+        for row in conn.execute(sql, tuple(params)).fetchall():
+            s = row[0]
+            if s in counts:
+                counts[s] = row[1]
     return counts
 
 
@@ -933,7 +944,20 @@ def get_status_counts(ctx: dict[str, Any]) -> dict[str, int]:
 # DB queries
 # ---------------------------------------------------------------------------
 
-def get_documents(
+_ACCOUNTING_STATUS_CASE_SQL = """
+    CASE
+        WHEN TRIM(COALESCE(d.review_status, '')) = 'Ignored' THEN 'Ignored'
+        WHEN TRIM(COALESCE(pj.external_id, '')) != '' OR TRIM(COALESCE(pj.posting_status, '')) = 'posted' THEN 'Posted'
+        WHEN TRIM(COALESCE(d.manual_hold_reason, '')) != '' OR TRIM(COALESCE(pj.approval_state, '')) = 'pending_human_approval' THEN 'On Hold'
+        WHEN TRIM(COALESCE(pj.posting_status, '')) = 'ready_to_post' OR TRIM(COALESCE(pj.approval_state, '')) = 'approved_for_posting' THEN 'Ready to Post'
+        WHEN TRIM(COALESCE(d.review_status, '')) IN ('NeedsReview', 'Exception') THEN 'Needs Review'
+        WHEN TRIM(COALESCE(d.review_status, '')) = 'Ready' THEN 'Ready'
+        ELSE COALESCE(NULLIF(TRIM(COALESCE(d.review_status, '')), ''), 'New')
+    END
+"""
+
+
+def _build_documents_where(
     *,
     ctx: dict[str, Any],
     status: str = "",
@@ -941,8 +965,8 @@ def get_documents(
     include_ignored: bool = False,
     only_my_queue: bool = False,
     only_unassigned: bool = False,
-    limit: int = 500,
-) -> list[dict]:
+) -> tuple[str, list[Any]]:
+    """Build the shared WHERE clause for document queries."""
     where: list[str] = []
     params: list[Any] = []
 
@@ -957,7 +981,7 @@ def get_documents(
     if not ctx["can_view_all_clients"]:
         allowed = ctx.get("allowed_clients", [])
         if not allowed:
-            return []
+            return "WHERE 1=0", []
         placeholders = ",".join("?" for _ in allowed)
         where.append(f"COALESCE(d.client_code, '') IN ({placeholders})")
         params.extend(allowed)
@@ -971,7 +995,67 @@ def get_documents(
         where.append("(COALESCE(da.assigned_to, d.assigned_to, '') = '' OR COALESCE(da.assigned_to, d.assigned_to, '') = ?)")
         params.append(ctx["username"])
 
+    wanted = normalize_key(status)
+    if wanted:
+        where.append(f"({_ACCOUNTING_STATUS_CASE_SQL}) = ?")
+        params.append(status)
+
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+_DOCUMENTS_FROM_SQL = """
+    FROM documents d
+    LEFT JOIN document_assignments da ON da.document_id = d.document_id
+    LEFT JOIN posting_jobs pj ON pj.document_id = d.document_id
+        AND pj.rowid = (
+            SELECT pj2.rowid FROM posting_jobs pj2
+            WHERE pj2.document_id = d.document_id
+            ORDER BY COALESCE(pj2.updated_at, pj2.created_at) DESC, pj2.rowid DESC LIMIT 1
+        )
+"""
+
+
+def count_documents(
+    *,
+    ctx: dict[str, Any],
+    status: str = "",
+    q: str = "",
+    include_ignored: bool = False,
+    only_my_queue: bool = False,
+    only_unassigned: bool = False,
+) -> int:
+    where_sql, params = _build_documents_where(
+        ctx=ctx, status=status, q=q, include_ignored=include_ignored,
+        only_my_queue=only_my_queue, only_unassigned=only_unassigned,
+    )
+    if where_sql == "WHERE 1=0":
+        return 0
+    sql = f"SELECT COUNT(*) {_DOCUMENTS_FROM_SQL} {where_sql}"
+    with open_db() as conn:
+        return conn.execute(sql, tuple(params)).fetchone()[0]
+
+
+def get_documents(
+    *,
+    ctx: dict[str, Any],
+    status: str = "",
+    q: str = "",
+    include_ignored: bool = False,
+    only_my_queue: bool = False,
+    only_unassigned: bool = False,
+    limit: int = 500,
+    per_page: int | None = None,
+    offset: int = 0,
+) -> list[dict]:
+    where_sql, params = _build_documents_where(
+        ctx=ctx, status=status, q=q, include_ignored=include_ignored,
+        only_my_queue=only_my_queue, only_unassigned=only_unassigned,
+    )
+    if where_sql == "WHERE 1=0":
+        return []
+
+    effective_limit = per_page if per_page is not None else limit
     sql = f"""
         SELECT
             d.document_id, d.file_name, d.file_path, d.client_code, d.vendor,
@@ -987,27 +1071,16 @@ def get_documents(
             pj.reviewer AS posting_reviewer, pj.external_id,
             pj.payload_json AS posting_payload_json,
             pj.error_text AS posting_error_text
-        FROM documents d
-        LEFT JOIN document_assignments da ON da.document_id = d.document_id
-        LEFT JOIN posting_jobs pj ON pj.document_id = d.document_id
-            AND pj.rowid = (
-                SELECT pj2.rowid FROM posting_jobs pj2
-                WHERE pj2.document_id = d.document_id
-                ORDER BY COALESCE(pj2.updated_at, pj2.created_at) DESC, pj2.rowid DESC LIMIT 1
-            )
+        {_DOCUMENTS_FROM_SQL}
         {where_sql}
         ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.file_name ASC
-        LIMIT ?
+        LIMIT ? OFFSET ?
     """
-    params.append(limit)
+    params.append(effective_limit)
+    params.append(offset)
 
     with open_db() as conn:
-        rows = [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
-
-    wanted = normalize_key(status)
-    if not wanted:
-        return rows
-    return [r for r in rows if normalize_key(get_accounting_status(r)) == wanted]
+        return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
 
 
 def _infer_entry_kind(doc_row) -> str:
@@ -8136,16 +8209,18 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 flash: str, flash_error: str, include_ignored: bool,
                 only_my_queue: bool, only_unassigned: bool, lang: str = "fr",
                 page: int = 1, per_page: int = 50) -> str:
-    rows = get_documents(ctx=ctx, status=status, q=q, include_ignored=include_ignored,
-                         only_my_queue=only_my_queue, only_unassigned=only_unassigned)
-    counts = get_status_counts(ctx)
-
-    # Pagination
-    total_rows = len(rows)
+    # SQL-level pagination — fetch only the rows needed for this page
+    total_rows = count_documents(ctx=ctx, status=status, q=q,
+                                 include_ignored=include_ignored,
+                                 only_my_queue=only_my_queue,
+                                 only_unassigned=only_unassigned)
     total_pages = max(1, (total_rows + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
-    start_idx = (page - 1) * per_page
-    rows = rows[start_idx:start_idx + per_page]
+    offset = (page - 1) * per_page
+    rows = get_documents(ctx=ctx, status=status, q=q, include_ignored=include_ignored,
+                         only_my_queue=only_my_queue, only_unassigned=only_unassigned,
+                         per_page=per_page, offset=offset)
+    counts = get_status_counts(ctx)
 
     portfolio_btn = (
         f'<a class="button-link btn-dark" href="/portfolios">{esc(t("btn_manage_portfolios", lang))}</a>'
@@ -8239,11 +8314,26 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 <option value="">-- S\u00e9lectionner client / Select client --</option>
                 {_upload_client_options}
             </select>
-            <button type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;width:100%;">
+            <button id="upload-btn" type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;width:100%;">
                 \u2705 T\u00e9l\u00e9verser / Upload
             </button>
+            <div id="upload-spinner" style="display:none;text-align:center;padding:16px;color:#aaa;">
+                \u23f3 Traitement en cours... / Processing...
+            </div>
         </form>
     </div>
+    <script>
+    (function() {{
+        var uploadForm = document.querySelector('form[action="/upload"]');
+        if (!uploadForm) return;
+        uploadForm.addEventListener('submit', function() {{
+            var btn = document.getElementById('upload-btn');
+            var spinner = document.getElementById('upload-spinner');
+            if (btn) {{ btn.disabled = true; btn.innerText = 'T\u00e9l\u00e9versement... / Uploading...'; }}
+            if (spinner) {{ spinner.style.display = 'block'; }}
+        }});
+    }})();
+    </script>
     <script>
     (function() {{
         var dz = document.getElementById('drop-zone');
@@ -11546,7 +11636,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 from src.engines.ocr_engine import process_file  # noqa: PLC0415
                 ok_count = 0
                 fail_count = 0
+                skip_count = 0
                 for fname, fbytes in files:
+                    # Duplicate guard: skip if same filename uploaded within last 60s
+                    try:
+                        with open_db() as _dup_conn:
+                            _dup_existing = _dup_conn.execute(
+                                "SELECT document_id FROM documents "
+                                "WHERE file_name = ? AND created_at > datetime('now', '-60 seconds')",
+                                (fname,),
+                            ).fetchone()
+                        if _dup_existing:
+                            skip_count += 1
+                            continue
+                    except Exception:
+                        pass
                     try:
                         result = process_file(
                             fbytes,
@@ -11577,6 +11681,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 msg = f"{ok_count} document(s) uploaded"
                 if fail_count:
                     msg += f", {fail_count} failed"
+                if skip_count:
+                    msg += f" — {skip_count} déjà téléversé(s) / already uploaded"
                 self._flash_redirect("/", flash=msg)
                 return
 
