@@ -2204,29 +2204,33 @@ def render_health_page(ctx: dict[str, Any], user: dict[str, Any],
         except Exception:
             watcher_status = "unavailable"
 
-        # DB stats
-        total_docs = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-        needs_review = conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE review_status='NeedsReview'"
-        ).fetchone()[0]
-        posted = conn.execute(
-            "SELECT COUNT(*) FROM documents WHERE review_status='Posted'"
-        ).fetchone()[0]
+        # DB stats — use cursor with no row_factory for COUNT queries
+        def _count(sql: str) -> int:
+            cur = conn.cursor()
+            cur.row_factory = None
+            cur.execute(sql)
+            row = cur.fetchone()
+            return row[0] if row else 0
+
+        total_docs = _count("SELECT COUNT(*) FROM documents")
+        needs_review = _count("SELECT COUNT(*) FROM documents WHERE review_status='NeedsReview'")
+        posted = _count("SELECT COUNT(*) FROM documents WHERE review_status='Posted'")
 
         # Last processed
-        last_doc = conn.execute(
-            "SELECT file_name, created_at FROM documents ORDER BY created_at DESC LIMIT 1"
-        ).fetchone()
-        last_name = last_doc[0] if last_doc else "None"
+        last_cur = conn.cursor()
+        last_cur.row_factory = None
+        last_cur.execute("SELECT file_name, created_at FROM documents ORDER BY created_at DESC LIMIT 1")
+        last_row = last_cur.fetchone()
+        last_name = last_row[0] if last_row else "None"
 
         # AI usage stats
-        ai_used = conn.execute("SELECT COUNT(*) FROM documents WHERE ai_used=1").fetchone()[0]
+        ai_used = _count("SELECT COUNT(*) FROM documents WHERE ai_used=1")
         ai_pct = round(ai_used * 100 / max(total_docs, 1))
 
         # Last 24h
-        last_24h = conn.execute(
+        last_24h = _count(
             "SELECT COUNT(*) FROM documents WHERE created_at > datetime('now', '-24 hours')"
-        ).fetchone()[0]
+        )
     finally:
         conn.close()
 
@@ -9383,14 +9387,6 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 except (OSError, RuntimeError):
                     continue
         if not _file_exists:
-            _fname = Path(file_path).name
-            _uploads = ROOT_DIR / "data" / "ocr_uploads"
-            if _uploads.is_dir():
-                for _match in _uploads.rglob(_fname):
-                    if _match.exists():
-                        _file_exists = True
-                        break
-        if not _file_exists:
             pdf_viewer_html = (
                 f'<div class="card"><h3>{preview_title}</h3>'
                 '<div style="border:2px solid #3b82f6;border-radius:8px;padding:20px 24px;background:#eff6ff;">'
@@ -10294,17 +10290,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     break
                 except (OSError, RuntimeError):
                     continue
-        if resolved is None:
-            # Search in ocr_uploads by filename
-            _fname = Path(file_path).name
-            _uploads = ROOT_DIR / "data" / "ocr_uploads"
-            if _uploads.is_dir():
-                for _match in _uploads.rglob(_fname):
-                    try:
-                        resolved = _match.resolve(strict=True)
-                        break
-                    except (OSError, RuntimeError):
-                        continue
         if resolved is None:
             _pdf_error(
                 "Document de test / Test document",
