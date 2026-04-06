@@ -840,3 +840,18 @@ Total $100.00"""
         assert amount == 960.38, f"Should use présente facture 960.38 not {amount}"
         vendor = result.get("vendor_name") or result.get("vendor") or ""
         assert "hydro" in vendor.lower(), f"Vendor wrong: {vendor}"
+
+
+def test_quebec_comma_decimal_amounts():
+    """Verify Quebec comma-decimal format (126,62 → 126.62) is parsed correctly."""
+    from src.engines.ocr_engine import parse_invoice_fields
+
+    text = """Walmart
+    SOUS-TOTAL 122,28
+    TPS 1,45
+    TVQ 2,89
+    TOTAL 126,62"""
+
+    result = parse_invoice_fields(text)
+    amount = float(result.get('amount') or 0)
+    assert amount == 126.62, f'Expected 126.62 got {amount}'

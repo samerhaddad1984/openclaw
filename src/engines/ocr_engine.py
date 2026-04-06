@@ -2983,14 +2983,20 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
 
     def _parse_amount_string(raw: str) -> float:
         """Parse amount string handling both English (1,234.56) and Quebec (1 234,56) formats."""
-        s = raw.strip()
-        # Quebec format: comma as decimal separator (e.g. "960,38" or "3 854,43")
-        # Detect: ends with ,DD and has no period
-        if re.match(r'^[\d\s]+,\d{2}$', s):
-            s = s.replace(" ", "").replace(",", ".")
-        else:
-            s = s.replace(",", "").replace(" ", "")
-        return float(s)
+        if not raw:
+            return 0.0
+        s = raw.strip().replace(' ', '')
+        # Quebec format: 1 234,56 or 56,70 — comma as decimal separator
+        if ',' in s and '.' not in s:
+            parts = s.split(',')
+            if len(parts) == 2 and len(parts[1]) == 2:
+                # comma is decimal separator
+                return float(s.replace(',', '.'))
+            else:
+                # comma is thousands separator
+                return float(s.replace(',', ''))
+        # English format: 1,234.56 — comma is thousands separator
+        return float(s.replace(',', ''))
 
     def _extract_amount_from_patterns(patterns, use_last=False):
         found = []
