@@ -2192,18 +2192,20 @@ def render_health_page(ctx: dict[str, Any], user: dict[str, Any],
             load_dotenv()
         except ImportError:
             pass
-        try:
-            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            api_key = (
-                os.environ.get('OPENROUTER_API_KEY')
-                or cfg.get("ai_router", {}).get("routine_provider", {}).get("api_key")
-                or cfg.get("ai_router", {}).get("premium_provider", {}).get("api_key")
-                or cfg.get("openrouter", {}).get("api_key", "")
-            )
-            api_key_set = bool(api_key)
-            ai_status = "connected" if api_key_set else "no key"
-        except Exception:
-            ai_status = "error"
+        api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
+        if not api_key:
+            try:
+                cfg_path = Path(__file__).resolve().parent.parent / "otocpa.config.json"
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                api_key = (
+                    cfg.get("ai_router", {}).get("routine_provider", {}).get("api_key")
+                    or cfg.get("ai_router", {}).get("premium_provider", {}).get("api_key")
+                    or cfg.get("openrouter", {}).get("api_key", "")
+                )
+            except Exception:
+                pass
+        api_key_set = bool(api_key)
+        ai_status = "connected" if api_key_set else "no key"
 
         # Folder watcher — check thread by name
         watcher_status = "unknown"
@@ -10171,7 +10173,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         # Install date & wizard
         cfg = {}
         try:
-            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            cfg_path = Path(__file__).resolve().parent.parent / "otocpa.config.json"
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
         except Exception:
             pass
         install_date = cfg.get("install_date", _SERVICE_START.isoformat())
