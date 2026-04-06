@@ -1120,6 +1120,7 @@
   "flash_update_success":            "Mise à jour installée avec succès",
   "flash_update_failed":             "Échec de la mise à jour — vérifier les journaux",
 
+  "health_nav_link":                 "Santé",
   "remote_nav_link":                 "Gestion à distance",
   "remote_title":                    "Gestion à distance",
   "remote_system_status":            "État du système",

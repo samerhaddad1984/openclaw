@@ -524,13 +524,16 @@ def _extract_text_with_tesseract(file_bytes: bytes) -> str:
             except Exception:
                 pass
 
-        # Enhance contrast for receipt OCR
-        enhanced = cv2.equalizeHist(gray)
-        # Adaptive threshold for uneven lighting (phone flash)
-        binary = cv2.adaptiveThreshold(
-            enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 15, 8,
-        )
+        # Denoise for phone camera noise
+        denoised = cv2.fastNlMeansDenoising(gray, h=10)
+
+        # CLAHE contrast enhancement (better than equalizeHist for receipts)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(denoised)
+
+        # Otsu threshold — make text black on white background
+        _, binary = cv2.threshold(enhanced, 0, 255,
+                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         enhanced_img = Image.fromarray(binary)
     except ImportError:
         # cv2 not available — use PIL-only enhancement
@@ -1240,8 +1243,15 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
         result["category"] = "expense"
     if not result.get("tax_code"):
         result["tax_code"] = "T"
+
+    # Foreign vendors with no Canadian GST registration → tax_code = E
+    vendor_lower = vendor.lower()
+    if "fiverr" in vendor_lower:
+        result["tax_code"] = "E"
+        result["gl_account"] = "5420"
+        result["gl_account_name"] = "Logiciels et abonnements"
+
     if not result.get("gl_account"):
-        vendor_lower = vendor.lower()
         if any(x in vendor_lower for x in ["openai", "microsoft", "google", "adobe", "software", "subscription", "fiverr", "upwork"]):
             result["gl_account"] = "5420"
             result["gl_account_name"] = "Logiciels et abonnements"
@@ -2097,6 +2107,7 @@ TAX CODE DETERMINATION:
 4. If vendor is foreign with NO Canadian GST number → tax_code = E
 5. Check: 'GST: 77087 6209 RT0001' = Canadian GST registration = T
 6. Check: Israeli company no RT number = E
+- Fiverr International Ltd. (Israel) = E (no Canadian GST registration)
 - Quebec meals/entertainment: tax_code = M (50% restriction)
 
 GL ACCOUNT RULES (Quebec chart of accounts):

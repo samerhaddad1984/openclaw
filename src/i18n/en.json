@@ -1120,6 +1120,7 @@
   "flash_update_success":            "Update installed successfully",
   "flash_update_failed":             "Update failed — check logs",
 
+  "health_nav_link":                 "Health",
   "remote_nav_link":                 "Remote",
   "remote_title":                    "Remote Management",
   "remote_system_status":            "System Status",

@@ -391,6 +391,21 @@ class TestAmountVerification:
         assert result.get('tax_code') == 'E', \
             f"Fiverr has no GST, expected tax_code=E got {result.get('tax_code')}"
 
+    def test_fiverr_enrich_tax_code_E(self):
+        """Fiverr through enrich_extracted_fields must also get tax_code=E.
+        This test must NEVER be deleted. Fiverr is Israeli — no Canadian GST."""
+        import sqlite3
+        from src.engines.ocr_engine import enrich_extracted_fields
+        conn = sqlite3.connect('data/otocpa_agent.db')
+        conn.row_factory = sqlite3.Row
+        result = enrich_extracted_fields(
+            {'vendor_name': 'Fiverr International Ltd.', 'amount': 212.27},
+            'BOLDUC', conn
+        )
+        conn.close()
+        assert result.get('tax_code') == 'E', \
+            f"Fiverr should be E not {result.get('tax_code')}"
+
     def test_google_paypal_amount_not_storage(self):
         """Google PayPal receipt: amount must be $32.18 not 100 (storage size)."""
         text = """Google

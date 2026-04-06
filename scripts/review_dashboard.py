@@ -934,9 +934,9 @@ def get_status_counts(ctx: dict[str, Any]) -> dict[str, int]:
     counts = {"Needs Review": 0, "On Hold": 0, "Ready to Post": 0, "Posted": 0, "Ignored": 0}
     with open_db() as conn:
         for row in conn.execute(sql, tuple(params)).fetchall():
-            s = row[0]
+            s = row['acct_status']
             if s in counts:
-                counts[s] = row[1]
+                counts[s] = row['cnt']
     return counts
 
 
@@ -1031,9 +1031,10 @@ def count_documents(
     )
     if where_sql == "WHERE 1=0":
         return 0
-    sql = f"SELECT COUNT(*) {_DOCUMENTS_FROM_SQL} {where_sql}"
+    sql = f"SELECT COUNT(*) AS cnt {_DOCUMENTS_FROM_SQL} {where_sql}"
     with open_db() as conn:
-        return conn.execute(sql, tuple(params)).fetchone()[0]
+        row = conn.execute(sql, tuple(params)).fetchone()
+        return row['cnt'] if row else 0
 
 
 def get_documents(
@@ -2174,6 +2175,113 @@ def _render_cloudflare_tunnel_status(lang: str = "fr") -> str:
   <strong>{esc(t("cf_tunnel_requests_today", lang))}</strong>
   <span>{esc(requests_today)}</span>
 </div>"""
+
+
+def render_health_page(ctx: dict[str, Any], user: dict[str, Any],
+                       lang: str = "fr") -> str:
+    """Render an HTML system-health dashboard page."""
+    conn = open_db()
+    try:
+        # AI status
+        ai_status = "unknown"
+        api_key_set = False
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            api_key_set = bool(
+                cfg.get("ai_router", {}).get("routine_provider", {}).get("api_key")
+                or cfg.get("ai_router", {}).get("premium_provider", {}).get("api_key")
+            )
+            ai_status = "connected" if api_key_set else "no key"
+        except Exception:
+            ai_status = "error"
+
+        # Folder watcher
+        watcher_status = "unknown"
+        try:
+            from scripts.folder_watcher import get_watcher_status
+            ws = get_watcher_status()
+            watcher_status = "running" if ws.get("running") else "stopped"
+        except Exception:
+            watcher_status = "unavailable"
+
+        # DB stats
+        total_docs = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        needs_review = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE review_status='NeedsReview'"
+        ).fetchone()[0]
+        posted = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE review_status='Posted'"
+        ).fetchone()[0]
+
+        # Last processed
+        last_doc = conn.execute(
+            "SELECT file_name, created_at FROM documents ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        last_name = last_doc[0] if last_doc else "None"
+
+        # AI usage stats
+        ai_used = conn.execute("SELECT COUNT(*) FROM documents WHERE ai_used=1").fetchone()[0]
+        ai_pct = round(ai_used * 100 / max(total_docs, 1))
+
+        # Last 24h
+        last_24h = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE created_at > datetime('now', '-24 hours')"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    watcher_ok = watcher_status == "running"
+    ai_ok = ai_status == "connected"
+    db_path_str = str(DB_PATH)
+    _health_title = "System Health" if lang == "en" else "Sant\u00e9 du syst\u00e8me"
+    _ai_badge = "&#9989; Connected" if ai_ok else "&#10060; " + esc(ai_status)
+    _watcher_badge = "&#9989; Running" if watcher_ok else "&#10060; " + esc(watcher_status)
+    _key_badge = "&#9989; Set" if api_key_set else "&#10060; Missing"
+    _last_esc = esc(last_name)
+    _db_esc = esc(db_path_str)
+    _ver = _get_app_version()
+
+    body = f"""
+    <div style="padding:24px;max-width:800px;margin:0 auto;">
+        <h2 style="color:white;">&#127973; {esc(_health_title)}</h2>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+
+            <div style="background:#1a2e4a;border-radius:8px;padding:16px;">
+                <h3 style="color:#2ecc71;">&#129302; AI Status</h3>
+                <p style="color:white;">OpenRouter: {_ai_badge}</p>
+                <p style="color:#aaa;">AI used on {ai_pct}% of documents</p>
+            </div>
+
+            <div style="background:#1a2e4a;border-radius:8px;padding:16px;">
+                <h3 style="color:#2ecc71;">&#128065; Folder Watcher</h3>
+                <p style="color:white;">Status: {_watcher_badge}</p>
+                <p style="color:#aaa;">Watching: inbox/</p>
+            </div>
+
+            <div style="background:#1a2e4a;border-radius:8px;padding:16px;">
+                <h3 style="color:#2ecc71;">&#128202; Database</h3>
+                <p style="color:white;">Total documents: {total_docs}</p>
+                <p style="color:#aaa;">Needs review: {needs_review} | Posted: {posted}</p>
+            </div>
+
+            <div style="background:#1a2e4a;border-radius:8px;padding:16px;">
+                <h3 style="color:#2ecc71;">&#9201; Activity</h3>
+                <p style="color:white;">Last 24h: {last_24h} documents</p>
+                <p style="color:#aaa;">Last: {_last_esc}</p>
+            </div>
+
+        </div>
+
+        <div style="background:#1a2e4a;border-radius:8px;padding:16px;margin-top:16px;">
+            <h3 style="color:#2ecc71;">&#128273; Configuration</h3>
+            <p style="color:white;">API Key: {_key_badge}</p>
+            <p style="color:white;">Database: &#9989; {_db_esc}</p>
+            <p style="color:white;">Version: OtoCPA v{_ver}</p>
+        </div>
+    </div>
+    """
+    return page_layout(_health_title, body, user=user, lang=lang)
 
 
 def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
@@ -7538,6 +7646,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + (_anav("/license/machines", "lic_machines_nav") if user.get("role") == "owner" else "")
             + (_anav("/admin/updates", "update_nav_link") if user.get("role") == "owner" else "")
             + (_anav("/admin/remote", "remote_nav_link") if user.get("role") == "owner" else "")
+            + (_anav("/health/page", "health_nav_link") if user.get("role") == "owner" else "")
             + f'</nav>'
         )
 
@@ -10358,6 +10467,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_troubleshoot(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/health/page":
+                self._send_html(render_health_page(ctx, user, lang=lang))
                 return
 
             if path == "/troubleshoot/backup":
