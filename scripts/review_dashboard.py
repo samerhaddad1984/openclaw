@@ -13919,6 +13919,27 @@ def main() -> int:
     except Exception as e:
         print(f'⚠️ Folder watcher not started: {e}')
 
+    # Auto-start WhatsApp webhook server on port 8790
+    def start_whatsapp():
+        import logging as _logging
+        try:
+            from src.integrations.whatsapp import _load_config, start_whatsapp_server
+            wa_cfg = _load_config().get("whatsapp", {})
+            if not wa_cfg.get("enabled"):
+                return
+            webhook_url = wa_cfg.get("webhook_url", "")
+            wa_server = start_whatsapp_server(host="0.0.0.0", port=8790, webhook_url=webhook_url)
+            print(f'✅ WhatsApp webhook server started on port 8790')
+            wa_server.serve_forever()
+        except Exception as e:
+            _logging.error(f'WhatsApp server failed: {e}')
+            print(f'⚠️ WhatsApp server not started: {e}')
+
+    try:
+        threading.Thread(target=start_whatsapp, daemon=True, name='WhatsAppWebhook').start()
+    except Exception as e:
+        print(f'⚠️ WhatsApp server not started: {e}')
+
     server = ThreadingHTTPServer((HOST, PORT), ReviewDashboardHandler)
     try:
         server.serve_forever()

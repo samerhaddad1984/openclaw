@@ -34,10 +34,21 @@ CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
 # ---------------------------------------------------------------------------
 
 def _load_config() -> dict[str, Any]:
+    import os
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {}
+    # Resolve _env keys in the whatsapp section to actual env var values
+    wa = cfg.get("whatsapp", {})
+    if wa.get("account_sid_env"):
+        wa["account_sid"] = os.environ.get(wa["account_sid_env"], "")
+    if wa.get("auth_token_env"):
+        wa["auth_token"] = os.environ.get(wa["auth_token_env"], "")
+    if wa.get("webhook_url_env"):
+        base = os.environ.get(wa["webhook_url_env"], "")
+        wa["webhook_url"] = base + wa.get("webhook_path", "/ingest/whatsapp")
+    return cfg
 
 
 def _utc_now_iso() -> str:
@@ -441,7 +452,7 @@ class WhatsAppWebhookHandler(BaseHTTPRequestHandler):
 
 
 def start_whatsapp_server(
-    host: str = "127.0.0.1",
+    host: str = "0.0.0.0",
     port: int = 8790,
     webhook_url: str = "",
 ) -> ThreadingHTTPServer:

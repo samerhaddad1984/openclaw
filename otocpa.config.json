@@ -1,7 +1,7 @@
 {
   "fx_rates": {
     "usd_cad_last_known": 1.3718,
-    "last_updated": "2026-04-06T18:53:09+00:00"
+    "last_updated": "2026-04-06T20:33:21+00:00"
   },
   "host": "0.0.0.0",
   "port": 8787,
@@ -37,5 +37,14 @@
       ".webp"
     ],
     "poll_interval_seconds": 10
+  },
+  "whatsapp": {
+    "enabled": true,
+    "account_sid_env": "TWILIO_ACCOUNT_SID",
+    "auth_token_env": "TWILIO_AUTH_TOKEN",
+    "from_number": "whatsapp:+14155238886",
+    "webhook_url_env": "NGROK_URL",
+    "webhook_path": "/ingest/whatsapp",
+    "sandbox_mode": true
   }
 }
