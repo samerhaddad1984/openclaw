@@ -280,7 +280,12 @@ def urlquote(value: Any) -> str:
 
 
 def parse_form_body(raw: bytes) -> dict[str, str]:
-    parsed = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+    try:
+        parsed = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+    except (UnicodeDecodeError, ValueError):
+        # Multipart uploads contain binary image/PDF data that isn't valid UTF-8.
+        # Return empty dict — the multipart parser handles these requests instead.
+        return {}
     return {k: v[0] if v else "" for k, v in parsed.items()}
 
 
@@ -333,6 +338,53 @@ def _parse_multipart_simple(
 
     return fields, file_bytes, filename
 
+
+def _parse_multipart_files(
+    raw: bytes, content_type: str
+) -> tuple[dict[str, str], list[tuple[str, bytes]]]:
+    """Multipart parser that returns (fields, [(filename, file_bytes), ...])."""
+    fields: dict[str, str] = {}
+    files: list[tuple[str, bytes]] = []
+
+    boundary_str = ""
+    for part in content_type.split(";"):
+        part = part.strip()
+        if part.startswith("boundary="):
+            boundary_str = part[len("boundary="):].strip().strip('"')
+            break
+    if not boundary_str:
+        return fields, files
+
+    boundary = ("--" + boundary_str).encode()
+    parts = raw.split(boundary)
+
+    for chunk in parts[1:]:
+        if chunk in (b"--\r\n", b"--", b"--\r\n--") or chunk.startswith(b"--"):
+            continue
+        if b"\r\n\r\n" not in chunk:
+            continue
+        header_block, body = chunk.split(b"\r\n\r\n", 1)
+        if body.endswith(b"\r\n"):
+            body = body[:-2]
+
+        headers_raw = header_block.decode("utf-8", errors="replace")
+        disp = ""
+        for line in headers_raw.splitlines():
+            if line.lower().startswith("content-disposition"):
+                disp = line
+        if 'filename="' in disp:
+            fn_start = disp.index('filename="') + len('filename="')
+            fn_end = disp.index('"', fn_start)
+            fname = disp[fn_start:fn_end]
+            if fname and body:
+                files.append((fname, body))
+        elif 'name="' in disp:
+            n_start = disp.index('name="') + len('name="')
+            n_end = disp.index('"', n_start)
+            name = disp[n_start:n_end]
+            fields[name] = body.decode("utf-8", errors="replace")
+
+    return fields, files
 
 
 def hash_password(password: str) -> str:
@@ -8164,6 +8216,57 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
     except Exception:
         pass
 
+    # Upload section — client options
+    _upload_client_options = ""
+    try:
+        with open_db() as _uconn:
+            _upload_clients = _uconn.execute('SELECT client_code, client_name FROM clients ORDER BY client_code').fetchall()
+            _upload_client_options = '\n'.join([f'<option value="{esc(c["client_code"])}">{esc(c["client_code"])} - {esc(c["client_name"])}</option>' for c in _upload_clients])
+    except Exception:
+        pass
+
+    upload_html = f"""
+    <!-- Upload Button -->
+    <div style="background:#1a2e4a;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;">
+        <h3 style="color:white;margin:0 0 12px 0;">\U0001f4e4 T\u00e9l\u00e9verser des documents / Upload Documents</h3>
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+            <div id="drop-zone" style="border:2px dashed #2ecc71;border-radius:8px;padding:32px;text-align:center;color:#aaa;margin-bottom:8px;background:#0d1b2a;">
+                \U0001f4c1 Glissez-d\u00e9posez ici / Drag &amp; drop here
+            </div>
+            <input type="file" id="upload-file-input" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp"
+                   style="color:white;margin-bottom:8px;display:block;width:100%;">
+            <select name="client_code" style="width:100%;padding:8px;margin-bottom:8px;border-radius:4px;">
+                <option value="">-- S\u00e9lectionner client / Select client --</option>
+                {_upload_client_options}
+            </select>
+            <button type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;width:100%;">
+                \u2705 T\u00e9l\u00e9verser / Upload
+            </button>
+        </form>
+    </div>
+    <script>
+    (function() {{
+        var dz = document.getElementById('drop-zone');
+        var fi = document.getElementById('upload-file-input');
+        if (!dz || !fi) return;
+        ['dragenter','dragover'].forEach(function(e) {{
+            dz.addEventListener(e, function(ev) {{ ev.preventDefault(); ev.stopPropagation(); dz.style.borderColor='#27ae60'; dz.style.background='#1a3a5c'; }});
+        }});
+        ['dragleave','drop'].forEach(function(e) {{
+            dz.addEventListener(e, function(ev) {{ ev.preventDefault(); ev.stopPropagation(); dz.style.borderColor='#2ecc71'; dz.style.background='#0d1b2a'; }});
+        }});
+        dz.addEventListener('drop', function(ev) {{
+            ev.preventDefault();
+            fi.files = ev.dataTransfer.files;
+            dz.textContent = ev.dataTransfer.files.length + ' fichier(s) / file(s) selected';
+        }});
+        dz.addEventListener('click', function() {{ fi.click(); }});
+        fi.addEventListener('change', function() {{
+            if (fi.files.length > 0) dz.textContent = fi.files.length + ' fichier(s) / file(s) selected';
+        }});
+    }})();
+    </script>"""
+
     status_opts = "".join(
         f'<option value="{v}" {"selected" if status==v else ""}>'
         f'{esc(t(_STATUS_LABEL_KEYS.get(v, v), lang))}</option>'
@@ -8325,7 +8428,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             </div>
         </div>"""
 
-    return page_layout(t("dashboard_title", lang), stats_html + _learning_stats_html + filters_html + table_html + pagination_html,
+    return page_layout(t("dashboard_title", lang), stats_html + _learning_stats_html + upload_html + filters_html + table_html + pagination_html,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
@@ -11422,6 +11525,59 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._redirect(referer, extra_headers=[
                     ("Set-Cookie", f"dashboard_lang={new_lang}; {sec}; Path=/"),
                 ])
+                return
+
+            # --- Upload documents ---
+            if path == "/upload":
+                ct = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ct:
+                    self._flash_redirect("/", error="No file uploaded")
+                    return
+                fields, files = _parse_multipart_files(raw, ct)
+                if not files:
+                    self._flash_redirect("/", error="No file selected")
+                    return
+                upload_client = normalize_text(fields.get("client_code", ""))
+                # Clear AI cache to avoid stale results (fixes Google/PayPal stuck docs)
+                try:
+                    _ai_clear_cache()
+                except Exception:
+                    pass
+                from src.engines.ocr_engine import process_file  # noqa: PLC0415
+                ok_count = 0
+                fail_count = 0
+                for fname, fbytes in files:
+                    try:
+                        result = process_file(
+                            fbytes,
+                            fname,
+                            client_code=upload_client or "UNASSIGNED",
+                            ingest_source="web_upload",
+                            db_path=DB_PATH,
+                        )
+                        if result.get("ok"):
+                            ok_count += 1
+                            # Reset "Ignored" documents to NeedsReview so they appear
+                            doc_id = result.get("document_id")
+                            if doc_id:
+                                try:
+                                    with open_db() as _uc:
+                                        _uc.execute(
+                                            "UPDATE documents SET review_status = 'Needs Review' "
+                                            "WHERE document_id = ? AND review_status = 'Ignored'",
+                                            (doc_id,),
+                                        )
+                                        _uc.commit()
+                                except Exception:
+                                    pass
+                        else:
+                            fail_count += 1
+                    except Exception:
+                        fail_count += 1
+                msg = f"{ok_count} document(s) uploaded"
+                if fail_count:
+                    msg += f", {fail_count} failed"
+                self._flash_redirect("/", flash=msg)
                 return
 
             if path == "/document/update":

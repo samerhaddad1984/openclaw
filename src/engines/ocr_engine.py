@@ -475,6 +475,115 @@ def detect_handwriting(image_bytes: bytes) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Tesseract OCR fallback for phone photos (receipt/image files)
+# ---------------------------------------------------------------------------
+
+RECEIPT_TOTAL_PATTERNS = [
+    re.compile(r'(?:TOTAL|SUBTOTAL|MONTANT|SOLDE)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
+    re.compile(r'(?:TAX|TPS|TVQ|GST|QST)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
+    re.compile(r'(?:BALANCE|DUE|À\s+PAYER)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
+]
+
+
+def _extract_text_with_tesseract(file_bytes: bytes) -> str:
+    """
+    Run Tesseract OCR on an image with receipt-specific enhancements.
+
+    Applies contrast enhancement and deskew for phone-photographed receipts.
+    Returns extracted text or empty string if Tesseract is unavailable.
+    """
+    try:
+        from PIL import Image  # type: ignore[import]
+        img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+    except Exception:
+        return ""
+
+    enhanced_img = img
+    try:
+        import cv2  # type: ignore[import]
+        import numpy as np  # type: ignore[import]
+        img_array = np.array(img)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+
+        # Deskew: detect and correct tilt for phone photos
+        coords = np.column_stack(np.where(gray < 200))
+        if len(coords) > 100:
+            try:
+                angle = cv2.minAreaRect(coords)[-1]
+                if angle < -45:
+                    angle = -(90 + angle)
+                else:
+                    angle = -angle
+                if abs(angle) > 0.5 and abs(angle) < 15:
+                    h, w = gray.shape
+                    center = (w // 2, h // 2)
+                    matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+                    gray = cv2.warpAffine(gray, matrix, (w, h),
+                                          flags=cv2.INTER_CUBIC,
+                                          borderMode=cv2.BORDER_REPLICATE)
+            except Exception:
+                pass
+
+        # Enhance contrast for receipt OCR
+        enhanced = cv2.equalizeHist(gray)
+        # Adaptive threshold for uneven lighting (phone flash)
+        binary = cv2.adaptiveThreshold(
+            enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 15, 8,
+        )
+        enhanced_img = Image.fromarray(binary)
+    except ImportError:
+        # cv2 not available — use PIL-only enhancement
+        try:
+            from PIL import ImageEnhance  # type: ignore[import]
+            enhanced_img = ImageEnhance.Contrast(img.convert("L")).enhance(2.0)
+        except Exception:
+            enhanced_img = img.convert("L")
+
+    try:
+        import pytesseract  # type: ignore[import]
+        # Receipt-specific: PSM 6 (single block) with French+English
+        text = pytesseract.image_to_string(
+            enhanced_img,
+            lang="fra+eng",
+            config="--psm 6 --oem 3",
+        )
+        return text.strip()
+    except Exception:
+        return ""
+
+
+def _extract_receipt_amounts(text: str) -> dict[str, Any]:
+    """Extract total, tax amounts from receipt text using receipt-specific patterns."""
+    result: dict[str, Any] = {}
+    if not text:
+        return result
+
+    # Find the largest TOTAL-like amount (usually the final total)
+    totals: list[float] = []
+    taxes: list[float] = []
+    for pattern in RECEIPT_TOTAL_PATTERNS:
+        for m in pattern.finditer(text):
+            val_str = m.group(1).replace(",", "")
+            try:
+                val = float(val_str)
+                if val > 0:
+                    label = m.group(0).upper()
+                    if any(t in label for t in ("TAX", "TPS", "TVQ", "GST", "QST")):
+                        taxes.append(val)
+                    else:
+                        totals.append(val)
+            except ValueError:
+                continue
+
+    if totals:
+        result["total"] = max(totals)
+    if taxes:
+        result["tax_total"] = sum(taxes)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Handwriting prompt (loaded from file)
 # ---------------------------------------------------------------------------
 
@@ -867,7 +976,7 @@ def extract_pdf_text(data: bytes) -> str:
     try:
         import pdfplumber  # type: ignore[import]
         with pdfplumber.open(io.BytesIO(data)) as pdf:
-            pages = [p.extract_text() or "" for p in pdf.pages]
+            pages = [p.extract_text(layout=False) or "" for p in pdf.pages]
         text = "\n".join(pages).strip()
         if text:
             return text
@@ -1253,24 +1362,61 @@ def process_file(
             norm_bytes, mime_type = _normalise_image(file_bytes, fmt)
             # Check for handwriting on image formats
             handwriting_score = detect_handwriting(file_bytes)
-            if handwriting_score > HANDWRITING_HIGH_THRESHOLD:
-                raw               = call_vision_handwriting(norm_bytes, mime_type)
-                extraction_method = f"vision_handwriting_{fmt}"
-            elif handwriting_score < HANDWRITING_LOW_THRESHOLD:
-                raw               = call_vision(norm_bytes, mime_type)
-                extraction_method = f"vision_{fmt}"
-            else:
-                # Ambiguous: try both pipelines, use higher confidence
-                raw_std = call_vision(norm_bytes, mime_type)
-                raw_hw  = call_vision_handwriting(norm_bytes, mime_type)
-                std_conf = float(raw_std.get("confidence") or 0.0)
-                hw_conf  = float(raw_hw.get("confidence") or 0.0)
-                if hw_conf >= std_conf:
-                    raw               = raw_hw
+            _vision_error: str | None = None
+            try:
+                if handwriting_score > HANDWRITING_HIGH_THRESHOLD:
+                    raw               = call_vision_handwriting(norm_bytes, mime_type)
                     extraction_method = f"vision_handwriting_{fmt}"
-                else:
-                    raw               = raw_std
+                elif handwriting_score < HANDWRITING_LOW_THRESHOLD:
+                    raw               = call_vision(norm_bytes, mime_type)
                     extraction_method = f"vision_{fmt}"
+                else:
+                    # Ambiguous: try both pipelines, use higher confidence
+                    raw_std = call_vision(norm_bytes, mime_type)
+                    raw_hw  = call_vision_handwriting(norm_bytes, mime_type)
+                    std_conf = float(raw_std.get("confidence") or 0.0)
+                    hw_conf  = float(raw_hw.get("confidence") or 0.0)
+                    if hw_conf >= std_conf:
+                        raw               = raw_hw
+                        extraction_method = f"vision_handwriting_{fmt}"
+                    else:
+                        raw               = raw_std
+                        extraction_method = f"vision_{fmt}"
+            except Exception as _ve:
+                # Vision API failed — try Tesseract below
+                _vision_error = str(_ve)
+                raw               = {}
+                extraction_method = f"vision_failed_{fmt}"
+
+            # Tesseract fallback: if Vision returned nothing useful, try local OCR
+            _vision_got_amount = raw.get("total") is not None or raw.get("subtotal") is not None
+            _vision_got_vendor = bool(raw.get("vendor_name"))
+            if not _vision_got_amount and not _vision_got_vendor:
+                _tess_text = _extract_text_with_tesseract(file_bytes)
+                if _tess_text and len(_tess_text.split()) >= 3:
+                    raw_ocr_text = _tess_text
+                    _tess_parsed = _extract_from_text(_tess_text)
+                    for _tk, _tv in _tess_parsed.items():
+                        if _tv is not None and not raw.get(_tk):
+                            raw[_tk] = _tv
+                    _receipt_amounts = _extract_receipt_amounts(_tess_text)
+                    if _receipt_amounts.get("total") and not raw.get("total"):
+                        raw["total"] = _receipt_amounts["total"]
+                    if _receipt_amounts.get("tax_total") and not raw.get("tax_total"):
+                        raw["tax_total"] = _receipt_amounts["tax_total"]
+                    if not raw.get("confidence") or float(raw.get("confidence") or 0) < 0.3:
+                        raw["confidence"] = 0.5
+                    extraction_method = f"tesseract_{fmt}"
+                    _vision_error = None  # Tesseract succeeded, clear error
+                elif _vision_error:
+                    # Both Vision and Tesseract failed
+                    error = _vision_error
+                    raw = {
+                        "confidence": 0.0,
+                        "doc_type":   "unknown",
+                        "notes":      f"Extraction failed: {_vision_error}",
+                    }
+                    extraction_method = "failed"
 
     except Exception as exc:
         error             = str(exc)
@@ -1422,6 +1568,7 @@ def process_file(
                 raw['ai_used'] = True
                 raw['ai_complexity'] = _ai_primary.get('ai_complexity')
                 raw['ai_model_used'] = _ai_primary.get('ai_model_used')
+                raw['raw_ai_response'] = _ai_primary.get('raw_ai_response')
                 confidence = max(confidence, _ai_primary.get('confidence', 0.92))
             else:
                 # AI failed — use regex fallback results from extract_with_ai_primary
@@ -2043,6 +2190,7 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
 
         if response and response.get('result'):
             result_text = response['result']
+            logging.getLogger(__name__).warning('AI raw response for %s: %s', doc_id, repr(result_text[:200]))
             # Clean markdown code blocks
             result_text = re.sub(r'```json\s*', '', result_text)
             result_text = re.sub(r'```\s*', '', result_text)
@@ -2052,6 +2200,12 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
                 ai_result['ai_used'] = True
                 ai_result['ai_complexity'] = complexity
                 ai_result['ai_model_used'] = response.get('provider', '')
+                ai_result['raw_ai_response'] = result_text[:2000]
+            else:
+                logging.getLogger(__name__).warning('AI returned unparseable response for %s: %s', doc_id, repr(result_text[:200]))
+                ai_result['raw_ai_response'] = result_text[:2000]
+        else:
+            logging.getLogger(__name__).warning('AI returned empty response for %s', doc_id)
     except Exception as e:
         logging.getLogger(__name__).warning('AI primary extraction failed for %s: %s', doc_id, e)
 
@@ -2076,6 +2230,7 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
     final['ai_used'] = bool(ai_result)
     final['ai_complexity'] = ai_result.get('ai_complexity')
     final['ai_model_used'] = ai_result.get('ai_model_used')
+    final['raw_ai_response'] = ai_result.get('raw_ai_response')
     final['confidence'] = 0.92 if ai_result else 0.70
 
     return final
@@ -2351,7 +2506,7 @@ def extract_with_pdfplumber(file_path: str) -> dict[str, Any]:
     try:
         import pdfplumber  # type: ignore[import]
         with pdfplumber.open(file_path) as pdf:
-            pages = [p.extract_text() or "" for p in pdf.pages]
+            pages = [p.extract_text(layout=False) or "" for p in pdf.pages]
         text = "\n".join(pages).strip()
         word_count = len(text.split()) if text else 0
         # Confidence based on text quality
@@ -2458,6 +2613,31 @@ def extract_valid_amounts(text: str) -> list[float]:
                 candidates.append(val)
 
     return candidates
+
+
+PAYPAL_TOTAL = re.compile(
+    r'Total\s*\n\s*\$?([\d,]+\.?\d{2})',
+    re.IGNORECASE
+)
+
+PAYPAL_AMOUNT = re.compile(
+    r'(?:^|\n)\$\s*([\d]+\.\d{2})\s*(?:\n|$)',
+    re.MULTILINE
+)
+
+
+def find_most_frequent_amount(text: str):
+    """Find the most frequently occurring dollar amount in text."""
+    import collections
+    amounts = re.findall(r'\$\s*([\d,]+\.\d{2})', text)
+    if not amounts:
+        return None
+    amounts = [float(a.replace(',', '')) for a in amounts]
+    counter = collections.Counter(amounts)
+    most_common_val, most_common_count = counter.most_common(1)[0]
+    if most_common_count >= 2:
+        return most_common_val
+    return None
 
 
 def parse_invoice_fields(text: str) -> dict[str, Any]:
@@ -2630,10 +2810,32 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
 
     extracted_amount = None
 
+    # PayPal receipt detection — frequency-based amount selection
+    _is_paypal = 'paypal' in text.lower() or 'transaction id' in text.lower()
+    if _is_paypal:
+        # PayPal Total pattern: "Total\n$32.18"
+        _paypal_m = PAYPAL_TOTAL.search(text)
+        if _paypal_m:
+            try:
+                extracted_amount = _parse_amount_string(_paypal_m.group(1))
+            except ValueError:
+                pass
+        # Frequency-based: most repeated dollar amount is very likely correct
+        if extracted_amount is None:
+            _freq_amount = find_most_frequent_amount(text)
+            if _freq_amount is not None:
+                extracted_amount = _freq_amount
+
     # Strict currency-context pre-check: only accept numbers with currency context
-    _strict_amounts = extract_valid_amounts(text)
-    if _strict_amounts:
-        extracted_amount = max(_strict_amounts)  # largest labeled amount (Total > Subtotal)
+    if extracted_amount is None:
+        _strict_amounts = extract_valid_amounts(text)
+        if _strict_amounts:
+            # For PayPal, prefer frequency; for others, largest labeled amount
+            if _is_paypal:
+                _freq_amount = find_most_frequent_amount(text)
+                extracted_amount = _freq_amount if _freq_amount is not None else max(_strict_amounts)
+            else:
+                extracted_amount = max(_strict_amounts)  # largest labeled amount (Total > Subtotal)
 
     # Fall back to priority-based extraction if strict check found nothing
     if extracted_amount is None:

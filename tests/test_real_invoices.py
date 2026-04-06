@@ -413,6 +413,19 @@ class TestAmountVerification:
         amount = float(result.get('amount') or 0)
         assert amount == 32.18, f'REGRESSION: 100 GB wrongly used as amount. Got {amount}. Fix the extraction code.'
 
+    def test_paypal_multicolumn_layout(self):
+        """PayPal receipt with 2-column layout: amount must be $32.18 not 100."""
+        text = """PayPal Transaction Details
+Google -32.18
+100 GB (Google    $32.18
+One)
+Total
+$32.18
+Transaction ID 0JE97521J5871591"""
+        result = parse_invoice_fields(text)
+        amount = float(result.get('amount') or 0)
+        assert amount == 32.18, f'PayPal multicolumn failed: got {amount}'
+
     def test_strict_currency_context(self):
         """Strict currency rule: numbers need currency context to be amounts."""
         # PayPal Google receipt format
