@@ -407,6 +407,27 @@ def _normalise_image(data: bytes, fmt: str) -> tuple[bytes, str]:
         "tiff": "image/tiff",
         "webp": "image/webp",
     }
+
+    # Apply EXIF orientation and resize large phone photos
+    try:
+        from PIL import Image, ImageOps  # type: ignore[import]
+        img = Image.open(io.BytesIO(data))
+        transposed = ImageOps.exif_transpose(img)
+        w, h = transposed.size
+        needs_fix = transposed is not img or max(w, h) > 4000
+        if needs_fix:
+            if max(w, h) > 4000:
+                ratio = 4000 / max(w, h)
+                transposed = transposed.resize(
+                    (int(w * ratio), int(h * ratio)), Image.LANCZOS
+                )
+            buf = io.BytesIO()
+            out_fmt = "JPEG" if fmt in ("jpeg", "tiff") else fmt.upper()
+            transposed.convert("RGB").save(buf, format=out_fmt, quality=92)
+            return buf.getvalue(), _MIME.get(fmt, "image/jpeg")
+    except Exception:
+        pass
+
     return data, _MIME.get(fmt, "application/octet-stream")
 
 
@@ -479,10 +500,26 @@ def detect_handwriting(image_bytes: bytes) -> float:
 # ---------------------------------------------------------------------------
 
 RECEIPT_TOTAL_PATTERNS = [
-    re.compile(r'(?:TOTAL|SUBTOTAL|MONTANT|SOLDE)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
-    re.compile(r'(?:TAX|TPS|TVQ|GST|QST)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
-    re.compile(r'(?:BALANCE|DUE|À\s+PAYER)\s*:?\s*\$?\s*([\d,]+\.?\d{0,2})', re.IGNORECASE),
+    re.compile(r'(?:TOTAL|SUBTOTAL|SOUS[\-\s]*TOTAL|MONTANT|SOLDE)\s*:?\s*\$?\s*([\d]+[.,]\d{2})', re.IGNORECASE),
+    re.compile(r'(?:TAX|TPS|TVQ|GST|QST)\s*[^.\d]*([\d]+[.,]\d{2})', re.IGNORECASE),
+    re.compile(r'(?:BALANCE|DUE|À\s+PAYER)\s*:?\s*\$?\s*([\d]+[.,]\d{2})', re.IGNORECASE),
 ]
+
+
+def _extract_with_paddle(file_path: str | Path) -> str | None:
+    """Run PaddleOCR on an image. Returns text or None if unavailable."""
+    try:
+        from paddleocr import PaddleOCR
+        ocr = PaddleOCR(use_angle_cls=True, lang='french', show_log=False)
+        result = ocr.ocr(str(file_path), cls=True)
+        if result and result[0]:
+            lines = [line[1][0] for line in result[0] if line[1][1] > 0.5]
+            return '\n'.join(lines)
+        return ''
+    except ImportError:
+        return None  # Fall back to Tesseract
+    except Exception:
+        return None
 
 
 def _extract_text_with_tesseract(file_bytes: bytes) -> str:
@@ -493,10 +530,21 @@ def _extract_text_with_tesseract(file_bytes: bytes) -> str:
     Returns extracted text or empty string if Tesseract is unavailable.
     """
     try:
-        from PIL import Image  # type: ignore[import]
-        img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+        from PIL import Image, ImageOps  # type: ignore[import]
+        img = Image.open(io.BytesIO(file_bytes))
+        # Apply EXIF orientation — phone photos are often rotated
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
     except Exception:
         return ""
+
+    # Resize large phone photos — Tesseract struggles above ~2000px
+    max_dimension = 2000
+    w, h = img.size
+    if max(w, h) > max_dimension:
+        ratio = max_dimension / max(w, h)
+        new_size = (int(w * ratio), int(h * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
 
     enhanced_img = img
     try:
@@ -545,6 +593,9 @@ def _extract_text_with_tesseract(file_bytes: bytes) -> str:
 
     try:
         import pytesseract  # type: ignore[import]
+        _tess = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+        if _tess.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(_tess)
         # Receipt-specific: PSM 6 (single block) with French+English
         text = pytesseract.image_to_string(
             enhanced_img,
@@ -554,6 +605,53 @@ def _extract_text_with_tesseract(file_bytes: bytes) -> str:
         return text.strip()
     except Exception:
         return ""
+
+
+_RECEIPT_VENDORS: list[tuple[str, str]] = [
+    (r"walmart",             "Walmart"),
+    (r"super\s*c\b",         "Super C"),
+    (r"\biga\b",             "IGA"),
+    (r"\bmetro\b",           "Metro"),
+    (r"costco",              "Costco"),
+    (r"maxi\b",              "Maxi"),
+    (r"provigo",             "Provigo"),
+    (r"jean\s*coutu",        "Jean Coutu"),
+    (r"pharmaprix",          "Pharmaprix"),
+    (r"shoppers",            "Shoppers Drug Mart"),
+    (r"dollarama",           "Dollarama"),
+    (r"canadian\s*tire",     "Canadian Tire"),
+    (r"home\s*depot",        "Home Depot"),
+    (r"rona\b",              "RONA"),
+    (r"bmr\b",               "BMR"),
+    (r"patrick\s*morin",     "Patrick Morin"),
+    (r"tim\s*horton",        "Tim Hortons"),
+    (r"mcdonald",            "McDonald's"),
+    (r"st[\.\-]?\s*hubert",  "St-Hubert"),
+    (r"couche[\.\-]?\s*tard", "Couche-Tard"),
+    (r"dep[a\xe0]nneur",     "Dépanneur"),
+    (r"petro[\.\-]?\s*canada", "Petro-Canada"),
+    (r"shell\b",             "Shell"),
+    (r"esso\b",              "Esso"),
+    (r"ultramar",            "Ultramar"),
+    (r"sobeys",              "Sobeys"),
+    (r"loblaws",             "Loblaws"),
+    (r"bureau\s*en\s*gros",  "Bureau en Gros"),
+    (r"staples",             "Staples"),
+    (r"best\s*buy",          "Best Buy"),
+    (r"amazon",              "Amazon"),
+    (r"saq\b",               "SAQ"),
+]
+
+
+def _detect_receipt_vendor(text: str) -> str | None:
+    """Detect vendor name from OCR text using known store patterns."""
+    if not text:
+        return None
+    text_lower = text.lower()
+    for pattern, name in _RECEIPT_VENDORS:
+        if re.search(pattern, text_lower):
+            return name
+    return None
 
 
 def _extract_receipt_amounts(text: str) -> dict[str, Any]:
@@ -567,7 +665,12 @@ def _extract_receipt_amounts(text: str) -> dict[str, Any]:
     taxes: list[float] = []
     for pattern in RECEIPT_TOTAL_PATTERNS:
         for m in pattern.finditer(text):
-            val_str = m.group(1).replace(",", "")
+            val_str = m.group(1)
+            # French-Canadian format: comma as decimal separator (e.g. 126,62)
+            if re.match(r'^\d+,\d{2}$', val_str):
+                val_str = val_str.replace(",", ".")
+            else:
+                val_str = val_str.replace(",", "")
             try:
                 val = float(val_str)
                 if val > 0:
@@ -1398,11 +1501,13 @@ def process_file(
                 raw               = {}
                 extraction_method = f"vision_failed_{fmt}"
 
-            # Tesseract fallback: if Vision returned nothing useful, try local OCR
+            # Local OCR fallback: if Vision returned nothing useful, try PaddleOCR then Tesseract
             _vision_got_amount = raw.get("total") is not None or raw.get("subtotal") is not None
             _vision_got_vendor = bool(raw.get("vendor_name"))
             if not _vision_got_amount and not _vision_got_vendor:
-                _tess_text = _extract_text_with_tesseract(file_bytes)
+                _tess_text = _extract_with_paddle(file_path)
+                if _tess_text is None:  # PaddleOCR not available
+                    _tess_text = _extract_text_with_tesseract(file_bytes)
                 if _tess_text and len(_tess_text.split()) >= 3:
                     raw_ocr_text = _tess_text
                     _tess_parsed = _extract_from_text(_tess_text)
@@ -1414,6 +1519,11 @@ def process_file(
                         raw["total"] = _receipt_amounts["total"]
                     if _receipt_amounts.get("tax_total") and not raw.get("tax_total"):
                         raw["tax_total"] = _receipt_amounts["tax_total"]
+                    # Detect vendor from receipt text patterns
+                    if not raw.get("vendor_name"):
+                        _tess_vendor = _detect_receipt_vendor(_tess_text)
+                        if _tess_vendor:
+                            raw["vendor_name"] = _tess_vendor
                     if not raw.get("confidence") or float(raw.get("confidence") or 0) < 0.3:
                         raw["confidence"] = 0.5
                     extraction_method = f"tesseract_{fmt}"
@@ -2162,10 +2272,88 @@ def _classify_complexity_for_model(text: str) -> str:
     return 'simple'
 
 
+def _extract_with_instructor(raw_text: str, doc_id: str, client_code: str,
+                              conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """Try Instructor + Pydantic structured extraction. Returns dict or None."""
+    try:
+        import instructor
+        import openai as _openai
+        from src.engines.invoice_schema import InvoiceExtraction
+    except ImportError:
+        return None
+
+    api_key = os.environ.get('OPENROUTER_API_KEY', '')
+    if not api_key:
+        return None
+
+    try:
+        client = instructor.from_openai(
+            _openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=api_key,
+            ),
+            mode=instructor.Mode.JSON,
+        )
+
+        examples = get_learning_examples(conn, client_code)
+
+        # Tag non-currency numbers so AI ignores them
+        text_for_ai = re.sub(
+            r'(\d+(?:\.\d+)?)\s*(GB|MB|TB|KB|GHz|kWh|users?|seats?|months?)',
+            r'[\1\2-NOT-MONEY]',
+            raw_text,
+            flags=re.IGNORECASE
+        )
+
+        prompt = f"""Extract invoice fields from this text.
+
+RULES:
+- vendor_name: company name only, never tariff codes (DEF, GD) or document types
+- amount: final total in dollars, NEVER storage sizes (100 GB = NOT an amount)
+- For Quebec utility bills use "Montant de la présente facture" not "Montant dû"
+- gl_account: 5400=telecom, 5410=utilities, 5420=software, 5440=general
+- tax_code: T=has Canadian GST, E=foreign no GST, M=meals, Z=zero-rated
+
+{examples}
+
+INVOICE TEXT:
+{text_for_ai[:3000]}"""
+
+        result = client.chat.completions.create(
+            model="deepseek/deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            response_model=InvoiceExtraction,
+            max_retries=2,
+        )
+
+        data = result.model_dump()
+        data['ai_used'] = True
+        data['confidence'] = 0.92
+        data['ai_model_used'] = 'deepseek/deepseek-chat (instructor)'
+        return data
+
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            'Instructor extraction failed for %s: %s', doc_id, e)
+        return None
+
+
 def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
                             conn: sqlite3.Connection) -> dict[str, Any]:
-    """AI is primary extractor. Regex is fallback only."""
+    """AI is primary extractor. Tries Instructor first, then ai_router, then regex."""
 
+    # --- Attempt 1: Instructor + Pydantic (structured, validated) ---
+    instructor_result = _extract_with_instructor(raw_text, doc_id, client_code, conn)
+    if instructor_result:
+        # Still merge with regex to fill any optional fields
+        regex_result = parse_invoice_fields(raw_text)
+        for field in ['document_date', 'invoice_number', 'gst_number', 'qst_number',
+                      'gst_amount', 'qst_amount']:
+            if not instructor_result.get(field) and regex_result.get(field) is not None:
+                instructor_result[field] = regex_result[field]
+        return instructor_result
+
+    # --- Attempt 2: ai_router (unstructured JSON parsing) ---
     # Get learning examples from approved documents
     examples = get_learning_examples(conn, client_code)
 
