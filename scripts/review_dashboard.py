@@ -8,6 +8,8 @@ except ImportError:
 
 import hashlib
 import html
+import os
+import re
 import bcrypt
 import json
 import secrets
@@ -2182,25 +2184,37 @@ def render_health_page(ctx: dict[str, Any], user: dict[str, Any],
     """Render an HTML system-health dashboard page."""
     conn = open_db()
     try:
-        # AI status
+        # AI status — load dotenv so env vars are available
         ai_status = "unknown"
         api_key_set = False
         try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
+        try:
             cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            api_key_set = bool(
-                cfg.get("ai_router", {}).get("routine_provider", {}).get("api_key")
+            api_key = (
+                os.environ.get('OPENROUTER_API_KEY')
+                or cfg.get("ai_router", {}).get("routine_provider", {}).get("api_key")
                 or cfg.get("ai_router", {}).get("premium_provider", {}).get("api_key")
+                or cfg.get("openrouter", {}).get("api_key", "")
             )
+            api_key_set = bool(api_key)
             ai_status = "connected" if api_key_set else "no key"
         except Exception:
             ai_status = "error"
 
-        # Folder watcher
+        # Folder watcher — check thread by name
         watcher_status = "unknown"
         try:
-            from scripts.folder_watcher import get_watcher_status
-            ws = get_watcher_status()
-            watcher_status = "running" if ws.get("running") else "stopped"
+            import threading
+            watcher_running = any(
+                t.name == 'FolderWatcher' or 'watcher' in t.name.lower()
+                for t in threading.enumerate()
+                if t.is_alive()
+            )
+            watcher_status = "running" if watcher_running else "stopped"
         except Exception:
             watcher_status = "unavailable"
 
@@ -2221,16 +2235,25 @@ def render_health_page(ctx: dict[str, Any], user: dict[str, Any],
         last_cur.row_factory = None
         last_cur.execute("SELECT file_name, created_at FROM documents ORDER BY created_at DESC LIMIT 1")
         last_row = last_cur.fetchone()
-        last_name = last_row[0] if last_row else "None"
+        last_doc_name = last_row[0] if last_row else "None"
+        display_name = re.sub(r'_[0-9a-f]{8}(?:_[0-9a-f]{8})*', '', last_doc_name)
+        display_name = re.sub(r'_\d{12,}', '', display_name)
+        last_name = display_name
 
         # AI usage stats
         ai_used = _count("SELECT COUNT(*) FROM documents WHERE ai_used=1")
         ai_pct = round(ai_used * 100 / max(total_docs, 1))
 
-        # Last 24h
-        last_24h = _count(
-            "SELECT COUNT(*) FROM documents WHERE created_at > datetime('now', '-24 hours')"
+        # Last 24h — use local date to avoid UTC mismatch
+        today = datetime.now().strftime('%Y-%m-%d')
+        last_cur2 = conn.cursor()
+        last_cur2.row_factory = None
+        last_cur2.execute(
+            "SELECT COUNT(*) FROM documents WHERE created_at LIKE ?",
+            (f'{today}%',)
         )
+        _r = last_cur2.fetchone()
+        last_24h = _r[0] if _r else 0
     finally:
         conn.close()
 

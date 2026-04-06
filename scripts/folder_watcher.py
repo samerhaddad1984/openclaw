@@ -489,6 +489,24 @@ class _FileDispatcher:
         self._seen: set[str] = set()
         self._lock = threading.Lock()
 
+    def _already_in_db(self, file_path: Path) -> bool:
+        """Check whether a file (by cleaned name or fingerprint) is already in the DB."""
+        try:
+            clean_name = re.sub(r'(_\d{12,})+', '', file_path.stem) + file_path.suffix
+            # Also strip monotonic_ns timestamps (15+ digits)
+            clean_name = re.sub(r'(_\d{15,})+', '', Path(clean_name).stem) + Path(clean_name).suffix
+            conn = sqlite3.connect(str(self._db))
+            try:
+                row = conn.execute(
+                    'SELECT document_id FROM documents WHERE file_name = ? LIMIT 1',
+                    (clean_name,),
+                ).fetchone()
+                return row is not None
+            finally:
+                conn.close()
+        except Exception:
+            return False
+
     def dispatch(self, file_path: Path) -> None:
         if not _is_supported(file_path):
             logging.debug("folder_watcher: file skipped (unsupported): %s", file_path)
@@ -499,6 +517,11 @@ class _FileDispatcher:
                 logging.debug("folder_watcher: file skipped (already seen): %s", file_path)
                 return
             self._seen.add(key)
+        # DB-backed dedup: skip files already processed in a previous run
+        if self._already_in_db(file_path):
+            logging.debug("folder_watcher: already in DB, skipping: %s", file_path.name)
+            _move_to_processed(file_path, self._inbox)
+            return
         thread = threading.Thread(
             target=process_one,
             args=(file_path, self._inbox, self._default, self._db),
