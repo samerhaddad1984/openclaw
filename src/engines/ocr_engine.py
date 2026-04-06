@@ -771,7 +771,17 @@ def _fix_quebec_date(raw: Any) -> str | None:
     # Already ISO: YYYY-MM-DD
     m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
     if m:
-        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        # If year < 2020, AI likely mis-read a DD/MM/YYYY Canadian receipt.
+        # Try swapping: treat month as day, day as a 2-digit year.
+        if year < 2020 and 1 <= month <= 31 and 1 <= day <= 12:
+            day, month = month, day
+            year = 2000 + (year % 100) if year < 100 else year
+            # Still bad? Force current year.
+            if year < 2020:
+                from datetime import datetime as _dt
+                year = _dt.now().year
+        return f"{year}-{month:02d}-{day:02d}"
 
     # DD/MM/YY or DD-MM-YYYY or DD/MM/YYYY
     m = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})$", s)
@@ -1347,8 +1357,16 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
     if not result.get("tax_code"):
         result["tax_code"] = "T"
 
-    # Foreign vendors with no Canadian GST registration → tax_code = E
+    # Grocery/retail stores → office supplies GL 5430
     vendor_lower = vendor.lower()
+    GROCERY_VENDORS = ['super c', 'walmart', 'iga', 'metro',
+                       'maxi', 'costco', 'loblaws', 'provigo']
+    if any(g in vendor_lower for g in GROCERY_VENDORS):
+        result['gl_account'] = '5430'
+        result['tax_code'] = 'T'
+        result['category'] = 'office_supplies'
+
+    # Foreign vendors with no Canadian GST registration → tax_code = E
     if "fiverr" in vendor_lower:
         result["tax_code"] = "E"
         result["gl_account"] = "5420"
@@ -2225,6 +2243,7 @@ GL ACCOUNT RULES (Quebec chart of accounts):
 - Utilities (Hydro, Gaz, Electricite): GL 5410
 - Software/SaaS (Microsoft, Google, Adobe, OpenAI): GL 5420
 - Office supplies: GL 5430
+- Grocery/retail stores (Walmart, Super C, IGA, Metro, Maxi, Costco): 5430
 - Freelance platforms (Fiverr, Upwork, Toptal, 99designs): GL 5420
 - General expenses: GL 5440
 - Insurance: GL 5450
