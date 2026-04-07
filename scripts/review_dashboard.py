@@ -510,6 +510,16 @@ def bootstrap_schema() -> None:
         # AR invoices table
         _aging.ensure_ar_invoices_table(conn)
 
+        # Performance indexes for document queries
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at DESC)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(review_status)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_client ON documents(client_code)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_vendor ON documents(vendor)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_posting_jobs_document_id ON posting_jobs(document_id)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_document_assignments_document_id ON document_assignments(document_id)')
+        conn.commit()
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -7669,6 +7679,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + _anav("/ar", "ar_nav_link")
             + _anav("/cashflow", "cashflow_nav_link")
             + _anav("/t2", "t2_nav_link")
+            + _anav("/clients", "clients_nav")
             + _anav("/export", "export_nav_link")
             + _anav("/qr", "qr_nav_link")
             + _lic_link
@@ -8343,6 +8354,128 @@ def render_communications(
     return page_layout(title, body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+# ---------------------------------------------------------------------------
+# Client management pages
+# ---------------------------------------------------------------------------
+
+def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
+                        flash: str = '', flash_error: str = '',
+                        lang: str = 'fr') -> str:
+    with open_db() as conn:
+        clients = conn.execute('''
+            SELECT client_code, client_name, contact_email,
+                   language, active, whatsapp_number
+            FROM clients
+            ORDER BY client_code
+        ''').fetchall()
+
+    rows = ''
+    for c in clients:
+        rows += f"""
+        <tr>
+            <td style="color:#2ecc71;font-weight:bold;">{esc(c['client_code'])}</td>
+            <td style="color:#e0e0e0;">{esc(c['client_name'] or '')}</td>
+            <td style="color:#aaa;">{esc(c['contact_email'] or '')}</td>
+            <td style="color:#e0e0e0;">{esc(c['language'] or 'fr')}</td>
+            <td>{'&#x2705;' if c['active'] else '&#x274C;'}</td>
+            <td style="color:#e0e0e0;">{esc(c['whatsapp_number'] or '') or '&#x2014;'}</td>
+            <td>
+                <a href="/clients/edit?code={urlquote(c['client_code'])}"
+                   style="background:#3498db;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;">
+                   &#x270F;&#xFE0F; Edit
+                </a>
+            </td>
+        </tr>"""
+
+    return page_layout("Clients", f"""
+    <div style="padding:24px;">
+        <a href="/" style="color:#aaa;text-decoration:none;margin-bottom:16px;display:inline-block;">
+            &larr; Retour &agrave; la file / Back to queue
+        </a>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="color:white;">&#x1F465; Clients</h2>
+            <a href="/clients/new" style="background:#2ecc71;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;">
+                + Nouveau client / New client
+            </a>
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;background:#1a2e4a;border-radius:8px;">
+            <thead>
+                <tr style="background:#0d1b2a;">
+                    <th style="color:#aaa;padding:12px;text-align:left;">Code</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Nom / Name</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Email</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Langue</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Actif</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4F1; WhatsApp</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+    </div>
+    """, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
+                       client: dict[str, Any] | None = None,
+                       flash: str = '', flash_error: str = '',
+                       lang: str = 'fr') -> str:
+    is_edit = client is not None
+    title = "Modifier client / Edit client" if is_edit else "Nouveau client / New client"
+    code_val = esc(client['client_code']) if is_edit else ''
+    name_val = esc(client['client_name'] or '') if is_edit else ''
+    email_val = esc(client['contact_email'] or '') if is_edit else ''
+    lang_val = (client['language'] or 'fr') if is_edit else 'fr'
+    whatsapp_val = esc(client['whatsapp_number'] or '') if is_edit else ''
+    active_checked = 'checked' if (not is_edit or client['active']) else ''
+    code_readonly = 'readonly style="background:#334155;"' if is_edit else ''
+
+    return page_layout(title, f"""
+    <div style="padding:24px;max-width:600px;">
+        <h2 style="color:white;">{esc(title)}</h2>
+        <form method="POST" action="/clients/save" style="display:flex;flex-direction:column;gap:12px;">
+            <label style="color:#e0e0e0;">Code client / Client code *
+                <input type="text" name="client_code" value="{code_val}" required
+                       {code_readonly}
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Nom / Name
+                <input type="text" name="client_name" value="{name_val}"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Email
+                <input type="email" name="contact_email" value="{email_val}"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Langue / Language
+                <select name="language" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+                    <option value="fr" {"selected" if lang_val == "fr" else ""}>Fran&#xe7;ais</option>
+                    <option value="en" {"selected" if lang_val == "en" else ""}>English</option>
+                </select>
+            </label>
+            <label style="color:#e0e0e0;">&#x1F4F1; WhatsApp
+                <input type="text" name="whatsapp_number" value="{whatsapp_val}"
+                       placeholder="+15145551234"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="active" value="1" {active_checked}>
+                Actif / Active
+            </label>
+            <div style="display:flex;gap:12px;margin-top:8px;">
+                <button type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;">
+                    &#x2705; Sauvegarder / Save
+                </button>
+                <a href="/clients" style="background:#64748b;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">
+                    Annuler / Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+    """, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
 def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 flash: str, flash_error: str, include_ignored: bool,
                 only_my_queue: bool, only_unassigned: bool, lang: str = "fr",
@@ -8525,6 +8658,12 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
 
     all_usernames = get_available_usernames()
     _unassigned_badge = '<span class="badge badge-needsreview">\U0001F4C1 Non assign\u00e9</span>'
+    # Pre-import learning status icon function once (not per-row)
+    _get_learning_icon = None
+    try:
+        from src.engines.client_mismatch_engine import get_learning_status_icon as _get_learning_icon
+    except Exception:
+        pass
     row_html: list[str] = []
     card_html: list[str] = []
     for row in rows:
@@ -8551,15 +8690,16 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             assign_ctrl = esc(assigned or t("unassigned_label", lang))
 
         # Learning status icon
-        try:
-            from src.engines.client_mismatch_engine import get_learning_status_icon
-            _ls = get_learning_status_icon(row)
-            _ls_badge = (
-                f'<span class="badge {_ls["css_class"]}" title="{esc(_ls["label_fr"])}">'
-                f'{_ls["icon"]}</span> '
-            )
-        except Exception:
-            _ls_badge = ""
+        _ls_badge = ""
+        if _get_learning_icon:
+            try:
+                _ls = _get_learning_icon(row)
+                _ls_badge = (
+                    f'<span class="badge {_ls["css_class"]}" title="{esc(_ls["label_fr"])}">'
+                    f'{_ls["icon"]}</span> '
+                )
+            except Exception:
+                pass
 
         row_html.append(f"""<tr>
             <td class="file-cell"><a href="/document?id={urlquote(row["document_id"])}">{esc(row["file_name"])}</a>
@@ -11630,6 +11770,49 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self.wfile.write(csv_bytes)
                 return
 
+            # ------------------------------------------------------------------
+            # Client management (owner/manager)
+            # ------------------------------------------------------------------
+            if path == "/clients":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
+                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_clients_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/clients/new":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_client_form(ctx, user, lang=lang))
+                return
+
+            if path == "/clients/edit":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                code = qs.get("code", [""])[0].strip()
+                with open_db() as conn:
+                    row = conn.execute('SELECT * FROM clients WHERE client_code = ?', (code,)).fetchone()
+                if not row:
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
+                self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
+                return
+
             self._send_html(page_layout(
                 t("err_not_found", lang),
                 f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2>'
@@ -13865,6 +14048,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 with open_db() as conn:
                     _aging.send_ar_invoice(inv_id, conn)
                 self._flash_redirect(f"/ar?client_code={urlquote(cc)}", flash=t("ar_sent", lang))
+                return
+
+            # --- Client management save ---
+            if path == "/clients/save":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                client_code = normalize_text(form.get("client_code", "")).strip()
+                if not client_code:
+                    self._flash_redirect("/clients", error="Client code is required")
+                    return
+                client_name = form.get("client_name", "").strip()
+                contact_email = form.get("contact_email", "").strip()
+                language = form.get("language", "fr").strip()
+                if language not in ("fr", "en"):
+                    language = "fr"
+                whatsapp_number = form.get("whatsapp_number", "").strip()
+                active = 1 if form.get("active") else 0
+                with open_db() as conn:
+                    conn.execute('''
+                        INSERT OR REPLACE INTO clients
+                            (client_code, client_name, contact_email, language, active, whatsapp_number)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (client_code, client_name, contact_email, language, active, whatsapp_number))
+                    conn.commit()
+                self._flash_redirect("/clients", flash=f"Client {client_code} saved")
                 return
 
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)

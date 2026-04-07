@@ -1449,121 +1449,170 @@ def process_file(
     raw_ocr_text:     str | None     = None
     handwriting_score = 0.0
 
+    # 3a. Try Google Document AI first (primary extractor)
+    _docai_succeeded = False
     try:
-        if fmt == "pdf":
-            text       = extract_pdf_text(file_bytes)
-            word_count = len(text.split()) if text else 0
+        from src.engines.google_docai import process_with_docai
 
-            if word_count >= PDF_TEXT_MIN_WORDS:
-                raw_ocr_text      = text
-                raw               = _extract_from_text(text)
-                extraction_method = "pdfplumber_text"
+        _docai_type = 'expense' if fmt in ('jpeg', 'png', 'heic', 'webp', 'tiff') else 'invoice'
+        docai_result = process_with_docai(file_path, _docai_type)
+
+        if docai_result.get('raw_text'):
+            raw_ocr_text = docai_result['raw_text']
+
+            if docai_result.get('docai_confidence', 0) > 0.7:
+                # DocAI gave high-confidence structured fields — use them
+                raw = _extract_from_text(raw_ocr_text)
+                if docai_result.get('vendor_name'):
+                    raw['vendor_name'] = docai_result['vendor_name']
+                if docai_result.get('amount'):
+                    try:
+                        raw['total'] = float(str(docai_result['amount']).replace(',', '').replace('$', '').strip())
+                    except (ValueError, TypeError):
+                        pass
+                if docai_result.get('subtotal'):
+                    try:
+                        raw['subtotal'] = float(str(docai_result['subtotal']).replace(',', '').replace('$', '').strip())
+                    except (ValueError, TypeError):
+                        pass
+                if docai_result.get('tax_total'):
+                    try:
+                        raw['tax_total'] = float(str(docai_result['tax_total']).replace(',', '').replace('$', '').strip())
+                    except (ValueError, TypeError):
+                        pass
+                if docai_result.get('document_date'):
+                    raw['document_date'] = docai_result['document_date']
+                if docai_result.get('invoice_number'):
+                    raw['invoice_number'] = docai_result['invoice_number']
+                if docai_result.get('gst_number'):
+                    raw['gst_number'] = docai_result['gst_number']
+                raw['confidence'] = max(float(raw.get('confidence') or 0), docai_result['docai_confidence'])
+                extraction_method = f"google_docai_{_docai_type}"
+                _docai_succeeded = True
             else:
-                images = _pdf_to_images(file_bytes)
-                if images:
-                    # Check for handwriting before choosing pipeline
-                    handwriting_score = detect_handwriting(file_bytes)
+                # Low confidence but we still have raw text — let normal pipeline use it
+                raw = _extract_from_text(raw_ocr_text)
+                extraction_method = "google_docai_text_only"
+                _docai_succeeded = True
+    except Exception as _docai_exc:
+        logging.warning(f'DocAI failed, falling back to legacy pipeline: {_docai_exc}')
+
+    if not _docai_succeeded:
+        try:
+            if fmt == "pdf":
+                text       = extract_pdf_text(file_bytes)
+                word_count = len(text.split()) if text else 0
+
+                if word_count >= PDF_TEXT_MIN_WORDS:
+                    raw_ocr_text      = text
+                    raw               = _extract_from_text(text)
+                    extraction_method = "pdfplumber_text"
+                else:
+                    images = _pdf_to_images(file_bytes)
+                    if images:
+                        # Check for handwriting before choosing pipeline
+                        handwriting_score = detect_handwriting(file_bytes)
+                        if handwriting_score > HANDWRITING_HIGH_THRESHOLD:
+                            raw               = call_vision_handwriting(*images[0])
+                            extraction_method = "vision_handwriting"
+                        elif handwriting_score < HANDWRITING_LOW_THRESHOLD:
+                            raw               = call_vision(*images[0])
+                            extraction_method = "vision_pdf_fallback"
+                        else:
+                            # Ambiguous: try both pipelines, use higher confidence
+                            raw_std = call_vision(*images[0])
+                            raw_hw  = call_vision_handwriting(*images[0])
+                            std_conf = float(raw_std.get("confidence") or 0.0)
+                            hw_conf  = float(raw_hw.get("confidence") or 0.0)
+                            if hw_conf >= std_conf:
+                                raw               = raw_hw
+                                extraction_method = "vision_handwriting"
+                            else:
+                                raw               = raw_std
+                                extraction_method = "vision_pdf_fallback"
+                    elif text:
+                        raw_ocr_text      = text
+                        raw               = _extract_from_text(text)
+                        extraction_method = "pdfminer_sparse_text"
+                    else:
+                        raw               = {"confidence": 0.1, "doc_type": "unknown",
+                                            "notes": "Empty or unreadable PDF."}
+                        extraction_method = "empty_pdf"
+            else:
+                norm_bytes, mime_type = _normalise_image(file_bytes, fmt)
+                # Check for handwriting on image formats
+                handwriting_score = detect_handwriting(file_bytes)
+                _vision_error: str | None = None
+                try:
                     if handwriting_score > HANDWRITING_HIGH_THRESHOLD:
-                        raw               = call_vision_handwriting(*images[0])
-                        extraction_method = "vision_handwriting"
+                        raw               = call_vision_handwriting(norm_bytes, mime_type)
+                        extraction_method = f"vision_handwriting_{fmt}"
                     elif handwriting_score < HANDWRITING_LOW_THRESHOLD:
-                        raw               = call_vision(*images[0])
-                        extraction_method = "vision_pdf_fallback"
+                        raw               = call_vision(norm_bytes, mime_type)
+                        extraction_method = f"vision_{fmt}"
                     else:
                         # Ambiguous: try both pipelines, use higher confidence
-                        raw_std = call_vision(*images[0])
-                        raw_hw  = call_vision_handwriting(*images[0])
+                        raw_std = call_vision(norm_bytes, mime_type)
+                        raw_hw  = call_vision_handwriting(norm_bytes, mime_type)
                         std_conf = float(raw_std.get("confidence") or 0.0)
                         hw_conf  = float(raw_hw.get("confidence") or 0.0)
                         if hw_conf >= std_conf:
                             raw               = raw_hw
-                            extraction_method = "vision_handwriting"
+                            extraction_method = f"vision_handwriting_{fmt}"
                         else:
                             raw               = raw_std
-                            extraction_method = "vision_pdf_fallback"
-                elif text:
-                    raw_ocr_text      = text
-                    raw               = _extract_from_text(text)
-                    extraction_method = "pdfminer_sparse_text"
-                else:
-                    raw               = {"confidence": 0.1, "doc_type": "unknown",
-                                        "notes": "Empty or unreadable PDF."}
-                    extraction_method = "empty_pdf"
-        else:
-            norm_bytes, mime_type = _normalise_image(file_bytes, fmt)
-            # Check for handwriting on image formats
-            handwriting_score = detect_handwriting(file_bytes)
-            _vision_error: str | None = None
-            try:
-                if handwriting_score > HANDWRITING_HIGH_THRESHOLD:
-                    raw               = call_vision_handwriting(norm_bytes, mime_type)
-                    extraction_method = f"vision_handwriting_{fmt}"
-                elif handwriting_score < HANDWRITING_LOW_THRESHOLD:
-                    raw               = call_vision(norm_bytes, mime_type)
-                    extraction_method = f"vision_{fmt}"
-                else:
-                    # Ambiguous: try both pipelines, use higher confidence
-                    raw_std = call_vision(norm_bytes, mime_type)
-                    raw_hw  = call_vision_handwriting(norm_bytes, mime_type)
-                    std_conf = float(raw_std.get("confidence") or 0.0)
-                    hw_conf  = float(raw_hw.get("confidence") or 0.0)
-                    if hw_conf >= std_conf:
-                        raw               = raw_hw
-                        extraction_method = f"vision_handwriting_{fmt}"
-                    else:
-                        raw               = raw_std
-                        extraction_method = f"vision_{fmt}"
-            except Exception as _ve:
-                # Vision API failed — try Tesseract below
-                _vision_error = str(_ve)
-                raw               = {}
-                extraction_method = f"vision_failed_{fmt}"
+                            extraction_method = f"vision_{fmt}"
+                except Exception as _ve:
+                    # Vision API failed — try Tesseract below
+                    _vision_error = str(_ve)
+                    raw               = {}
+                    extraction_method = f"vision_failed_{fmt}"
 
-            # Local OCR fallback: if Vision returned nothing useful, try PaddleOCR then Tesseract
-            _vision_got_amount = raw.get("total") is not None or raw.get("subtotal") is not None
-            _vision_got_vendor = bool(raw.get("vendor_name"))
-            if not _vision_got_amount and not _vision_got_vendor:
-                _tess_text = _extract_with_paddle(file_path)
-                if _tess_text is None:  # PaddleOCR not available
-                    _tess_text = _extract_text_with_tesseract(file_bytes)
-                if _tess_text and len(_tess_text.split()) >= 3:
-                    raw_ocr_text = _tess_text
-                    _tess_parsed = _extract_from_text(_tess_text)
-                    for _tk, _tv in _tess_parsed.items():
-                        if _tv is not None and not raw.get(_tk):
-                            raw[_tk] = _tv
-                    _receipt_amounts = _extract_receipt_amounts(_tess_text)
-                    if _receipt_amounts.get("total") and not raw.get("total"):
-                        raw["total"] = _receipt_amounts["total"]
-                    if _receipt_amounts.get("tax_total") and not raw.get("tax_total"):
-                        raw["tax_total"] = _receipt_amounts["tax_total"]
-                    # Detect vendor from receipt text patterns
-                    if not raw.get("vendor_name"):
-                        _tess_vendor = _detect_receipt_vendor(_tess_text)
-                        if _tess_vendor:
-                            raw["vendor_name"] = _tess_vendor
-                    if not raw.get("confidence") or float(raw.get("confidence") or 0) < 0.3:
-                        raw["confidence"] = 0.5
-                    extraction_method = f"tesseract_{fmt}"
-                    _vision_error = None  # Tesseract succeeded, clear error
-                elif _vision_error:
-                    # Both Vision and Tesseract failed
-                    error = _vision_error
-                    raw = {
-                        "confidence": 0.0,
-                        "doc_type":   "unknown",
-                        "notes":      f"Extraction failed: {_vision_error}",
-                    }
-                    extraction_method = "failed"
+                # Local OCR fallback: if Vision returned nothing useful, try PaddleOCR then Tesseract
+                _vision_got_amount = raw.get("total") is not None or raw.get("subtotal") is not None
+                _vision_got_vendor = bool(raw.get("vendor_name"))
+                if not _vision_got_amount and not _vision_got_vendor:
+                    _tess_text = _extract_with_paddle(file_path)
+                    if _tess_text is None:  # PaddleOCR not available
+                        _tess_text = _extract_text_with_tesseract(file_bytes)
+                    if _tess_text and len(_tess_text.split()) >= 3:
+                        raw_ocr_text = _tess_text
+                        _tess_parsed = _extract_from_text(_tess_text)
+                        for _tk, _tv in _tess_parsed.items():
+                            if _tv is not None and not raw.get(_tk):
+                                raw[_tk] = _tv
+                        _receipt_amounts = _extract_receipt_amounts(_tess_text)
+                        if _receipt_amounts.get("total") and not raw.get("total"):
+                            raw["total"] = _receipt_amounts["total"]
+                        if _receipt_amounts.get("tax_total") and not raw.get("tax_total"):
+                            raw["tax_total"] = _receipt_amounts["tax_total"]
+                        # Detect vendor from receipt text patterns
+                        if not raw.get("vendor_name"):
+                            _tess_vendor = _detect_receipt_vendor(_tess_text)
+                            if _tess_vendor:
+                                raw["vendor_name"] = _tess_vendor
+                        if not raw.get("confidence") or float(raw.get("confidence") or 0) < 0.3:
+                            raw["confidence"] = 0.5
+                        extraction_method = f"tesseract_{fmt}"
+                        _vision_error = None  # Tesseract succeeded, clear error
+                    elif _vision_error:
+                        # Both Vision and Tesseract failed
+                        error = _vision_error
+                        raw = {
+                            "confidence": 0.0,
+                            "doc_type":   "unknown",
+                            "notes":      f"Extraction failed: {_vision_error}",
+                        }
+                        extraction_method = "failed"
 
-    except Exception as exc:
-        error             = str(exc)
-        raw               = {
-            "confidence": 0.0,
-            "doc_type":   "unknown",
-            "notes":      f"Extraction failed: {exc}",
-        }
-        extraction_method = "failed"
+        except Exception as exc:
+            error             = str(exc)
+            raw               = {
+                "confidence": 0.0,
+                "doc_type":   "unknown",
+                "notes":      f"Extraction failed: {exc}",
+            }
+            extraction_method = "failed"
 
     # 3b. Hallucination guard — validate AI output fields
     hallucination_suspected = False

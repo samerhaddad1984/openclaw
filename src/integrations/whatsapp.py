@@ -13,6 +13,7 @@ Webhook endpoint:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
 import urllib.parse
@@ -62,6 +63,24 @@ def _open_db() -> sqlite3.Connection:
 
 
 # ---------------------------------------------------------------------------
+# Phone normalisation
+# ---------------------------------------------------------------------------
+
+def normalize_phone(phone: str) -> str:
+    """Strip whatsapp: prefix, non-digits, and leading country code 1.
+
+    'whatsapp:+15147157086' → '5147157086'
+    '+15147157086'           → '5147157086'
+    '5147157086'             → '5147157086'
+    """
+    phone = phone.replace("whatsapp:", "")
+    phone = re.sub(r"[^\d]", "", phone)
+    if len(phone) == 11 and phone.startswith("1"):
+        phone = phone[1:]
+    return phone
+
+
+# ---------------------------------------------------------------------------
 # Client lookup
 # ---------------------------------------------------------------------------
 
@@ -71,32 +90,33 @@ def get_client_by_whatsapp_phone(phone: str) -> dict[str, Any] | None:
     Checks dashboard_users first (CPA staff), then the clients table
     (client company bookkeepers).
 
-    Normalises both sides to digits-only and does a suffix-match so that
-    e.g. a stored "+15141234567" matches Twilio's "whatsapp:+15141234567".
+    Normalises the incoming phone (strips whatsapp: prefix, country code)
+    and each stored number before comparing.
     """
-    normalized = "".join(c for c in phone if c.isdigit())
+    normalized = normalize_phone(phone)
+    print(f"DEBUG: raw={phone} normalized={normalized}")
     if not normalized:
         return None
-
-    def _suffix_match(stored_raw: str) -> bool:
-        stored = "".join(c for c in (stored_raw or "") if c.isdigit())
-        return bool(stored) and (
-            stored == normalized
-            or stored.endswith(normalized)
-            or normalized.endswith(stored)
-        )
 
     try:
         with _open_db() as conn:
             # First check dashboard_users (CPA staff)
             rows = conn.execute(
-                "SELECT username, client_code, language, display_name "
+                "SELECT username, client_code, language, display_name, "
+                "whatsapp_number "
                 "FROM dashboard_users "
                 "WHERE whatsapp_number IS NOT NULL AND active=1"
             ).fetchall()
             for row in rows:
-                if _suffix_match(row["whatsapp_number"]):
-                    return dict(row)
+                if normalize_phone(row["whatsapp_number"]) == normalized:
+                    print(f"DEBUG: dashboard_users match: username={row['username']} client_code={row['client_code']}")
+                    return {
+                        "username": row["username"],
+                        "client_code": row["client_code"],
+                        "language": row["language"],
+                        "display_name": row["display_name"],
+                    }
+            print(f"DEBUG: dashboard_users no match ({len(rows)} rows checked)")
 
             # Then check clients table (client company bookkeepers)
             client_rows = conn.execute(
@@ -105,14 +125,16 @@ def get_client_by_whatsapp_phone(phone: str) -> dict[str, Any] | None:
                 "WHERE whatsapp_number IS NOT NULL AND active=1"
             ).fetchall()
             for row in client_rows:
-                if _suffix_match(row["whatsapp_number"]):
+                if normalize_phone(row["whatsapp_number"]) == normalized:
+                    print(f"DEBUG: clients match: client_code={row['client_code']} client_name={row['client_name']}")
                     return {
                         "client_code": row["client_code"],
                         "display_name": row["client_name"],
                         "language": row["language"] or "fr",
                     }
-    except Exception:
-        pass
+            print(f"DEBUG: clients no match ({len(client_rows)} rows checked)")
+    except Exception as exc:
+        print(f"DEBUG: get_client_by_whatsapp_phone exception: {exc}")
     return None
 
 
@@ -287,6 +309,8 @@ def handle_whatsapp_webhook(
 
     from_number = form_data.get("From", "")
     num_media   = int(form_data.get("NumMedia", "0") or "0")
+    print(f"DEBUG TWILIO FROM: {from_number}")
+    print(f"DEBUG TWILIO ALL: {dict(form_data)}")
 
     # 2. Look up client by sender phone
     client      = get_client_by_whatsapp_phone(from_number)
@@ -405,6 +429,11 @@ class WhatsAppWebhookHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return  # suppress default stderr logging
+
+    def end_headers(self) -> None:
+        # Tell ngrok free tier to skip the browser warning interstitial page.
+        self.send_header("ngrok-skip-browser-warning", "true")
+        super().end_headers()
 
     def _twiml(self, message: str, status: int = 200) -> None:
         body = (

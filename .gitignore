@@ -179,3 +179,7 @@ data/uploads/
 inbox/
 data/*.db
 data/backups/
+
+# Google credentials - never commit
+google-credentials.json
+*-credentials.json
