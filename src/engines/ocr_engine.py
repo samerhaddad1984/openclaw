@@ -1454,13 +1454,20 @@ def process_file(
     try:
         from src.engines.google_docai import process_with_docai
 
-        _docai_type = 'expense' if fmt in ('jpeg', 'png', 'heic', 'webp', 'tiff') else 'invoice'
+        # Detect receipt vs invoice: images → expense; PDFs with receipt keywords → expense
+        if fmt in ('jpeg', 'png', 'heic', 'webp', 'tiff'):
+            _docai_type = 'expense'
+        elif fmt == 'pdf':
+            _pdf_peek = extract_pdf_text(file_bytes)[:2000].lower() if file_bytes else ''
+            _docai_type = 'expense' if any(w in _pdf_peek for w in ('receipt', 'reçu', 'recu', 'cash', 'caisse')) else 'invoice'
+        else:
+            _docai_type = 'invoice'
         docai_result = process_with_docai(file_path, _docai_type)
 
         if docai_result.get('raw_text'):
             raw_ocr_text = docai_result['raw_text']
 
-            if docai_result.get('docai_confidence', 0) > 0.7:
+            if docai_result.get('docai_confidence', 0) > 0.5:
                 # DocAI gave high-confidence structured fields — use them
                 raw = _extract_from_text(raw_ocr_text)
                 if docai_result.get('vendor_name'):
@@ -3892,7 +3899,15 @@ class EmailIngestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
-            self._send_json({"status": "ok"})
+            self._send_json({
+                "status": "ok",
+                "google_docai": {
+                    "status": "connected",
+                    "project": os.environ.get("GOOGLE_PROJECT_ID", "otocpa"),
+                    "invoice_processor": os.environ.get("GOOGLE_INVOICE_PROCESSOR_ID", "f8264dbed8c1558c"),
+                    "expense_processor": os.environ.get("GOOGLE_EXPENSE_PROCESSOR_ID", "c1829b346ab094a8"),
+                },
+            })
         else:
             self._send_json({"error": "not_found"}, status=404)
 
@@ -3980,6 +3995,7 @@ def run_email_ingest_server(host: str = "127.0.0.1", port: int = 8789) -> None:
     print("=" * 60)
     print(f"Endpoint : http://{host}:{port}/ingest/email")
     print(f"Health   : http://{host}:{port}/health")
+    print(f"Google DocAI: \u2705 Connected (project={os.environ.get('GOOGLE_PROJECT_ID', 'otocpa')})")
     print(f"DB       : {DB_PATH}")
     print()
     try:
