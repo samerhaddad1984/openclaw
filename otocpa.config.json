@@ -1,16 +1,16 @@
 {
   "fx_rates": {
     "usd_cad_last_known": 1.3718,
-    "last_updated": "2026-04-07T18:32:05+00:00"
+    "last_updated": "2026-04-07T19:55:09+00:00"
   },
   "host": "0.0.0.0",
   "port": 8787,
   "database_path": "data/otocpa_agent.db",
   "ai_complexity_models": {
-    "simple": "deepseek/deepseek-chat",
-    "medium": "google/gemini-flash-1.5",
-    "complex": "anthropic/claude-haiku-4-5",
-    "very_complex": "anthropic/claude-sonnet-4-6"
+    "simple": "claude-haiku-4-5-20251001",
+    "medium": "claude-haiku-4-5-20251001",
+    "complex": "claude-haiku-4-5-20251001",
+    "very_complex": "claude-sonnet-4-6"
   },
   "openrouter": {
     "enabled": true,

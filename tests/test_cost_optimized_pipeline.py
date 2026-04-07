@@ -98,15 +98,15 @@ def populated_cache(tmp_db):
 
 class TestEstimateCost:
     def test_known_model(self):
-        cost = ocr._estimate_cost("deepseek/deepseek-chat", 1000)
-        assert cost == pytest.approx(0.0002, abs=1e-6)
+        cost = ocr._estimate_cost("claude-haiku-4-5-20251001", 1000)
+        assert cost == pytest.approx(0.001, abs=1e-6)
 
     def test_unknown_model_default(self):
         cost = ocr._estimate_cost("unknown/model", 1000)
         assert cost == pytest.approx(0.001, abs=1e-6)
 
     def test_zero_tokens(self):
-        assert ocr._estimate_cost("deepseek/deepseek-chat", 0) == 0.0
+        assert ocr._estimate_cost("claude-haiku-4-5-20251001", 0) == 0.0
 
     def test_haiku_cost(self):
         cost = ocr._estimate_cost("anthropic/claude-haiku-4-5", 2000)
@@ -138,8 +138,8 @@ class TestAiUsageLog:
             document_id="doc_123",
             client_code="acme",
             source="ai_simple",
-            model_used="deepseek/deepseek-chat",
-            cost_usd=0.0002,
+            model_used="claude-haiku-4-5-20251001",
+            cost_usd=0.001,
             tokens_used=500,
             confidence=0.91,
             db_path=db,
@@ -150,8 +150,8 @@ class TestAiUsageLog:
         assert row[1] == "doc_123"  # document_id
         assert row[2] == "acme"     # client_code
         assert row[3] == "ai_simple"
-        assert row[4] == "deepseek/deepseek-chat"
-        assert row[5] == pytest.approx(0.0002)
+        assert row[4] == "claude-haiku-4-5-20251001"
+        assert row[5] == pytest.approx(0.001)
         assert row[6] == 500
 
     def test_log_multiple(self, tmp_path):
@@ -390,21 +390,21 @@ class TestClassifyComplexity:
 class TestGetModelForComplexity:
     @patch.object(ocr, "_load_config", return_value={})
     def test_defaults(self, _):
-        assert ocr.get_model_for_complexity("simple") == "deepseek/deepseek-chat"
-        assert ocr.get_model_for_complexity("medium") == "google/gemini-2.0-flash-001"
-        assert ocr.get_model_for_complexity("complex") == "anthropic/claude-haiku-4-5"
-        assert ocr.get_model_for_complexity("very_complex") == "anthropic/claude-sonnet-4-6"
+        assert ocr.get_model_for_complexity("simple") == "claude-haiku-4-5-20251001"
+        assert ocr.get_model_for_complexity("medium") == "claude-haiku-4-5-20251001"
+        assert ocr.get_model_for_complexity("complex") == "claude-haiku-4-5-20251001"
+        assert ocr.get_model_for_complexity("very_complex") == "claude-sonnet-4-6"
 
     @patch.object(ocr, "_load_config", return_value={
         "ai_complexity_models": {"simple": "custom/model-1"}
     })
     def test_config_override(self, _):
         assert ocr.get_model_for_complexity("simple") == "custom/model-1"
-        assert ocr.get_model_for_complexity("medium") == "google/gemini-2.0-flash-001"
+        assert ocr.get_model_for_complexity("medium") == "claude-haiku-4-5-20251001"
 
     @patch.object(ocr, "_load_config", return_value={})
     def test_unknown_complexity(self, _):
-        assert ocr.get_model_for_complexity("unknown") == "deepseek/deepseek-chat"
+        assert ocr.get_model_for_complexity("unknown") == "claude-haiku-4-5-20251001"
 
 
 # ---------------------------------------------------------------------------
@@ -514,7 +514,7 @@ Amount Due: $250.00
             "confidence": 0.88,
             "tokens_used": 500,
             "cost_usd": 0.0001,
-            "model_used": "deepseek/deepseek-chat",
+            "model_used": "claude-haiku-4-5-20251001",
         }
         result = ocr.process_document_optimized(
             "doc_003",
@@ -526,7 +526,7 @@ Amount Due: $250.00
         assert result["source"] == "ai_simple"
         assert result["cost"] == pytest.approx(0.0001)
         assert result["vendor"] == "New Vendor"
-        assert result["model_used"] == "deepseek/deepseek-chat"
+        assert result["model_used"] == "claude-haiku-4-5-20251001"
 
     @patch.object(ocr, "_call_openrouter_for_extraction")
     @patch.object(ocr, "classify_complexity", return_value="medium")

@@ -2061,7 +2061,7 @@ CREATE TABLE IF NOT EXISTS ai_usage_log (
 
 # Approximate per-1K-token costs (input+output blended) for cost estimation
 _MODEL_COST_PER_1K: dict[str, float] = {
-    "deepseek/deepseek-chat":        0.0002,
+    "claude-haiku-4-5-20251001":     0.001,
     "google/gemini-2.0-flash-001":       0.0004,
     "anthropic/claude-haiku-4-5":    0.001,
     "anthropic/claude-sonnet-4-6":   0.003,
@@ -2349,38 +2349,33 @@ def _classify_complexity_for_model(text: str) -> str:
 
 def _extract_with_instructor(raw_text: str, doc_id: str, client_code: str,
                               conn: sqlite3.Connection) -> dict[str, Any] | None:
-    """Try Instructor + Pydantic structured extraction. Returns dict or None."""
+    """Try Instructor + Pydantic structured extraction via Anthropic Claude.
+
+    Falls back to OpenRouter if the Anthropic call fails.
+    Returns dict or None.
+    """
     try:
         import instructor
-        import openai as _openai
         from src.engines.invoice_schema import InvoiceExtraction
     except ImportError:
         return None
 
-    api_key = os.environ.get('OPENROUTER_API_KEY', '')
-    if not api_key:
+    anthropic_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    openrouter_key = os.environ.get('OPENROUTER_API_KEY', '')
+    if not anthropic_key and not openrouter_key:
         return None
 
-    try:
-        client = instructor.from_openai(
-            _openai.OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=api_key,
-            ),
-            mode=instructor.Mode.JSON,
-        )
+    examples = get_learning_examples(conn, client_code)
 
-        examples = get_learning_examples(conn, client_code)
+    # Tag non-currency numbers so AI ignores them
+    text_for_ai = re.sub(
+        r'(\d+(?:\.\d+)?)\s*(GB|MB|TB|KB|GHz|kWh|users?|seats?|months?)',
+        r'[\1\2-NOT-MONEY]',
+        raw_text,
+        flags=re.IGNORECASE
+    )
 
-        # Tag non-currency numbers so AI ignores them
-        text_for_ai = re.sub(
-            r'(\d+(?:\.\d+)?)\s*(GB|MB|TB|KB|GHz|kWh|users?|seats?|months?)',
-            r'[\1\2-NOT-MONEY]',
-            raw_text,
-            flags=re.IGNORECASE
-        )
-
-        prompt = f"""Extract invoice fields from this text.
+    prompt = f"""Extract invoice fields from this text.
 
 RULES:
 - vendor_name: company name only, never tariff codes (DEF, GD) or document types
@@ -2394,23 +2389,61 @@ RULES:
 INVOICE TEXT:
 {text_for_ai[:3000]}"""
 
-        result = client.chat.completions.create(
-            model="deepseek/deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            response_model=InvoiceExtraction,
-            max_retries=2,
-        )
+    # --- Primary: Anthropic SDK via instructor ---
+    if anthropic_key:
+        try:
+            import anthropic as _anthropic
 
-        data = result.model_dump()
-        data['ai_used'] = True
-        data['confidence'] = 0.92
-        data['ai_model_used'] = 'deepseek/deepseek-chat (instructor)'
-        return data
+            client = instructor.from_anthropic(_anthropic.Anthropic(api_key=anthropic_key))
 
-    except Exception as e:
-        logging.getLogger(__name__).warning(
-            'Instructor extraction failed for %s: %s', doc_id, e)
-        return None
+            result = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=1000,
+                messages=[{'role': 'user', 'content': prompt}],
+                response_model=InvoiceExtraction,
+            )
+
+            data = result.model_dump()
+            data['ai_used'] = True
+            data['confidence'] = 0.92
+            data['ai_model_used'] = 'claude-haiku-4-5-20251001 (instructor)'
+            return data
+
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                'Instructor/Anthropic extraction failed for %s: %s — falling back to OpenRouter', doc_id, e)
+
+    # --- Fallback: OpenRouter via instructor ---
+    if openrouter_key:
+        try:
+            import openai as _openai
+
+            client = instructor.from_openai(
+                _openai.OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=openrouter_key,
+                ),
+                mode=instructor.Mode.JSON,
+            )
+
+            result = client.chat.completions.create(
+                model="anthropic/claude-haiku-4-5-20251001",
+                messages=[{"role": "user", "content": prompt}],
+                response_model=InvoiceExtraction,
+                max_retries=2,
+            )
+
+            data = result.model_dump()
+            data['ai_used'] = True
+            data['confidence'] = 0.92
+            data['ai_model_used'] = 'anthropic/claude-haiku-4-5-20251001 (instructor-openrouter-fallback)'
+            return data
+
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                'Instructor/OpenRouter fallback failed for %s: %s', doc_id, e)
+
+    return None
 
 
 def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
@@ -3482,16 +3515,16 @@ def get_model_for_complexity(complexity: str) -> str:
     Reads from otocpa.config.json ai_complexity_models, with defaults.
     """
     defaults = {
-        "simple": "deepseek/deepseek-chat",
-        "medium": "google/gemini-2.0-flash-001",
-        "complex": "anthropic/claude-haiku-4-5",
-        "very_complex": "anthropic/claude-sonnet-4-6",
+        "simple": "claude-haiku-4-5-20251001",
+        "medium": "claude-haiku-4-5-20251001",
+        "complex": "claude-haiku-4-5-20251001",
+        "very_complex": "claude-sonnet-4-6",
     }
     cfg = _load_config()
     models = cfg.get("ai_complexity_models", {})
     if isinstance(models, dict) and complexity in models:
         return str(models[complexity])
-    return defaults.get(complexity, "deepseek/deepseek-chat")
+    return defaults.get(complexity, "claude-haiku-4-5-20251001")
 
 
 def _build_extraction_prompt(file_path: str, text_result: dict[str, Any] | None = None) -> str:

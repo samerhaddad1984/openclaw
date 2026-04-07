@@ -169,28 +169,28 @@ class TestRouterProviderSelection:
     def test_routine_task_picks_routine_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("classify_document")
-        assert name == "google/gemini-2.0-flash-001"
-        assert cfg["model"] == "google/gemini-2.0-flash-001"
+        assert name == "claude-haiku-4-5-20251001"
+        assert cfg["model"] == "claude-haiku-4-5-20251001"
 
     def test_complex_task_picks_premium_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("escalation_decision")
-        assert name == "anthropic/claude-haiku-4-5"
-        assert cfg["model"] == "anthropic/claude-haiku-4-5"
+        assert name == "claude-haiku-4-5-20251001"
+        assert cfg["model"] == "claude-haiku-4-5-20251001"
 
     def test_unknown_task_picks_premium_provider(self):
         router = _fresh_router()
         name, cfg = router._pick_provider("some_unknown_task")
-        # Unknown tasks fall back to deepseek/deepseek-chat
-        assert name == "deepseek/deepseek-chat"
-        assert cfg["model"] == "deepseek/deepseek-chat"
+        # Unknown tasks fall back to claude-haiku-4-5-20251001
+        assert name == "claude-haiku-4-5-20251001"
+        assert cfg["model"] == "claude-haiku-4-5-20251001"
 
     def test_all_default_routine_tasks_go_to_routine(self):
         router = _fresh_router()
         expected = {
-            "classify_document": "google/gemini-2.0-flash-001",
-            "extract_vendor": "google/gemini-2.0-flash-001",
-            "suggest_gl": "deepseek/deepseek-chat",
+            "classify_document": "claude-haiku-4-5-20251001",
+            "extract_vendor": "claude-haiku-4-5-20251001",
+            "suggest_gl": "claude-haiku-4-5-20251001",
         }
         for task, model in expected.items():
             name, _ = router._pick_provider(task)
@@ -294,12 +294,12 @@ class TestRouterCall:
         assert result["result"] == "AI response text"
         assert result["error"] is None
         assert result["fallback_used"] is False
-        assert result["provider"] == "google/gemini-2.0-flash-001"
+        assert result["provider"] == "claude-haiku-4-5-20251001"
 
     def test_successful_premium_call(self):
         result = self._patched_call("escalation_decision", "Should we post this?")
         assert result["result"] == "AI response text"
-        assert result["provider"] == "anthropic/claude-haiku-4-5"
+        assert result["provider"] == "claude-haiku-4-5-20251001"
 
     def test_fallback_used_when_primary_fails(self):
         router = _fresh_router()
@@ -401,7 +401,7 @@ class TestRouterCall:
         assert kwargs["username"] == "alice"
         assert kwargs["document_id"] == "doc-1"
         assert kwargs["task_type"] == "escalation_decision"
-        assert kwargs["provider"] == "anthropic/claude-haiku-4-5"
+        assert kwargs["provider"] == "claude-haiku-4-5-20251001"
 
 
 # ---------------------------------------------------------------------------
