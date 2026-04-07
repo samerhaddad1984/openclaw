@@ -9825,7 +9825,7 @@ def render_onboarding_step2(ctx: dict[str, Any], user: dict[str, Any],
     with open_db() as conn:
         try:
             client_rows = conn.execute(
-                "SELECT client_code, client_name FROM clients ORDER BY client_name"
+                "SELECT client_code, client_name, whatsapp_number FROM clients ORDER BY client_name"
             ).fetchall()
         except Exception:
             client_rows = []
@@ -9834,7 +9834,8 @@ def render_onboarding_step2(ctx: dict[str, Any], user: dict[str, Any],
     if client_rows:
         rows_html = "".join(
             f"<tr><td style='padding:8px 12px;'>{esc(r['client_code'])}</td>"
-            f"<td style='padding:8px 12px;'>{esc(r['client_name'] or '')}</td></tr>"
+            f"<td style='padding:8px 12px;'>{esc(r['client_name'] or '')}</td>"
+            f"<td style='padding:8px 12px;'>{esc(r['whatsapp_number'] or '')}</td></tr>"
             for r in client_rows
         )
         client_table = f"""
@@ -9843,6 +9844,7 @@ def render_onboarding_step2(ctx: dict[str, Any], user: dict[str, Any],
           <thead><tr style="background:#f8fafc;">
             <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("onb_client_code", lang))}</th>
             <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">{esc(t("onb_client_name", lang))}</th>
+            <th style="padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0;">WhatsApp</th>
           </tr></thead>
           <tbody>{rows_html}</tbody>
         </table>"""
@@ -9880,6 +9882,10 @@ def render_onboarding_step2(ctx: dict[str, Any], user: dict[str, Any],
               <div>
                 <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">{esc(t("onb_entity_type", lang))}</label>
                 <select name="entity_type" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">{entity_opts}</select>
+              </div>
+              <div>
+                <label style="display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;">WhatsApp</label>
+                <input name="whatsapp_number" type="tel" placeholder="+15141234567" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:6px;">
               </div>
             </div>
             <button type="submit" class="button-link btn-primary" style="margin-top:16px;">{esc(t("onb_add_client", lang))}</button>
@@ -13570,19 +13576,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 cname = normalize_text(form.get("client_name", ""))
                 province = normalize_text(form.get("province", "QC"))
                 entity_type = normalize_text(form.get("entity_type", "company"))
+                wa_number = normalize_text(form.get("whatsapp_number", "")).strip() or None
                 if not cc or not cname:
                     self._flash_redirect("/onboarding/step2", error=t("err_required", lang) if t("err_required", lang) != "err_required" else "All fields are required.")
                     return
                 try:
                     with open_db() as conn:
                         conn.execute(
-                            """INSERT INTO clients (client_code, client_name, province, entity_type)
-                               VALUES (?,?,?,?)
+                            """INSERT INTO clients (client_code, client_name, province, entity_type, whatsapp_number)
+                               VALUES (?,?,?,?,?)
                                ON CONFLICT(client_code) DO UPDATE SET
                                  client_name=excluded.client_name,
                                  province=excluded.province,
-                                 entity_type=excluded.entity_type""",
-                            (cc, cname, province, entity_type),
+                                 entity_type=excluded.entity_type,
+                                 whatsapp_number=excluded.whatsapp_number""",
+                            (cc, cname, province, entity_type, wa_number),
                         )
                         conn.commit()
                     self._flash_redirect("/onboarding/step2", flash=t("flash_doc_updated", lang))

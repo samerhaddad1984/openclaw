@@ -66,7 +66,10 @@ def _open_db() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 def get_client_by_whatsapp_phone(phone: str) -> dict[str, Any] | None:
-    """Look up a dashboard_users row by whatsapp_number matching *phone*.
+    """Look up a user by whatsapp_number matching *phone*.
+
+    Checks dashboard_users first (CPA staff), then the clients table
+    (client company bookkeepers).
 
     Normalises both sides to digits-only and does a suffix-match so that
     e.g. a stored "+15141234567" matches Twilio's "whatsapp:+15141234567".
@@ -74,21 +77,40 @@ def get_client_by_whatsapp_phone(phone: str) -> dict[str, Any] | None:
     normalized = "".join(c for c in phone if c.isdigit())
     if not normalized:
         return None
+
+    def _suffix_match(stored_raw: str) -> bool:
+        stored = "".join(c for c in (stored_raw or "") if c.isdigit())
+        return bool(stored) and (
+            stored == normalized
+            or stored.endswith(normalized)
+            or normalized.endswith(stored)
+        )
+
     try:
         with _open_db() as conn:
+            # First check dashboard_users (CPA staff)
             rows = conn.execute(
                 "SELECT username, client_code, language, display_name "
                 "FROM dashboard_users "
                 "WHERE whatsapp_number IS NOT NULL AND active=1"
             ).fetchall()
-        for row in rows:
-            stored = "".join(c for c in (row["whatsapp_number"] or "") if c.isdigit())
-            if stored and (
-                stored == normalized
-                or stored.endswith(normalized)
-                or normalized.endswith(stored)
-            ):
-                return dict(row)
+            for row in rows:
+                if _suffix_match(row["whatsapp_number"]):
+                    return dict(row)
+
+            # Then check clients table (client company bookkeepers)
+            client_rows = conn.execute(
+                "SELECT client_code, client_name, language, whatsapp_number "
+                "FROM clients "
+                "WHERE whatsapp_number IS NOT NULL AND active=1"
+            ).fetchall()
+            for row in client_rows:
+                if _suffix_match(row["whatsapp_number"]):
+                    return {
+                        "client_code": row["client_code"],
+                        "display_name": row["client_name"],
+                        "language": row["language"] or "fr",
+                    }
     except Exception:
         pass
     return None
