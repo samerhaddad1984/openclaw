@@ -61,8 +61,6 @@ bin/
 bin/clawdbot-mac
 bin/docs-list
 
-Core/
-
 apps/ios/*.xcodeproj/
 apps/ios/*.xcworkspace/
 apps/ios/.swiftpm/
