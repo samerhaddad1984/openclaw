@@ -1213,6 +1213,7 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("ai_model_used",              "TEXT"),
     ("ai_cost",                    "REAL DEFAULT 0"),
     ("raw_ai_response",            "TEXT"),
+    ("logical_fingerprint",        "TEXT"),
 ]
 
 
@@ -1244,6 +1245,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         "ai_model_used":             None,
         "ai_cost":                   0,
         "raw_ai_response":           None,
+        "logical_fingerprint":       None,
         **record,
     }
     conn = sqlite3.connect(str(db_path))
@@ -1261,7 +1263,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 extraction_method, ingest_source,
                 raw_ocr_text, hallucination_suspected,
                 handwriting_low_confidence,
-                ai_used, ai_complexity, ai_model_used, ai_cost, raw_ai_response
+                ai_used, ai_complexity, ai_model_used, ai_cost, raw_ai_response,
+                logical_fingerprint
             ) VALUES (
                 :document_id, :file_name, :file_path, :client_code,
                 :vendor, :doc_type, :amount, :document_date,
@@ -1272,7 +1275,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 :extraction_method, :ingest_source,
                 :raw_ocr_text, :hallucination_suspected,
                 :handwriting_low_confidence,
-                :ai_used, :ai_complexity, :ai_model_used, :ai_cost, :raw_ai_response
+                :ai_used, :ai_complexity, :ai_model_used, :ai_cost, :raw_ai_response,
+                :logical_fingerprint
             )
             ON CONFLICT(document_id) DO UPDATE SET
                 vendor                      = excluded.vendor,
@@ -1298,7 +1302,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 ai_complexity               = excluded.ai_complexity,
                 ai_model_used               = excluded.ai_model_used,
                 ai_cost                     = excluded.ai_cost,
-                raw_ai_response             = excluded.raw_ai_response
+                raw_ai_response             = excluded.raw_ai_response,
+                logical_fingerprint         = COALESCE(excluded.logical_fingerprint, documents.logical_fingerprint)
             """,
             record,
         )
@@ -1424,6 +1429,10 @@ def process_file(
 
     doc_id = document_id or _new_doc_id()
     now    = _utc_now_iso()
+
+    # 0. Content fingerprint (MD5 of raw bytes) for dedup
+    import hashlib as _hashlib
+    content_fingerprint = _hashlib.md5(file_bytes).hexdigest()
 
     # 1. Format detection
     fmt = detect_format(file_bytes)
@@ -1935,6 +1944,7 @@ def process_file(
         "ai_model_used":         raw.get("ai_model_used"),
         "ai_cost":               raw.get("ai_cost", 0),
         "raw_ai_response":       raw.get("raw_ai_response"),
+        "logical_fingerprint":   content_fingerprint,
     }
     upsert_document(record, db_path=db_path)
 

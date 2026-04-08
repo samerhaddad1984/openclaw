@@ -490,22 +490,18 @@ class _FileDispatcher:
         self._lock = threading.Lock()
 
     def _already_in_db(self, file_path: Path) -> bool:
-        """Check whether a file (by cleaned name or fingerprint) is already in the DB recently."""
+        """Check whether a file with the same content already exists in the DB."""
         try:
-            clean_name = re.sub(r'(_\d{12,})+', '', file_path.stem) + file_path.suffix
-            # Also strip monotonic_ns timestamps (15+ digits)
-            clean_name = re.sub(r'(_\d{15,})+', '', Path(clean_name).stem) + Path(clean_name).suffix
-            # Also strip OneDrive conflict hex suffixes
-            clean_name = re.sub(r'_[0-9a-f]{8}(?:_[0-9a-f]{8})*', '', Path(clean_name).stem) + Path(clean_name).suffix
+            import hashlib
+            with open(file_path, 'rb') as f:
+                content_hash = hashlib.md5(f.read()).hexdigest()
             conn = sqlite3.connect(str(self._db))
             try:
                 row = conn.execute(
                     '''SELECT document_id FROM documents
-                       WHERE file_name = ?
-                       AND created_at > datetime('now', '-24 hours')
-                       AND extraction_method != 'failed'
+                       WHERE logical_fingerprint = ?
                        LIMIT 1''',
-                    (clean_name,),
+                    (content_hash,),
                 ).fetchone()
                 return row is not None
             finally:

@@ -275,14 +275,13 @@ class TestTryCall:
 
 class TestRouterCall:
     def _patched_call(self, task_type: str, prompt: str, **kwargs) -> dict[str, Any]:
-        """Run router.call with HTTP, DB, cache, and memory short-circuit all mocked."""
+        """Run router.call with Anthropic SDK, DB, cache, and memory short-circuit all mocked."""
         router = _fresh_router()
-        with patch("src.agents.core.ai_router.requests.post") as mock_post, \
+        with patch.object(router, "_try_anthropic_sdk", return_value="AI response text"), \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
-            mock_post.return_value = _make_http_response("AI response text")
             return router.call(task_type, prompt, **kwargs)
 
     def test_returns_expected_keys(self):
@@ -313,12 +312,11 @@ class TestRouterCall:
 
         with patch.object(ai_router, "get_providers_for_task", return_value=[fake_db_provider]), \
              patch.object(ai_router, "call_provider", side_effect=ConnectionError("db provider down")), \
-             patch("src.agents.core.ai_router.requests.post") as mock_post, \
+             patch.object(router, "_try_anthropic_sdk", return_value="fallback response"), \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
-            mock_post.return_value = _make_http_response("fallback response")
             result = router.call("classify_document", "classify this", fallback_on_error=True)
 
         assert result["fallback_used"] is True
@@ -327,7 +325,8 @@ class TestRouterCall:
 
     def test_no_fallback_when_disabled(self):
         router = _fresh_router()
-        with patch("src.agents.core.ai_router.requests.post", side_effect=ConnectionError("down")), \
+        with patch.object(router, "_try_anthropic_sdk", side_effect=ConnectionError("down")), \
+             patch("src.agents.core.ai_router.requests.post", side_effect=ConnectionError("down")), \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
@@ -339,45 +338,44 @@ class TestRouterCall:
         assert result["error"] is not None
 
     def test_prompt_sanitized_before_http(self):
-        """Verify sanitized text (not raw PII) reaches the HTTP call."""
+        """Verify sanitized text (not raw PII) reaches the AI call."""
         router = _fresh_router()
-        captured_payload: list[dict] = []
+        captured_prompts: list[str] = []
 
-        def capture(*args, **kwargs):
-            captured_payload.append(kwargs.get("json") or {})
-            return _make_http_response("ok")
+        def capture(*, model, system_prompt, prompt, image_bytes=None):
+            captured_prompts.append(prompt)
+            return "ok"
 
-        with patch("src.agents.core.ai_router.requests.post", side_effect=capture), \
+        with patch.object(router, "_try_anthropic_sdk", side_effect=capture), \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
             router.call("classify_document", "Amount $1,500.00 for SIN 111-222-333")
 
-        assert captured_payload, "HTTP was never called"
-        messages = captured_payload[0].get("messages", [])
-        user_content = next(m["content"] for m in messages if m["role"] == "user")
+        assert captured_prompts, "AI was never called"
+        user_content = captured_prompts[0]
         assert "111-222-333" not in user_content
         assert "$1,500.00" not in user_content
 
     def test_context_dict_included_in_prompt(self):
         """Context dict should appear JSON-serialized in the outbound prompt."""
         router = _fresh_router()
-        captured: list[dict] = []
+        captured_prompts: list[str] = []
 
-        def capture(*args, **kwargs):
-            captured.append(kwargs.get("json") or {})
-            return _make_http_response("ok")
+        def capture(*, model, system_prompt, prompt, image_bytes=None):
+            captured_prompts.append(prompt)
+            return "ok"
 
-        with patch("src.agents.core.ai_router.requests.post", side_effect=capture), \
+        with patch.object(router, "_try_anthropic_sdk", side_effect=capture), \
              patch.object(ai_router, "_write_audit_log"), \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
             router.call("classify_document", "classify", context={"vendor": "ACME", "doc_type": "invoice"})
 
-        messages = captured[0].get("messages", [])
-        user_content = next(m["content"] for m in messages if m["role"] == "user")
+        assert captured_prompts, "AI was never called"
+        user_content = captured_prompts[0]
         assert "ACME" in user_content
         assert "invoice" in user_content
 
@@ -388,12 +386,11 @@ class TestRouterCall:
 
     def test_audit_log_written_once_per_call(self):
         router = _fresh_router()
-        with patch("src.agents.core.ai_router.requests.post") as mock_post, \
+        with patch.object(router, "_try_anthropic_sdk", return_value="ok"), \
              patch.object(ai_router, "_write_audit_log") as mock_audit, \
              patch.object(ai_router, "_check_cache", return_value=None), \
              patch.object(ai_router, "_store_cache"), \
              patch.object(ai_router, "_check_memory_shortcircuit", return_value=None):
-            mock_post.return_value = _make_http_response("ok")
             router.call("escalation_decision", "decision prompt", username="alice", document_id="doc-1")
 
         mock_audit.assert_called_once()
@@ -532,9 +529,8 @@ class TestModuleLevelCall:
     def test_module_call_returns_dict(self):
         ai_router._reset()
         with patch.object(ai_router, "_load_config", return_value=_TEST_CONFIG), \
-             patch("src.agents.core.ai_router.requests.post") as mock_post, \
+             patch.object(ai_router.AIRouter, "_try_anthropic_sdk", return_value="result text"), \
              patch.object(ai_router, "_write_audit_log"):
-            mock_post.return_value = _make_http_response("result text")
             out = ai_router.call("classify_document", "invoice text")
 
         assert isinstance(out, dict)
@@ -544,9 +540,8 @@ class TestModuleLevelCall:
     def test_module_call_reuses_singleton(self):
         ai_router._reset()
         with patch.object(ai_router, "_load_config", return_value=_TEST_CONFIG), \
-             patch("src.agents.core.ai_router.requests.post") as mock_post, \
+             patch.object(ai_router.AIRouter, "_try_anthropic_sdk", return_value="ok"), \
              patch.object(ai_router, "_write_audit_log"):
-            mock_post.return_value = _make_http_response("ok")
             ai_router.call("classify_document", "a")
             r1 = ai_router._router
             ai_router.call("classify_document", "b")
