@@ -143,6 +143,8 @@ package-lock.json
 
 # Database (too large for git, backed up separately)
 data/*.db
+data/*.db-shm
+data/*.db-wal
 data/backups/
 data/ledgerlink_agent.db
 data/client_uploads/
