@@ -13,6 +13,8 @@ Webhook endpoint:
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 import sqlite3
 import sys
@@ -201,17 +203,54 @@ def send_whatsapp_message(to_number: str, body: str) -> bool:
 def _validate_twilio_signature(
     signature: str, url: str, params: dict[str, str]
 ) -> bool:
-    """Validate the X-Twilio-Signature header using the configured auth token."""
-    cfg = _load_config().get("whatsapp", {})
-    auth_token = cfg.get("auth_token", "")
+    """Validate the X-Twilio-Signature header using the configured auth token.
+
+    Honours two bypass mechanisms for dev / sandbox use:
+      * TWILIO_SANDBOX=true env var
+      * whatsapp.sandbox_mode=true in otocpa.config.json
+    When a bypass is active signature validation is skipped entirely.
+    """
+    # Sandbox bypass: env var takes precedence, config is fallback
+    cfg_wa = _load_config().get("whatsapp", {})
+    sandbox = os.environ.get("TWILIO_SANDBOX", "false").lower() == "true"
+    if not sandbox:
+        sandbox = bool(cfg_wa.get("sandbox_mode", False))
+    if sandbox:
+        logging.info("Twilio signature validation bypassed (sandbox mode)")
+        return True
+
+    auth_token = cfg_wa.get("auth_token", "")
     if not auth_token:
+        logging.warning(
+            "Twilio signature validation skipped: no auth token configured"
+        )
         return True  # Can't validate without token; accept in dev mode
     try:
         from twilio.request_validator import RequestValidator  # type: ignore[import]
-        return RequestValidator(auth_token).validate(url, params, signature)
+        validator = RequestValidator(auth_token)
+        ok = validator.validate(url, params, signature)
+        if not ok:
+            # Compute what the expected signature would have been so ops can
+            # diff it against the header Twilio actually sent.
+            try:
+                expected = validator.compute_signature(url, params)
+            except Exception:
+                expected = "<compute_failed>"
+            logging.warning(
+                "Twilio signature validation failed for URL: %s", url
+            )
+            logging.warning(
+                "Expected signature based on auth token: %s", expected
+            )
+            logging.warning("Received signature: %s", signature)
+        return ok
     except ImportError:
+        logging.warning(
+            "twilio package not installed — skipping signature validation"
+        )
         return True  # twilio not installed — allow through
-    except Exception:
+    except Exception as exc:
+        logging.warning("Twilio signature validation raised: %s", exc)
         return False
 
 
