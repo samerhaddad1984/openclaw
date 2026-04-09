@@ -102,7 +102,36 @@ def get_client_by_whatsapp_phone(phone: str) -> dict[str, Any] | None:
 
     try:
         with _open_db() as conn:
-            # First check dashboard_users (CPA staff)
+            # First check client_whatsapp_numbers (multi-number support)
+            try:
+                cwn_rows = conn.execute(
+                    "SELECT cwn.whatsapp_number, cwn.contact_name, "
+                    "c.client_code, c.client_name, c.language "
+                    "FROM client_whatsapp_numbers cwn "
+                    "JOIN clients c ON c.client_code = cwn.client_code "
+                    "WHERE cwn.active = 1"
+                ).fetchall()
+                for row in cwn_rows:
+                    if normalize_phone(row["whatsapp_number"]) == normalized:
+                        print(
+                            "DEBUG: client_whatsapp_numbers match: "
+                            f"client_code={row['client_code']} "
+                            f"contact={row['contact_name']}"
+                        )
+                        return {
+                            "client_code": row["client_code"],
+                            "display_name": row["contact_name"] or row["client_name"],
+                            "language": row["language"] or "fr",
+                        }
+                print(
+                    "DEBUG: client_whatsapp_numbers no match "
+                    f"({len(cwn_rows)} rows checked)"
+                )
+            except sqlite3.OperationalError as exc:
+                # Table may not exist yet on legacy databases.
+                print(f"DEBUG: client_whatsapp_numbers skipped: {exc}")
+
+            # Then check dashboard_users (CPA staff)
             rows = conn.execute(
                 "SELECT username, client_code, language, display_name, "
                 "whatsapp_number "

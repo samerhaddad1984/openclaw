@@ -8368,18 +8368,49 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             FROM clients
             ORDER BY client_code
         ''').fetchall()
+        # Fetch all WhatsApp numbers in one query, group by client_code.
+        wa_by_client: dict[str, list[sqlite3.Row]] = {}
+        try:
+            wa_rows = conn.execute('''
+                SELECT client_code, whatsapp_number, contact_name, active
+                FROM client_whatsapp_numbers
+                WHERE active = 1
+                ORDER BY contact_name
+            ''').fetchall()
+            for wr in wa_rows:
+                wa_by_client.setdefault(wr['client_code'], []).append(wr)
+        except sqlite3.OperationalError:
+            pass
 
     rows = ''
     for c in clients:
+        wa_list = wa_by_client.get(c['client_code'], [])
+        wa_html_parts: list[str] = []
+        if c['whatsapp_number']:
+            wa_html_parts.append(
+                f'<div style="color:#e0e0e0;">{esc(c["whatsapp_number"])} '
+                f'<span style="color:#888;font-size:11px;">(legacy)</span></div>'
+            )
+        for wr in wa_list:
+            label = wr['contact_name'] or ''
+            label_html = (
+                f' <span style="color:#888;font-size:11px;">({esc(label)})</span>'
+                if label else ''
+            )
+            wa_html_parts.append(
+                f'<div style="color:#e0e0e0;">{esc(wr["whatsapp_number"])}{label_html}</div>'
+            )
+        wa_cell = ''.join(wa_html_parts) or '<span style="color:#888;">&#x2014;</span>'
+
         rows += f"""
         <tr>
-            <td style="color:#2ecc71;font-weight:bold;">{esc(c['client_code'])}</td>
-            <td style="color:#e0e0e0;">{esc(c['client_name'] or '')}</td>
-            <td style="color:#aaa;">{esc(c['contact_email'] or '')}</td>
-            <td style="color:#e0e0e0;">{esc(c['language'] or 'fr')}</td>
-            <td>{'&#x2705;' if c['active'] else '&#x274C;'}</td>
-            <td style="color:#e0e0e0;">{esc(c['whatsapp_number'] or '') or '&#x2014;'}</td>
-            <td>
+            <td style="color:#2ecc71;font-weight:bold;vertical-align:top;">{esc(c['client_code'])}</td>
+            <td style="color:#e0e0e0;vertical-align:top;">{esc(c['client_name'] or '')}</td>
+            <td style="color:#aaa;vertical-align:top;">{esc(c['contact_email'] or '')}</td>
+            <td style="color:#e0e0e0;vertical-align:top;">{esc(c['language'] or 'fr')}</td>
+            <td style="vertical-align:top;">{'&#x2705;' if c['active'] else '&#x274C;'}</td>
+            <td style="vertical-align:top;">{wa_cell}</td>
+            <td style="vertical-align:top;">
                 <a href="/clients/edit?code={urlquote(c['client_code'])}"
                    style="background:#3498db;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;">
                    &#x270F;&#xFE0F; Edit
@@ -8431,6 +8462,65 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
     active_checked = 'checked' if (not is_edit or client['active']) else ''
     code_readonly = 'readonly style="background:#334155;"' if is_edit else ''
 
+    # WhatsApp numbers management (edit mode only — needs an existing client_code).
+    wa_section = ''
+    if is_edit:
+        wa_rows: list[sqlite3.Row] = []
+        try:
+            with open_db() as _wa_conn:
+                wa_rows = _wa_conn.execute('''
+                    SELECT id, whatsapp_number, contact_name, active
+                    FROM client_whatsapp_numbers
+                    WHERE client_code = ?
+                    ORDER BY contact_name
+                ''', (client['client_code'],)).fetchall()
+        except sqlite3.OperationalError:
+            pass
+
+        wa_items_html = ''
+        for wr in wa_rows:
+            label = wr['contact_name'] or ''
+            wa_items_html += f"""
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2c3e50;">
+                <div style="flex:1;color:#e0e0e0;">
+                    <strong>{esc(wr['whatsapp_number'])}</strong>
+                    {f'<span style="color:#888;margin-left:8px;">{esc(label)}</span>' if label else ''}
+                    {'' if wr['active'] else '<span style="color:#e74c3c;margin-left:8px;">(inactive)</span>'}
+                </div>
+                <form method="POST" action="/clients/whatsapp/delete" style="margin:0;"
+                      onsubmit="return confirm('Delete this number?');">
+                    <input type="hidden" name="id" value="{wr['id']}">
+                    <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
+                    <button type="submit"
+                            style="background:#e74c3c;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">
+                        &#x1F5D1; Delete
+                    </button>
+                </form>
+            </div>"""
+        if not wa_items_html:
+            wa_items_html = '<div style="color:#888;padding:6px 0;">Aucun num&eacute;ro / No numbers</div>'
+
+        wa_section = f"""
+        <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <h3 style="color:white;margin-top:0;">&#x1F4F1; Num&eacute;ros WhatsApp / WhatsApp Numbers</h3>
+            <p style="color:#888;font-size:12px;margin:0 0 12px 0;">
+                Plusieurs num&eacute;ros peuvent &ecirc;tre associ&eacute;s &agrave; ce client.
+                / Multiple numbers can be linked to this client.
+            </p>
+            {wa_items_html}
+            <form method="POST" action="/clients/whatsapp/add" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
+                <input type="text" name="whatsapp_number" placeholder="+15145551234" required
+                       style="flex:1;min-width:160px;background:#1a2e4a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;">
+                <input type="text" name="contact_name" placeholder="Nom du contact / Contact name"
+                       style="flex:1;min-width:160px;background:#1a2e4a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;">
+                <button type="submit"
+                        style="background:#2ecc71;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">
+                    + Ajouter / Add
+                </button>
+            </form>
+        </div>"""
+
     return page_layout(title, f"""
     <div style="padding:24px;max-width:600px;">
         <h2 style="color:white;">{esc(title)}</h2>
@@ -8472,6 +8562,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                 </a>
             </div>
         </form>
+        {wa_section}
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
@@ -14074,6 +14165,70 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     ''', (client_code, client_name, contact_email, language, active, whatsapp_number))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
+                return
+
+            # --- Client WhatsApp number: add ---
+            if path == "/clients/whatsapp/add":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                client_code = normalize_text(form.get("client_code", "")).strip()
+                wa_number = form.get("whatsapp_number", "").strip()
+                contact_name = form.get("contact_name", "").strip() or None
+                if not client_code or not wa_number:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        error="Client code and WhatsApp number required",
+                    )
+                    return
+                try:
+                    with open_db() as conn:
+                        conn.execute('''
+                            INSERT OR REPLACE INTO client_whatsapp_numbers
+                                (client_code, whatsapp_number, contact_name, active)
+                            VALUES (?, ?, ?, 1)
+                        ''', (client_code, wa_number, contact_name))
+                        conn.commit()
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        flash=f"WhatsApp number {wa_number} added",
+                    )
+                except Exception as exc:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        error=f"Failed to add number: {exc}",
+                    )
+                return
+
+            # --- Client WhatsApp number: delete ---
+            if path == "/clients/whatsapp/delete":
+                if ctx.get("role") not in ("manager", "owner"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                row_id = form.get("id", "").strip()
+                client_code = normalize_text(form.get("client_code", "")).strip()
+                if not row_id:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        error="Missing id",
+                    )
+                    return
+                try:
+                    with open_db() as conn:
+                        conn.execute(
+                            'DELETE FROM client_whatsapp_numbers WHERE id = ?',
+                            (row_id,),
+                        )
+                        conn.commit()
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        flash="WhatsApp number deleted",
+                    )
+                except Exception as exc:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(client_code)}",
+                        error=f"Failed to delete: {exc}",
+                    )
                 return
 
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)

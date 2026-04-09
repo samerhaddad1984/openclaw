@@ -24,7 +24,7 @@
   "security": {},
   "folder_watcher": {
     "enabled": true,
-    "inbox_folder": "C:/OtoCPA/inbox",
+    "inbox_folder": "/opt/otocpa/inbox",
     "watch_subfolders": true,
     "default_client_code": "UNASSIGNED",
     "supported_extensions": [
