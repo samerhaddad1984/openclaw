@@ -116,8 +116,8 @@ KNOWN_REGISTERED_SOFTWARE_VENDORS = {
     "hydro ottawa", "toronto hydro", "bc hydro",
     "enbridge", "fortisbc",
     # Major Canadian retailers
-    "walmart", "walmart canada", "costco", "costco wholesale",
-    "iga", "metro", "metro inc", "provigo", "maxi", "super c",
+    "walmart", "wal-mart", "walmart canada", "costco", "costco wholesale",
+    "iga", "metro", "metro inc", "provigo", "maxi", "super c", "super-c",
     "loblaws", "no frills", "shoppers drug mart",
     "canadian tire", "dollarama", "home depot", "rona", "home hardware",
     "staples", "bureau en gros",

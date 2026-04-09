@@ -1371,6 +1371,38 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
         result['tax_code'] = 'T'
         result['category'] = 'office_supplies'
 
+    # Known grocery vendors with GST registration → mark as registered for ITC eligibility
+    GROCERY_VENDORS_WITH_GST = {
+        'super c': 'R128834488',
+        'walmart': '137466199',
+        'iga': 'known',
+        'metro': 'known',
+        'maxi': 'known',
+        'costco': 'known',
+    }
+    if any(g in vendor_lower for g in GROCERY_VENDORS_WITH_GST):
+        result['tax_code'] = 'T'
+        result['gst_registered'] = True
+
+    KNOWN_GROCERY_GST = {
+        'super c': 'R128834488',
+        'walmart': '137466199RT0001',
+        'iga': 'known',
+        'metro': 'known',
+        'maxi': 'known',
+        'costco': 'known',
+        'provigo': 'known',
+    }
+
+    vendor_lower = (result.get('vendor_name') or '').lower()
+    for grocery, gst in KNOWN_GROCERY_GST.items():
+        if grocery in vendor_lower:
+            result['tax_code'] = 'T'
+            result['gl_account'] = '5430'
+            if gst != 'known':
+                result['gst_number'] = gst
+            break
+
     # Foreign vendors with no Canadian GST registration → tax_code = E
     if "fiverr" in vendor_lower:
         result["tax_code"] = "E"
