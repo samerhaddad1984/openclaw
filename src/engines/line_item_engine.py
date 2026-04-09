@@ -353,11 +353,19 @@ def calculate_line_tax(
     itc_pct = _ONE  # full recovery by default
     itr_pct = _ONE
 
-    # Meals: 50% recovery
+    # Meals: 50% recovery (covers alcohol via _ALCOHOL_LINE_KW too —
+    # alcohol lines are always 5640 / meals per the line GL classifier).
     desc = str(line.get("description", "")).lower()
     _MEAL_KW = {"meal", "repas", "restaurant", "dining", "entertainment",
                 "divertissement", "reception", "réception"}
-    if any(kw in desc for kw in _MEAL_KW):
+    line_gl = str(line.get("gl_account", "") or "").strip()
+    line_cat = str(line.get("category", "") or "").strip().lower()
+    if (
+        any(kw in desc for kw in _MEAL_KW)
+        or _line_is_alcohol(desc)
+        or line_gl == "5640"
+        or line_cat == "meals"
+    ):
         itc_pct = _HALF
         itr_pct = _HALF
 
@@ -392,6 +400,239 @@ def calculate_line_tax(
 
 
 # ---------------------------------------------------------------------------
+# DETERMINISTIC LINE-LEVEL GL CLASSIFIER
+# ---------------------------------------------------------------------------
+#
+# Runs as a safety net for every extracted line so the database always has a
+# usable gl_account/category even when the AI omits the field or the AI call
+# is unavailable. The AI's classification (when present) takes precedence —
+# this only fills in blanks. The Quebec GL codes mirror the rules in
+# src/agents/prompts/extract_invoice_lines.txt.
+
+# Capital threshold ($CAD) for treating equipment/furniture as a fixed asset.
+CAPITAL_ASSET_THRESHOLD = Decimal("500")
+
+_ALCOHOL_LINE_KW = (
+    "boiss. alc", "boiss alc", "boissons alc", "alcool", "alcohol",
+    "mojito", "cocktail", "martini", "whisky", "whiskey", "vodka",
+    "biere", "bière", "beer", "vin ", " vin", "wine", "champagne",
+    "liqueur", "spiritueux", "spirits", "rum", "tequila", "gin ",
+    "sangria",
+)
+
+# Word-boundary regex used by the classifier so short tokens like "gin",
+# "rum", "wine", "vin", "beer" don't false-match inside "virgin", "rumour",
+# "wineberry", etc. Multi-word tokens (e.g. "boiss. alc") are matched as
+# substrings since their full form is unambiguous.
+_ALCOHOL_BOUNDARY_RE = re.compile(
+    r"\b(?:mojito|cocktail|martini|whisky|whiskey|vodka|biere|bière|beer|"
+    r"vin|wine|champagne|liqueur|spiritueux|spirits|rum|tequila|gin|"
+    r"sangria|alcool|alcohol)\b",
+    re.IGNORECASE,
+)
+_ALCOHOL_SUBSTRING_KW = (
+    "boiss. alc", "boiss alc", "boissons alc",
+)
+
+
+def _line_is_alcohol(desc_lc: str) -> bool:
+    """Return True if the line description signals an alcoholic item.
+
+    Uses word-boundary matching so substrings like "gin" inside "virgin"
+    or "rum" inside "rumour" do not trigger a false positive.
+    """
+    if not desc_lc:
+        return False
+    if any(kw in desc_lc for kw in _ALCOHOL_SUBSTRING_KW):
+        return True
+    return bool(_ALCOHOL_BOUNDARY_RE.search(desc_lc))
+_RESTAURANT_VENDOR_KW = (
+    "restaurant", "bistro", "café", "cafe", "deli", "diner",
+    "grill", "saloon", "tavern", "taverne", "pub ", " pub",
+    "bar ", "lounge", "nightclub", "brasserie", "pizzeria",
+    "sushi", "buffet",
+)
+_HARDWARE_VENDOR_KW = (
+    "reno-depot", "renodepot", "rénovation", "home depot", "home-depot",
+    "homedepot", "rona", "canadian tire", "lowes", "lowe's",
+    "ace hardware", "patrick morin", "matériaux",
+)
+_TELECOM_KW = (
+    "phone", "téléphone", "telephone", "mobile", "cellular", "cell ",
+    "internet", "wi-fi", "wifi", "data plan", "forfait", "hosting",
+    "domain", "dns", "vpn",
+)
+_UTILITIES_KW = (
+    "hydro", "electricity", "électricité", "electricite", "gas bill",
+    "natural gas", "gaz naturel", "water bill", "aqueduc", "energir",
+)
+_SOFTWARE_KW = (
+    "software", "logiciel", "subscription", "abonnement", "saas",
+    "license", "licence", "app store", "google play", "monthly plan",
+    "annual plan", "cloud", "hosting plan",
+)
+_SUPPLIES_KW = (
+    "paper", "papier", "pen", "stylo", "stapler", "agrafeuse",
+    "ink", "encre", "toner", "cartridge", "folder", "envelope",
+    "office supply", "fourniture",
+)
+_REPAIRS_KW = (
+    "repair", "réparation", "reparation", "maintenance", "entretien",
+    "tune-up", "tune up", "service call", "fix",
+)
+_BANK_FEE_KW = (
+    "bank fee", "frais bancaire", "service charge", "interac fee",
+    "payment processing", "merchant fee", "card fee", "nsf",
+    "wire fee", "transfer fee",
+)
+_FURNITURE_KW = (
+    "chair", "chaise", "desk", "bureau ", "table", "sofa", "couch",
+    "fauteuil", "shelving", "étagère", "etagere", "filing cabinet",
+    "classeur", "armoire", "furniture", "mobilier",
+)
+_EQUIPMENT_KW = (
+    "drill", "perceuse", "saw", "scie", "compressor", "compresseur",
+    "ladder", "échelle", "machine", "outil", "tool ", "equipment",
+    "équipement", "equipement", "generator", "génératrice",
+    "computer", "ordinateur", "laptop", "imprimante", "printer",
+    "monitor", "écran", "écran",
+)
+
+
+def _line_amount_dec(raw_line: dict[str, Any]) -> Decimal:
+    """Best-effort Decimal of a line's monetary value."""
+    for key in ("line_total", "line_total_pretax", "unit_price"):
+        v = raw_line.get(key)
+        if v is None:
+            continue
+        try:
+            return _to_dec(v).copy_abs()
+        except Exception:
+            continue
+    return _ZERO
+
+
+def classify_line_gl(
+    raw_line: dict[str, Any],
+    vendor_name: str = "",
+) -> dict[str, Any]:
+    """Deterministic GL classifier for a single line item.
+
+    Returns dict with gl_account, category, is_capital, capital_notes,
+    optionally tax_indicator and notes additions. Caller decides how to
+    merge these against any AI-supplied values (AI wins on conflict).
+    """
+    desc = str(raw_line.get("description", "") or "").lower()
+    vendor = (vendor_name or "").lower()
+    amount = _line_amount_dec(raw_line)
+
+    extra_notes: list[str] = []
+    is_alcohol = _line_is_alcohol(desc)
+    is_restaurant_vendor = any(kw in vendor for kw in _RESTAURANT_VENDOR_KW)
+    is_hardware_vendor = any(kw in vendor for kw in _HARDWARE_VENDOR_KW)
+
+    # 1) Alcohol always wins — flagged for human review even at restaurants.
+    if is_alcohol:
+        extra_notes.append("alcohol — verify business purpose")
+        return {
+            "gl_account": "5640",
+            "category": "meals",
+            "is_capital": False,
+            "capital_notes": "",
+            "tax_indicator": "taxable",
+            "extra_notes": extra_notes,
+        }
+
+    # 2) Restaurant/bar vendor → meals (only food/drink lines reach here).
+    if is_restaurant_vendor:
+        return {
+            "gl_account": "5640",
+            "category": "meals",
+            "is_capital": False,
+            "capital_notes": "",
+            "tax_indicator": None,
+            "extra_notes": extra_notes,
+        }
+
+    # 3) Hardware-store vendor → classify each line on its own merits.
+    if is_hardware_vendor:
+        if amount >= CAPITAL_ASSET_THRESHOLD and any(kw in desc for kw in _FURNITURE_KW):
+            return {
+                "gl_account": "1830",
+                "category": "capital",
+                "is_capital": True,
+                "capital_notes": "Class 8 — furniture/fixtures",
+                "tax_indicator": None,
+                "extra_notes": extra_notes,
+            }
+        if amount >= CAPITAL_ASSET_THRESHOLD and any(kw in desc for kw in _EQUIPMENT_KW):
+            return {
+                "gl_account": "1820",
+                "category": "capital",
+                "is_capital": True,
+                "capital_notes": "Class 8 — equipment/tools",
+                "tax_indicator": None,
+                "extra_notes": extra_notes,
+            }
+        # Hardware store small purchases default to supplies.
+        return {
+            "gl_account": "5430",
+            "category": "supplies",
+            "is_capital": False,
+            "capital_notes": "",
+            "tax_indicator": None,
+            "extra_notes": extra_notes,
+        }
+
+    # 4) Description-based routing.
+    if any(kw in desc for kw in _BANK_FEE_KW):
+        return {"gl_account": "5500", "category": "bank_fees",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+    if any(kw in desc for kw in _SOFTWARE_KW):
+        return {"gl_account": "5420", "category": "software",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+    if any(kw in desc for kw in _TELECOM_KW):
+        return {"gl_account": "5400", "category": "telecom",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+    if any(kw in desc for kw in _UTILITIES_KW):
+        return {"gl_account": "5410", "category": "utilities",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+    if any(kw in desc for kw in _REPAIRS_KW):
+        return {"gl_account": "5750", "category": "repairs",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+
+    # 5) Capital asset by description + threshold (no hardware vendor).
+    if amount >= CAPITAL_ASSET_THRESHOLD and any(kw in desc for kw in _FURNITURE_KW):
+        return {"gl_account": "1830", "category": "capital",
+                "is_capital": True, "capital_notes": "Class 8 — furniture/fixtures",
+                "tax_indicator": None, "extra_notes": extra_notes}
+    if amount >= CAPITAL_ASSET_THRESHOLD and any(kw in desc for kw in _EQUIPMENT_KW):
+        return {"gl_account": "1820", "category": "capital",
+                "is_capital": True, "capital_notes": "Class 8 — equipment/tools",
+                "tax_indicator": None, "extra_notes": extra_notes}
+
+    if any(kw in desc for kw in _SUPPLIES_KW):
+        return {"gl_account": "5430", "category": "supplies",
+                "is_capital": False, "capital_notes": "",
+                "tax_indicator": None, "extra_notes": extra_notes}
+
+    # 6) Default: general operating expense.
+    return {
+        "gl_account": "5440",
+        "category": "operating_expense",
+        "is_capital": False,
+        "capital_notes": "",
+        "tax_indicator": None,
+        "extra_notes": extra_notes,
+    }
+
+
+# ---------------------------------------------------------------------------
 # AI EXTRACTION
 # ---------------------------------------------------------------------------
 
@@ -399,11 +640,16 @@ def extract_invoice_lines(
     document_id: str,
     raw_ocr_text: str,
     conn: sqlite3.Connection,
+    vendor_name: str = "",
 ) -> list[dict[str, Any]]:
     """Extract line items from OCR text using AI, store in invoice_lines table.
 
     Uses OpenRouterClient with the extract_invoice_lines prompt template.
     Returns the list of extracted line dicts.
+
+    *vendor_name* is used by the deterministic GL classifier to apply
+    restaurant/hardware-store rules even when the AI omits the gl_account
+    field on a line.
     """
     import sys
     root_str = str(ROOT_DIR)
@@ -498,30 +744,63 @@ def extract_invoice_lines(
         tax_det = detect_tax_included_per_line(raw_line)
         is_tax_included = tax_det["is_tax_included"]
 
+        # ── GL classification: AI value wins, classifier fills blanks. ──
+        ai_gl = str(raw_line.get("gl_account") or "").strip()
+        ai_category = str(raw_line.get("category") or "").strip()
+        ai_is_capital_raw = raw_line.get("is_capital")
+        ai_capital_notes = str(raw_line.get("capital_notes") or "").strip()
+
+        det = classify_line_gl(raw_line, vendor_name=vendor_name)
+        gl_account = ai_gl or det["gl_account"]
+        category = ai_category or det["category"]
+        if ai_is_capital_raw is None:
+            is_capital_bool = bool(det["is_capital"])
+        else:
+            is_capital_bool = bool(ai_is_capital_raw)
+        capital_notes = ai_capital_notes or det["capital_notes"]
+        # If classifier flagged extra notes (e.g., alcohol warning) and the AI
+        # didn't already include them, append.
+        for _en in det.get("extra_notes", []):
+            if _en and _en not in notes:
+                notes = (notes + " | " + _en).strip(" |")
+
         line_record = {
             "document_id": document_id,
             "line_number": line_num,
             "description": description,
             "quantity": quantity,
             "unit_price": unit_price,
+            # line_total stays on the dict so the downstream
+            # process_line_items step (which calls calculate_line_tax with
+            # this dict) can read it. line_total_pretax mirrors what's
+            # actually persisted in the row.
+            "line_total": float(line_total) if line_total else None,
             "line_total_pretax": float(line_total) if line_total else None,
             "tax_indicator": tax_indicator,
             "tax_amount_shown": tax_amount_shown,
             "is_tax_included": 1 if is_tax_included else (0 if is_tax_included is False else None),
             "line_notes": notes,
             "created_at": now,
+            "gl_account": gl_account,
+            "category": category,
+            "is_capital": 1 if is_capital_bool else 0,
+            "capital_notes": capital_notes,
         }
 
         conn.execute(
             """INSERT INTO invoice_lines
                (document_id, line_number, description, quantity, unit_price,
-                line_total_pretax, is_tax_included, line_notes, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                line_total_pretax, is_tax_included, line_notes, created_at,
+                gl_account, category, is_capital, capital_notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 document_id, line_num, description, quantity, unit_price,
                 line_record["line_total_pretax"],
                 line_record["is_tax_included"],
                 notes, now,
+                gl_account, category,
+                line_record["is_capital"],
+                capital_notes,
             ),
         )
         stored_lines.append(line_record)
@@ -541,7 +820,12 @@ def extract_invoice_lines(
 
 
 def _ensure_invoice_lines_table(conn: sqlite3.Connection) -> None:
-    """Create invoice_lines table if missing (runtime safety net)."""
+    """Create invoice_lines table if missing (runtime safety net).
+
+    Also adds any GL classification columns that may be missing on older DBs.
+    Adding columns is idempotent: ALTER TABLE failures (column exists) are
+    swallowed, mirroring the production migration in scripts/review_dashboard.py.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invoice_lines (
             line_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -559,9 +843,24 @@ def _ensure_invoice_lines_table(conn: sqlite3.Connection) -> None:
             province_of_supply TEXT,
             is_tax_included  INTEGER,
             line_notes       TEXT,
-            created_at       TEXT NOT NULL DEFAULT ''
+            created_at       TEXT NOT NULL DEFAULT '',
+            gl_account       TEXT,
+            category         TEXT,
+            is_capital       INTEGER DEFAULT 0,
+            capital_notes    TEXT
         )
     """)
+    # Backfill columns on pre-existing tables.
+    for _col_def in (
+        "gl_account TEXT",
+        "category TEXT",
+        "is_capital INTEGER DEFAULT 0",
+        "capital_notes TEXT",
+    ):
+        try:
+            conn.execute(f"ALTER TABLE invoice_lines ADD COLUMN {_col_def}")
+        except sqlite3.OperationalError:
+            pass
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_invoice_lines_doc "
         "ON invoice_lines(document_id)"
@@ -726,6 +1025,7 @@ def process_line_items(
     vendor_province: str = "QC",
     buyer_province: str = "QC",
     *,
+    vendor_name: str = "",
     db_path: Path = DB_PATH,
 ) -> dict[str, Any]:
     """Run the full line-item pipeline for a document.
@@ -735,13 +1035,16 @@ def process_line_items(
     3. Store results in invoice_lines
     4. Reconcile against invoice total
 
+    *vendor_name* is forwarded to extract_invoice_lines so the deterministic
+    GL classifier can apply restaurant/hardware-store rules per line.
+
     Returns summary dict.
     """
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
-        # Step 1: AI extraction
-        lines = extract_invoice_lines(document_id, raw_ocr_text, conn)
+        # Step 1: AI extraction (with vendor for GL classifier)
+        lines = extract_invoice_lines(document_id, raw_ocr_text, conn, vendor_name=vendor_name)
 
         # Step 2: Per-line tax processing
         for line in lines:
@@ -755,8 +1058,19 @@ def process_line_items(
             tax_det = detect_tax_included_per_line(line)
             is_tax_included = tax_det["is_tax_included"]
 
-            # Calculate tax
+            # Calculate tax (calculate_line_tax inspects gl_account/category to
+            # apply 50% recovery on meals).
             tax = calculate_line_tax(line, regime, is_tax_included)
+
+            # Tax code override: meals (alcohol/restaurant) → "M" so the
+            # downstream tax_code consumer applies the 50% restriction even if
+            # the regime resolved to plain "T".
+            tax_code = regime.get("tax_code", "")
+            if (
+                str(line.get("category", "")).lower() == "meals"
+                or str(line.get("gl_account", "")) == "5640"
+            ):
+                tax_code = "M"
 
             # Build deduplicated notes: keep existing + add regime note once
             regime_note = regime.get("notes", "")
@@ -768,7 +1082,9 @@ def process_line_items(
             parts = list(dict.fromkeys(parts))
             updated_notes = " | ".join(parts)
 
-            # Update invoice_lines row
+            # Update invoice_lines row (gl_account/category/is_capital/
+            # capital_notes were already set during the INSERT in
+            # extract_invoice_lines and intentionally NOT overwritten here).
             conn.execute(
                 """UPDATE invoice_lines
                    SET tax_code = ?,
@@ -781,7 +1097,7 @@ def process_line_items(
                        line_notes = ?
                    WHERE document_id = ? AND line_number = ?""",
                 (
-                    regime.get("tax_code", ""),
+                    tax_code,
                     regime.get("tax_regime", ""),
                     float(tax["gst"]),
                     float(tax["qst"]),
@@ -830,17 +1146,56 @@ _LINE_ITEM_KEYWORDS = re.compile(
 
 _MULTI_AMOUNT_RE = re.compile(r"\$?\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})")
 
+# Vendors that almost always have itemised receipts worth classifying line by
+# line — restaurants/bars (mixed food + alcohol GL) and hardware stores
+# (mixed supply + capital GL). The match is substring + case-insensitive.
+_LINE_ITEM_VENDOR_HINTS = (
+    "saloon", "tavern", "taverne", "pub", "lounge", "nightclub",
+    "brasserie", "bistro", "restaurant", "bar ", "café", "cafe",
+    "deli", "diner", "grill", "pizzeria", "sushi", "buffet",
+    "reno-depot", "renodepot", "rénovation", "home depot",
+    "homedepot", "rona", "canadian tire", "lowes", "lowe's",
+    "ace hardware", "patrick morin", "matériaux",
+)
 
-def looks_like_multiline_invoice(raw_text: str) -> bool:
-    """Heuristic: does this text look like a multi-line invoice?
 
-    True if it has line-item keywords AND 3+ distinct dollar amounts.
+def looks_like_multiline_invoice(raw_text: str, vendor_name: str = "") -> bool:
+    """Heuristic: should we run line-item extraction on this document?
+
+    Triggers when ANY of the following hold:
+    - The text has line-item keywords AND ≥3 distinct dollar amounts
+      (the original "structured invoice" path).
+    - The vendor is a known restaurant/bar/hardware store (mixed-GL
+      receipts that benefit most from per-line classification) AND the
+      text has ≥2 dollar amounts.
+    - The text has ≥2 dollar amounts AND looks like an itemised receipt
+      (subtotal/sub-total/sous-total marker).
     """
     if not raw_text:
         return False
-    has_keywords = bool(_LINE_ITEM_KEYWORDS.search(raw_text))
     amounts = _MULTI_AMOUNT_RE.findall(raw_text)
-    return has_keywords and len(amounts) >= 3
+    n_amounts = len(amounts)
+
+    has_keywords = bool(_LINE_ITEM_KEYWORDS.search(raw_text))
+    if has_keywords and n_amounts >= 3:
+        return True
+
+    vendor_lc = (vendor_name or "").lower()
+    text_lc = raw_text.lower()
+    vendor_hint = any(kw in vendor_lc for kw in _LINE_ITEM_VENDOR_HINTS) or any(
+        kw in text_lc for kw in _LINE_ITEM_VENDOR_HINTS
+    )
+    if vendor_hint and n_amounts >= 2:
+        return True
+
+    has_subtotal_marker = bool(re.search(
+        r"sub[-\s]?total|sous[-\s]?total|s/?total|total\s+ttc|tps|tvq",
+        text_lc,
+    ))
+    if has_subtotal_marker and n_amounts >= 2:
+        return True
+
+    return False
 
 
 # =========================================================================

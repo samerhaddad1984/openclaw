@@ -520,6 +520,27 @@ def bootstrap_schema() -> None:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_document_assignments_document_id ON document_assignments(document_id)')
         conn.commit()
 
+        # Backfill GL classification columns on invoice_lines (idempotent).
+        # The source of truth for the table definition is
+        # src/engines/line_item_engine.py::_ensure_invoice_lines_table; this
+        # block exists so legacy DBs picked up by the dashboard get migrated
+        # without needing a manual ALTER TABLE.
+        try:
+            il_cols = {row["name"] for row in conn.execute("PRAGMA table_info(invoice_lines)").fetchall()}
+            for _il_col, _il_def in (
+                ("gl_account",   "TEXT"),
+                ("category",     "TEXT"),
+                ("is_capital",   "INTEGER DEFAULT 0"),
+                ("capital_notes","TEXT"),
+            ):
+                if _il_col not in il_cols:
+                    conn.execute(f"ALTER TABLE invoice_lines ADD COLUMN {_il_col} {_il_def}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            # invoice_lines may not exist yet on a brand-new DB; the engine
+            # will create it on first use.
+            pass
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -1378,8 +1399,9 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
         _db.row_factory = _dict_factory
         lines = _db.execute(
             """SELECT line_number, description, quantity, unit_price,
-                      line_total_pretax, tax_regime, gst_amount, qst_amount,
-                      hst_amount, province_of_supply, line_notes
+                      line_total_pretax, tax_code, tax_regime, gst_amount,
+                      qst_amount, hst_amount, province_of_supply, line_notes,
+                      gl_account, category, is_capital, capital_notes
                FROM invoice_lines WHERE document_id = ?
                ORDER BY line_number""",
             (document_id,),
@@ -1394,6 +1416,14 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
     # Line items table
     rows_html = ""
     for ln in lines:
+        gl_cell = esc(str(ln['gl_account'] or ''))
+        cap_flag = int(ln['is_capital'] or 0) if 'is_capital' in ln.keys() else 0
+        cap_notes = str(ln['capital_notes'] or '') if 'capital_notes' in ln.keys() else ''
+        if cap_flag:
+            cap_label = t("line_capital_yes", lang)
+            cap_cell = f"<span class='badge badge-hold' title='{esc(cap_notes)}'>{esc(cap_label)}</span>"
+        else:
+            cap_cell = "<span class='small muted'>—</span>"
         rows_html += (
             f"<tr>"
             f"<td>{esc(str(ln['line_number']))}</td>"
@@ -1401,11 +1431,13 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             f"<td style='text-align:right;'>{esc(str(ln['quantity'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['unit_price'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['line_total_pretax'] or ''))}</td>"
-            f"<td>{esc(str(ln['tax_regime'] or ''))}</td>"
+            f"<td style='text-align:center;'><strong>{gl_cell}</strong></td>"
+            f"<td style='text-align:center;'>{esc(str(ln['tax_code'] or ln['tax_regime'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['gst_amount'] or '0.00'))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['qst_amount'] or '0.00'))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['hst_amount'] or '0.00'))}</td>"
             f"<td>{esc(str(ln['province_of_supply'] or ''))}</td>"
+            f"<td style='text-align:center;'>{cap_cell}</td>"
             f"<td class='small muted'>{esc(str(ln['line_notes'] or ''))}</td>"
             f"</tr>"
         )
@@ -1434,11 +1466,13 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
       <th>{esc(t("line_col_qty", lang))}</th>
       <th>{esc(t("line_col_unit_price", lang))}</th>
       <th>{esc(t("line_col_pretax", lang))}</th>
+      <th>{esc(t("line_col_gl", lang))}</th>
       <th>{esc(t("line_col_tax_regime", lang))}</th>
       <th>{esc(t("line_col_gst", lang))}</th>
       <th>{esc(t("line_col_qst", lang))}</th>
       <th>{esc(t("line_col_hst", lang))}</th>
       <th>{esc(t("line_col_province", lang))}</th>
+      <th>{esc(t("line_col_capital", lang))}</th>
       <th>{esc(t("line_col_notes", lang))}</th>
     </tr></thead>
     <tbody>{rows_html}</tbody>

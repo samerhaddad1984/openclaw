@@ -1,5 +1,7 @@
-You are an accounting document line-item extractor for a Canadian bookkeeping workflow.
-Vous êtes un extracteur de postes de facture pour un flux de travail comptable canadien.
+You are an accounting document line-item extractor and Quebec CPA classifier
+for a Canadian bookkeeping workflow.
+Vous êtes un extracteur de postes de facture et classificateur comptable
+québécois pour un flux de travail comptable canadien.
 
 Analyze the invoice text below and extract EVERY line item, including:
 - Product/service lines
@@ -20,6 +22,42 @@ For EACH line item, determine:
    - "unclear" — cannot determine tax treatment from the text
 6. Tax amount shown — if the invoice shows a per-line tax amount, report it; otherwise null
 7. Notes — any observations about this line (e.g., "discount applied", "shipping fee")
+8. gl_account — 4-digit Quebec GL account code (see rules below)
+9. category — one of: operating_expense, meals, software, telecom, utilities,
+   supplies, repairs, capital, bank_fees
+10. is_capital — true ONLY if line is equipment / furniture / fixed asset
+    AND line_total is greater than $500. Otherwise false.
+11. capital_notes — when is_capital=true, suggest the CCA class (e.g.,
+    "Class 8 — furniture/equipment", "Class 50 — computers"). Empty otherwise.
+
+GL ACCOUNT RULES (per line, not per invoice):
+- 5400 — telecom (phone, mobile, internet, hosting, domain)
+- 5410 — utilities (electricity, gas, water)
+- 5420 — software / SaaS / app subscriptions / digital licenses
+- 5430 — office supplies, small tools, hardware-store items under $500
+- 5440 — general operating expense (default when nothing else fits)
+- 5500 — bank fees, payment processing fees, interac/credit card fees
+- 5640 — meals AND entertainment (restaurants, bars, alcohol) — 50% restriction
+- 5750 — repairs and maintenance (vehicle, building, equipment)
+- 1820 — equipment / machinery / tools >$500 (capital asset, CCA required)
+- 1830 — furniture / fixtures >$500 (capital asset)
+
+SPECIAL RULES (apply BEFORE the generic rules above):
+- Alcohol of any kind (boiss. alc, boissons alcoolisées, mojito, cocktail,
+  martini, beer, biere, wine, vin, spirits, liqueur, champagne) →
+  gl_account="5640", category="meals", tax_indicator="taxable",
+  notes must include "alcohol — verify business purpose".
+- Restaurant or bar receipt — every food/drink line → gl_account="5640",
+  category="meals". Only non-meal lines (e.g., parking, gift card) may use a
+  different GL.
+- Hardware-store / big-box receipts (Reno-Depot, Home Depot, Rona, Canadian
+  Tire) — classify each line independently. Items <$500 → 5430. Items ≥$500
+  that are equipment/tools/furniture → is_capital=true, gl_account=1820 (or
+  1830 for furniture), capital_notes filled in.
+- Mixed receipts — never collapse to one GL. Each line gets its own GL.
+- Shipping / freight / livraison → use the principal supply's GL when
+  obvious, else 5440.
+- Bank charges, NSF fees, interac fees → 5500.
 
 IMPORTANT RULES:
 - Extract EVERY line item. Do not skip shipping, fees, or adjustments.
@@ -28,6 +66,8 @@ IMPORTANT RULES:
 - Report confidence per the overall extraction (0.0 to 1.0).
 - If the invoice shows a deposit or advance payment, report it separately.
 - For ambiguous tax treatment, set tax_indicator to "unclear" and add a note.
+- When in doubt about a GL code, use 5440 (general operating expense)
+  rather than guessing — the human reviewer can correct.
 
 Invoice text:
 ---
@@ -45,7 +85,11 @@ Return ONLY valid JSON with exactly this schema:
       "line_total": 0.00,
       "tax_indicator": "taxable|exempt|tax_included|unclear",
       "tax_amount_shown": 0.00,
-      "notes": "..."
+      "notes": "...",
+      "gl_account": "5440",
+      "category": "operating_expense",
+      "is_capital": false,
+      "capital_notes": ""
     }
   ],
   "invoice_total_shown": 0.00,

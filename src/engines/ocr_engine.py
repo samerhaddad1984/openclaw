@@ -1985,8 +1985,8 @@ def process_file(
     try:
         from src.engines.line_item_engine import looks_like_multiline_invoice, process_line_items
         _ocr_text = raw_ocr_text or ""
-        if _ocr_text and looks_like_multiline_invoice(_ocr_text):
-            process_line_items(doc_id, _ocr_text, db_path=db_path)
+        if _ocr_text and looks_like_multiline_invoice(_ocr_text, vendor_name=vendor):
+            process_line_items(doc_id, _ocr_text, vendor_name=vendor or "", db_path=db_path)
     except Exception:  # pragma: no cover
         pass
 
