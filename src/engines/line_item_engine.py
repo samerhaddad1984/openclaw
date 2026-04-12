@@ -1192,6 +1192,13 @@ Return JSON only:
     except Exception as e:
         logging.warning(f'Claude classification failed: {e}')
 
+    # Grocery vendors sell food for home consumption, not restaurant meals.
+    # Any 5640 (meals) classification on a grocery receipt is miscategorized.
+    _GROCERY_VENDORS = ('costco', 'iga', 'walmart', 'metro', 'loblaws',
+                        'provigo', 'maxi', 'super c', 'sobeys')
+    vendor_lc = (vendor_name or '').lower()
+    is_grocery_vendor = any(v in vendor_lc for v in _GROCERY_VENDORS)
+
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -1199,8 +1206,15 @@ Return JSON only:
         conn.execute('DELETE FROM invoice_lines WHERE document_id = ?', (document_id,))
 
         for i, item in enumerate(items):
+            # Round monetary amounts to 2 decimals to avoid FP drift
+            item['total_price'] = round(float(item.get('total_price') or 0), 2)
+            if item.get('unit_price') is not None:
+                item['unit_price'] = round(float(item.get('unit_price') or 0), 2)
+
             cls = classifications.get(i + 1, {})
             gl = cls.get('gl_account', '5440')
+            if is_grocery_vendor and gl == '5640':
+                gl = '5430'
             # Merchant overlays (e.g. Costco) pre-assign tax_code from
             # on-receipt codes (FP/P/F -> T, no code -> Z); respect that
             # over Claude's classification.
