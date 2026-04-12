@@ -855,3 +855,18 @@ def test_quebec_comma_decimal_amounts():
     result = parse_invoice_fields(text)
     amount = float(result.get('amount') or 0)
     assert amount == 126.62, f'Expected 126.62 got {amount}'
+
+
+def test_alcohol_detection():
+    """Bar receipts with 'Boiss. alc.' must route to GL 5640 / tax code M."""
+    from src.engines.ocr_engine import parse_invoice_fields
+
+    text = """JACK SALOON Montreal
+    1 MOJITO CLASSIC $17.00
+    Boiss. alc. (t. in.)
+    TPS #733185144RT0001
+    TOTAL $27.59"""
+
+    result = parse_invoice_fields(text)
+    assert result.get('gl_account') == '5640', f'GL should be 5640 got {result.get("gl_account")}'
+    assert result.get('tax_code') == 'M', f'Tax should be M got {result.get("tax_code")}'

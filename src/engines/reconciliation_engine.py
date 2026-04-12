@@ -809,7 +809,10 @@ def generate_reconciliation_pdf(
         rev_label = "Révisé par" if is_fr else "Reviewed by"
         pdf.cell(0, 5, f"{rev_label}: {recon['reviewed_by']}  ({recon.get('reviewed_at', '')})", ln=True)
 
-    return pdf.output()
+    result = pdf.output()
+    if isinstance(result, bytearray):
+        result = bytes(result)
+    return result
 
 
 # =========================================================================

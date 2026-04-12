@@ -87,6 +87,32 @@ TAX CODE DETERMINATION FROM RECEIPT:
 - Item is at restaurant/bar → M (50% restriction)
 - Item is insurance/bank fee → E
 
+CRITICAL RULES FOR ACCOUNTING ACCURACY:
+
+1. DESCRIPTION MUST BE EXACT:
+   - Copy the description EXACTLY as it appears on the receipt
+   - Do NOT translate, rephrase, or add explanations
+   - Receipt says 'COMP OEUFS BL GROS' → description = 'COMP OEUFS BL GROS'
+   - Receipt says 'RABAIS SUR LE PRIX COURANT' → description = 'RABAIS SUR LE PRIX COURANT'
+   - NEVER add words like 'Eggs —' or 'zero-rated' or 'Discount applied separately'
+
+2. NOTES FIELD IS FOR ACCOUNTING ISSUES ONLY:
+   - Leave notes EMPTY unless there is a specific accounting issue requiring CPA attention
+   - Do NOT add 'zero-rated basic grocery' - this is obvious from tax_code = Z
+   - Do NOT add 'Line marked exempt' - this is obvious from tax_code = E
+   - Only add notes for: capital assets, mixed-use items, unusual treatments
+
+3. TAX CODES - USE CORRECT CODES:
+   Z = zero-rated (basic groceries, exports) - charge 0% but can claim ITC
+   E = exempt (insurance, financial services) - fundamentally different from Z
+   For groceries: ALWAYS use Z not E
+   Z ≠ E - they have different ITC/ITR implications
+
+4. DO NOT INVENT DATA:
+   - Only return amounts that appear on the receipt
+   - If you cannot read an amount clearly - omit it
+   - When in doubt - leave the field empty rather than guess
+
 IMPORTANT RULES:
 - Extract EVERY line item. Do not skip shipping, fees, or adjustments.
 - Never assume a tax regime — report only what the invoice text shows.

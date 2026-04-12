@@ -609,7 +609,7 @@ def classify_line_gl(
         _line_is_zero_rated_grocery(desc) and not is_alcohol
     )
     if is_zero_rated_grocery:
-        extra_notes.append("zero-rated basic grocery")
+        pass  # tax_code=Z is self-explanatory; no redundant note needed
 
     # 1) Alcohol always wins — flagged for human review even at restaurants.
     if is_alcohol:
@@ -1177,6 +1177,26 @@ def process_line_items(
             # Deduplicate while preserving order
             parts = list(dict.fromkeys(parts))
             updated_notes = " | ".join(parts)
+
+            # Strip redundant notes that just restate what tax_code already
+            # conveys — these clutter the UI without adding information.
+            if updated_notes:
+                updated_notes = re.sub(r'zero-rated basic grocery\s*\|?\s*', '', updated_notes)
+                updated_notes = re.sub(r'Line marked exempt\s*\|?\s*', '', updated_notes)
+                updated_notes = re.sub(r'Quebec: GST 5% \+ QST 9\.975%\s*\|?\s*', '', updated_notes)
+                updated_notes = re.sub(r'\|\s*\|', '|', updated_notes)
+                updated_notes = updated_notes.strip('| \t\n')
+                if not updated_notes:
+                    updated_notes = ""
+
+            # E→Z correction: AI sometimes returns E (exempt) for groceries
+            # which should be Z (zero-rated). E and Z have different ITC/ITR
+            # implications — groceries are zero-rated, not exempt.
+            if tax_code == "E" and _line_is_zero_rated_grocery(desc_lc):
+                tax_code = "Z"
+                tax["gst"] = _ZERO
+                tax["qst"] = _ZERO
+                tax["hst"] = _ZERO
 
             # Update invoice_lines row (gl_account/category/is_capital/
             # capital_notes were already set during the INSERT in
