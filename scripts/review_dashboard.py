@@ -9966,6 +9966,20 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 </table></div>
             </div></div>"""
 
+    _doc_has_line_items = int(row.get("has_line_items") or 0)
+
+    # When line items exist, GL and tax code are per-line — hide the
+    # redundant document-level fields and show a short explanation instead.
+    if _doc_has_line_items:
+        _summary_gl_cell = (
+            '<div><strong>GL / Tax</strong>'
+            '<div class="small muted">Définis par les postes / Line items define the accounting entries</div></div>'
+        )
+    else:
+        _summary_gl_cell = (
+            f'<div><strong>{esc(t("doc_field_gl_account", lang))}</strong><div>{esc(row["gl_account"])}</div></div>'
+        )
+
     body = f"""
     <div class="card"><div class="actions" style="margin-bottom:12px;"><a href="/">{esc(t("btn_back_to_queue", lang))}</a></div>
         <h2 style="margin-bottom:8px;">{esc(row["file_name"])}</h2>
@@ -9988,7 +10002,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             <div><strong>{esc(t("doc_field_amount", lang))}</strong><div>{esc(row["amount"])}</div></div>
             <div><strong>{esc(t("doc_field_date", lang))}</strong><div>{esc(row["document_date"])}</div></div>
             <div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>
-            <div><strong>{esc(t("doc_field_gl_account", lang))}</strong><div>{esc(row["gl_account"])}</div></div>
+            {_summary_gl_cell}
         </div>
     </div>
     <div class="card"><h3>{esc(t("doc_section_attention", lang))}</h3>
@@ -10010,10 +10024,11 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 <div class="field"><label>{esc(t("field_doc_type", lang))}</label><input type="text" name="doc_type" value="{esc(row["doc_type"])}"></div>
                 <div class="field"><label>{esc(t("field_amount", lang))}</label><input type="text" name="amount" value="{esc(row["amount"])}"></div>
                 <div class="field"><label>{esc(t("field_document_date", lang))}</label><input type="text" name="document_date" value="{esc(row["document_date"])}"></div>
-                <div class="field"><label>{esc(t("col_gl_account", lang))}</label><input type="text" name="gl_account" value="{esc(row["gl_account"])}"></div>
-                <div class="field"><label>Tax Code</label><input type="text" name="tax_code" value="{esc(row.get('tax_code') or '')}"></div>
+                {"" if _doc_has_line_items else '<div class="field"><label>' + esc(t("col_gl_account", lang)) + '</label><input type="text" name="gl_account" value="' + esc(row["gl_account"]) + '"></div>'}
+                {"" if _doc_has_line_items else '<div class="field"><label>Tax Code</label><input type="text" name="tax_code" value="' + esc(row.get('tax_code') or '') + '"></div>'}
                 <div class="field"><label>{esc(t("col_category", lang))}</label><input type="text" name="category" value="{esc(row["category"])}"></div>
                 <div class="field"><label>{esc(t("field_review_status", lang))}</label><select name="review_status">{status_options}</select></div>
+                {"" if not _doc_has_line_items else '<div class="field"><div class="small muted" style="padding-top:10px;">GL et taxe définis par les postes / GL and tax defined by line items</div></div>'}
             </div>
             <button class="btn-primary" type="submit">{esc(t("btn_save_changes", lang))}</button>
         </form>

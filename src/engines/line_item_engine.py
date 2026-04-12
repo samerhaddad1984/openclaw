@@ -1184,6 +1184,14 @@ def process_line_items(
                 updated_notes = re.sub(r'zero-rated basic grocery\s*\|?\s*', '', updated_notes)
                 updated_notes = re.sub(r'Line marked exempt\s*\|?\s*', '', updated_notes)
                 updated_notes = re.sub(r'Quebec: GST 5% \+ QST 9\.975%\s*\|?\s*', '', updated_notes)
+                # Strip AI-generated tax regime descriptions that duplicate
+                # the tax_code field — e.g. "marked D (taxable)" or
+                # "marked E (exempt from tax)".
+                updated_notes = re.sub(r',?\s*marked [A-Z] \([^)]*\)\s*\|?\s*', '', updated_notes)
+                # Strip per-line tax calculation descriptions
+                updated_notes = re.sub(r'(?:Federal )?GST/TPS calculated at [\d.]+%[^|]*\|?\s*', '', updated_notes)
+                updated_notes = re.sub(r'Quebec provincial sales tax calculated at [\d.]+%[^|]*\|?\s*', '', updated_notes)
+                updated_notes = re.sub(r'HST \d+% applied at invoice level\s*\|?\s*', '', updated_notes)
                 updated_notes = re.sub(r'\|\s*\|', '|', updated_notes)
                 updated_notes = updated_notes.strip('| \t\n')
                 if not updated_notes:

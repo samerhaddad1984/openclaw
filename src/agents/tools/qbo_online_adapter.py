@@ -252,6 +252,100 @@ def resolve_payment_settings(
     }
 
 
+# ---------------------------------------------------------------------------
+# GL → QBO account name mapping (used when line items carry numeric codes)
+# ---------------------------------------------------------------------------
+GL_TO_QBO_MAP: dict[str, str] = {
+    "5400": "Telecommunications",
+    "5410": "Utilities",
+    "5420": "Software",
+    "5430": "Office Supplies",
+    "5440": "General Expenses",
+    "5500": "Bank Charges",
+    "5640": "Meals and Entertainment",
+    "5750": "Repairs and Maintenance",
+    "1820": "Equipment",
+    "1830": "Furniture",
+}
+
+TAX_TO_QBO_MAP: dict[str, str] = {
+    "T": "TAX",
+    "Z": "EXEMPT",
+    "E": "EXEMPT",
+    "M": "TAX",  # 50% handled by QBO meals category
+}
+
+
+def _map_gl_to_qbo_account(gl_account: str) -> str:
+    """Map a numeric GL code to the QBO account name, falling through to the
+    raw value when no mapping exists."""
+    return GL_TO_QBO_MAP.get(gl_account, gl_account)
+
+
+def _map_tax_code_to_qbo(tax_code: str) -> str:
+    """Map a single-letter tax code (T/Z/E/M) to a QBO TaxCodeRef value."""
+    return TAX_TO_QBO_MAP.get(tax_code, "TAX")
+
+
+def _fetch_invoice_lines(document_id: str, db_path: Path = DB_PATH) -> list[dict[str, Any]]:
+    """Fetch invoice_lines for a document, returning [] if none exist."""
+    try:
+        conn = open_db(db_path)
+        rows = conn.execute(
+            """SELECT line_number, description, quantity, unit_price,
+                      line_total_pretax, tax_code, gl_account
+               FROM invoice_lines
+               WHERE document_id = ?
+               ORDER BY line_number""",
+            (document_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def _build_line_items_for_qbo(
+    invoice_lines: list[dict[str, Any]],
+    *,
+    qbo_config: QBOConfig,
+    mappings: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build QBO Line array from invoice_lines rows."""
+    qbo_lines: list[dict[str, Any]] = []
+    for line in invoice_lines:
+        line_amount = round(float(line.get("line_total_pretax") or 0), 2)
+        gl = str(line.get("gl_account") or "5440")
+        tax = str(line.get("tax_code") or "T")
+        desc = str(line.get("description") or "")
+
+        mapped_account_name = _map_gl_to_qbo_account(gl)
+        # Try to resolve via the regular account mapping first, then fall back
+        mapped_account_name = apply_account_mapping(mapped_account_name, mappings)
+        expense_account_ref = find_account_by_name(mapped_account_name, qbo_config=qbo_config, db_path=DB_PATH)
+
+        detail: dict[str, Any] = {
+            "AccountRef": {
+                "value": expense_account_ref["qbo_id"],
+                "name": expense_account_ref["display_name"],
+            },
+        }
+
+        # Tax code mapping — use the per-line tax code
+        mapped_tax = _map_tax_code_to_qbo(tax)
+        detail["TaxCodeRef"] = {"value": mapped_tax}
+        detail["BillableStatus"] = "NotBillable"
+
+        qbo_line: dict[str, Any] = {
+            "Amount": line_amount,
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "AccountBasedExpenseLineDetail": detail,
+            "Description": desc,
+        }
+        qbo_lines.append(qbo_line)
+    return qbo_lines
+
+
 def build_qbo_expense_payload(
     posting_payload: dict[str, Any],
     *,
@@ -271,8 +365,6 @@ def build_qbo_expense_payload(
         raise ValueError("Posting payload missing vendor")
 
     gl_account = normalize_text(posting_payload.get("gl_account"))
-    if not gl_account:
-        raise ValueError("Posting payload missing gl_account")
 
     currency = normalize_text(posting_payload.get("currency")) or "CAD"
     memo = normalize_text(posting_payload.get("memo")) or vendor
@@ -282,10 +374,8 @@ def build_qbo_expense_payload(
     tax_code = normalize_text(posting_payload.get("tax_code"))
 
     mapped_vendor_name = apply_vendor_mapping(vendor, mappings)
-    mapped_account_name = apply_account_mapping(gl_account, mappings)
 
     vendor_ref = find_vendor_by_name(mapped_vendor_name, qbo_config=qbo_config, db_path=DB_PATH)
-    expense_account_ref = find_account_by_name(mapped_account_name, qbo_config=qbo_config, db_path=DB_PATH)
     payment_settings = resolve_payment_settings(mappings=mappings, qbo_config=qbo_config)
     payment_account_ref = payment_settings["payment_account"]
     payment_type = payment_settings["payment_type"]
@@ -300,23 +390,45 @@ def build_qbo_expense_payload(
     if memo:
         private_note_parts.append(f"memo={memo}")
     private_note_parts.append(f"otocpa_vendor={vendor}")
-    private_note_parts.append(f"otocpa_gl={gl_account}")
+    if gl_account:
+        private_note_parts.append(f"otocpa_gl={gl_account}")
 
-    line_detail: dict[str, Any] = {
-        "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-                "value": expense_account_ref["qbo_id"],
-                "name": expense_account_ref["display_name"],
-            }
-        },
-        "Amount": round(float(amount), 2),
-        "DetailType": "AccountBasedExpenseLineDetail",
-        "Description": memo,
-    }
+    # Try to use per-line items from invoice_lines table
+    document_id = normalize_text(posting_payload.get("document_id"))
+    invoice_lines = _fetch_invoice_lines(document_id) if document_id else []
 
-    tax_fragment = map_tax_code_for_qbo(tax_code, mappings)
-    if tax_fragment:
-        line_detail["AccountBasedExpenseLineDetail"].update(tax_fragment)
+    if invoice_lines:
+        # Multi-line posting: each invoice line becomes a QBO line
+        qbo_lines = _build_line_items_for_qbo(
+            invoice_lines,
+            qbo_config=qbo_config,
+            mappings=mappings,
+        )
+        private_note_parts.append(f"line_items={len(invoice_lines)}")
+    else:
+        # Single-line fallback (original behaviour)
+        if not gl_account:
+            raise ValueError("Posting payload missing gl_account")
+        mapped_account_name = apply_account_mapping(gl_account, mappings)
+        expense_account_ref = find_account_by_name(mapped_account_name, qbo_config=qbo_config, db_path=DB_PATH)
+
+        line_detail: dict[str, Any] = {
+            "AccountBasedExpenseLineDetail": {
+                "AccountRef": {
+                    "value": expense_account_ref["qbo_id"],
+                    "name": expense_account_ref["display_name"],
+                }
+            },
+            "Amount": round(float(amount), 2),
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "Description": memo,
+        }
+
+        tax_fragment = map_tax_code_for_qbo(tax_code, mappings)
+        if tax_fragment:
+            line_detail["AccountBasedExpenseLineDetail"].update(tax_fragment)
+
+        qbo_lines = [line_detail]
 
     payload: dict[str, Any] = {
         "PaymentType": payment_type,
@@ -331,7 +443,7 @@ def build_qbo_expense_payload(
         },
         "TxnDate": document_date,
         "PrivateNote": " | ".join(private_note_parts),
-        "Line": [line_detail],
+        "Line": qbo_lines,
         "CurrencyRef": {
             "value": currency
         },
@@ -359,34 +471,47 @@ def build_qbo_bill_payload(
         raise ValueError("Posting payload missing vendor")
 
     gl_account = normalize_text(posting_payload.get("gl_account"))
-    if not gl_account:
-        raise ValueError("Posting payload missing gl_account")
 
     currency = normalize_text(posting_payload.get("currency")) or "CAD"
     memo = normalize_text(posting_payload.get("memo")) or vendor
     tax_code = normalize_text(posting_payload.get("tax_code"))
 
     mapped_vendor_name = apply_vendor_mapping(vendor, mappings)
-    mapped_account_name = apply_account_mapping(gl_account, mappings)
-
     vendor_ref = find_vendor_by_name(mapped_vendor_name, qbo_config=qbo_config, db_path=DB_PATH)
-    expense_account_ref = find_account_by_name(mapped_account_name, qbo_config=qbo_config, db_path=DB_PATH)
 
-    line_detail: dict[str, Any] = {
-        "AccountBasedExpenseLineDetail": {
-            "AccountRef": {
-                "value": expense_account_ref["qbo_id"],
-                "name": expense_account_ref["display_name"],
-            }
-        },
-        "Amount": round(float(amount), 2),
-        "DetailType": "AccountBasedExpenseLineDetail",
-        "Description": memo,
-    }
+    # Try to use per-line items from invoice_lines table
+    document_id = normalize_text(posting_payload.get("document_id"))
+    invoice_lines = _fetch_invoice_lines(document_id) if document_id else []
 
-    tax_fragment = map_tax_code_for_qbo(tax_code, mappings)
-    if tax_fragment:
-        line_detail["AccountBasedExpenseLineDetail"].update(tax_fragment)
+    if invoice_lines:
+        qbo_lines = _build_line_items_for_qbo(
+            invoice_lines,
+            qbo_config=qbo_config,
+            mappings=mappings,
+        )
+    else:
+        if not gl_account:
+            raise ValueError("Posting payload missing gl_account")
+        mapped_account_name = apply_account_mapping(gl_account, mappings)
+        expense_account_ref = find_account_by_name(mapped_account_name, qbo_config=qbo_config, db_path=DB_PATH)
+
+        line_detail: dict[str, Any] = {
+            "AccountBasedExpenseLineDetail": {
+                "AccountRef": {
+                    "value": expense_account_ref["qbo_id"],
+                    "name": expense_account_ref["display_name"],
+                }
+            },
+            "Amount": round(float(amount), 2),
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "Description": memo,
+        }
+
+        tax_fragment = map_tax_code_for_qbo(tax_code, mappings)
+        if tax_fragment:
+            line_detail["AccountBasedExpenseLineDetail"].update(tax_fragment)
+
+        qbo_lines = [line_detail]
 
     payload: dict[str, Any] = {
         "TxnDate": document_date,
@@ -394,7 +519,7 @@ def build_qbo_bill_payload(
             "value": vendor_ref["qbo_id"],
             "name": vendor_ref["display_name"],
         },
-        "Line": [line_detail],
+        "Line": qbo_lines,
         "CurrencyRef": {
             "value": currency
         },
