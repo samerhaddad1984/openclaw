@@ -70,6 +70,23 @@ CANADIAN GROCERY TAX RULES:
 - Alcohol: tax_code = M (50% restriction)
 - Vitamins, supplements: tax_code = T
 
+CRITICAL TAX EXTRACTION RULE:
+- READ the actual tax amounts from the receipt — do NOT calculate them.
+- If a line item has no tax shown next to it → gst_amount = 0, qst_amount = 0
+- If the receipt shows TPS $0.00 for an item → tax_code = Z, gst_amount = 0
+- If total receipt TPS is small relative to total → most items are zero-rated
+- NEVER calculate tax_amount = price × rate unless that exact number appears
+  on the receipt.
+- Zero-rated items (Z): fresh produce, eggs, dairy, meat, bread — tax = 0
+- Only set gst_amount > 0 if you can see that exact dollar amount on the
+  receipt.
+
+TAX CODE DETERMINATION FROM RECEIPT:
+- Item has tax line beside it showing > $0 → T
+- Item has no tax line OR tax = $0 → Z
+- Item is at restaurant/bar → M (50% restriction)
+- Item is insurance/bank fee → E
+
 IMPORTANT RULES:
 - Extract EVERY line item. Do not skip shipping, fees, or adjustments.
 - Never assume a tax regime — report only what the invoice text shows.

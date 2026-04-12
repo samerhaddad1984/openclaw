@@ -399,6 +399,44 @@ def calculate_line_tax(
     }
 
 
+def validate_line_tax(
+    tax: dict[str, Any],
+    tax_code: str,
+    raw_text: str,
+) -> tuple[dict[str, Any], str]:
+    """Zero out any per-line tax that was *calculated* rather than *read*.
+
+    Fundamental fix: the AI/engine must not invent per-line tax via
+    price × rate.  If the calculated GST amount does not appear verbatim
+    anywhere in the receipt text, it was fabricated — zero out GST/QST/HST
+    and force tax_code="Z" so downstream totals don't pick up phantom tax.
+
+    Accepts both "0.12" and "0,12" (Quebec receipts often use comma
+    decimals).  Amounts of $0.00 are untouched (nothing to validate).
+    """
+    gst = tax.get("gst", _ZERO)
+    if not isinstance(gst, Decimal):
+        gst = _to_dec(gst)
+
+    if gst <= _ZERO:
+        return tax, tax_code
+
+    amount_dot = f"{gst:.2f}"
+    amount_comma = amount_dot.replace(".", ",")
+    if amount_dot in raw_text or amount_comma in raw_text:
+        return tax, tax_code
+
+    # Amount was calculated, not read — strip phantom tax.
+    tax = dict(tax)
+    tax["gst"] = _ZERO
+    tax["qst"] = _ZERO
+    tax["hst"] = _ZERO
+    tax["recoverable_gst"] = _ZERO
+    tax["recoverable_qst"] = _ZERO
+    tax["recoverable_hst"] = _ZERO
+    return tax, "Z"
+
+
 # ---------------------------------------------------------------------------
 # DETERMINISTIC LINE-LEVEL GL CLASSIFIER
 # ---------------------------------------------------------------------------
@@ -1124,6 +1162,11 @@ def process_line_items(
                 tax["gst"] = _ZERO
                 tax["qst"] = _ZERO
                 tax["hst"] = _ZERO
+
+            # Phantom-tax guard: if the per-line GST amount doesn't appear
+            # verbatim in the OCR text, it was calculated rather than read
+            # off the receipt — zero it out and downgrade to Z.
+            tax, tax_code = validate_line_tax(tax, tax_code, raw_ocr_text)
 
             # Build deduplicated notes: keep existing + add regime note once
             regime_note = regime.get("notes", "")
