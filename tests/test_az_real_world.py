@@ -1511,7 +1511,7 @@ class TestP_LearningPipeline:
 # =========================================================================
 
 class TestQ_LineItems:
-    def test_q1_capped_20(self): assert MAX_LINE_ITEMS == 20
+    def test_q1_capped_50(self): assert MAX_LINE_ITEMS == 50
     def test_q2_gst(self):
         tax = calculate_line_tax({"line_total": 100}, assign_line_tax_regime({}, "QC"), False)
         assert tax["gst"] == Decimal("5.00")

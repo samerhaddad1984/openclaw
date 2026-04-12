@@ -59,6 +59,22 @@ SPECIAL RULES (apply BEFORE the generic rules above):
   obvious, else 5440.
 - Bank charges, NSF fees, interac fees → 5500.
 
+GROCERY RECEIPT DISCOUNT RULES — CRITICAL FOR RECONCILIATION:
+On IGA, Metro, Provigo, Maxi, and other Quebec grocery receipts:
+- "RABAIS SUR LE PRIX COURANT: $X.XX" is INFORMATIONAL — it shows how
+  much you saved. The item price above already reflects the discount.
+  DO NOT extract these as separate negative line items. They would
+  double-count the discount and break reconciliation.
+- "PRIX MEMBRE SCENE + RABAIS SUR LE PRIX COURANT: $X.XX" is also
+  INFORMATIONAL — same rule, do not extract as a line item.
+- "RABAIS INSTANTANÉ -$X.XX" WITH a minus sign IS a real price
+  reduction — extract it as a negative line item.
+- Rule of thumb: if the line has a colon before the amount and no minus
+  sign, it is informational savings. If it has a minus sign, it is a
+  real deduction.
+- The receipt SOUS-TOTAL should equal the sum of item prices plus any
+  real deductions (minus-sign lines only).
+
 CANADIAN GROCERY TAX RULES:
 - Fresh produce (fruits, vegetables): tax_code = Z (zero-rated)
 - Eggs, dairy, meat, fish: tax_code = Z (zero-rated)
@@ -89,12 +105,16 @@ TAX CODE DETERMINATION FROM RECEIPT:
 
 CRITICAL RULES FOR ACCOUNTING ACCURACY:
 
-1. DESCRIPTION MUST BE EXACT:
-   - Copy the description EXACTLY as it appears on the receipt
-   - Do NOT translate, rephrase, or add explanations
-   - Receipt says 'COMP OEUFS BL GROS' → description = 'COMP OEUFS BL GROS'
-   - Receipt says 'RABAIS SUR LE PRIX COURANT' → description = 'RABAIS SUR LE PRIX COURANT'
-   - NEVER add words like 'Eggs —' or 'zero-rated' or 'Discount applied separately'
+1. DESCRIPTION RULE — MOST IMPORTANT:
+   You must copy the description EXACTLY character-by-character from the receipt.
+   - Receipt shows 'COMP OEUFS BL GROS' → you return 'COMP OEUFS BL GROS'
+   - Receipt shows 'RABAIS SUR LE PRIX COURANT' → you return 'RABAIS SUR LE PRIX COURANT'
+   - Receipt shows 'AVOCAT HASS PAQ5' → you return 'AVOCAT HASS PAQ5'
+   - NEVER add words before or after the receipt text
+   - NEVER translate from French to English
+   - NEVER add '—' or explanations after the description
+   - If you cannot read a word clearly, copy what you can see
+   - The description in your response must match what a human would read on the receipt
 
 2. NOTES FIELD IS FOR ACCOUNTING ISSUES ONLY:
    - Leave notes EMPTY unless there is a specific accounting issue requiring CPA attention

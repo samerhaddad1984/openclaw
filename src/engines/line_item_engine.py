@@ -40,7 +40,7 @@ _ONE = Decimal("1")
 _HALF = Decimal("0.5")
 CENT = Decimal("0.01")
 
-MAX_LINE_ITEMS = 20
+MAX_LINE_ITEMS = 50
 
 GST_RATE = Decimal("0.05")
 QST_RATE = Decimal("0.09975")
