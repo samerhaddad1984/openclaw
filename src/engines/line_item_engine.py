@@ -29,6 +29,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
+from src.engines.event_codes import log_event as _log_event
+from src.engines.shadow_log import ShadowLog
+
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
@@ -973,6 +976,7 @@ def _ensure_invoice_lines_table(conn: sqlite3.Connection) -> None:
 def reconcile_invoice_lines(
     document_id: str,
     conn: sqlite3.Connection,
+    shadow: ShadowLog | None = None,
 ) -> dict[str, Any]:
     """Reconcile line totals against the invoice total.
 
@@ -1006,6 +1010,15 @@ def reconcile_invoice_lines(
     total_computed = line_sum + tax_sum
     gap = _round(abs(total_computed - invoice_total))
     reconciled = gap <= Decimal("0.02")
+
+    if not reconciled and shadow:
+        _log_event(shadow, 'RECONCILIATION_FAILED', {
+            'line_sum': float(total_computed),
+            'receipt_total': float(invoice_total),
+            'delta': float(gap),
+            'tolerance': 0.03,
+            'line_count': len(rows),
+        })
 
     # Update document
     conn.execute(
@@ -1305,6 +1318,13 @@ def process_line_items(
 
     Returns summary dict.
     """
+    # Shadow log for structured event tracing
+    shadow = None
+    try:
+        shadow = ShadowLog(document_id)
+    except Exception:
+        pass
+
     # Priority 0: Adaptive Spatial Grouping Engine — uses word-level
     # bounding boxes from DocAI for production-quality receipt parsing.
     spatial_items: list[dict] = []
@@ -1355,6 +1375,13 @@ def process_line_items(
                         if weight and at_price:
                             item['quantity'] = weight
                             item['unit_price'] = at_price
+                        elif weight and not at_price and shadow:
+                            _log_event(shadow, 'WEIGHTED_ITEM_VOID', {
+                                'description': parent.raw_text,
+                                'weight_found': weight,
+                                'unit_price_found': None,
+                                'line_index': len(spatial_items),
+                            })
 
                         # Attach child discount
                         for child in structure.child_lines:
@@ -1365,6 +1392,11 @@ def process_line_items(
                                     if discount_amount and discount_amount < amount:
                                         item['discount'] = discount_amount
                                         item['total_price'] = amount - discount_amount
+                                        if shadow:
+                                            _log_event(shadow, 'DISCOUNT_ATTACHED', {
+                                                'parent': parent.raw_text,
+                                                'discount': float(discount_amount),
+                                            })
                                     else:
                                         item['discount'] = discount_amount
                                         item['total_price'] = amount
@@ -1374,9 +1406,18 @@ def process_line_items(
                 logging.info(f'Spatial engine found {len(spatial_items)} items for {document_id}')
         except Exception as e:
             logging.warning(f'Spatial engine failed: {e}')
+            if shadow:
+                _log_event(shadow, 'DOCAI_FALLBACK', {'reason': str(e)})
 
     avg_conf = sum(i.get('confidence', 0.5) for i in spatial_items) / max(1, len(spatial_items))
     if len(spatial_items) >= 2 and avg_conf > 0.6:
+        if shadow:
+            _log_event(shadow, 'SPATIAL_ENGINE_USED', {
+                'word_count': len(words) if 'words' in dir() else 0,
+                'line_count': len(parsed.structures) if 'parsed' in dir() else 0,
+                'item_count': len(spatial_items),
+                'avg_confidence': avg_conf,
+            })
         return _process_docai_line_items(
             document_id, spatial_items, vendor_name, raw_ocr_text, db_path,
             vendor_province, buyer_province,
@@ -1533,7 +1574,7 @@ def process_line_items(
         conn.commit()
 
         # Step 3: Reconcile
-        recon = reconcile_invoice_lines(document_id, conn)
+        recon = reconcile_invoice_lines(document_id, conn, shadow=shadow)
 
         return {
             "ok": True,

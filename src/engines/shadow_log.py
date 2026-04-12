@@ -1,5 +1,6 @@
 import psycopg2, uuid, json, time, logging, os
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -133,6 +134,16 @@ class ShadowLog:
             logging.warning(f'ShadowLog log_final_item failed: {e}')
         return item_id
 
+    def log_cataloged_event(self, code: str, details: Dict[str, Any],
+                           line_id: str = None, message: str = None):
+        """Log an event using the event code catalog.
+
+        Resolves event_type/severity automatically from
+        src.engines.event_codes.EVENT_CATALOG.
+        """
+        from src.engines.event_codes import log_event
+        log_event(self, code, details, line_id=line_id, message=message)
+
     def finalize(self, status, total_from_receipt=None, reconciliation_delta=None,
                  overall_confidence=None, merchant_name=None):
         processing_ms = int((time.time() - self.start_time) * 1000)
@@ -159,3 +170,126 @@ class ShadowLog:
             conn.close()
         except Exception as e:
             logging.warning(f'ShadowLog finalize failed: {e}')
+
+
+def get_calibration_report() -> List[Dict[str, Any]]:
+    """Aggregate event code firing stats across all processing runs.
+
+    Returns a list of dicts with event_code, event_type, total_fires,
+    avg_severity, and unique_runs — sorted by total fires descending.
+    """
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT
+                event_code,
+                event_type,
+                COUNT(*) as total_fires,
+                AVG(severity) as avg_severity,
+                COUNT(DISTINCT processing_run_id) as unique_runs
+            FROM processing_events
+            GROUP BY event_code, event_type
+            ORDER BY total_fires DESC
+        ''')
+        rows = cur.fetchall()
+        conn.close()
+
+        report = []
+        for row in rows:
+            report.append({
+                'event_code': row[0],
+                'event_type': row[1],
+                'total_fires': row[2],
+                'avg_severity': float(row[3] or 0),
+                'unique_runs': row[4],
+            })
+        return report
+    except Exception as e:
+        logging.warning(f'Calibration report failed: {e}')
+        return []
+
+
+def get_calibration_by_merchant() -> List[Dict[str, Any]]:
+    """Top merchants by event fire count."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT
+                r.merchant_name_guess,
+                pe.event_code,
+                pe.event_type,
+                COUNT(*) as fires
+            FROM processing_events pe
+            JOIN receipt_processing_runs r ON r.id = pe.processing_run_id
+            WHERE r.merchant_name_guess IS NOT NULL
+              AND r.merchant_name_guess != ''
+            GROUP BY r.merchant_name_guess, pe.event_code, pe.event_type
+            ORDER BY fires DESC
+            LIMIT 100
+        ''')
+        rows = cur.fetchall()
+        conn.close()
+
+        return [
+            {
+                'merchant': row[0],
+                'event_code': row[1],
+                'event_type': row[2],
+                'fires': row[3],
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        logging.warning(f'Calibration by merchant failed: {e}')
+        return []
+
+
+def get_calibration_trend() -> Dict[str, Any]:
+    """Compare event fires: last 7 days vs previous 7 days."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+
+        cur.execute('''
+            SELECT event_code, event_type, COUNT(*) as fires
+            FROM processing_events
+            WHERE created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY event_code, event_type
+            ORDER BY fires DESC
+        ''')
+        recent = {row[0]: {'event_type': row[1], 'fires': row[2]} for row in cur.fetchall()}
+
+        cur.execute('''
+            SELECT event_code, event_type, COUNT(*) as fires
+            FROM processing_events
+            WHERE created_at >= NOW() - INTERVAL '14 days'
+              AND created_at < NOW() - INTERVAL '7 days'
+            GROUP BY event_code, event_type
+            ORDER BY fires DESC
+        ''')
+        previous = {row[0]: {'event_type': row[1], 'fires': row[2]} for row in cur.fetchall()}
+
+        conn.close()
+
+        all_codes = set(recent.keys()) | set(previous.keys())
+        trend = []
+        for code in sorted(all_codes):
+            r = recent.get(code, {})
+            p = previous.get(code, {})
+            r_fires = r.get('fires', 0)
+            p_fires = p.get('fires', 0)
+            trend.append({
+                'event_code': code,
+                'event_type': r.get('event_type') or p.get('event_type', ''),
+                'last_7d': r_fires,
+                'prev_7d': p_fires,
+                'delta': r_fires - p_fires,
+            })
+
+        trend.sort(key=lambda x: x['last_7d'], reverse=True)
+        return {'recent': recent, 'previous': previous, 'trend': trend}
+    except Exception as e:
+        logging.warning(f'Calibration trend failed: {e}')
+        return {'recent': {}, 'previous': {}, 'trend': []}

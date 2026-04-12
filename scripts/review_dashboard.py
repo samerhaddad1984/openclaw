@@ -7543,6 +7543,127 @@ def render_admin_updates(
 
 
 # ---------------------------------------------------------------------------
+# Calibration report page
+# ---------------------------------------------------------------------------
+
+def render_calibration(
+    user: dict[str, Any],
+    lang: str = "fr",
+) -> str:
+    """Render the event code calibration dashboard page."""
+    from src.engines.shadow_log import (
+        get_calibration_report,
+        get_calibration_by_merchant,
+        get_calibration_trend,
+    )
+    from src.engines.event_codes import EVENT_CATALOG
+
+    report = get_calibration_report()
+    merchant_data = get_calibration_by_merchant()
+    trend_data = get_calibration_trend()
+
+    # --- Event code summary table ---
+    rows_html = ""
+    for row in report:
+        code = esc(row['event_code'])
+        etype = row['event_type']
+        badge_cls = 'danger' if etype == 'BLOCKER' else ('warning' if etype == 'WARNING' else 'info')
+        catalog_entry = EVENT_CATALOG.get(row['event_code'])
+        desc = esc(catalog_entry.description) if catalog_entry else ''
+        rows_html += f"""<tr>
+            <td><code>{code}</code></td>
+            <td><span class="badge {badge_cls}">{esc(etype)}</span></td>
+            <td>{row['total_fires']}</td>
+            <td>{row['avg_severity']:.1f}</td>
+            <td>{row['unique_runs']}</td>
+            <td>{desc}</td>
+        </tr>"""
+
+    if not report:
+        rows_html = '<tr><td colspan="6" style="text-align:center;color:#888;">No events recorded yet.</td></tr>'
+
+    # --- Merchant breakdown table ---
+    merchant_rows = ""
+    for m in merchant_data[:30]:
+        badge_cls = 'danger' if m['event_type'] == 'BLOCKER' else ('warning' if m['event_type'] == 'WARNING' else 'info')
+        merchant_rows += f"""<tr>
+            <td>{esc(m['merchant'])}</td>
+            <td><code>{esc(m['event_code'])}</code></td>
+            <td><span class="badge {badge_cls}">{esc(m['event_type'])}</span></td>
+            <td>{m['fires']}</td>
+        </tr>"""
+
+    if not merchant_data:
+        merchant_rows = '<tr><td colspan="4" style="text-align:center;color:#888;">No merchant data yet.</td></tr>'
+
+    # --- Trend table (last 7d vs previous 7d) ---
+    trend_rows = ""
+    for t_row in trend_data.get('trend', []):
+        delta = t_row['delta']
+        if delta > 0:
+            delta_html = f'<span style="color:#e74c3c;">+{delta}</span>'
+        elif delta < 0:
+            delta_html = f'<span style="color:#27ae60;">{delta}</span>'
+        else:
+            delta_html = '<span style="color:#888;">0</span>'
+        badge_cls = 'danger' if t_row['event_type'] == 'BLOCKER' else ('warning' if t_row['event_type'] == 'WARNING' else 'info')
+        trend_rows += f"""<tr>
+            <td><code>{esc(t_row['event_code'])}</code></td>
+            <td><span class="badge {badge_cls}">{esc(t_row['event_type'])}</span></td>
+            <td>{t_row['last_7d']}</td>
+            <td>{t_row['prev_7d']}</td>
+            <td>{delta_html}</td>
+        </tr>"""
+
+    if not trend_data.get('trend'):
+        trend_rows = '<tr><td colspan="5" style="text-align:center;color:#888;">No trend data yet.</td></tr>'
+
+    body = f"""
+    <div class="card">
+        <h2>Event Code Calibration</h2>
+        <p style="color:#666;">This page shows what the engine fires most often.
+        Fix the top blockers first, then reduce warnings.</p>
+
+        <h3>Event Code Summary</h3>
+        <table class="table">
+            <thead><tr>
+                <th>Event Code</th><th>Type</th><th>Total Fires</th>
+                <th>Avg Severity</th><th>Unique Runs</th><th>Description</th>
+            </tr></thead>
+            <tbody>{rows_html}</tbody>
+        </table>
+
+        <h3 style="margin-top:2rem;">Top Merchants by Events</h3>
+        <table class="table">
+            <thead><tr>
+                <th>Merchant</th><th>Event Code</th><th>Type</th><th>Fires</th>
+            </tr></thead>
+            <tbody>{merchant_rows}</tbody>
+        </table>
+
+        <h3 style="margin-top:2rem;">7-Day Trend (Last 7d vs Previous 7d)</h3>
+        <table class="table">
+            <thead><tr>
+                <th>Event Code</th><th>Type</th><th>Last 7d</th>
+                <th>Previous 7d</th><th>Delta</th>
+            </tr></thead>
+            <tbody>{trend_rows}</tbody>
+        </table>
+    </div>
+
+    <style>
+        .badge {{ display:inline-block; padding:2px 8px; border-radius:4px;
+                  font-size:0.8em; font-weight:bold; color:#fff; }}
+        .badge.danger {{ background:#e74c3c; }}
+        .badge.warning {{ background:#f39c12; }}
+        .badge.info {{ background:#3498db; }}
+    </style>
+    """
+
+    return page_layout("Calibration", body, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # Admin remote management page
 # ---------------------------------------------------------------------------
 
@@ -11526,6 +11647,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_admin_updates(user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/calibration":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>{esc(t("err_owner_required", lang))}</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_calibration(user, lang=lang))
                 return
 
             if path == "/admin/remote":
