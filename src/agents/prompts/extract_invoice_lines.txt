@@ -59,6 +59,17 @@ SPECIAL RULES (apply BEFORE the generic rules above):
   obvious, else 5440.
 - Bank charges, NSF fees, interac fees → 5500.
 
+CANADIAN GROCERY TAX RULES:
+- Fresh produce (fruits, vegetables): tax_code = Z (zero-rated)
+- Eggs, dairy, meat, fish: tax_code = Z (zero-rated)
+- Bread, cereals, grains: tax_code = Z (zero-rated)
+- Snacks, candy, chips, chocolate: tax_code = T
+- Carbonated drinks: tax_code = T
+- Prepared foods, deli items: tax_code = T
+- Household supplies: tax_code = T
+- Alcohol: tax_code = M (50% restriction)
+- Vitamins, supplements: tax_code = T
+
 IMPORTANT RULES:
 - Extract EVERY line item. Do not skip shipping, fees, or adjustments.
 - Never assume a tax regime — report only what the invoice text shows.

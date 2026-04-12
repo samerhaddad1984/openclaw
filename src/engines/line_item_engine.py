@@ -498,6 +498,43 @@ _EQUIPMENT_KW = (
     "monitor", "écran", "écran",
 )
 
+# Zero-rated basic groceries (Canadian tax rules): fresh produce, eggs,
+# dairy, meat, fish, bread/cereals/grains. These items carry no GST/QST
+# regardless of the province of supply, so we override tax_code to "Z"
+# and zero out gst/qst when a line description matches one of these
+# tokens. Word-boundary matching avoids false positives (e.g. "pate"
+# inside "update").
+ZERO_RATED_GROCERY = (
+    "egg", "oeuf", "oeufs", "lait", "milk", "fromage", "cheese",
+    "yogourt", "yogurt", "beurre", "butter",
+    "pomme", "apple", "banane", "banana", "orange", "citron",
+    "fraise", "strawberry", "framboise", "blueberry", "bluet",
+    "tomate", "tomato", "laitue", "lettuce", "epinard", "spinach",
+    "carotte", "carrot", "oignon", "onion", "patate", "potato",
+    "poivron", "pepper", "asperge", "asparagus", "avocat", "avocado",
+    "brocoli", "broccoli", "chou", "cabbage", "celeri", "celery",
+    "concombre", "cucumber", "champignon", "mushroom",
+    "poulet", "chicken", "boeuf", "beef", "porc", "pork",
+    "saumon", "salmon", "thon", "tuna", "crevette", "shrimp",
+    "pain", "bread", "riz", "rice", "pate", "pasta", "farine", "flour",
+)
+
+_ZERO_RATED_GROCERY_RE = re.compile(
+    r"\b(?:" + "|".join(ZERO_RATED_GROCERY) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _line_is_zero_rated_grocery(desc_lc: str) -> bool:
+    """Return True if the description matches a zero-rated basic grocery.
+
+    Uses word-boundary matching so short tokens like "egg" don't match
+    inside "eggplant" and "pate" doesn't match inside "update".
+    """
+    if not desc_lc:
+        return False
+    return bool(_ZERO_RATED_GROCERY_RE.search(desc_lc))
+
 
 def _line_amount_dec(raw_line: dict[str, Any]) -> Decimal:
     """Best-effort Decimal of a line's monetary value."""
@@ -530,6 +567,11 @@ def classify_line_gl(
     is_alcohol = _line_is_alcohol(desc)
     is_restaurant_vendor = any(kw in vendor for kw in _RESTAURANT_VENDOR_KW)
     is_hardware_vendor = any(kw in vendor for kw in _HARDWARE_VENDOR_KW)
+    is_zero_rated_grocery = (
+        _line_is_zero_rated_grocery(desc) and not is_alcohol
+    )
+    if is_zero_rated_grocery:
+        extra_notes.append("zero-rated basic grocery")
 
     # 1) Alcohol always wins — flagged for human review even at restaurants.
     if is_alcohol:
@@ -1071,6 +1113,17 @@ def process_line_items(
                 or str(line.get("gl_account", "")) == "5640"
             ):
                 tax_code = "M"
+
+            # Zero-rated basic groceries (fresh produce, eggs, dairy, meat,
+            # fish, bread/cereals): no GST/QST regardless of province. This
+            # runs after the meals override so alcohol/prepared meals aren't
+            # affected (alcohol items never match the grocery keyword list).
+            desc_lc = str(line.get("description", "")).lower()
+            if _line_is_zero_rated_grocery(desc_lc):
+                tax_code = "Z"
+                tax["gst"] = _ZERO
+                tax["qst"] = _ZERO
+                tax["hst"] = _ZERO
 
             # Build deduplicated notes: keep existing + add regime note once
             regime_note = regime.get("notes", "")
