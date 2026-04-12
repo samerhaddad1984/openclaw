@@ -71,6 +71,43 @@ UPLOAD_DIR  = ROOT_DIR / "data" / "ocr_uploads"
 LOW_CONFIDENCE_THRESHOLD = 0.7
 PDF_TEXT_MIN_WORDS       = 20
 
+# Alcohol / bar detection — any match forces manual CPA review.
+# CPA decides between client entertainment (50% deductible) and personal (0%).
+BAR_KEYWORDS = ['saloon', 'bar ', 'tavern', 'pub ', 'lounge',
+                'brasserie', 'alcool', 'alcohol', 'boiss. alc',
+                'mojito', 'cocktail', 'biere', 'beer', 'vin', 'wine']
+
+# Expanded alcohol keyword set scanned against full OCR text.
+# Quebec receipts often abbreviate "Boissons alcoolisées" as "Boiss. alc."
+ALCOHOL_KEYWORDS = [
+    'boiss. alc', 'boissons alc', 'alcool', 'alcohol',
+    'saloon', 'taverne', 'tavern', 'pub ', ' pub',
+    'mojito', 'cocktail', 'martini', 'whisky', 'vodka',
+    'biere', 'beer', 'vin ', 'wine', 'champagne',
+    'liqueur', 'spiritueux', 'spirits',
+]
+
+# Vendor-name substrings that identify a bar/entertainment venue.
+BAR_VENDOR_KEYWORDS = [
+    'saloon', 'taverne', 'tavern', 'pub', 'lounge',
+    'bar ', 'nightclub', 'brasserie',
+]
+
+
+def detect_alcohol(raw_text: str | None, vendor_name: str | None) -> bool:
+    """Return True if OCR text or vendor name signals alcohol/bar purchase.
+
+    Triggers GL 5640, tax code M, and mandatory CPA review because alcohol
+    is never fully deductible — business purpose must be verified.
+    """
+    text_lower = (raw_text or '').lower()
+    vendor_lower = (vendor_name or '').lower()
+
+    has_alcohol = any(k in text_lower for k in ALCOHOL_KEYWORDS)
+    is_bar = any(k in vendor_lower for k in BAR_VENDOR_KEYWORDS)
+
+    return has_alcohol or is_bar
+
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -1420,6 +1457,29 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
         else:
             result["gl_account"] = "5440"
 
+    # Alcohol / bar detection — overrides any prior GL because alcohol is
+    # never fully deductible. CPA must verify business purpose.
+    raw_text = result.get('raw_ocr_text', '') or ''
+    vendor_for_alcohol = result.get('vendor_name') or result.get('vendor') or ''
+
+    if detect_alcohol(raw_text, vendor_for_alcohol):
+        result['gl_account'] = '5640'
+        result['tax_code'] = 'M'
+        result['category'] = 'meals_entertainment'
+        result['alcohol_detected'] = True
+        # Flag for mandatory review (pipe-delimited string for downstream review UI)
+        existing_flags = result.get('substance_flags', '') or ''
+        if not isinstance(existing_flags, str):
+            # Coerce list/other shapes to pipe-joined string for this flag channel
+            try:
+                existing_flags = '|'.join(str(f) for f in existing_flags)
+            except TypeError:
+                existing_flags = ''
+        result['substance_flags'] = (
+            existing_flags
+            + '|ALCOOL_DETECTED: Vérifier usage professionnel / Verify business purpose'
+        ).strip('|')
+
     return result
 
 
@@ -1880,6 +1940,25 @@ def process_file(
     tax_code   = _enrich_data.get("tax_code") or None
     category   = _enrich_data.get("category") or None
 
+    # 5b-bis. Alcohol / bar detection — always escalate to manual CPA review.
+    # CPA decides: client entertainment (50% deductible) or personal (0%).
+    _alcohol_scan_text = (raw_ocr_text or json.dumps(raw, ensure_ascii=False)).lower()
+    if any(kw in _alcohol_scan_text for kw in BAR_KEYWORDS):
+        gl_account = "5640"
+        tax_code = "M"
+        category = "meals_entertainment"
+        _flags = raw.get("substance_flags")
+        if not isinstance(_flags, list):
+            _flags = []
+        _flags.append("alcohol_detected - verify business purpose")
+        raw["substance_flags"] = _flags
+        raw["substance_flag"] = "alcohol_detected - verify business purpose"
+        review_status = "NeedsReview"
+        raw["review_note"] = (
+            "Alcool détecté — vérifier usage professionnel / "
+            "Alcohol detected — verify business purpose"
+        )
+
     # 5c. Document type detection — route to correct processing module
     _detect_text = raw_ocr_text or json.dumps(raw)
     detected_doc_type = detect_document_type(_detect_text, filename)
@@ -1980,7 +2059,7 @@ def process_file(
     }
     upsert_document(record, db_path=db_path)
 
-    # Line-item extraction for multi-line invoices.
+    # Line-item extraction for multi-line invoices and itemised receipts.
     # Failures are non-fatal: the document is already saved.
     try:
         from src.engines.line_item_engine import looks_like_multiline_invoice, process_line_items
@@ -2349,6 +2428,20 @@ GL ACCOUNT RULES (Quebec chart of accounts):
 - Travel/transport: GL 5650
 - Bank charges: GL 5500
 
+ALCOHOL AND BAR RULES:
+- 'Boiss. alc.' or 'Boissons alcoolisées' = alcoholic beverages (Quebec abbreviation)
+- Bar, Saloon, Pub, Taverne, Lounge = bar/entertainment venue
+- If alcohol keywords found:
+  - gl_account = 5640 (meals and entertainment)
+  - tax_code = M (50% restriction)
+  - category = meals_entertainment
+  - Add to notes: 'Alcool détecté — vérifier usage professionnel'
+- Alcohol is NOT fully deductible — always requires CPA review
+- Common Quebec alcohol abbreviations:
+  FP = full price, FPS = full price service
+  t.in. = taxes incluses
+  Boiss. alc. = boissons alcoolisées
+
 {learning_examples}
 
 Return ONLY this JSON, no explanation, no markdown:
@@ -2672,6 +2765,20 @@ TAX CODE DETERMINATION:
 3. If vendor is foreign with NO Canadian GST number → tax_code = E
 4. Check: 'GST: 77087 6209 RT0001' = Canadian GST registration = T
 5. Check: Israeli company no RT number = E
+
+ALCOHOL AND BAR RULES:
+- 'Boiss. alc.' or 'Boissons alcoolisées' = alcoholic beverages (Quebec abbreviation)
+- Bar, Saloon, Pub, Taverne, Lounge = bar/entertainment venue
+- If alcohol keywords found:
+  - gl_account = 5640 (meals and entertainment)
+  - tax_code = M (50% restriction)
+  - category = meals_entertainment
+  - Add to notes: 'Alcool détecté — vérifier usage professionnel'
+- Alcohol is NOT fully deductible — always requires CPA review
+- Common Quebec alcohol abbreviations:
+  FP = full price, FPS = full price service
+  t.in. = taxes incluses
+  Boiss. alc. = boissons alcoolisées
 
 Return ONLY this JSON, no explanation:
 {{
@@ -3495,6 +3602,26 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             result["tax_code"] = "E"
 
     result["confidence"] = min(1.0, round(confidence, 4))
+
+    # --- Alcohol / bar detection ---
+    # Overrides prior GL/tax classification because alcohol is never fully
+    # deductible — CPA must verify business purpose. Applied before the
+    # final confidence calc so review flags propagate through the pipeline.
+    if detect_alcohol(text, result.get("vendor_name") or result.get("vendor") or ""):
+        result["gl_account"] = "5640"
+        result["tax_code"] = "M"
+        result["category"] = "meals_entertainment"
+        result["alcohol_detected"] = True
+        existing_flags = result.get("substance_flags", "") or ""
+        if not isinstance(existing_flags, str):
+            try:
+                existing_flags = "|".join(str(f) for f in existing_flags)
+            except TypeError:
+                existing_flags = ""
+        result["substance_flags"] = (
+            existing_flags
+            + "|ALCOOL_DETECTED: Vérifier usage professionnel / Verify business purpose"
+        ).strip("|")
 
     # --- Field-aware confidence recalculation ---
     result["confidence"] = _calculate_field_confidence(result)
