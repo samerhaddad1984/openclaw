@@ -1146,16 +1146,33 @@ _LINE_ITEM_KEYWORDS = re.compile(
 
 _MULTI_AMOUNT_RE = re.compile(r"\$?\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})")
 
+# Barcode/UPC-like pattern on an item line: a 10+ digit run followed by a
+# dollar amount on the same line (e.g. "SHORTSETS 073077268457 10.00 J").
+# Walmart and other grocery/retail receipts use this format and rarely carry
+# the explicit "qty/quantity/unit price" keywords the original heuristic
+# looked for, so they need their own trigger.
+_BARCODE_LINE_RE = re.compile(
+    r"\d{10,}\s+\$?\d{1,3}(?:[,\s]\d{3})*\.\d{2}"
+)
+
 # Vendors that almost always have itemised receipts worth classifying line by
-# line — restaurants/bars (mixed food + alcohol GL) and hardware stores
-# (mixed supply + capital GL). The match is substring + case-insensitive.
+# line — restaurants/bars (mixed food + alcohol GL), hardware stores
+# (mixed supply + capital GL) and big-box / grocery retailers (mixed supply +
+# personal expense risk). Match is substring + case-insensitive.
 _LINE_ITEM_VENDOR_HINTS = (
+    # Restaurants / bars
     "saloon", "tavern", "taverne", "pub", "lounge", "nightclub",
     "brasserie", "bistro", "restaurant", "bar ", "café", "cafe",
     "deli", "diner", "grill", "pizzeria", "sushi", "buffet",
+    # Hardware / building supply
     "reno-depot", "renodepot", "rénovation", "home depot",
     "homedepot", "rona", "canadian tire", "lowes", "lowe's",
     "ace hardware", "patrick morin", "matériaux",
+    # Big-box / grocery / retail (mixed supply + personal expense risk)
+    "walmart", "costco", "target", "superstore", "real canadian",
+    "loblaws", "loblaw", "maxi", "iga", "metro ", "sobeys",
+    "provigo", "super c", "superc", "adonis", "avril",
+    "pa ", "pa nature", "bulk barn", "dollarama", "dollar tree",
 )
 
 
@@ -1165,16 +1182,28 @@ def looks_like_multiline_invoice(raw_text: str, vendor_name: str = "") -> bool:
     Triggers when ANY of the following hold:
     - The text has line-item keywords AND ≥3 distinct dollar amounts
       (the original "structured invoice" path).
-    - The vendor is a known restaurant/bar/hardware store (mixed-GL
-      receipts that benefit most from per-line classification) AND the
-      text has ≥2 dollar amounts.
+    - The vendor is a known restaurant/bar/hardware/grocery/big-box store
+      (mixed-GL receipts that benefit most from per-line classification)
+      AND the text has ≥2 dollar amounts.
     - The text has ≥2 dollar amounts AND looks like an itemised receipt
       (subtotal/sub-total/sous-total marker).
+    - The text has ≥5 distinct dollar amounts (retail receipt pattern —
+      most grocery/big-box receipts have no explicit "qty/unit price"
+      keywords but list one amount per item).
+    - The text has ≥2 barcode-like item lines (long digit run followed
+      by a dollar amount on the same line). Catches Walmart-style
+      "SHORTSETS 073077268457 10.00 J" rows even when the OCR drops the
+      SUBTOTAL marker.
     """
     if not raw_text:
         return False
     amounts = _MULTI_AMOUNT_RE.findall(raw_text)
     n_amounts = len(amounts)
+    # Distinct amounts matter more than the raw count: "10.00 J" appearing
+    # five times in a Walmart "SHORTSETS" run should still count as five
+    # separate line items, but duplicate totals ("TOTAL 98.95 / PAID 98.95")
+    # shouldn't inflate the signal for two-line receipts.
+    n_distinct_amounts = len(set(amounts))
 
     has_keywords = bool(_LINE_ITEM_KEYWORDS.search(raw_text))
     if has_keywords and n_amounts >= 3:
@@ -1195,7 +1224,56 @@ def looks_like_multiline_invoice(raw_text: str, vendor_name: str = "") -> bool:
     if has_subtotal_marker and n_amounts >= 2:
         return True
 
+    # Retail receipt pattern: many items but no structured keywords.
+    if n_distinct_amounts >= 5:
+        return True
+
+    # Walmart-style "DESCRIPTION BARCODE AMOUNT" rows.
+    if len(_BARCODE_LINE_RE.findall(raw_text)) >= 2:
+        return True
+
     return False
+
+
+# ---------------------------------------------------------------------------
+# PERSONAL-ITEM DETECTION (apparel / personal-use keywords on a business
+# receipt). Runs on the raw OCR text so we don't depend on the AI
+# line-extraction succeeding. A hit sets substance_flags.potential_personal_
+# expense so the existing review_policy re-run downgrades the document to
+# NeedsReview.
+# ---------------------------------------------------------------------------
+
+PERSONAL_ITEM_KEYWORDS = (
+    "shortset", "swimwear", "swimsuit", "clothing", "shirt", "shorts",
+    "dress", "pants", "shoes", "socks", "underwear", "tee", "jean",
+    "hat", "cap", "jacket", "coat", "sweater", "hoodie",
+)
+
+# Precompile as word-boundary regex so "teeth", "capacitor", "jeans" etc.
+# still hit sensibly ("jeans" → "jean", "tees" → "tee") without matching
+# unrelated substrings like "capital" for "cap".
+_PERSONAL_ITEM_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in PERSONAL_ITEM_KEYWORDS) + r")s?\b",
+    re.IGNORECASE,
+)
+
+
+def detect_personal_items(raw_text: str) -> list[str]:
+    """Return the list of distinct personal-item keywords found in *raw_text*.
+
+    Empty list = no personal items detected. Callers typically treat any
+    non-empty result as a NeedsReview trigger on business receipts.
+    """
+    if not raw_text:
+        return []
+    hits: list[str] = []
+    seen: set[str] = set()
+    for match in _PERSONAL_ITEM_RE.finditer(raw_text):
+        kw = match.group(1).lower()
+        if kw not in seen:
+            seen.add(kw)
+            hits.append(kw)
+    return hits
 
 
 # =========================================================================

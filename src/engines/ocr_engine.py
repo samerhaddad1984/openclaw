@@ -2061,11 +2061,21 @@ def process_file(
 
     # Line-item extraction for multi-line invoices and itemised receipts.
     # Failures are non-fatal: the document is already saved.
+    _personal_items_detected: list[str] = []
     try:
-        from src.engines.line_item_engine import looks_like_multiline_invoice, process_line_items
+        from src.engines.line_item_engine import (
+            looks_like_multiline_invoice,
+            process_line_items,
+            detect_personal_items,
+        )
         _ocr_text = raw_ocr_text or ""
         if _ocr_text and looks_like_multiline_invoice(_ocr_text, vendor_name=vendor):
             process_line_items(doc_id, _ocr_text, vendor_name=vendor or "", db_path=db_path)
+        # Personal-item detection runs regardless of whether the line-item
+        # pipeline triggered — apparel keywords on a business receipt are a
+        # NeedsReview signal even on a simple one-line receipt.
+        if _ocr_text:
+            _personal_items_detected = detect_personal_items(_ocr_text)
     except Exception:  # pragma: no cover
         pass
 
@@ -2083,6 +2093,25 @@ def process_file(
     try:
         from src.engines.substance_engine import run_substance_classifier
         substance_flags_result = run_substance_classifier(record)
+        # Merge line-item personal-item detection into substance_flags so the
+        # existing review_policy re-run downgrades the document to NeedsReview.
+        if _personal_items_detected:
+            if not isinstance(substance_flags_result, dict):
+                substance_flags_result = {}
+            substance_flags_result["potential_personal_expense"] = True
+            substance_flags_result["block_auto_approval"] = True
+            substance_flags_result["personal_items_detected"] = _personal_items_detected
+            notes = substance_flags_result.get("review_notes")
+            if not isinstance(notes, list):
+                notes = []
+            note = (
+                "Personal items detected ("
+                + ", ".join(_personal_items_detected)
+                + ") — verify business purpose"
+            )
+            if note not in notes:
+                notes.append(note)
+            substance_flags_result["review_notes"] = notes
         _db = sqlite3.connect(str(db_path))
         _db.row_factory = sqlite3.Row
         try:
