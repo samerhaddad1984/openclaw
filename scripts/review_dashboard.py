@@ -1398,7 +1398,7 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
         _db = sqlite3.connect(str(DB_PATH))
         _db.row_factory = _dict_factory
         lines = _db.execute(
-            """SELECT line_number, description, quantity, unit_price,
+            """SELECT line_id, line_number, description, quantity, unit_price,
                       line_total_pretax, tax_code, tax_regime, gst_amount,
                       qst_amount, hst_amount, province_of_supply, line_notes,
                       gl_account, category, is_capital, capital_notes
@@ -1406,6 +1406,18 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
                ORDER BY line_number""",
             (document_id,),
         ).fetchall()
+        # Load chart of accounts for the GL dropdown. Fallback gracefully
+        # to an empty list if the table is missing or empty; the UI will
+        # still accept free-form GL codes via the datalist input.
+        coa_rows: list[dict[str, Any]] = []
+        try:
+            coa_rows = [
+                dict(r) for r in _db.execute(
+                    "SELECT account_code, account_name FROM chart_of_accounts ORDER BY account_code"
+                ).fetchall()
+            ]
+        except Exception:
+            coa_rows = []
         _db.close()
     except Exception:
         return ""
@@ -1413,10 +1425,29 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
     if not lines:
         return ""
 
+    # Build <option> list for the GL datalist (shared across all rows).
+    gl_datalist_options = "".join(
+        f'<option value="{esc(str(c.get("account_code") or ""))}">'
+        f'{esc(str(c.get("account_name") or ""))}</option>'
+        for c in coa_rows
+    )
+
+    # Tax code options — canonical purchase codes exposed in the UI.
+    tax_code_choices = [
+        ("T", "T — Taxable (GST+QST)"),
+        ("E", "E — Exempt"),
+        ("M", "M — Mixed / Meals 50%"),
+        ("Z", "Z — Zero-rated"),
+    ]
+
     # Line items table
     rows_html = ""
     for ln in lines:
-        gl_cell = esc(str(ln['gl_account'] or ''))
+        line_id = ln.get('line_id')
+        gl_val = str(ln['gl_account'] or '')
+        desc_val = str(ln['description'] or '')
+        tax_val = str(ln['tax_code'] or ln['tax_regime'] or '')
+        gl_cell = esc(gl_val)
         cap_flag = int(ln['is_capital'] or 0) if 'is_capital' in ln.keys() else 0
         cap_notes = str(ln['capital_notes'] or '') if 'capital_notes' in ln.keys() else ''
         if cap_flag:
@@ -1424,21 +1455,69 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             cap_cell = f"<span class='badge badge-hold' title='{esc(cap_notes)}'>{esc(cap_label)}</span>"
         else:
             cap_cell = "<span class='small muted'>—</span>"
+
+        # Build tax <select> for the edit row, preserving current value even
+        # if it's outside the canonical T/E/M/Z set.
+        tax_options_html = ""
+        seen_tax_values = set()
+        for code, label in tax_code_choices:
+            sel = " selected" if code == tax_val else ""
+            tax_options_html += f'<option value="{esc(code)}"{sel}>{esc(label)}</option>'
+            seen_tax_values.add(code)
+        if tax_val and tax_val not in seen_tax_values:
+            tax_options_html += (
+                f'<option value="{esc(tax_val)}" selected>{esc(tax_val)}</option>'
+            )
+
+        rid = f"li-{line_id}"
+        # Display row (read-only presentation)
         rows_html += (
-            f"<tr>"
+            f"<tr id='{rid}-view' data-line-id='{line_id}'>"
             f"<td>{esc(str(ln['line_number']))}</td>"
-            f"<td>{esc(str(ln['description'] or ''))}</td>"
+            f"<td class='li-desc-cell'>{esc(desc_val)}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['quantity'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['unit_price'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['line_total_pretax'] or ''))}</td>"
-            f"<td style='text-align:center;'><strong>{gl_cell}</strong></td>"
-            f"<td style='text-align:center;'>{esc(str(ln['tax_code'] or ln['tax_regime'] or ''))}</td>"
+            f"<td style='text-align:center;' class='li-gl-cell'><strong>{gl_cell}</strong></td>"
+            f"<td style='text-align:center;' class='li-tax-cell'>{esc(tax_val)}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['gst_amount'] or '0.00'))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['qst_amount'] or '0.00'))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['hst_amount'] or '0.00'))}</td>"
             f"<td>{esc(str(ln['province_of_supply'] or ''))}</td>"
             f"<td style='text-align:center;'>{cap_cell}</td>"
             f"<td class='small muted'>{esc(str(ln['line_notes'] or ''))}</td>"
+            f"<td style='text-align:center;'>"
+            f"<button type='button' class='btn-small' "
+            f"onclick=\"otoLineEdit('{line_id}')\" title='Edit'>\u270f\ufe0f</button>"
+            f"</td>"
+            f"</tr>"
+        )
+        # Edit row (hidden until toggled). colspan spans all 14 columns.
+        rows_html += (
+            f"<tr id='{rid}-edit' data-line-id='{line_id}' style='display:none;background:#f7fafc;'>"
+            f"<td colspan='14'>"
+            f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;'>"
+            f"<label style='display:flex;flex-direction:column;font-size:12px;'>"
+            f"<span>{esc(t('line_col_description', lang))}</span>"
+            f"<input type='text' id='{rid}-desc' value='{esc(desc_val)}'>"
+            f"</label>"
+            f"<label style='display:flex;flex-direction:column;font-size:12px;'>"
+            f"<span>{esc(t('line_col_gl', lang))}</span>"
+            f"<input type='text' id='{rid}-gl' list='oto-gl-datalist' value='{esc(gl_val)}'>"
+            f"</label>"
+            f"<label style='display:flex;flex-direction:column;font-size:12px;'>"
+            f"<span>{esc(t('line_col_tax_regime', lang))}</span>"
+            f"<select id='{rid}-tax'>{tax_options_html}</select>"
+            f"</label>"
+            f"<div style='display:flex;gap:4px;'>"
+            f"<button type='button' class='btn-primary btn-small' "
+            f"onclick=\"otoLineSave('{line_id}')\">{esc(t('btn_save_changes', lang))}</button>"
+            f"<button type='button' class='btn-small' "
+            f"onclick=\"otoLineCancel('{line_id}')\">\u2716</button>"
+            f"</div>"
+            f"</div>"
+            f"<div id='{rid}-status' class='small muted' style='margin-top:4px;'></div>"
+            f"</td>"
             f"</tr>"
         )
 
@@ -1458,6 +1537,7 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
 <div class="card">
   <h3>{esc(t("line_items_section", lang))}</h3>
   <div style="margin-bottom:8px;"><strong>{esc(t("line_reconciliation_status", lang))}:</strong> {recon_badge}</div>
+  <datalist id="oto-gl-datalist">{gl_datalist_options}</datalist>
   <div style="overflow-x:auto;">
   <table>
     <thead><tr>
@@ -1474,10 +1554,72 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
       <th>{esc(t("line_col_province", lang))}</th>
       <th>{esc(t("line_col_capital", lang))}</th>
       <th>{esc(t("line_col_notes", lang))}</th>
+      <th></th>
     </tr></thead>
     <tbody>{rows_html}</tbody>
   </table>
   </div>
+  <script>
+  (function() {{
+    if (window.__otoLineItemEditInstalled) return;
+    window.__otoLineItemEditInstalled = true;
+    window.otoLineEdit = function(lineId) {{
+      var view = document.getElementById('li-' + lineId + '-view');
+      var edit = document.getElementById('li-' + lineId + '-edit');
+      if (view) view.style.display = 'none';
+      if (edit) edit.style.display = '';
+    }};
+    window.otoLineCancel = function(lineId) {{
+      var view = document.getElementById('li-' + lineId + '-view');
+      var edit = document.getElementById('li-' + lineId + '-edit');
+      if (view) view.style.display = '';
+      if (edit) edit.style.display = 'none';
+      var status = document.getElementById('li-' + lineId + '-status');
+      if (status) status.textContent = '';
+    }};
+    window.otoLineSave = function(lineId) {{
+      var descEl = document.getElementById('li-' + lineId + '-desc');
+      var glEl   = document.getElementById('li-' + lineId + '-gl');
+      var taxEl  = document.getElementById('li-' + lineId + '-tax');
+      var status = document.getElementById('li-' + lineId + '-status');
+      if (status) status.textContent = 'Saving…';
+      var payload = {{
+        line_id: lineId,
+        description: descEl ? descEl.value : '',
+        gl_account: glEl ? glEl.value : '',
+        tax_code: taxEl ? taxEl.value : ''
+      }};
+      fetch('/document/line_item/save', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      }}).then(function(r) {{ return r.json().then(function(j) {{ return {{ ok: r.ok, body: j }}; }}); }})
+      .then(function(res) {{
+        if (!res.ok || !res.body || res.body.ok !== true) {{
+          if (status) status.textContent = 'Error: ' + ((res.body && res.body.error) || 'save failed');
+          return;
+        }}
+        // Update the display row inline so the user sees the change.
+        var viewRow = document.getElementById('li-' + lineId + '-view');
+        if (viewRow) {{
+          var descCell = viewRow.querySelector('.li-desc-cell');
+          var glCell   = viewRow.querySelector('.li-gl-cell');
+          var taxCell  = viewRow.querySelector('.li-tax-cell');
+          if (descCell) descCell.textContent = payload.description;
+          if (glCell)   glCell.innerHTML = '<strong>' + (payload.gl_account || '').replace(/[&<>"']/g, function(c) {{
+            return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c];
+          }}) + '</strong>';
+          if (taxCell)  taxCell.textContent = payload.tax_code;
+        }}
+        window.otoLineCancel(lineId);
+      }})
+      .catch(function(err) {{
+        if (status) status.textContent = 'Error: ' + err;
+      }});
+    }};
+  }})();
+  </script>
 </div>"""
 
     # Deposit allocation section
@@ -12301,6 +12443,70 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 clear_manual_hold(document_id)
                 set_document_status(document_id, "Ready")
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_return_ready", lang))
+                return
+
+            # --- Line item inline edit (JSON POST) ---
+            if path == "/document/line_item/save":
+                try:
+                    payload = json.loads(raw.decode("utf-8")) if raw else {}
+                except Exception:
+                    self._send_json({"ok": False, "error": "invalid_json"}, status=400)
+                    return
+                try:
+                    line_id = int(payload.get("line_id"))
+                except (TypeError, ValueError):
+                    self._send_json({"ok": False, "error": "invalid_line_id"}, status=400)
+                    return
+                new_desc = normalize_text(payload.get("description", ""))
+                new_gl   = normalize_text(payload.get("gl_account", ""))
+                new_tax  = normalize_text(payload.get("tax_code", ""))
+                # Validate tax_code against the canonical registry so a typo
+                # can't poison downstream tax calculations.
+                try:
+                    from src.engines.tax_engine import VALID_TAX_CODES as _VALID_TAX
+                    allowed_tax = set(_VALID_TAX)
+                except Exception:
+                    allowed_tax = {"T", "E", "M", "Z", "I", "HST", "HST_ATL",
+                                   "GST_ONLY", "GST_QST", "VAT", "GENERIC_TAX", "NONE"}
+                if new_tax and new_tax not in allowed_tax:
+                    self._send_json(
+                        {"ok": False, "error": f"invalid_tax_code:{new_tax}"},
+                        status=400,
+                    )
+                    return
+                # Locate the owning document so we can enforce the period lock
+                # and return the caller to the right detail page.
+                try:
+                    with open_db() as _lconn:
+                        _row = _lconn.execute(
+                            "SELECT document_id FROM invoice_lines WHERE line_id = ?",
+                            (line_id,),
+                        ).fetchone()
+                        if not _row:
+                            self._send_json({"ok": False, "error": "line_not_found"}, status=404)
+                            return
+                        owning_doc = _row["document_id"]
+                        _check_period_not_locked_for_doc(owning_doc, lang)
+                        _lconn.execute(
+                            "UPDATE invoice_lines SET gl_account = ?, tax_code = ?, "
+                            "description = ? WHERE line_id = ?",
+                            (new_gl, new_tax, new_desc, line_id),
+                        )
+                        _lconn.commit()
+                except ValueError as _ve:
+                    self._send_json({"ok": False, "error": str(_ve)}, status=400)
+                    return
+                except Exception as _exc:
+                    self._send_json({"ok": False, "error": f"db_error:{_exc}"}, status=500)
+                    return
+                self._send_json({
+                    "ok": True,
+                    "line_id": line_id,
+                    "document_id": owning_doc,
+                    "gl_account": new_gl,
+                    "tax_code": new_tax,
+                    "description": new_desc,
+                })
                 return
 
             if path == "/assign":
