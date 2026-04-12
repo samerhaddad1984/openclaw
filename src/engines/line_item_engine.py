@@ -1201,11 +1201,17 @@ Return JSON only:
         for i, item in enumerate(items):
             cls = classifications.get(i + 1, {})
             gl = cls.get('gl_account', '5440')
-            tax_code = cls.get('tax_code', 'T')
+            # Merchant overlays (e.g. Costco) pre-assign tax_code from
+            # on-receipt codes (FP/P/F -> T, no code -> Z); respect that
+            # over Claude's classification.
+            overlay_tax_code = item.get('tax_code')
+            tax_code = overlay_tax_code or cls.get('tax_code', 'T')
             desc_lc = str(item.get('description', '')).lower()
 
-            # Zero-rated grocery override
-            if _line_is_zero_rated_grocery(desc_lc):
+            # Zero-rated grocery override - but don't override a merchant
+            # overlay that read a taxable code directly off the receipt
+            # (e.g. Costco FP on prepared foods).
+            if _line_is_zero_rated_grocery(desc_lc) and overlay_tax_code != 'T':
                 tax_code = 'Z'
 
             # E→Z correction for groceries
@@ -1243,8 +1249,12 @@ Return JSON only:
                 tax['qst'] = _ZERO
                 tax['hst'] = _ZERO
 
-            # Phantom-tax guard
-            tax, tax_code = validate_line_tax(tax, tax_code, raw_ocr_text)
+            # Phantom-tax guard. Skip for lines whose tax_code was read
+            # directly off the receipt via merchant overlay (Costco FP/P/F):
+            # those receipts only print a summary tax total, so per-line
+            # amounts will always be calculated rather than quoted verbatim.
+            if overlay_tax_code != 'T':
+                tax, tax_code = validate_line_tax(tax, tax_code, raw_ocr_text)
 
             conn.execute('''
                 INSERT INTO invoice_lines
@@ -1408,6 +1418,20 @@ def process_line_items(
             logging.warning(f'Spatial engine failed: {e}')
             if shadow:
                 _log_event(shadow, 'DOCAI_FALLBACK', {'reason': str(e)})
+
+    # Merchant-aware overlay: for vendors with barcode-first layouts
+    # (Costco), rebuild items directly from OCR text so totals/tax/payment
+    # lines don't leak in as phantom line items.
+    try:
+        from src.engines.merchant_overlay import apply_merchant_overlay
+        overlaid = apply_merchant_overlay(spatial_items, vendor_name, raw_ocr_text)
+        if overlaid is not spatial_items and overlaid:
+            logging.info(
+                f'Merchant overlay rebuilt line items ({len(spatial_items)} -> {len(overlaid)}) for {document_id}'
+            )
+            spatial_items = overlaid
+    except Exception as e:
+        logging.warning(f'Merchant overlay failed: {e}')
 
     avg_conf = sum(i.get('confidence', 0.5) for i in spatial_items) / max(1, len(spatial_items))
     if len(spatial_items) >= 2 and avg_conf > 0.6:
