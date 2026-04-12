@@ -21,6 +21,7 @@ allocate_deposit_proportionally(document_id, deposit_amount, conn)
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -1114,6 +1115,170 @@ def allocate_deposit_proportionally(
 
 
 # ---------------------------------------------------------------------------
+# DOCAI LINE-ITEM PROCESSING
+# ---------------------------------------------------------------------------
+
+
+def _process_docai_line_items(
+    document_id: str,
+    items: list[dict],
+    vendor_name: str,
+    raw_ocr_text: str,
+    db_path: Path,
+    vendor_province: str = "QC",
+    buyer_province: str = "QC",
+) -> dict[str, Any]:
+    """Process line items extracted by Google DocAI.
+
+    DocAI provides exact descriptions and amounts from the receipt image.
+    Claude Haiku classifies GL account and tax code only — no extraction needed.
+    Then the standard per-line tax pipeline (place of supply, regime, calculation)
+    runs on each line.
+    """
+    import anthropic
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    # Ask Claude to classify GL and tax code only
+    items_text = '\n'.join([
+        f'{i+1}. "{item["description"]}" amount={item["total_price"]}'
+        for i, item in enumerate(items)
+    ])
+
+    prompt = f"""Quebec CPA. Classify each item with gl_account and tax_code only.
+Vendor: {vendor_name}
+
+Items:
+{items_text}
+
+GL: 5400=telecom 5410=utilities 5420=software 5430=supplies/groceries
+5440=general 5500=bank 5640=meals 5750=repairs 1820=equipment>500
+
+TAX: Z=zero-rated grocery (fresh produce eggs dairy meat bread)
+T=taxable (snacks prepared food household items)
+M=meals/restaurant E=exempt
+
+Return JSON only:
+[{{"line": 1, "gl_account": "5430", "tax_code": "Z"}}]"""
+
+    classifications: dict[int, dict] = {}
+    try:
+        key = os.environ.get('ANTHROPIC_API_KEY', '')
+        client = anthropic.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=1000,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        text = msg.content[0].text
+        text = re.sub(r'```json\s*', '', text)
+        text = re.sub(r'```\s*', '', text)
+        for cls in json.loads(text.strip()):
+            classifications[cls['line']] = cls
+    except Exception as e:
+        logging.warning(f'Claude classification failed: {e}')
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        # Clear old lines
+        conn.execute('DELETE FROM invoice_lines WHERE document_id = ?', (document_id,))
+
+        for i, item in enumerate(items):
+            cls = classifications.get(i + 1, {})
+            gl = cls.get('gl_account', '5440')
+            tax_code = cls.get('tax_code', 'T')
+            desc_lc = str(item.get('description', '')).lower()
+
+            # Zero-rated grocery override
+            if _line_is_zero_rated_grocery(desc_lc):
+                tax_code = 'Z'
+
+            # E→Z correction for groceries
+            if tax_code == 'E' and _line_is_zero_rated_grocery(desc_lc):
+                tax_code = 'Z'
+
+            # Build a line dict compatible with the standard tax pipeline
+            # (calculate_line_tax reads "line_total")
+            line = {
+                'line_number': i + 1,
+                'description': item['description'],
+                'quantity': item.get('quantity', 1.0),
+                'unit_price': item.get('unit_price'),
+                'line_total': item['total_price'],
+                'gl_account': gl,
+                'tax_code': tax_code,
+                'category': 'meals' if gl == '5640' else '',
+            }
+
+            pos = determine_place_of_supply(line, vendor_province, buyer_province)
+            regime = assign_line_tax_regime(line, pos)
+
+            # Override tax_code with regime if not already set to a special code
+            if tax_code not in ('Z', 'M'):
+                tax_code = regime.get('tax_code', tax_code)
+            if gl == '5640':
+                tax_code = 'M'
+
+            tax_det = detect_tax_included_per_line(line)
+            is_tax_included = tax_det['is_tax_included']
+            tax = calculate_line_tax(line, regime, is_tax_included)
+
+            if tax_code == 'Z':
+                tax['gst'] = _ZERO
+                tax['qst'] = _ZERO
+                tax['hst'] = _ZERO
+
+            # Phantom-tax guard
+            tax, tax_code = validate_line_tax(tax, tax_code, raw_ocr_text)
+
+            conn.execute('''
+                INSERT INTO invoice_lines
+                (document_id, line_number, description, quantity, unit_price,
+                 line_total_pretax, gl_account, tax_code, gst_amount, qst_amount,
+                 hst_amount, province_of_supply, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ''', (
+                document_id, i + 1,
+                item['description'],
+                item.get('quantity', 1.0),
+                item.get('unit_price'),
+                float(tax['pretax_amount']),
+                gl, tax_code,
+                float(tax['gst']),
+                float(tax['qst']),
+                float(tax.get('hst', _ZERO)),
+                pos,
+            ))
+
+        # Mark document as having line items
+        conn.execute('UPDATE documents SET has_line_items = 1 WHERE document_id = ?', (document_id,))
+        conn.commit()
+
+        # Reconcile
+        recon = reconcile_invoice_lines(document_id, conn)
+        logging.info(f'Saved {len(items)} DocAI line items for {document_id}')
+
+        return {
+            'ok': True,
+            'document_id': document_id,
+            'lines_extracted': len(items),
+            'reconciliation': recon,
+            'source': 'docai',
+        }
+
+    except Exception as exc:
+        return {
+            'ok': False,
+            'document_id': document_id,
+            'error': str(exc),
+        }
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # FULL LINE PROCESSING PIPELINE
 # ---------------------------------------------------------------------------
 
@@ -1125,19 +1290,37 @@ def process_line_items(
     *,
     vendor_name: str = "",
     db_path: Path = DB_PATH,
+    file_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the full line-item pipeline for a document.
 
-    1. Extract lines via AI
-    2. For each line: determine place of supply, assign tax regime, calculate tax
-    3. Store results in invoice_lines
-    4. Reconcile against invoice total
+    1. Try Google DocAI line item extraction first (if file_path provided)
+    2. Fall back to AI extraction from OCR text
+    3. For each line: determine place of supply, assign tax regime, calculate tax
+    4. Store results in invoice_lines
+    5. Reconcile against invoice total
 
     *vendor_name* is forwarded to extract_invoice_lines so the deterministic
     GL classifier can apply restaurant/hardware-store rules per line.
 
     Returns summary dict.
     """
+    # Try DocAI line items first
+    docai_items: list[dict] = []
+    if file_path:
+        try:
+            from src.engines.google_docai import extract_line_items_from_docai
+            docai_items = extract_line_items_from_docai(file_path)
+            logging.info(f'DocAI found {len(docai_items)} line items for {document_id}')
+        except Exception as e:
+            logging.warning(f'DocAI line items failed: {e}')
+
+    if len(docai_items) >= 2:
+        return _process_docai_line_items(
+            document_id, docai_items, vendor_name, raw_ocr_text, db_path,
+            vendor_province, buyer_province,
+        )
+
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:

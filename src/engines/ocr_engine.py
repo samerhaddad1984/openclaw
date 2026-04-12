@@ -2070,7 +2070,7 @@ def process_file(
         )
         _ocr_text = raw_ocr_text or ""
         if _ocr_text and looks_like_multiline_invoice(_ocr_text, vendor_name=vendor):
-            process_line_items(doc_id, _ocr_text, vendor_name=vendor or "", db_path=db_path)
+            process_line_items(doc_id, _ocr_text, vendor_name=vendor or "", db_path=db_path, file_path=file_path)
         # Personal-item detection runs regardless of whether the line-item
         # pipeline triggered — apparel keywords on a business receipt are a
         # NeedsReview signal even on a simple one-line receipt.
