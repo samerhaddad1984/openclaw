@@ -1325,10 +1325,25 @@ def process_line_items(
                         if not prices:
                             continue
 
-                        amount = prices[-1]  # Last price is usually the total
+                        if len(prices) == 1:
+                            amount = prices[0]
+                        elif len(prices) >= 2:
+                            amount = max(prices)
+                        else:
+                            continue
+
+                        qty = parent.metadata.get('qty')
+                        weight = parent.metadata.get('weight')
+                        if weight:
+                            quantity = weight
+                        elif qty:
+                            quantity = float(qty)
+                        else:
+                            quantity = 1.0
+
                         item: dict[str, Any] = {
                             'description': parent.raw_text,
-                            'quantity': parent.metadata.get('qty') or 1.0,
+                            'quantity': quantity,
                             'unit_price': amount,
                             'total_price': amount,
                             'confidence': structure.confidence,
@@ -1347,7 +1362,12 @@ def process_line_items(
                                 child_prices = child.metadata.get('prices', [])
                                 if child_prices:
                                     discount_amount = child_prices[-1]
-                                    item['total_price'] = amount - discount_amount
+                                    if discount_amount and discount_amount < amount:
+                                        item['discount'] = discount_amount
+                                        item['total_price'] = amount - discount_amount
+                                    else:
+                                        item['discount'] = discount_amount
+                                        item['total_price'] = amount
 
                         spatial_items.append(item)
 
@@ -1355,7 +1375,8 @@ def process_line_items(
         except Exception as e:
             logging.warning(f'Spatial engine failed: {e}')
 
-    if len(spatial_items) >= 2:
+    avg_conf = sum(i.get('confidence', 0.5) for i in spatial_items) / max(1, len(spatial_items))
+    if len(spatial_items) >= 2 and avg_conf > 0.6:
         return _process_docai_line_items(
             document_id, spatial_items, vendor_name, raw_ocr_text, db_path,
             vendor_province, buyer_province,
