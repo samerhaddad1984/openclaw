@@ -495,6 +495,12 @@ _HARDWARE_VENDOR_KW = (
     "homedepot", "rona", "canadian tire", "lowes", "lowe's",
     "ace hardware", "patrick morin", "matériaux",
 )
+_GROCERY_VENDOR_KW = (
+    "iga", "metro", "provigo", "maxi", "super c", "superc",
+    "loblaws", "sobeys", "food basics", "freshco", "no frills",
+    "walmart supercent", "costco", "sam's club", "marché",
+    "épicerie", "epicerie", "grocery",
+)
 _TELECOM_KW = (
     "phone", "téléphone", "telephone", "mobile", "cellular", "cell ",
     "internet", "wi-fi", "wifi", "data plan", "forfait", "hosting",
@@ -605,6 +611,7 @@ def classify_line_gl(
     is_alcohol = _line_is_alcohol(desc)
     is_restaurant_vendor = any(kw in vendor for kw in _RESTAURANT_VENDOR_KW)
     is_hardware_vendor = any(kw in vendor for kw in _HARDWARE_VENDOR_KW)
+    is_grocery_vendor = any(kw in vendor for kw in _GROCERY_VENDOR_KW)
     is_zero_rated_grocery = (
         _line_is_zero_rated_grocery(desc) and not is_alcohol
     )
@@ -655,6 +662,17 @@ def classify_line_gl(
                 "extra_notes": extra_notes,
             }
         # Hardware store small purchases default to supplies.
+        return {
+            "gl_account": "5430",
+            "category": "supplies",
+            "is_capital": False,
+            "capital_notes": "",
+            "tax_indicator": None,
+            "extra_notes": extra_notes,
+        }
+
+    # 3b) Grocery vendor → supplies (5430) for food/produce items.
+    if is_grocery_vendor:
         return {
             "gl_account": "5430",
             "category": "supplies",

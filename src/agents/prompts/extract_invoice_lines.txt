@@ -13,7 +13,12 @@ Analyze the invoice text below and extract EVERY line item, including:
 For EACH line item, determine:
 1. Description — exactly as shown on invoice
 2. Quantity — default to 1 if not shown
-3. Unit price — if not shown, use line total
+3. Unit price — the SHELF PRICE shown on the receipt (before any discount).
+   Never subtract a discount from the unit price. Discounts are separate
+   negative line items. Example:
+   - COMP OEUFS BL GROS $2.49 → unit_price = 2.49
+   - RABAIS INSTANTANÉ -$1.60 → unit_price = -1.60 (separate line)
+   If not shown, use line total.
 4. Line total — the extended amount for this line (qty × unit price)
 5. Tax indicator:
    - "taxable" — line is subject to tax (default assumption)
