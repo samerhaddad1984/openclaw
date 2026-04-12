@@ -1305,13 +1305,87 @@ def process_line_items(
 
     Returns summary dict.
     """
-    # Try DocAI line items first
+    # Priority 0: Adaptive Spatial Grouping Engine — uses word-level
+    # bounding boxes from DocAI for production-quality receipt parsing.
+    spatial_items: list[dict] = []
+    if file_path and Path(str(file_path)).exists():
+        try:
+            from src.engines.google_docai import extract_words_with_bbox
+            from src.engines.receipt_spatial_engine import ReceiptSpatialEngine
+
+            words = extract_words_with_bbox(file_path)
+            if words:
+                engine = ReceiptSpatialEngine()
+                parsed = engine.parse(words)
+
+                for structure in parsed.structures:
+                    if structure.structure_type == 'ITEM_CANDIDATE':
+                        parent = structure.parent_line
+                        prices = parent.metadata.get('prices', [])
+                        if not prices:
+                            continue
+
+                        amount = prices[-1]  # Last price is usually the total
+                        item: dict[str, Any] = {
+                            'description': parent.raw_text,
+                            'quantity': parent.metadata.get('qty') or 1.0,
+                            'unit_price': amount,
+                            'total_price': amount,
+                            'confidence': structure.confidence,
+                        }
+
+                        # Handle weighted items
+                        weight = parent.metadata.get('weight')
+                        at_price = parent.metadata.get('at_price')
+                        if weight and at_price:
+                            item['quantity'] = weight
+                            item['unit_price'] = at_price
+
+                        # Attach child discount
+                        for child in structure.child_lines:
+                            if child.line_type == 'DISCOUNT':
+                                child_prices = child.metadata.get('prices', [])
+                                if child_prices:
+                                    discount_amount = child_prices[-1]
+                                    item['total_price'] = amount - discount_amount
+
+                        spatial_items.append(item)
+
+                logging.info(f'Spatial engine found {len(spatial_items)} items for {document_id}')
+        except Exception as e:
+            logging.warning(f'Spatial engine failed: {e}')
+
+    if len(spatial_items) >= 2:
+        return _process_docai_line_items(
+            document_id, spatial_items, vendor_name, raw_ocr_text, db_path,
+            vendor_province, buyer_province,
+        )
+
+    # Priority 1: Parse clean OCR text from DocAI with regex (most reliable
+    # for grocery/retail receipts — no hallucinated descriptions, no
+    # collapsed duplicates).
+    ocr_parsed_items: list[dict] = []
+    if file_path:
+        try:
+            from src.engines.google_docai import extract_line_items_from_ocr_text
+            ocr_parsed_items = extract_line_items_from_ocr_text(file_path)
+            logging.info(f'OCR text parser found {len(ocr_parsed_items)} line items for {document_id}')
+        except Exception as e:
+            logging.warning(f'OCR text parsing failed: {e}')
+
+    if len(ocr_parsed_items) >= 3:
+        return _process_docai_line_items(
+            document_id, ocr_parsed_items, vendor_name, raw_ocr_text, db_path,
+            vendor_province, buyer_province,
+        )
+
+    # Priority 2: DocAI entity extraction (structured but misses items)
     docai_items: list[dict] = []
     if file_path:
         try:
             from src.engines.google_docai import extract_line_items_from_docai
             docai_items = extract_line_items_from_docai(file_path)
-            logging.info(f'DocAI found {len(docai_items)} line items for {document_id}')
+            logging.info(f'DocAI entities found {len(docai_items)} line items for {document_id}')
         except Exception as e:
             logging.warning(f'DocAI line items failed: {e}')
 

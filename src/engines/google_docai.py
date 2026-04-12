@@ -1,5 +1,7 @@
 from google.cloud import documentai
+import logging
 import os
+import re
 from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
@@ -261,7 +263,232 @@ def extract_line_items_from_docai(file_path):
         return []
 
 
+def extract_words_with_bbox(file_path) -> list:
+    """Extract OCR lines with bounding boxes from Google DocAI.
+
+    Uses DocAI's line-level segmentation (not raw tokens) for clean text.
+    Returns list of OCRWord objects (one per DocAI line) for use with
+    ReceiptSpatialEngine.  Returns [] on any failure.
+    """
+    try:
+        import pathlib
+
+        client = get_docai_client()
+        suffix = pathlib.Path(str(file_path)).suffix.lower()
+        is_image = suffix in ['.jpg', '.jpeg', '.png', '.heic', '.webp', '.tiff']
+        processor_id = EXPENSE_PROCESSOR_ID if is_image else INVOICE_PROCESSOR_ID
+        processor_name = f'projects/{PROJECT_ID}/locations/{LOCATION}/processors/{processor_id}'
+
+        mime_map = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.png': 'image/png', '.tiff': 'image/tiff',
+            '.heic': 'image/heic', '.webp': 'image/webp',
+        }
+        mime_type = mime_map.get(suffix, 'image/jpeg')
+
+        with open(str(file_path), 'rb') as f:
+            content = f.read()
+
+        raw_document = documentai.RawDocument(content=content, mime_type=mime_type)
+        request = documentai.ProcessRequest(
+            name=processor_name,
+            raw_document=raw_document,
+        )
+        result = client.process_document(request=request)
+
+        from src.engines.receipt_spatial_engine import OCRWord, BoundingBox
+
+        words = []
+        document = result.document
+
+        for page in document.pages:
+            for line in page.lines:
+                layout = line.layout
+                if not layout.bounding_poly.normalized_vertices:
+                    continue
+
+                verts = layout.bounding_poly.normalized_vertices
+                x_coords = [v.x for v in verts]
+                y_coords = [v.y for v in verts]
+
+                segments = layout.text_anchor.text_segments
+                start = segments[0].start_index if segments else 0
+                end = segments[0].end_index if segments else 0
+                text = document.text[start:end].strip()
+
+                if not text:
+                    continue
+
+                words.append(OCRWord(
+                    text=text,
+                    bbox=BoundingBox(
+                        x0=min(x_coords),
+                        y0=min(y_coords),
+                        x1=max(x_coords),
+                        y1=max(y_coords),
+                    ),
+                    confidence=layout.confidence,
+                ))
+
+        return words
+
+    except Exception as e:
+        logging.warning(f'extract_words_with_bbox failed: {e}')
+        return []
+
+
 def extract_text_with_docai(file_path: Path) -> str:
     """Extract raw text from document using Google Document AI."""
     result = process_with_docai(file_path)
     return result.get('raw_text', '')
+
+
+# ---------------------------------------------------------------------------
+# OCR-text-based receipt line parser
+# ---------------------------------------------------------------------------
+# Quebec grocery receipts (IGA, Metro, Maxi, etc.) follow a consistent format
+# where item name is on one line and price on the next.  DocAI entity
+# extraction misses items and collapses duplicates; Claude invents
+# descriptions.  Parsing the clean OCR text with regex is far more reliable.
+
+# Lines to skip (totals, payment, header, tax lines)
+_SKIP_WORDS: list[str] = [
+    'sous-total', 'subtotal', 'total', 'tps', 'tvq', 'gst', 'qst',
+    'visa', 'debit', 'credit', 'monnaie', 'merci', 'thank', 'tel',
+    'scene', 'argent', 'mastercard', 'nombre', 'economies', 'economie',
+    'valeur', 'servi par', 'numero carte', 'bienvenue', 'vive la bouffe',
+    'taxe', 'media', 'média', 'rabais:', 'prix membre',
+]
+
+# "RABAIS SUR LE PRIX COURANT" lines show the per-item saving —
+# they are NOT standalone discount line items.
+_COURANT_RABAIS_RE = re.compile(
+    r'RABAIS\s+SUR\s+LE\s+PRIX\s+COURANT', re.IGNORECASE,
+)
+
+# Price on its own line: "$2.49" or "-$1.00"
+_PRICE_LINE_RE = re.compile(r'^-?\$(\d+\.\d{2})$')
+
+# Weight/unit-price line: "0.275 kg @ $8.80 / kg"
+_WEIGHT_LINE_RE = re.compile(r'^\d+\.\d+\s*kg\s*@', re.IGNORECASE)
+
+# Section headers: "EPICERIE", "FRUITS/LEGUMES", "BOULANGERIE", etc.
+_SECTION_HEADERS = frozenset({
+    'epicerie', 'fruits/legumes', 'boulangerie', 'boucherie',
+    'charcuterie', 'poissonnerie', 'produits laitiers', 'surgeles',
+    'boissons', 'entretien', 'sante', 'beaute',
+})
+
+
+def parse_receipt_ocr_text(clean_text: str) -> list[dict]:
+    """Parse receipt line items from clean OCR text.
+
+    Returns list of dicts with keys:
+        description, quantity, unit_price, total_price, tax_indicator
+    """
+    text_lines = clean_text.split('\n')
+    items: list[dict] = []
+    i = 0
+
+    while i < len(text_lines):
+        line = text_lines[i].strip()
+
+        # Skip blank / star divider lines
+        if not line or line.startswith('***') or line.startswith('==='):
+            i += 1
+            continue
+
+        line_lower = line.lower()
+
+        # Skip known non-item lines
+        if any(s in line_lower for s in _SKIP_WORDS):
+            i += 1
+            continue
+
+        # Skip section headers
+        if line_lower.strip('/') in _SECTION_HEADERS:
+            i += 1
+            continue
+
+        # Skip "RABAIS SUR LE PRIX COURANT" (per-item saving, not a line item)
+        if _COURANT_RABAIS_RE.search(line):
+            i += 1
+            continue
+
+        # Skip weight/unit-price detail lines
+        if _WEIGHT_LINE_RE.match(line):
+            i += 1
+            continue
+
+        # Skip lines that are just a price (orphan price without a preceding desc)
+        if _PRICE_LINE_RE.match(line):
+            i += 1
+            continue
+
+        # Check if next line is a price → this line is the description
+        if i + 1 < len(text_lines):
+            next_line = text_lines[i + 1].strip()
+            price_m = _PRICE_LINE_RE.match(next_line)
+            if price_m:
+                desc = line
+                amount = float(price_m.group(1))
+                is_negative = next_line.startswith('-')
+
+                # "RABAIS INSTANTANÉ" / "RABAIS ..." with a negative price
+                # are real discount line items
+                is_discount = is_negative or 'RABAIS' in desc.upper()
+
+                if len(desc) >= 3:
+                    items.append({
+                        'description': desc,
+                        'quantity': 1.0,
+                        'unit_price': -amount if is_discount else amount,
+                        'total_price': -amount if is_discount else amount,
+                        'tax_indicator': None,
+                    })
+                i += 2
+                continue
+
+        # Also handle single-line format: "ITEM_NAME  $PRICE [TAX_CODE]"
+        single_m = re.match(
+            r'^(.+?)\s+\$?(\d+\.\d{2})\s*([DJNEFHZ])?\s*$', line,
+        )
+        if single_m:
+            desc = single_m.group(1).strip()
+            amount = float(single_m.group(2))
+            tax_ind = single_m.group(3)
+            if len(desc) >= 3 and not any(s in desc.lower() for s in _SKIP_WORDS):
+                items.append({
+                    'description': desc,
+                    'quantity': 1.0,
+                    'unit_price': amount,
+                    'total_price': amount,
+                    'tax_indicator': tax_ind,
+                })
+                i += 1
+                continue
+
+        i += 1
+
+    logging.info(f'OCR text parser found {len(items)} line items')
+    return items
+
+
+def extract_line_items_from_ocr_text(file_path) -> list[dict]:
+    """Get clean OCR text from DocAI then parse line items with regex.
+
+    Returns list of dicts compatible with _process_docai_line_items.
+    Falls back to [] on any error.
+    """
+    try:
+        import pathlib
+        fp = pathlib.Path(str(file_path))
+        result = process_with_docai(fp)
+        clean_text = result.get('raw_text', '')
+        if not clean_text:
+            return []
+        return parse_receipt_ocr_text(clean_text)
+    except Exception as e:
+        logging.warning(f'OCR text line item extraction failed for {file_path}: {e}')
+        return []
