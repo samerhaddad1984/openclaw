@@ -11016,6 +11016,68 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_json(self._build_health_full_response())
                 return
 
+            if path == "/qbo/connect":
+                from src.agents.tools.qbo_oauth import get_authorize_url, is_connected as _qbo_is_connected
+                if _qbo_is_connected():
+                    self._redirect("/qbo/status")
+                    return
+                auth_url, _state = get_authorize_url()
+                html_doc = f'''<!DOCTYPE html>
+<html><head><title>Connect QuickBooks</title>
+<style>body{{font-family:sans-serif;max-width:600px;margin:80px auto;text-align:center;background:#0d1b2a;color:white;}}
+.btn{{background:#2CA01C;color:white;padding:16px 32px;border-radius:8px;text-decoration:none;font-size:18px;display:inline-block;margin-top:24px;}}
+</style></head>
+<body>
+<h1>Connect to QuickBooks Online</h1>
+<p>Click below to authorize OtoCPA to post expenses to your QuickBooks account.</p>
+<a href="{auth_url}" class="btn">Connect QuickBooks</a>
+<br><br>
+<a href="/" style="color:#aaa;">&larr; Back to queue</a>
+</body></html>'''
+                self._send_html(html_doc)
+                return
+
+            if path == "/qbo/callback":
+                from src.agents.tools.qbo_oauth import exchange_code_for_token
+                code = qs.get("code", [""])[0]
+                realm_id = qs.get("realmId", [""])[0]
+                if code and realm_id:
+                    try:
+                        exchange_code_for_token(code, realm_id)
+                        self._redirect("/qbo/status")
+                    except Exception as e:
+                        self._send_html(f"<h1>Error: {html.escape(str(e))}</h1>")
+                else:
+                    self._send_html("<h1>Missing code or realmId</h1>")
+                return
+
+            if path == "/qbo/status":
+                from src.agents.tools.qbo_oauth import is_connected as _qbo_is_connected, load_config as _qbo_load_config
+                config = _qbo_load_config()
+                connected = _qbo_is_connected()
+                status_txt = "Connected" if connected else "Not connected"
+                realm = config.get("realm_id", "N/A")
+                env = config.get("environment", "N/A")
+                html_doc = f'''<!DOCTYPE html>
+<html><head><title>QBO Status</title>
+<style>body{{font-family:sans-serif;max-width:600px;margin:80px auto;background:#0d1b2a;color:white;padding:24px;}}
+.card{{background:#1a2e4a;border-radius:8px;padding:24px;}}
+.btn{{background:#2CA01C;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:16px;}}
+</style></head>
+<body>
+<h1>QuickBooks Status</h1>
+<div class="card">
+<p>Status: <strong>{html.escape(status_txt)}</strong></p>
+<p>Realm ID: {html.escape(str(realm))}</p>
+<p>Environment: {html.escape(str(env))}</p>
+</div>
+<br>
+<a href="/qbo/connect" class="btn">Reconnect</a>
+<a href="/" style="color:#aaa;margin-left:16px;">&larr; Back to queue</a>
+</body></html>'''
+                self._send_html(html_doc)
+                return
+
             if path == "/":
                 # Onboarding redirect: owner with no staff or no clients
                 if _onboarding_check_needed(user):
