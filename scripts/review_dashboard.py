@@ -12873,7 +12873,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("Could not create posting job")
-                payload = approve_posting_job(normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER)
+                payload = approve_posting_job(document_id, reviewer=DEFAULT_REVIEWER)
                 clear_manual_hold(document_id)
                 set_document_status(document_id, "Ready")
                 # --- Feed ALL learning engines on approval ---
@@ -12924,9 +12924,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError("Could not create posting job")
                 posting_id = normalize_text(posting["posting_id"])
                 if normalize_text(posting["posting_status"]) == "post_failed":
-                    retry_posting_job(posting_id, reviewer=DEFAULT_REVIEWER, notes=["retry from dashboard"])
+                    retry_posting_job(document_id, reviewer=DEFAULT_REVIEWER, notes=["retry from dashboard"])
                 elif normalize_text(posting["approval_state"]) != "approved_for_posting" or normalize_text(posting["posting_status"]) != "ready_to_post":
-                    approve_posting_job(posting_id, reviewer=DEFAULT_REVIEWER)
+                    approve_posting_job(document_id, reviewer=DEFAULT_REVIEWER)
                 result = qbo_post_one_ready_job(posting_id, db_path=DB_PATH)
                 if normalize_text(result.get("status")) == "posted":
                     set_document_status(document_id, "Ready")
@@ -13006,7 +13006,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     raise ValueError("No posting job exists for this document")
-                payload = retry_posting_job(posting_id=normalize_text(posting["posting_id"]), reviewer=DEFAULT_REVIEWER, note="retry from dashboard", db_path=DB_PATH)
+                payload = retry_posting_job(document_id, reviewer=DEFAULT_REVIEWER, notes=["retry from dashboard"])
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
                                      flash=t("flash_retry_prepared", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
