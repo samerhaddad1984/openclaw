@@ -2704,6 +2704,34 @@ def extract_with_ai_primary(raw_text: str, doc_id: str, client_code: str,
     final['raw_ai_response'] = ai_result.get('raw_ai_response')
     final['confidence'] = 0.92 if ai_result else 0.70
 
+    # Validation + correction layer: catch math/GL/tax/amount/date issues
+    # before the result reaches downstream persistence.
+    try:
+        from src.engines.ai_validator import validate_document_extraction
+        from src.engines.deepseek_client import get_vendor_gl_history
+
+        final, _val_errors = validate_document_extraction(final)
+        if _val_errors:
+            final['needs_review'] = True
+            final['review_reason'] = '; '.join(_val_errors)
+            logging.getLogger(__name__).warning(
+                'AI validation flagged %s: %s', doc_id, _val_errors
+            )
+
+        # Vendor-consistency memory: if AI's GL disagrees with this
+        # vendor's historical GL and confidence is low, prefer history.
+        vendor_name = final.get('vendor_name')
+        historical_gl = get_vendor_gl_history(conn, vendor_name) if vendor_name else None
+        if historical_gl and final.get('gl_account') != historical_gl:
+            logging.info(
+                'GL inconsistency for %s: got %s expected %s',
+                vendor_name, final.get('gl_account'), historical_gl,
+            )
+            if (final.get('confidence') or 1.0) < 0.8:
+                final['gl_account'] = historical_gl
+    except Exception as _e:
+        logging.getLogger(__name__).warning('AI validation skipped: %s', _e)
+
     return final
 
 

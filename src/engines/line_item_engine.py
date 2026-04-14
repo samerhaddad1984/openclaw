@@ -738,6 +738,17 @@ def classify_line_gl(
 # AI EXTRACTION
 # ---------------------------------------------------------------------------
 
+def estimate_line_count(raw_text: str) -> int:
+    """Rough estimate of line-item count from OCR text.
+
+    Counts dollar-formatted numbers and subtracts ~5 for totals/tax/payment
+    rows that almost always appear at the bottom. Used to flag suspicious
+    AI under-extraction (e.g. AI returns 2 lines for a clear 20-line bill).
+    """
+    price_lines = re.findall(r'\d+\.\d{2}', raw_text or '')
+    return max(0, len(price_lines) - 5)
+
+
 def extract_invoice_lines(
     document_id: str,
     raw_ocr_text: str,
@@ -773,6 +784,54 @@ def extract_invoice_lines(
     result = client.chat_json(system=system_msg, user=prompt, temperature=0.0)
 
     lines = result.get("lines", [])
+
+    # ── Line-count sanity check: detect AI under-extraction ──
+    estimated = estimate_line_count(raw_ocr_text)
+    actual = len(lines)
+    if estimated > 0 and actual < estimated * 0.5:
+        logging.warning(
+            "Line count mismatch for %s: expected ~%d got %d - possible skipping",
+            document_id, estimated, actual,
+        )
+        try:
+            _log_event(
+                None, 'LINE_COUNT_MISMATCH',
+                {'estimated': estimated, 'actual': actual, 'vendor': vendor_name},
+                document_id=document_id,
+            )
+        except Exception:
+            pass
+
+    # ── Validate each line: math, GL, tax, suspicious amounts ──
+    try:
+        from src.engines.ai_validator import validate_line_items
+
+        # Map line_item_engine field names to validator's expected names.
+        _validator_view = [
+            {
+                'description': l.get('description'),
+                'quantity': l.get('quantity'),
+                'unit_price': l.get('unit_price'),
+                'total_price': l.get('line_total'),
+                'gl_account': l.get('gl_account'),
+                'tax_code': l.get('tax_code'),
+            }
+            for l in lines
+        ]
+        invoice_total_shown_val = result.get('invoice_total_shown')
+        _, _val_errors, _ = validate_line_items(
+            _validator_view,
+            invoice_total=float(invoice_total_shown_val) if invoice_total_shown_val else None,
+        )
+        # Propagate auto-corrections (gl/tax) back to the source lines.
+        for orig, fixed in zip(lines, _validator_view):
+            if fixed.get('gl_account') and not orig.get('gl_account'):
+                orig['gl_account'] = fixed['gl_account']
+            if fixed.get('tax_code') and not orig.get('tax_code'):
+                orig['tax_code'] = fixed['tax_code']
+    except Exception as _e:
+        logging.warning("Line validation skipped for %s: %s", document_id, _e)
+
     invoice_total_shown = result.get("invoice_total_shown")
     tax_total_shown = result.get("tax_total_shown")
     deposit_found = result.get("deposit_found", False)
