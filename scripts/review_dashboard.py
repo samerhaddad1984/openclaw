@@ -292,6 +292,95 @@ def urlquote(value: Any) -> str:
     return urllib.parse.quote("" if value is None else str(value), safe="")
 
 
+def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, int]:
+    """Save Plaid transactions to bank_transactions and auto-match against documents.
+
+    Matching rule: same client_code, amount within $0.01, date within 7 days,
+    vendor name similar to merchant_name (case-insensitive substring either way).
+    Returns (inserted_count, matched_count).
+    """
+    import datetime as _dt
+    inserted = 0
+    matched = 0
+    with open_db() as conn:
+        docs = [dict(r) for r in conn.execute(
+            "SELECT document_id, vendor, amount, document_date FROM documents "
+            "WHERE client_code=?", (client_code,)
+        ).fetchall()]
+
+        for tx in plaid_txs:
+            plaid_tx_id = getattr(tx, "transaction_id", None) or ""
+            if not plaid_tx_id:
+                continue
+            existing = conn.execute(
+                "SELECT id, matched_document_id FROM bank_transactions WHERE plaid_transaction_id=?",
+                (plaid_tx_id,),
+            ).fetchone()
+            tx_date = getattr(tx, "date", None)
+            tx_date_str = tx_date.isoformat() if hasattr(tx_date, "isoformat") else str(tx_date or "")
+            tx_amount = float(getattr(tx, "amount", 0) or 0)
+            description = getattr(tx, "name", "") or ""
+            merchant = getattr(tx, "merchant_name", "") or ""
+            category_list = getattr(tx, "category", None) or []
+            category = ", ".join(category_list) if isinstance(category_list, list) else str(category_list)
+            account_id = getattr(tx, "account_id", "") or ""
+            pending = 1 if getattr(tx, "pending", False) else 0
+
+            # Try to match to a document
+            match_doc_id = None
+            try:
+                tx_date_obj = _dt.date.fromisoformat(tx_date_str) if tx_date_str else None
+            except ValueError:
+                tx_date_obj = None
+            merchant_lc = (merchant or description).lower().strip()
+            for d in docs:
+                d_amt = d.get("amount")
+                if d_amt is None:
+                    continue
+                if abs(float(d_amt) - tx_amount) > 0.01 and abs(float(d_amt) + tx_amount) > 0.01:
+                    continue
+                d_date_str = d.get("document_date") or ""
+                try:
+                    d_date = _dt.date.fromisoformat(d_date_str[:10]) if d_date_str else None
+                except ValueError:
+                    d_date = None
+                if tx_date_obj and d_date and abs((tx_date_obj - d_date).days) > 7:
+                    continue
+                vendor_lc = (d.get("vendor") or "").lower().strip()
+                if vendor_lc and merchant_lc and (vendor_lc in merchant_lc or merchant_lc in vendor_lc):
+                    match_doc_id = d.get("document_id")
+                    break
+                # If no vendor text available, accept match on amount+date alone
+                if not vendor_lc or not merchant_lc:
+                    match_doc_id = d.get("document_id")
+                    break
+
+            if existing:
+                if match_doc_id and not existing.get("matched_document_id"):
+                    conn.execute(
+                        "UPDATE bank_transactions SET matched_document_id=?, reconciled=1 WHERE id=?",
+                        (match_doc_id, existing["id"]),
+                    )
+                    matched += 1
+                continue
+
+            row_id = secrets.token_hex(16)
+            conn.execute(
+                "INSERT INTO bank_transactions (id, client_code, plaid_transaction_id,"
+                " account_id, date, amount, description, merchant_name, category, pending,"
+                " matched_document_id, reconciled)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (row_id, client_code, plaid_tx_id, account_id, tx_date_str, tx_amount,
+                 description, merchant, category, pending, match_doc_id,
+                 1 if match_doc_id else 0),
+            )
+            inserted += 1
+            if match_doc_id:
+                matched += 1
+        conn.commit()
+    return inserted, matched
+
+
 def parse_form_body(raw: bytes) -> dict[str, str]:
     try:
         parsed = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
@@ -516,6 +605,26 @@ def bootstrap_schema() -> None:
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Plaid bank transactions (imported via /bank/sync, then matched to documents)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bank_transactions (
+                id TEXT PRIMARY KEY,
+                client_code TEXT NOT NULL,
+                plaid_transaction_id TEXT UNIQUE,
+                account_id TEXT,
+                date TEXT,
+                amount REAL,
+                description TEXT,
+                merchant_name TEXT,
+                category TEXT,
+                pending INTEGER DEFAULT 0,
+                matched_document_id TEXT,
+                reconciled INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_client ON bank_transactions(client_code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_date ON bank_transactions(date)")
         conn.commit()
 
         # Seed a default admin account if no users exist
@@ -8700,20 +8809,26 @@ def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str 
 # ---------------------------------------------------------------------------
 
 def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str = "",
-                        lang: str = "fr") -> str:
+                        lang: str = "fr", client_code: str = "") -> str:
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    cc_js = json.dumps(client_code)
+    cc_qs = f"?client={urlquote(client_code)}" if client_code else ""
+    client_label = f" for <strong>{esc(client_code)}</strong>" if client_code else ""
+    back_link = (f'<a href="/clients/edit?code={urlquote(client_code)}">&larr; Back to client</a>'
+                 if client_code else '<a href="/bank/feeds">View connected accounts &rarr;</a>')
     inner = f"""
     <div class="card">
-        <h2>Connect Bank Account</h2>
+        <h2>Connect Bank Account{client_label}</h2>
         {flash_html}{err_html}
         <p>Connect a bank account via Plaid to automatically import transactions.</p>
         <button id="connect-btn" class="btn-primary" style="margin-top:12px;">Connect Bank Account</button>
-        <p style="margin-top:20px;"><a href="/bank/feeds">View connected accounts &rarr;</a></p>
+        <p style="margin-top:20px;">{back_link}</p>
     </div>
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <script>
-    fetch('/bank/link_token')
+    const CLIENT_CODE = {cc_js};
+    fetch('/bank/link_token' + (CLIENT_CODE ? ('?client=' + encodeURIComponent(CLIENT_CODE)) : ''))
       .then(r => r.json())
       .then(data => {{
         if (!data.link_token) {{
@@ -8724,11 +8839,15 @@ def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str 
         const handler = Plaid.create({{
           token: data.link_token,
           onSuccess: (public_token, metadata) => {{
-            fetch('/bank/callback', {{
+            fetch('/bank/callback' + (CLIENT_CODE ? ('?client=' + encodeURIComponent(CLIENT_CODE)) : ''), {{
               method: 'POST',
               headers: {{'Content-Type': 'application/json'}},
-              body: JSON.stringify({{public_token, metadata}})
-            }}).then(() => window.location = '/bank/feeds');
+              body: JSON.stringify({{public_token, metadata, client_code: CLIENT_CODE}})
+            }}).then(() => {{
+              window.location = CLIENT_CODE
+                ? ('/clients/edit?code=' + encodeURIComponent(CLIENT_CODE))
+                : '/bank/feeds';
+            }});
           }},
         }});
         document.getElementById('connect-btn').onclick = () => handler.open();
@@ -8742,29 +8861,66 @@ def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str 
     return page_layout("Bank", inner, user=user, lang=lang)
 
 
-def render_bank_feeds(user: dict[str, Any], connections: list, transactions: list,
+def render_bank_feeds(user: dict[str, Any], connections: list, tx_by_client: dict,
                        flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
     conn_rows = ""
     for c in connections:
         last_sync = c.get("last_sync") or "Never"
+        cc = c.get("client_code") or ""
         conn_rows += (
             f"<tr><td>{esc(c.get('institution_name') or '')}</td>"
             f"<td>{esc(c.get('account_name') or '')}</td>"
-            f"<td>{esc(c.get('client_code') or '')}</td>"
+            f"<td>{esc(cc)}</td>"
             f"<td>{esc(last_sync)}</td>"
-            f"<td><form method='POST' action='/bank/sync' style='display:inline;'>"
+            f"<td>"
+            f"<form method='POST' action='/bank/sync?client={urlquote(cc)}' style='display:inline;'>"
             f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
-            f"<button type='submit'>Sync</button></form></td></tr>"
+            f"<button type='submit'>Sync</button></form> "
+            f"<form method='POST' action='/bank/disconnect' style='display:inline;' "
+            f"onsubmit=\"return confirm('Disconnect this bank?');\">"
+            f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
+            f"<button type='submit' style='background:#e74c3c;color:white;'>Disconnect</button></form>"
+            f"</td></tr>"
         )
-    tx_rows = ""
-    for tx in transactions:
-        tx_rows += (
-            f"<tr><td>{esc(str(tx.get('date','')))}</td>"
-            f"<td>{esc(tx.get('name',''))}</td>"
-            f"<td style='text-align:right;'>{esc(str(tx.get('amount','')))}</td></tr>"
-        )
+
+    grouped_html = ""
+    for client_code, txs in sorted(tx_by_client.items()):
+        matched = sum(1 for t in txs if t.get("reconciled"))
+        unmatched = len(txs) - matched
+        tx_rows = ""
+        for tx in txs:
+            if tx.get("reconciled"):
+                status_html = f"<span style='color:#2ecc71;'>&#x2713; matched</span> " \
+                              f"<span style='color:#888;font-size:11px;'>{esc(tx.get('matched_document_id') or '')}</span>"
+            else:
+                status_html = (
+                    f"<form method='POST' action='/bank/match' style='display:inline;'>"
+                    f"<input type='hidden' name='tx_id' value='{esc(tx.get('id',''))}'>"
+                    f"<input type='text' name='document_id' placeholder='document_id' "
+                    f"style='padding:2px 6px;width:120px;'>"
+                    f"<button type='submit' style='padding:2px 8px;'>Match</button></form>"
+                )
+            try:
+                amt_str = f"{float(tx.get('amount') or 0):.2f}"
+            except (TypeError, ValueError):
+                amt_str = str(tx.get("amount") or "")
+            tx_rows += (
+                f"<tr><td>{esc(str(tx.get('date','')))}</td>"
+                f"<td>{esc(tx.get('description') or tx.get('merchant_name') or '')}</td>"
+                f"<td style='text-align:right;'>{esc(amt_str)}</td>"
+                f"<td>{status_html}</td></tr>"
+            )
+        grouped_html += f"""
+        <div class="card" style="margin-top:16px;">
+            <h3>{esc(client_code)} <span style="color:#888;font-size:13px;font-weight:normal;">
+                {matched} matched &middot; {unmatched} unmatched</span></h3>
+            <table><thead><tr><th>Date</th><th>Description</th>
+                <th style="text-align:right;">Amount</th><th>Status</th></tr></thead>
+            <tbody>{tx_rows or '<tr><td colspan="4" class="muted">No transactions.</td></tr>'}</tbody></table>
+        </div>"""
+
     inner = f"""
     <div class="card">
         <h2>Bank Feeds</h2>
@@ -8773,10 +8929,8 @@ def render_bank_feeds(user: dict[str, Any], connections: list, transactions: lis
         <h3>Connected accounts</h3>
         <table><thead><tr><th>Institution</th><th>Account</th><th>Client</th><th>Last sync</th><th></th></tr></thead>
         <tbody>{conn_rows or '<tr><td colspan="5" class="muted">No connected accounts.</td></tr>'}</tbody></table>
-        <h3 style="margin-top:24px;">Recent transactions</h3>
-        <table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
-        <tbody>{tx_rows or '<tr><td colspan="3" class="muted">No transactions yet.</td></tr>'}</tbody></table>
     </div>
+    {grouped_html}
     """
     return page_layout("Bank Feeds", inner, user=user, lang=lang)
 
@@ -9180,6 +9334,18 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                 wa_by_client.setdefault(wr['client_code'], []).append(wr)
         except sqlite3.OperationalError:
             pass
+        bank_by_client: dict[str, list[sqlite3.Row]] = {}
+        try:
+            bank_rows = conn.execute('''
+                SELECT client_code, institution_name, account_name, last_sync
+                FROM bank_connections
+                WHERE active = 1
+                ORDER BY created_at DESC
+            ''').fetchall()
+            for br in bank_rows:
+                bank_by_client.setdefault(br['client_code'], []).append(br)
+        except sqlite3.OperationalError:
+            pass
 
     rows = ''
     for c in clients:
@@ -9201,6 +9367,19 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             )
         wa_cell = ''.join(wa_html_parts) or '<span style="color:#888;">&#x2014;</span>'
 
+        bank_list = bank_by_client.get(c['client_code'], [])
+        bank_parts: list[str] = []
+        for br in bank_list:
+            bank_parts.append(
+                f'<div style="color:#e0e0e0;">{esc(br["institution_name"] or "")} '
+                f'<span style="color:#888;font-size:11px;">{esc(br["account_name"] or "")}</span></div>'
+            )
+        bank_parts.append(
+            f'<a href="/bank/connect?client={urlquote(c["client_code"])}" '
+            f'style="color:#2ecc71;font-size:12px;text-decoration:none;">+ Connect</a>'
+        )
+        bank_cell = ''.join(bank_parts)
+
         rows += f"""
         <tr>
             <td style="color:#2ecc71;font-weight:bold;vertical-align:top;">{esc(c['client_code'])}</td>
@@ -9209,6 +9388,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             <td style="color:#e0e0e0;vertical-align:top;">{esc(c['language'] or 'fr')}</td>
             <td style="vertical-align:top;">{'&#x2705;' if c['active'] else '&#x274C;'}</td>
             <td style="vertical-align:top;">{wa_cell}</td>
+            <td style="vertical-align:top;">{bank_cell}</td>
             <td style="vertical-align:top;">
                 <a href="/clients/edit?code={urlquote(c['client_code'])}"
                    style="background:#3498db;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;">
@@ -9238,6 +9418,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                     <th style="color:#aaa;padding:12px;text-align:left;">Langue</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Actif</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4F1; WhatsApp</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">&#x1F3E6; Bank</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Actions</th>
                 </tr>
             </thead>
@@ -9260,6 +9441,73 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
     whatsapp_val = esc(client['whatsapp_number'] or '') if is_edit else ''
     active_checked = 'checked' if (not is_edit or client['active']) else ''
     code_readonly = 'readonly style="background:#334155;"' if is_edit else ''
+
+    # Bank connections (edit mode only — needs an existing client_code).
+    bank_section = ''
+    if is_edit:
+        bank_conns: list[dict] = []
+        try:
+            with open_db() as _bk_conn:
+                bank_conns = [dict(r) for r in _bk_conn.execute('''
+                    SELECT id, institution_name, account_name, last_sync
+                    FROM bank_connections
+                    WHERE client_code = ? AND active = 1
+                    ORDER BY created_at DESC
+                ''', (client['client_code'],)).fetchall()]
+                # tx counts per connection/client
+                tx_count_row = _bk_conn.execute(
+                    'SELECT COUNT(*) AS n, SUM(reconciled) AS r FROM bank_transactions WHERE client_code=?',
+                    (client['client_code'],)
+                ).fetchone()
+                tx_total = (tx_count_row['n'] if tx_count_row else 0) or 0
+                tx_reconciled = (tx_count_row['r'] if tx_count_row else 0) or 0
+        except sqlite3.OperationalError:
+            tx_total = 0
+            tx_reconciled = 0
+
+        bank_items_html = ''
+        for bc in bank_conns:
+            last_sync = bc.get('last_sync') or 'Jamais / Never'
+            bank_items_html += f"""
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2c3e50;">
+                <div style="flex:1;color:#e0e0e0;">
+                    <strong>{esc(bc.get('institution_name') or '')}</strong>
+                    <span style="color:#888;margin-left:8px;">{esc(bc.get('account_name') or '')}</span>
+                    <div style="color:#888;font-size:12px;">Last sync: {esc(last_sync)}</div>
+                </div>
+                <form method="POST" action="/bank/sync?client={urlquote(client['client_code'])}" style="margin:0;">
+                    <input type="hidden" name="connection_id" value="{esc(bc.get('id',''))}">
+                    <button type="submit"
+                            style="background:#3498db;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">
+                        Sync
+                    </button>
+                </form>
+                <form method="POST" action="/bank/disconnect" style="margin:0;"
+                      onsubmit="return confirm('Disconnect this bank account?');">
+                    <input type="hidden" name="connection_id" value="{esc(bc.get('id',''))}">
+                    <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
+                    <button type="submit"
+                            style="background:#e74c3c;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">
+                        Disconnect
+                    </button>
+                </form>
+            </div>"""
+        if not bank_items_html:
+            bank_items_html = '<div style="color:#888;padding:6px 0;">Aucune connexion / No connections</div>'
+
+        bank_section = f"""
+        <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <h3 style="color:white;margin-top:0;">&#x1F3E6; Comptes bancaires / Bank accounts</h3>
+            <p style="color:#888;font-size:12px;margin:0 0 12px 0;">
+                Transactions: <strong style="color:#e0e0e0;">{tx_total}</strong>
+                &middot; Reconciled: <strong style="color:#2ecc71;">{tx_reconciled}</strong>
+            </p>
+            {bank_items_html}
+            <a href="/bank/connect?client={urlquote(client['client_code'])}"
+               style="display:inline-block;margin-top:12px;background:#2ecc71;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;">
+                + Connect bank account
+            </a>
+        </div>"""
 
     # WhatsApp numbers management (edit mode only — needs an existing client_code).
     wa_section = ''
@@ -9362,6 +9610,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
             </div>
         </form>
         {wa_section}
+        {bank_section}
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
@@ -11650,14 +11899,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/bank/connect":
-                self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error, lang=lang))
+                client_code = qs.get("client", [""])[0].strip()
+                self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error,
+                                                     lang=lang, client_code=client_code))
                 return
 
             if path == "/bank/link_token":
                 try:
                     from src.integrations.plaid_client import create_link_token
-                    client_code = (ctx.get("clients") or [""])[0] if ctx.get("clients") else ""
-                    token = create_link_token(client_code or "default", user["username"])
+                    client_code = qs.get("client", [""])[0].strip() or "default"
+                    token = create_link_token(client_code, user["username"])
                     self._send_json({"link_token": token})
                 except Exception as e:
                     self._send_json({"link_token": "", "error": str(e)}, status=200)
@@ -11668,26 +11919,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     conns = [dict(r) for r in conn.execute(
                         "SELECT * FROM bank_connections WHERE active=1 ORDER BY created_at DESC"
                     ).fetchall()]
-                txs: list = []
-                try:
-                    from src.integrations.plaid_client import get_transactions
-                    import datetime as _dt
-                    end = _dt.date.today()
-                    start = end - _dt.timedelta(days=30)
-                    for c in conns[:1]:
-                        try:
-                            raw_txs = get_transactions(c["plaid_access_token"], start, end)
-                            for tx in raw_txs[:50]:
-                                txs.append({
-                                    "date": getattr(tx, "date", ""),
-                                    "name": getattr(tx, "name", ""),
-                                    "amount": getattr(tx, "amount", ""),
-                                })
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                self._send_html(render_bank_feeds(user, conns, txs, flash=flash,
+                    tx_rows = [dict(r) for r in conn.execute(
+                        "SELECT * FROM bank_transactions ORDER BY date DESC LIMIT 500"
+                    ).fetchall()]
+                tx_by_client: dict[str, list[dict]] = {}
+                for tx in tx_rows:
+                    tx_by_client.setdefault(tx.get("client_code") or "(unassigned)", []).append(tx)
+                self._send_html(render_bank_feeds(user, conns, tx_by_client, flash=flash,
                                                   flash_error=flash_error, lang=lang))
                 return
 
@@ -13157,7 +13395,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self._send_json({"ok": False, "error": str(e)}, status=400)
                     return
-                client_code = (ctx.get("clients") or [""])[0] if ctx.get("clients") else ""
+                client_code = (qs.get("client", [""])[0].strip()
+                               or (payload.get("client_code") or "").strip())
                 conn_id = secrets.token_hex(16)
                 with open_db() as conn:
                     conn.execute(
@@ -13171,33 +13410,85 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "id": conn_id})
                 return
 
-            # --- Bank: sync transactions ---
+            # --- Bank: sync transactions (saves to bank_transactions, runs matching) ---
             if path == "/bank/sync":
                 conn_id = form.get("connection_id", "").strip()
+                client_qs = qs.get("client", [""])[0].strip()
                 try:
                     from src.integrations.plaid_client import get_transactions
                     import datetime as _dt
                     with open_db() as conn:
-                        _r = conn.execute(
-                            "SELECT * FROM bank_connections WHERE id=?", (conn_id,)
-                        ).fetchone()
-                        row = dict(_r) if _r else None
-                    if not row:
-                        self._flash_redirect("/bank/feeds", error="Connection not found.")
+                        if conn_id:
+                            rows = conn.execute(
+                                "SELECT * FROM bank_connections WHERE id=? AND active=1",
+                                (conn_id,),
+                            ).fetchall()
+                        elif client_qs:
+                            rows = conn.execute(
+                                "SELECT * FROM bank_connections WHERE client_code=? AND active=1",
+                                (client_qs,),
+                            ).fetchall()
+                        else:
+                            rows = []
+                        conn_rows = [dict(r) for r in rows]
+                    if not conn_rows:
+                        redir = (f"/clients/edit?code={urlquote(client_qs)}"
+                                 if client_qs else "/bank/feeds")
+                        self._flash_redirect(redir, error="Connection not found.")
                         return
                     end = _dt.date.today()
                     start = end - _dt.timedelta(days=30)
-                    txs = get_transactions(row["plaid_access_token"], start, end)
-                    with open_db() as conn:
-                        conn.execute(
-                            "UPDATE bank_connections SET last_sync=? WHERE id=?",
-                            (utc_now_iso(), conn_id),
-                        )
-                        conn.commit()
-                    self._flash_redirect("/bank/feeds",
-                                         flash=f"Synced {len(txs)} transactions.")
+                    total_inserted = 0
+                    total_matched = 0
+                    for row in conn_rows:
+                        txs = get_transactions(row["plaid_access_token"], start, end)
+                        inserted, matched = _save_and_match_bank_txs(row["client_code"], txs)
+                        total_inserted += inserted
+                        total_matched += matched
+                        with open_db() as conn:
+                            conn.execute(
+                                "UPDATE bank_connections SET last_sync=? WHERE id=?",
+                                (utc_now_iso(), row["id"]),
+                            )
+                            conn.commit()
+                    redir = (f"/clients/edit?code={urlquote(client_qs)}"
+                             if client_qs else "/bank/feeds")
+                    self._flash_redirect(
+                        redir,
+                        flash=f"Synced {total_inserted} tx ({total_matched} auto-matched).",
+                    )
                 except Exception as e:
-                    self._flash_redirect("/bank/feeds", error=f"Sync failed: {e}")
+                    redir = (f"/clients/edit?code={urlquote(client_qs)}"
+                             if client_qs else "/bank/feeds")
+                    self._flash_redirect(redir, error=f"Sync failed: {e}")
+                return
+
+            # --- Bank: disconnect ---
+            if path == "/bank/disconnect":
+                conn_id = form.get("connection_id", "").strip()
+                client_code = form.get("client_code", "").strip()
+                with open_db() as conn:
+                    conn.execute("UPDATE bank_connections SET active=0 WHERE id=?", (conn_id,))
+                    conn.commit()
+                redir = (f"/clients/edit?code={urlquote(client_code)}"
+                         if client_code else "/bank/feeds")
+                self._flash_redirect(redir, flash="Bank account disconnected.")
+                return
+
+            # --- Bank: manual match transaction to document ---
+            if path == "/bank/match":
+                tx_id = form.get("tx_id", "").strip()
+                document_id = form.get("document_id", "").strip()
+                if not tx_id or not document_id:
+                    self._flash_redirect("/bank/feeds", error="Missing tx_id or document_id.")
+                    return
+                with open_db() as conn:
+                    conn.execute(
+                        "UPDATE bank_transactions SET matched_document_id=?, reconciled=1 WHERE id=?",
+                        (document_id, tx_id),
+                    )
+                    conn.commit()
+                self._flash_redirect("/bank/feeds", flash="Transaction matched.")
                 return
 
             # --- Set language ---
