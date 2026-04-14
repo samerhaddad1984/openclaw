@@ -13496,7 +13496,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length)
             form = parse_form_body(raw)
-            path = urllib.parse.urlparse(self.path).path
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
+            qs = urllib.parse.parse_qs(parsed_url.query, keep_blank_values=True)
             document_id = form.get("document_id", "")
 
             # --- Login (no auth required) ---
@@ -13811,9 +13813,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Bank: exchange public token and save connection ---
             if path == "/bank/callback":
-                qs = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(self.path).query, keep_blank_values=True
-                )
                 try:
                     payload = json.loads(raw.decode("utf-8")) if raw else {}
                 except Exception as e:
