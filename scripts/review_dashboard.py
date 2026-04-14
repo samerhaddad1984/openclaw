@@ -8335,6 +8335,175 @@ setInterval(function() {{
 
 
 # ---------------------------------------------------------------------------
+# Privacy policy page (public, no login required)
+# ---------------------------------------------------------------------------
+
+def render_privacy_page():
+    return '''<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Politique de confidentialité / Privacy Policy — OtoCPA</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 40px 24px; background: #fff; color: #222; }
+h1 { color: #1a3a5c; border-bottom: 3px solid #1a3a5c; padding-bottom: 12px; }
+h2 { color: #2E75B6; margin-top: 40px; }
+h3 { color: #444; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+th { background: #1a3a5c; color: white; padding: 10px; text-align: left; }
+td { padding: 10px; border: 1px solid #ddd; }
+tr:nth-child(even) { background: #f5f5f5; }
+.badge { background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 4px; font-size: 13px; }
+.lang-toggle { text-align: right; margin-bottom: 24px; }
+footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #ddd; color: #666; font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="lang-toggle">
+<a href="#french">Français</a> | <a href="#english">English</a>
+</div>
+
+<div id="french">
+<h1>Politique de confidentialité</h1>
+<p><strong>OtoCPA Inc.</strong> | Dernière mise à jour : ''' + __import__('datetime').date.today().strftime('%d %B %Y') + '''</p>
+<p>OtoCPA Inc. (« OtoCPA ») s\'engage à protéger la vie privée des utilisateurs et des clients conformément à la <strong>Loi 25 du Québec</strong> (Loi modernisant des dispositions législatives en matière de protection des renseignements personnels).</p>
+
+<h2>1. Informations collectées</h2>
+<p>OtoCPA collecte uniquement les informations nécessaires à la prestation de ses services :</p>
+<ul>
+<li>Documents financiers soumis par les cabinets CPA (factures, reçus, relevés bancaires)</li>
+<li>Informations d\'identification des utilisateurs (nom, courriel, numéro WhatsApp)</li>
+<li>Données de connexion aux comptes bancaires via Plaid (jetons d\'accès sécurisés uniquement)</li>
+<li>Données de connexion QuickBooks Online pour l\'exportation comptable</li>
+</ul>
+
+<h2>2. Utilisation des données</h2>
+<p>Les données collectées sont utilisées exclusivement pour :</p>
+<ul>
+<li>La classification automatique des dépenses et revenus</li>
+<li>L\'exportation vers les logiciels comptables (QuickBooks Online)</li>
+<li>L\'importation des transactions bancaires pour la réconciliation</li>
+<li>La fourniture du tableau de bord de révision aux cabinets CPA</li>
+</ul>
+<p><strong>Vos données ne sont jamais vendues ou partagées à des fins publicitaires.</strong></p>
+
+<h2>3. Stockage et résidence des données</h2>
+<table>
+<tr><th>Fournisseur</th><th>Rôle</th><th>Emplacement</th><th>Statut Loi 25</th></tr>
+<tr><td>DigitalOcean</td><td>Infrastructure principale</td><td>Toronto, Canada</td><td><span class="badge">✓ Conforme</span></td></tr>
+<tr><td>Anthropic</td><td>Intelligence artificielle</td><td>États-Unis</td><td><span class="badge">✓ Entente signée</span></td></tr>
+<tr><td>Google Cloud</td><td>Reconnaissance optique</td><td>États-Unis</td><td><span class="badge">✓ Entente signée</span></td></tr>
+<tr><td>Twilio</td><td>WhatsApp</td><td>États-Unis</td><td><span class="badge">✓ Entente signée</span></td></tr>
+<tr><td>Plaid</td><td>Données bancaires</td><td>États-Unis</td><td><span class="badge">✓ Rétention zéro</span></td></tr>
+<tr><td>Stripe</td><td>Paiements</td><td>États-Unis</td><td><span class="badge">✓ PCI-DSS</span></td></tr>
+</table>
+
+<h2>4. Conservation des données</h2>
+<p>Les documents financiers sont conservés pendant <strong>7 ans</strong> conformément aux exigences de l\'Agence du revenu du Canada (ARC), puis supprimés de façon sécurisée.</p>
+
+<h2>5. Sécurité</h2>
+<ul>
+<li>Chiffrement TLS 1.2+ pour toutes les communications</li>
+<li>Chiffrement AES-256 pour les données au repos</li>
+<li>Authentification à deux facteurs (2FA) obligatoire</li>
+<li>Accès basé sur les rôles (RBAC)</li>
+<li>Journaux d\'audit complets</li>
+</ul>
+
+<h2>6. Vos droits (Loi 25)</h2>
+<p>Vous avez le droit de :</p>
+<ul>
+<li>Accéder à vos renseignements personnels</li>
+<li>Corriger des informations inexactes</li>
+<li>Demander la suppression de vos données</li>
+<li>Retirer votre consentement en tout temps</li>
+<li>Déposer une plainte auprès de la Commission d\'accès à l\'information (CAI)</li>
+</ul>
+
+<h2>7. Contact</h2>
+<p>Pour toute question relative à la confidentialité :<br>
+<strong>Responsable de la protection des renseignements personnels</strong><br>
+OtoCPA Inc.<br>
+Courriel : <a href="mailto:privacy@otocpa.com">privacy@otocpa.com</a></p>
+</div>
+
+<hr style="margin: 60px 0; border-color: #ddd;">
+
+<div id="english">
+<h1>Privacy Policy</h1>
+<p><strong>OtoCPA Inc.</strong> | Last updated: ''' + __import__('datetime').date.today().strftime('%B %d, %Y') + '''</p>
+<p>OtoCPA Inc. ("OtoCPA") is committed to protecting the privacy of users and clients in accordance with <strong>Quebec Law 25</strong> (Act to Modernize Legislative Provisions Respecting the Protection of Personal Information).</p>
+
+<h2>1. Information We Collect</h2>
+<p>OtoCPA collects only information necessary to provide its services:</p>
+<ul>
+<li>Financial documents submitted by CPA firms (invoices, receipts, bank statements)</li>
+<li>User identification information (name, email, WhatsApp number)</li>
+<li>Bank account access tokens via Plaid (secure tokens only, no credentials)</li>
+<li>QuickBooks Online connection data for accounting export</li>
+</ul>
+
+<h2>2. How We Use Your Data</h2>
+<p>Collected data is used exclusively for:</p>
+<ul>
+<li>Automated expense and revenue classification</li>
+<li>Export to accounting software (QuickBooks Online)</li>
+<li>Bank transaction import for reconciliation</li>
+<li>Providing the CPA review dashboard</li>
+</ul>
+<p><strong>Your data is never sold or shared for advertising purposes.</strong></p>
+
+<h2>3. Data Storage and Residency</h2>
+<table>
+<tr><th>Vendor</th><th>Role</th><th>Location</th><th>Law 25 Status</th></tr>
+<tr><td>DigitalOcean</td><td>Primary infrastructure</td><td>Toronto, Canada</td><td><span class="badge">✓ Compliant</span></td></tr>
+<tr><td>Anthropic</td><td>AI processing</td><td>United States</td><td><span class="badge">✓ DPA signed</span></td></tr>
+<tr><td>Google Cloud</td><td>OCR processing</td><td>United States</td><td><span class="badge">✓ DPA signed</span></td></tr>
+<tr><td>Twilio</td><td>WhatsApp</td><td>United States</td><td><span class="badge">✓ DPA signed</span></td></tr>
+<tr><td>Plaid</td><td>Bank data</td><td>United States</td><td><span class="badge">✓ Zero retention</span></td></tr>
+<tr><td>Stripe</td><td>Payments</td><td>United States</td><td><span class="badge">✓ PCI-DSS</span></td></tr>
+</table>
+
+<h2>4. Data Retention</h2>
+<p>Financial documents are retained for <strong>7 years</strong> per Canada Revenue Agency (CRA) requirements, then securely deleted.</p>
+
+<h2>5. Security Measures</h2>
+<ul>
+<li>TLS 1.2+ encryption for all communications</li>
+<li>AES-256 encryption for data at rest</li>
+<li>Mandatory Two-Factor Authentication (2FA)</li>
+<li>Role-based access control (RBAC)</li>
+<li>Complete audit logs</li>
+</ul>
+
+<h2>6. Your Rights (Law 25)</h2>
+<p>You have the right to:</p>
+<ul>
+<li>Access your personal information</li>
+<li>Correct inaccurate information</li>
+<li>Request deletion of your data</li>
+<li>Withdraw consent at any time</li>
+<li>File a complaint with the Commission d\'accès à l\'information (CAI)</li>
+</ul>
+
+<h2>7. Contact</h2>
+<p>For any privacy-related questions:<br>
+<strong>Privacy Officer</strong><br>
+OtoCPA Inc.<br>
+Email: <a href="mailto:privacy@otocpa.com">privacy@otocpa.com</a></p>
+</div>
+
+<footer>
+<p>© 2026 OtoCPA Inc. | <a href="/">Dashboard</a> | <a href="mailto:privacy@otocpa.com">privacy@otocpa.com</a></p>
+</footer>
+
+</body>
+</html>'''
+
+
+# ---------------------------------------------------------------------------
 # Login page
 # ---------------------------------------------------------------------------
 
@@ -11340,6 +11509,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # --- /health (no authentication) ---
             if path == "/health":
                 self._send_json(self._build_health_response())
+                return
+
+            elif path == '/privacy':
+                self._send_html(render_privacy_page())
                 return
 
             user = get_session_user(self)
