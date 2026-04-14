@@ -8443,13 +8443,14 @@ def render_2fa_settings(user: dict[str, Any], flash: str = "", flash_error: str 
         </form>
         """
     else:
-        secret = setup_secret or (pyotp.random_base32() if pyotp else "")
-        qr_b64 = generate_totp_qr_base64(secret, user.get("username", "user"))
+        secret = setup_secret or user.get("totp_secret") or ""
+        qr_b64 = generate_totp_qr_base64(secret, user.get("username", "user")) if secret else ""
+        qr_b64 = "".join(qr_b64.split())
         body = f"""
         <p><strong>Status:</strong> <span style="color:#6b7280;">Not enabled</span></p>
         <p>Scan this QR code with Google Authenticator, Authy, or a similar app, then enter the 6-digit code to enable.</p>
         <div style="text-align:center;margin:18px 0;">
-            <img src="data:image/png;base64,{qr_b64}" alt="TOTP QR code" style="max-width:240px;">
+            <img src="data:image/png;base64,{qr_b64}" alt="TOTP QR code" style="width:250px;height:250px;display:block;margin:0 auto;">
         </div>
         <p style="font-size:12px;color:#6b7280;">Manual secret: <code>{esc(secret)}</code></p>
         <form method="POST" action="/settings/2fa/enable" style="margin-top:16px;">
@@ -11443,7 +11444,24 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/settings/2fa":
-                self._send_html(render_2fa_settings(user, flash=flash, flash_error=flash_error, lang=lang))
+                with open_db() as conn:
+                    row = conn.execute(
+                        "SELECT * FROM dashboard_users WHERE username=?",
+                        (user["username"],),
+                    ).fetchone()
+                    db_user = dict(row) if row else dict(user)
+                    secret = db_user.get("totp_secret") or ""
+                    if not bool(db_user.get("totp_enabled")) and not secret and pyotp:
+                        secret = pyotp.random_base32()
+                        conn.execute(
+                            "UPDATE dashboard_users SET totp_secret=? WHERE username=?",
+                            (secret, user["username"]),
+                        )
+                        conn.commit()
+                        db_user["totp_secret"] = secret
+                self._send_html(render_2fa_settings(
+                    db_user, flash=flash, flash_error=flash_error,
+                    setup_secret=secret, lang=lang))
                 return
 
             if path == "/settings/profile":
