@@ -6,8 +6,10 @@ try:
 except ImportError:
     pass
 
+import base64
 import hashlib
 import html
+import io
 import os
 import re
 import bcrypt
@@ -18,6 +20,15 @@ import sys
 import time
 import traceback
 import urllib.parse
+
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
+try:
+    import qrcode
+except ImportError:
+    qrcode = None
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from http import HTTPStatus
@@ -468,6 +479,38 @@ def bootstrap_schema() -> None:
             conn.execute("UPDATE dashboard_users SET must_reset_password = 1")
             conn.commit()
             print("  [bootstrap] must_reset_password=1 set for all existing users (bcrypt migration)")
+        if "totp_secret" not in user_cols:
+            conn.execute("ALTER TABLE dashboard_users ADD COLUMN totp_secret TEXT")
+            conn.commit()
+        if "totp_enabled" not in user_cols:
+            conn.execute("ALTER TABLE dashboard_users ADD COLUMN totp_enabled INTEGER DEFAULT 0")
+            conn.commit()
+
+        # Pending 2FA tokens (issued after password ok, before TOTP verified)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_pending_2fa (
+                token      TEXT PRIMARY KEY,
+                username   TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT
+            )
+        """)
+        # Plaid bank connections
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bank_connections (
+                id TEXT PRIMARY KEY,
+                client_code TEXT NOT NULL,
+                plaid_access_token TEXT NOT NULL,
+                plaid_item_id TEXT NOT NULL,
+                institution_name TEXT,
+                account_name TEXT,
+                account_type TEXT,
+                last_sync TEXT,
+                active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.commit()
 
         # Seed a default admin account if no users exist
         count = list(conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone().values())[0]
@@ -562,6 +605,70 @@ def delete_session(token: str) -> None:
     with open_db() as conn:
         conn.execute("DELETE FROM dashboard_sessions WHERE session_token = ?", (token,))
         conn.commit()
+
+
+def create_pending_2fa(username: str) -> str:
+    """Issue a short-lived token after password verification, before TOTP check."""
+    token = secrets.token_hex(32)
+    expires = (utc_now() + timedelta(minutes=5)).isoformat()
+    with open_db() as conn:
+        conn.execute(
+            "INSERT INTO dashboard_pending_2fa (token, username, expires_at, created_at) VALUES (?,?,?,?)",
+            (token, username, expires, utc_now_iso()),
+        )
+        conn.commit()
+    return token
+
+
+def consume_pending_2fa(token: str) -> str | None:
+    """Return username for a valid pending-2FA token, or None. Does not delete."""
+    if not token:
+        return None
+    with open_db() as conn:
+        row = conn.execute(
+            "SELECT username, expires_at FROM dashboard_pending_2fa WHERE token=?",
+            (token,),
+        ).fetchone()
+    if not row:
+        return None
+    if row["expires_at"] < utc_now_iso():
+        return None
+    return row["username"]
+
+
+def delete_pending_2fa(token: str) -> None:
+    with open_db() as conn:
+        conn.execute("DELETE FROM dashboard_pending_2fa WHERE token=?", (token,))
+        conn.commit()
+
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    if not pyotp or not secret or not code:
+        return False
+    try:
+        return pyotp.TOTP(secret).verify(code.strip(), valid_window=1)
+    except Exception:
+        return False
+
+
+def generate_totp_qr_base64(secret: str, username: str) -> str:
+    """Return base64-encoded PNG for a provisioning URI."""
+    if not pyotp or not qrcode:
+        return ""
+    uri = pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name='OtoCPA')
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def get_pending_2fa_token_from_cookie(handler: BaseHTTPRequestHandler) -> str:
+    cookie = handler.headers.get("Cookie", "")
+    for part in cookie.split(";"):
+        part = part.strip()
+        if part.startswith("pending_2fa="):
+            return part[len("pending_2fa="):]
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -8280,6 +8387,164 @@ def render_change_password(user: dict[str, Any] | None = None, flash_error: str 
 
 
 # ---------------------------------------------------------------------------
+# Two-Factor Authentication pages
+# ---------------------------------------------------------------------------
+
+def render_totp_challenge(flash_error: str = "", lang: str = "fr") -> str:
+    err = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    return f"""<!doctype html>
+<html lang="{lang}">
+<head><meta charset="utf-8"><title>Two-Factor Authentication</title><style>{CSS}
+.login-wrap{{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f7fb}}
+.login-box{{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:2rem 2.5rem;min-width:340px;box-shadow:0 2px 8px rgba(0,0,0,.06)}}
+</style></head>
+<body>
+<div class="login-wrap">
+    <div class="login-box">
+        <h2 style="margin-bottom:.5rem;">Two-Factor Authentication</h2>
+        <p class="muted" style="margin-bottom:1.5rem;">Enter the 6-digit code from your authenticator app.</p>
+        {err}
+        <form method="POST" action="/login/totp">
+            <div class="field"><label>Code</label>
+                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{{6}}"
+                       maxlength="6" autofocus autocomplete="one-time-code"></div>
+            <button class="btn-primary" type="submit" style="width:100%;padding:12px;">Verify</button>
+        </form>
+        <p style="text-align:center;margin-top:14px;font-size:12px;"><a href="/logout">Cancel</a></p>
+    </div>
+</div>
+</body></html>"""
+
+
+def render_2fa_settings(user: dict[str, Any], flash: str = "", flash_error: str = "",
+                        setup_secret: str = "", lang: str = "fr") -> str:
+    enabled = bool(user.get("totp_enabled"))
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    if enabled and not setup_secret:
+        body = f"""
+        <p><strong>Status:</strong> <span style="color:#16a34a;">Enabled</span></p>
+        <p>Two-factor authentication is active on your account.</p>
+        <form method="POST" action="/settings/2fa/disable" style="margin-top:16px;">
+            <button class="btn-primary" type="submit" style="background:#dc2626;">Disable 2FA</button>
+        </form>
+        """
+    else:
+        secret = setup_secret or (pyotp.random_base32() if pyotp else "")
+        qr_b64 = generate_totp_qr_base64(secret, user.get("username", "user"))
+        body = f"""
+        <p><strong>Status:</strong> <span style="color:#6b7280;">Not enabled</span></p>
+        <p>Scan this QR code with Google Authenticator, Authy, or a similar app, then enter the 6-digit code to enable.</p>
+        <div style="text-align:center;margin:18px 0;">
+            <img src="data:image/png;base64,{qr_b64}" alt="TOTP QR code" style="max-width:240px;">
+        </div>
+        <p style="font-size:12px;color:#6b7280;">Manual secret: <code>{esc(secret)}</code></p>
+        <form method="POST" action="/settings/2fa/enable" style="margin-top:16px;">
+            <input type="hidden" name="secret" value="{esc(secret)}">
+            <div class="field"><label>Verification code</label>
+                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{{6}}"
+                       maxlength="6" autofocus autocomplete="one-time-code"></div>
+            <button class="btn-primary" type="submit">Enable 2FA</button>
+        </form>
+        """
+    inner = f"""
+    <div class="card">
+        <h2>Two-Factor Authentication</h2>
+        {flash_html}{err_html}
+        {body}
+        <p style="margin-top:20px;"><a href="/">&larr; Back</a></p>
+    </div>
+    """
+    return page_layout("2FA Settings", inner, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
+# Bank feed (Plaid) pages
+# ---------------------------------------------------------------------------
+
+def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str = "",
+                        lang: str = "fr") -> str:
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    inner = f"""
+    <div class="card">
+        <h2>Connect Bank Account</h2>
+        {flash_html}{err_html}
+        <p>Connect a bank account via Plaid to automatically import transactions.</p>
+        <button id="connect-btn" class="btn-primary" style="margin-top:12px;">Connect Bank Account</button>
+        <p style="margin-top:20px;"><a href="/bank/feeds">View connected accounts &rarr;</a></p>
+    </div>
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+    fetch('/bank/link_token')
+      .then(r => r.json())
+      .then(data => {{
+        if (!data.link_token) {{
+          document.getElementById('connect-btn').disabled = true;
+          document.getElementById('connect-btn').textContent = 'Plaid not configured';
+          return;
+        }}
+        const handler = Plaid.create({{
+          token: data.link_token,
+          onSuccess: (public_token, metadata) => {{
+            fetch('/bank/callback', {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/json'}},
+              body: JSON.stringify({{public_token, metadata}})
+            }}).then(() => window.location = '/bank/feeds');
+          }},
+        }});
+        document.getElementById('connect-btn').onclick = () => handler.open();
+      }})
+      .catch(() => {{
+        document.getElementById('connect-btn').disabled = true;
+        document.getElementById('connect-btn').textContent = 'Plaid not configured';
+      }});
+    </script>
+    """
+    return page_layout("Bank", inner, user=user, lang=lang)
+
+
+def render_bank_feeds(user: dict[str, Any], connections: list, transactions: list,
+                       flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    conn_rows = ""
+    for c in connections:
+        last_sync = c.get("last_sync") or "Never"
+        conn_rows += (
+            f"<tr><td>{esc(c.get('institution_name') or '')}</td>"
+            f"<td>{esc(c.get('account_name') or '')}</td>"
+            f"<td>{esc(c.get('client_code') or '')}</td>"
+            f"<td>{esc(last_sync)}</td>"
+            f"<td><form method='POST' action='/bank/sync' style='display:inline;'>"
+            f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
+            f"<button type='submit'>Sync</button></form></td></tr>"
+        )
+    tx_rows = ""
+    for tx in transactions:
+        tx_rows += (
+            f"<tr><td>{esc(str(tx.get('date','')))}</td>"
+            f"<td>{esc(tx.get('name',''))}</td>"
+            f"<td style='text-align:right;'>{esc(str(tx.get('amount','')))}</td></tr>"
+        )
+    inner = f"""
+    <div class="card">
+        <h2>Bank Feeds</h2>
+        {flash_html}{err_html}
+        <p><a href="/bank/connect">+ Connect another account</a></p>
+        <h3>Connected accounts</h3>
+        <table><thead><tr><th>Institution</th><th>Account</th><th>Client</th><th>Last sync</th><th></th></tr></thead>
+        <tbody>{conn_rows or '<tr><td colspan="5" class="muted">No connected accounts.</td></tr>'}</tbody></table>
+        <h3 style="margin-top:24px;">Recent transactions</h3>
+        <table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody>{tx_rows or '<tr><td colspan="3" class="muted">No transactions yet.</td></tr>'}</tbody></table>
+    </div>
+    """
+    return page_layout("Bank Feeds", inner, user=user, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # Portfolio page
 # ---------------------------------------------------------------------------
 
@@ -10995,6 +11260,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_login(flash_error, lang=lang))
                 return
 
+            if path == "/login/totp":
+                lang = self._get_lang_from_cookie()
+                pending = get_pending_2fa_token_from_cookie(self)
+                if not consume_pending_2fa(pending):
+                    self._redirect("/login")
+                    return
+                self._send_html(render_totp_challenge(flash_error, lang=lang))
+                return
+
             # --- /health (no authentication) ---
             if path == "/health":
                 self._send_json(self._build_health_response())
@@ -11099,6 +11373,52 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             if path == "/change_password":
                 self._send_html(render_change_password(user, flash_error=flash_error, lang=lang))
+                return
+
+            if path == "/settings/2fa":
+                self._send_html(render_2fa_settings(user, flash=flash, flash_error=flash_error, lang=lang))
+                return
+
+            if path == "/bank/connect":
+                self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error, lang=lang))
+                return
+
+            if path == "/bank/link_token":
+                try:
+                    from src.integrations.plaid_client import create_link_token
+                    client_code = (ctx.get("clients") or [""])[0] if ctx.get("clients") else ""
+                    token = create_link_token(client_code or "default", user["username"])
+                    self._send_json({"link_token": token})
+                except Exception as e:
+                    self._send_json({"link_token": "", "error": str(e)}, status=200)
+                return
+
+            if path == "/bank/feeds":
+                with open_db() as conn:
+                    conns = [dict(r) for r in conn.execute(
+                        "SELECT * FROM bank_connections WHERE active=1 ORDER BY created_at DESC"
+                    ).fetchall()]
+                txs: list = []
+                try:
+                    from src.integrations.plaid_client import get_transactions
+                    import datetime as _dt
+                    end = _dt.date.today()
+                    start = end - _dt.timedelta(days=30)
+                    for c in conns[:1]:
+                        try:
+                            raw_txs = get_transactions(c["plaid_access_token"], start, end)
+                            for tx in raw_txs[:50]:
+                                txs.append({
+                                    "date": getattr(tx, "date", ""),
+                                    "name": getattr(tx, "name", ""),
+                                    "amount": getattr(tx, "amount", ""),
+                                })
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                self._send_html(render_bank_feeds(user, conns, txs, flash=flash,
+                                                  flash_error=flash_error, lang=lang))
                 return
 
             if path == "/pdf":
@@ -12343,8 +12663,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 stored = user_row["password_hash"]
                 is_legacy = not stored.startswith(("$2b$", "$2a$", "$2y$"))
                 record_login_attempt(ip, username, True)
-                token = create_session(username)
                 sec = _session_cookie_attrs(self)
+                # 2FA gate: if enabled, do not create session yet; issue pending token.
+                if user_row.get("totp_enabled") and user_row.get("totp_secret"):
+                    pending = create_pending_2fa(username)
+                    self._redirect("/login/totp", extra_headers=[
+                        ("Set-Cookie", f"pending_2fa={pending}; HttpOnly; {sec}; Path=/; Max-Age=300"),
+                        ("Set-Cookie", f"dashboard_lang={lang}; {sec}; Path=/"),
+                    ])
+                    return
+                token = create_session(username)
                 if is_legacy or user_row["must_reset_password"]:
                     if is_legacy:
                         # Re-hash with bcrypt immediately
@@ -12363,6 +12691,34 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         ("Set-Cookie", f"session_token={token}; HttpOnly; {sec}; Path=/"),
                         ("Set-Cookie", f"dashboard_lang={lang}; {sec}; Path=/"),
                     ])
+                return
+
+            # --- TOTP verification (no auth required, uses pending token) ---
+            if path == "/login/totp":
+                lang = self._get_lang_from_cookie()
+                pending = get_pending_2fa_token_from_cookie(self)
+                username = consume_pending_2fa(pending)
+                if not username:
+                    self._redirect("/login")
+                    return
+                code = form.get("code", "").strip()
+                with open_db() as conn:
+                    _ur = conn.execute(
+                        "SELECT * FROM dashboard_users WHERE username=? AND active=1", (username,)
+                    ).fetchone()
+                    user_row = dict(_ur) if _ur else None
+                if not user_row or not verify_totp_code(user_row.get("totp_secret", ""), code):
+                    self._send_html(render_totp_challenge("Invalid code. Try again.", lang=lang))
+                    return
+                delete_pending_2fa(pending)
+                token = create_session(username)
+                sec = _session_cookie_attrs(self)
+                target = "/change_password" if user_row.get("must_reset_password") else "/"
+                self._redirect(target, extra_headers=[
+                    ("Set-Cookie", f"session_token={token}; HttpOnly; {sec}; Path=/"),
+                    ("Set-Cookie", f"pending_2fa=; HttpOnly; {sec}; Path=/; Max-Age=0"),
+                    ("Set-Cookie", f"dashboard_lang={lang}; {sec}; Path=/"),
+                ])
                 return
 
             # --- Logout (no auth required) ---
@@ -12427,6 +12783,95 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             lang = get_user_lang(user)
             ctx = build_user_context(user)
             redirect_to = form.get("redirect_to", "document")
+
+            # --- 2FA enable ---
+            if path == "/settings/2fa/enable":
+                secret = form.get("secret", "").strip()
+                code = form.get("code", "").strip()
+                if not secret or not verify_totp_code(secret, code):
+                    self._send_html(render_2fa_settings(
+                        user, flash_error="Invalid code — try again.",
+                        setup_secret=secret, lang=lang))
+                    return
+                with open_db() as conn:
+                    conn.execute(
+                        "UPDATE dashboard_users SET totp_secret=?, totp_enabled=1 WHERE username=?",
+                        (secret, user["username"]),
+                    )
+                    conn.commit()
+                self._flash_redirect("/settings/2fa", flash="Two-factor authentication enabled.")
+                return
+
+            # --- 2FA disable ---
+            if path == "/settings/2fa/disable":
+                with open_db() as conn:
+                    conn.execute(
+                        "UPDATE dashboard_users SET totp_secret=NULL, totp_enabled=0 WHERE username=?",
+                        (user["username"],),
+                    )
+                    conn.commit()
+                self._flash_redirect("/settings/2fa", flash="Two-factor authentication disabled.")
+                return
+
+            # --- Bank: exchange public token and save connection ---
+            if path == "/bank/callback":
+                try:
+                    payload = json.loads(raw.decode("utf-8")) if raw else {}
+                except Exception:
+                    payload = {}
+                public_token = payload.get("public_token", "")
+                metadata = payload.get("metadata") or {}
+                institution = (metadata.get("institution") or {}).get("name", "")
+                accounts = metadata.get("accounts") or []
+                acct = accounts[0] if accounts else {}
+                try:
+                    from src.integrations.plaid_client import exchange_public_token
+                    access_token, item_id = exchange_public_token(public_token)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": str(e)}, status=400)
+                    return
+                client_code = (ctx.get("clients") or [""])[0] if ctx.get("clients") else ""
+                conn_id = secrets.token_hex(16)
+                with open_db() as conn:
+                    conn.execute(
+                        "INSERT INTO bank_connections (id, client_code, plaid_access_token,"
+                        " plaid_item_id, institution_name, account_name, account_type, active)"
+                        " VALUES (?,?,?,?,?,?,?,1)",
+                        (conn_id, client_code, access_token, item_id, institution,
+                         acct.get("name", ""), acct.get("subtype", "")),
+                    )
+                    conn.commit()
+                self._send_json({"ok": True, "id": conn_id})
+                return
+
+            # --- Bank: sync transactions ---
+            if path == "/bank/sync":
+                conn_id = form.get("connection_id", "").strip()
+                try:
+                    from src.integrations.plaid_client import get_transactions
+                    import datetime as _dt
+                    with open_db() as conn:
+                        _r = conn.execute(
+                            "SELECT * FROM bank_connections WHERE id=?", (conn_id,)
+                        ).fetchone()
+                        row = dict(_r) if _r else None
+                    if not row:
+                        self._flash_redirect("/bank/feeds", error="Connection not found.")
+                        return
+                    end = _dt.date.today()
+                    start = end - _dt.timedelta(days=30)
+                    txs = get_transactions(row["plaid_access_token"], start, end)
+                    with open_db() as conn:
+                        conn.execute(
+                            "UPDATE bank_connections SET last_sync=? WHERE id=?",
+                            (utc_now_iso(), conn_id),
+                        )
+                        conn.commit()
+                    self._flash_redirect("/bank/feeds",
+                                         flash=f"Synced {len(txs)} transactions.")
+                except Exception as e:
+                    self._flash_redirect("/bank/feeds", error=f"Sync failed: {e}")
+                return
 
             # --- Set language ---
             if path == "/set_language":
