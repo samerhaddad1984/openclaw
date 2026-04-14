@@ -11623,8 +11623,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (user["username"],),
                     ).fetchone()
                     db_user = dict(row) if row else dict(user)
+                    enabled = bool(db_user.get("totp_enabled"))
                     secret = db_user.get("totp_secret") or ""
-                    if not bool(db_user.get("totp_enabled")) and not secret and pyotp:
+                    if not enabled and not secret and pyotp:
                         secret = pyotp.random_base32()
                         conn.execute(
                             "UPDATE dashboard_users SET totp_secret=? WHERE username=?",
@@ -11634,7 +11635,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         db_user["totp_secret"] = secret
                 self._send_html(render_2fa_settings(
                     db_user, flash=flash, flash_error=flash_error,
-                    setup_secret=secret, lang=lang))
+                    setup_secret=("" if enabled else secret), lang=lang))
                 return
 
             if path == "/settings/profile":
