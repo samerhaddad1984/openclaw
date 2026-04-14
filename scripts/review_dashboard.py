@@ -14,6 +14,7 @@ import os
 import re
 import bcrypt
 import json
+import logging
 import secrets
 import sqlite3
 import sys
@@ -13810,11 +13811,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Bank: exchange public token and save connection ---
             if path == "/bank/callback":
+                qs = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query, keep_blank_values=True
+                )
                 try:
                     payload = json.loads(raw.decode("utf-8")) if raw else {}
-                except Exception:
-                    payload = {}
+                except Exception as e:
+                    logging.exception("bank/callback: invalid JSON body")
+                    self._send_json({"ok": False, "error": f"invalid_json: {e}"}, status=400)
+                    return
+                logging.info("bank/callback received: keys=%s qs_client=%s",
+                             sorted(payload.keys()), qs.get("client", [""])[0])
                 public_token = payload.get("public_token", "")
+                if not public_token:
+                    self._send_json({"ok": False, "error": "missing public_token"}, status=400)
+                    return
                 metadata = payload.get("metadata") or {}
                 institution = (metadata.get("institution") or {}).get("name", "")
                 accounts = metadata.get("accounts") or []
@@ -13823,27 +13834,62 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     from src.integrations.plaid_client import exchange_public_token
                     access_token, item_id = exchange_public_token(public_token)
                 except Exception as e:
-                    self._send_json({"ok": False, "error": str(e)}, status=400)
+                    logging.exception("bank/callback: exchange_public_token failed")
+                    self._send_json({"ok": False, "error": f"exchange_failed: {e}"}, status=400)
                     return
                 client_code = (qs.get("client", [""])[0].strip()
                                or (payload.get("client_code") or "").strip())
                 conn_id = secrets.token_hex(16)
-                with open_db() as conn:
-                    client_firm_row = conn.execute(
-                        "SELECT firm_code FROM clients WHERE client_code=?",
-                        (client_code,),
-                    ).fetchone() if client_code else None
-                    client_firm = (client_firm_row.get("firm_code") if client_firm_row else None) or \
-                                  (ctx.get("firm_code") if ctx.get("role") != "owner" else "OWNER") or "OWNER"
-                    conn.execute(
-                        "INSERT INTO bank_connections (id, client_code, plaid_access_token,"
-                        " plaid_item_id, institution_name, account_name, account_type, firm_code, active)"
-                        " VALUES (?,?,?,?,?,?,?,?,1)",
-                        (conn_id, client_code, access_token, item_id, institution,
-                         acct.get("name", ""), acct.get("subtype", ""), client_firm),
-                    )
-                    conn.commit()
-                self._send_json({"ok": True, "id": conn_id})
+                try:
+                    with open_db() as conn:
+                        client_firm_row = conn.execute(
+                            "SELECT firm_code FROM clients WHERE client_code=?",
+                            (client_code,),
+                        ).fetchone() if client_code else None
+                        client_firm = (client_firm_row.get("firm_code") if client_firm_row else None) or \
+                                      (ctx.get("firm_code") if ctx.get("role") != "owner" else "OWNER") or "OWNER"
+                        conn.execute(
+                            "INSERT INTO bank_connections (id, client_code, plaid_access_token,"
+                            " plaid_item_id, institution_name, account_name, account_type, firm_code, active)"
+                            " VALUES (?,?,?,?,?,?,?,?,1)",
+                            (conn_id, client_code, access_token, item_id, institution,
+                             acct.get("name", ""), acct.get("subtype", ""), client_firm),
+                        )
+                        conn.commit()
+                except Exception as e:
+                    logging.exception("bank/callback: DB insert failed")
+                    self._send_json({"ok": False, "error": f"db_insert_failed: {e}"}, status=500)
+                    return
+                logging.info("bank/callback: saved connection id=%s client=%s institution=%s",
+                             conn_id, client_code, institution)
+
+                # Initial sync: last 30 days of transactions
+                initial_inserted = 0
+                initial_matched = 0
+                try:
+                    from src.integrations.plaid_client import get_transactions
+                    import datetime as _dt
+                    end = _dt.date.today()
+                    start = end - _dt.timedelta(days=30)
+                    txs = get_transactions(access_token, start, end)
+                    initial_inserted, initial_matched = _save_and_match_bank_txs(client_code, txs)
+                    with open_db() as conn:
+                        conn.execute(
+                            "UPDATE bank_connections SET last_sync=? WHERE id=?",
+                            (utc_now_iso(), conn_id),
+                        )
+                        conn.commit()
+                    logging.info("bank/callback: initial sync inserted=%d matched=%d",
+                                 initial_inserted, initial_matched)
+                except Exception as e:
+                    logging.exception("bank/callback: initial sync failed (connection still saved)")
+
+                self._send_json({
+                    "ok": True,
+                    "id": conn_id,
+                    "inserted": initial_inserted,
+                    "matched": initial_matched,
+                })
                 return
 
             # --- Bank: sync transactions (saves to bank_transactions, runs matching) ---
