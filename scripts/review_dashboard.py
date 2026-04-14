@@ -8049,7 +8049,10 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             f'text-decoration:none;white-space:nowrap;">'
             f'{esc(t("training_nav_link", lang))}</a>'
         )
-        right_controls = f'{user_pill} {comm_link_html} {training_link_html} {lang_toggle} {logout_btn}'
+        settings_icon_html = (
+            '<a href="/settings/2fa" style="color:#aaa;margin-right:16px;">⚙️ Paramètres</a>'
+        )
+        right_controls = f'{user_pill} {comm_link_html} {training_link_html} {lang_toggle} {settings_icon_html} {logout_btn}'
 
     # Audit navigation strip — visible to manager/owner only
     audit_nav_html = ""
@@ -8091,6 +8094,10 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + (_anav("/admin/updates", "update_nav_link") if user.get("role") == "owner" else "")
             + (_anav("/admin/remote", "remote_nav_link") if user.get("role") == "owner" else "")
             + (_anav("/health/page", "health_nav_link") if user.get("role") == "owner" else "")
+            + f'<a href="/bank/connect" style="color:#e2e8f0;font-size:12px;font-weight:500;text-decoration:none;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.08);white-space:nowrap;">Connecter banque</a>'
+            + f'<a href="/bank/feeds" style="color:#e2e8f0;font-size:12px;font-weight:500;text-decoration:none;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.08);white-space:nowrap;">Transactions bancaires</a>'
+            + f'<a href="/settings/2fa" style="color:#e2e8f0;font-size:12px;font-weight:500;text-decoration:none;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.08);white-space:nowrap;">2FA / Sécurité</a>'
+            + f'<a href="/settings/profile" style="color:#e2e8f0;font-size:12px;font-weight:500;text-decoration:none;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.08);white-space:nowrap;">Profil</a>'
             + f'</nav>'
         )
 
