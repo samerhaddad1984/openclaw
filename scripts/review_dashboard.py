@@ -485,6 +485,12 @@ def bootstrap_schema() -> None:
         if "totp_enabled" not in user_cols:
             conn.execute("ALTER TABLE dashboard_users ADD COLUMN totp_enabled INTEGER DEFAULT 0")
             conn.commit()
+        if "email" not in user_cols:
+            conn.execute("ALTER TABLE dashboard_users ADD COLUMN email TEXT")
+            conn.commit()
+        if "whatsapp_number" not in user_cols:
+            conn.execute("ALTER TABLE dashboard_users ADD COLUMN whatsapp_number TEXT")
+            conn.commit()
 
         # Pending 2FA tokens (issued after password ok, before TOTP verified)
         conn.execute("""
@@ -8465,6 +8471,60 @@ def render_2fa_settings(user: dict[str, Any], flash: str = "", flash_error: str 
     return page_layout("2FA Settings", inner, user=user, lang=lang)
 
 
+def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str = "",
+                        lang: str = "fr") -> str:
+    flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    totp_on = bool(user.get("totp_enabled"))
+    totp_badge = ('<span style="color:#16a34a;font-weight:600;">Enabled</span>' if totp_on
+                  else '<span style="color:#6b7280;">Disabled</span>')
+    totp_btn_label = "Manage 2FA" if totp_on else "Enable 2FA"
+    inner = f"""
+    <div class="card">
+        <h2>Profile</h2>
+        {flash_html}{err_html}
+        <form method="POST" action="/settings/profile/save">
+            <div class="field"><label>Username (read-only)</label>
+                <input type="text" value="{esc(user.get("username",""))}" disabled></div>
+            <div class="field"><label>Role (read-only)</label>
+                <input type="text" value="{esc(user.get("role",""))}" disabled></div>
+            <div class="field"><label>Display name</label>
+                <input type="text" name="display_name" value="{esc(user.get("display_name") or "")}"></div>
+            <div class="field"><label>Email address</label>
+                <input type="email" name="email" value="{esc(user.get("email") or "")}"></div>
+            <div class="field"><label>Language</label>
+                <select name="language">
+                    <option value="fr"{' selected' if (user.get("language") or "fr") == "fr" else ''}>Français</option>
+                    <option value="en"{' selected' if user.get("language") == "en" else ''}>English</option>
+                </select></div>
+            <div class="field"><label>WhatsApp number (for receiving documents)</label>
+                <input type="tel" name="whatsapp_number" value="{esc(user.get("whatsapp_number") or "")}"
+                       placeholder="+15145551234"></div>
+
+            <h3 style="margin-top:24px;">Change password</h3>
+            <p style="font-size:12px;color:#6b7280;">Leave blank to keep current password. Current password is required to save any change.</p>
+            <div class="field"><label>Current password</label>
+                <input type="password" name="current_password" autocomplete="current-password"></div>
+            <div class="field"><label>New password</label>
+                <input type="password" name="new_password" minlength="8" autocomplete="new-password"></div>
+            <div class="field"><label>Confirm new password</label>
+                <input type="password" name="confirm_password" minlength="8" autocomplete="new-password"></div>
+
+            <button class="btn-primary" type="submit" style="margin-top:16px;">Save changes</button>
+        </form>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+        <h3>Two-Factor Authentication</h3>
+        <p><strong>Status:</strong> {totp_badge}</p>
+        <p><a class="btn-primary" href="/settings/2fa" style="display:inline-block;text-decoration:none;">{totp_btn_label}</a></p>
+    </div>
+
+    <p style="margin-top:20px;"><a href="/">&larr; Back</a></p>
+    """
+    return page_layout("Profile", inner, user=user, lang=lang)
+
+
 # ---------------------------------------------------------------------------
 # Bank feed (Plaid) pages
 # ---------------------------------------------------------------------------
@@ -11386,6 +11446,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_2fa_settings(user, flash=flash, flash_error=flash_error, lang=lang))
                 return
 
+            if path == "/settings/profile":
+                with open_db() as conn:
+                    row = conn.execute(
+                        "SELECT * FROM dashboard_users WHERE username=?",
+                        (user["username"],),
+                    ).fetchone()
+                profile_user = dict(row) if row else user
+                self._send_html(render_profile_page(profile_user, flash=flash,
+                                                    flash_error=flash_error, lang=lang))
+                return
+
             if path == "/bank/connect":
                 self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error, lang=lang))
                 return
@@ -12807,6 +12878,63 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     )
                     conn.commit()
                 self._flash_redirect("/settings/2fa", flash="Two-factor authentication enabled.")
+                return
+
+            # --- Profile save ---
+            if path == "/settings/profile/save":
+                display_name = form.get("display_name", "").strip()
+                email = form.get("email", "").strip()
+                language = form.get("language", "fr").strip()
+                if language not in ("fr", "en"):
+                    language = "fr"
+                whatsapp_number = form.get("whatsapp_number", "").strip()
+                current_pw = form.get("current_password", "")
+                new_pw = form.get("new_password", "")
+                confirm_pw = form.get("confirm_password", "")
+
+                with open_db() as conn:
+                    row = conn.execute(
+                        "SELECT * FROM dashboard_users WHERE username=?",
+                        (user["username"],),
+                    ).fetchone()
+                    if not row or not verify_password(current_pw, row["password_hash"]):
+                        profile_user = dict(row) if row else user
+                        profile_user.update({
+                            "display_name": display_name or profile_user.get("display_name"),
+                            "email": email or profile_user.get("email"),
+                            "language": language,
+                            "whatsapp_number": whatsapp_number or profile_user.get("whatsapp_number"),
+                        })
+                        self._send_html(render_profile_page(
+                            profile_user,
+                            flash_error="Current password is required and must be correct.",
+                            lang=lang))
+                        return
+
+                    new_hash = row["password_hash"]
+                    if new_pw or confirm_pw:
+                        if new_pw != confirm_pw:
+                            self._send_html(render_profile_page(
+                                dict(row),
+                                flash_error="New password and confirmation do not match.",
+                                lang=lang))
+                            return
+                        if len(new_pw) < 8:
+                            self._send_html(render_profile_page(
+                                dict(row),
+                                flash_error="New password must be at least 8 characters.",
+                                lang=lang))
+                            return
+                        new_hash = hash_password(new_pw)
+
+                    conn.execute(
+                        "UPDATE dashboard_users SET display_name=?, email=?, language=?, "
+                        "whatsapp_number=?, password_hash=? WHERE username=?",
+                        (display_name or None, email or None, language,
+                         whatsapp_number or None, new_hash, user["username"]),
+                    )
+                    conn.commit()
+                self._flash_redirect("/settings/profile", flash="Profile updated.")
                 return
 
             # --- 2FA disable ---
