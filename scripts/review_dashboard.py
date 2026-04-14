@@ -8876,7 +8876,8 @@ def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str 
 # ---------------------------------------------------------------------------
 
 def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str = "",
-                        lang: str = "fr", client_code: str = "") -> str:
+                        lang: str = "fr", client_code: str = "",
+                        plaid_configured: bool = True) -> str:
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
     cc_js = json.dumps(client_code)
@@ -12211,17 +12212,34 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             if path == "/bank/connect":
                 client_code = qs.get("client", [""])[0].strip()
+                plaid_configured = bool(os.environ.get("PLAID_CLIENT_ID")
+                                        and os.environ.get("PLAID_SECRET"))
+                if not plaid_configured:
+                    flash_error = flash_error or "Plaid credentials missing: set PLAID_CLIENT_ID and PLAID_SECRET in .env"
                 self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error,
-                                                     lang=lang, client_code=client_code))
+                                                     lang=lang, client_code=client_code,
+                                                     plaid_configured=plaid_configured))
                 return
 
             if path == "/bank/link_token":
+                client_id = os.environ.get("PLAID_CLIENT_ID", "").strip()
+                secret = os.environ.get("PLAID_SECRET", "").strip()
+                if not client_id or not secret:
+                    self._send_json({"link_token": "",
+                                     "error": "Plaid credentials not configured"}, status=200)
+                    return
                 try:
                     from src.integrations.plaid_client import create_link_token
                     client_code = qs.get("client", [""])[0].strip() or "default"
                     token = create_link_token(client_code, user["username"])
+                    if not token:
+                        self._send_json({"link_token": "",
+                                         "error": "Empty token from Plaid"}, status=200)
+                        return
                     self._send_json({"link_token": token})
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     self._send_json({"link_token": "", "error": str(e)}, status=200)
                 return
 
