@@ -36,10 +36,10 @@ _INSTRUCTIONS_EN = "Scan to submit your documents"
 
 
 def _build_upload_url(portal_base_url: str, client_code: str) -> str:
-    """Return the direct upload URL for a client."""
+    """Return the direct upload URL for a client (public, no login)."""
     base = portal_base_url.rstrip("/")
     encoded = urllib.parse.quote(client_code, safe="")
-    return f"{base}/?client_code={encoded}"
+    return f"{base}/upload?client_code={encoded}"
 
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

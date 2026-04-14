@@ -37,11 +37,11 @@ from src.integrations.qr_generator import (
 class TestBuildUploadUrl:
     def test_basic(self):
         url = _build_upload_url("http://127.0.0.1:8788", "ACME")
-        assert url == "http://127.0.0.1:8788/?client_code=ACME"
+        assert url == "http://127.0.0.1:8788/upload?client_code=ACME"
 
     def test_trailing_slash_stripped(self):
         url = _build_upload_url("http://127.0.0.1:8788/", "ACME")
-        assert url == "http://127.0.0.1:8788/?client_code=ACME"
+        assert url == "http://127.0.0.1:8788/upload?client_code=ACME"
 
     def test_special_chars_encoded(self):
         url = _build_upload_url("http://example.com", "Le Café & Co")

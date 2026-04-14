@@ -188,6 +188,15 @@ ROLE_CONFIG: dict[str, dict[str, Any]] = {
         "can_post": False,
         "can_manage_team": False,
     },
+    # Tier-2 CPA firm administrator. Has manager-equivalent powers but scoped
+    # to their own firm_code by _build_documents_where + firm filters.
+    "firm_admin": {
+        "can_view_all_clients": True,
+        "can_view_all_assignments": True,
+        "can_assign": True,
+        "can_post": True,
+        "can_manage_team": True,
+    },
 }
 
 
@@ -580,6 +589,47 @@ def bootstrap_schema() -> None:
         if "whatsapp_number" not in user_cols:
             conn.execute("ALTER TABLE dashboard_users ADD COLUMN whatsapp_number TEXT")
             conn.commit()
+        if "firm_code" not in user_cols:
+            conn.execute("ALTER TABLE dashboard_users ADD COLUMN firm_code TEXT")
+            # Existing users (owner + legacy staff) belong to the OWNER firm.
+            conn.execute("UPDATE dashboard_users SET firm_code='OWNER' WHERE firm_code IS NULL OR firm_code=''")
+            conn.commit()
+
+        # CPA firms (tier 2). 'OWNER' is reserved for the platform owner.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS firms (
+                firm_code     TEXT PRIMARY KEY,
+                firm_name     TEXT NOT NULL,
+                contact_email TEXT,
+                contact_phone TEXT,
+                language      TEXT DEFAULT 'fr',
+                plan          TEXT DEFAULT 'basic',
+                active        INTEGER DEFAULT 1,
+                created_at    TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "INSERT OR IGNORE INTO firms (firm_code, firm_name, language, plan) VALUES ('OWNER','OtoCPA (Owner)','fr','owner')"
+        )
+        conn.commit()
+
+        # Clients firm_code (tier 3 belongs to a firm).
+        client_cols = {row["name"] for row in conn.execute("PRAGMA table_info(clients)").fetchall()}
+        if "firm_code" not in client_cols:
+            conn.execute("ALTER TABLE clients ADD COLUMN firm_code TEXT")
+            conn.execute("UPDATE clients SET firm_code='OWNER' WHERE firm_code IS NULL OR firm_code=''")
+            conn.commit()
+
+        # Bank connections firm_code (denormalized for fast firm-scoped reads).
+        bank_cols = {row["name"] for row in conn.execute("PRAGMA table_info(bank_connections)").fetchall()}
+        if "firm_code" not in bank_cols:
+            conn.execute("ALTER TABLE bank_connections ADD COLUMN firm_code TEXT")
+            conn.execute(
+                "UPDATE bank_connections SET firm_code = COALESCE("
+                "(SELECT firm_code FROM clients WHERE clients.client_code = bank_connections.client_code), 'OWNER')"
+                " WHERE firm_code IS NULL OR firm_code=''"
+            )
+            conn.commit()
 
         # Pending 2FA tokens (issued after password ok, before TOTP verified)
         conn.execute("""
@@ -969,11 +1019,13 @@ def build_user_context(user: dict[str, Any]) -> dict[str, Any]:
     username = normalize_key(user.get("username") or "")
 
     db_clients = get_portfolio_clients(username) if role == "employee" else []
+    firm_code = normalize_text(user.get("firm_code") or "OWNER") or "OWNER"
 
     return {
         "username": username,
         "display_name": normalize_text(user.get("display_name") or user.get("username")),
         "role": role,
+        "firm_code": firm_code,
         "allowed_clients": db_clients,
         "can_view_all_clients": bool(base["can_view_all_clients"]),
         "can_view_all_assignments": bool(base["can_view_all_assignments"]),
@@ -1240,6 +1292,14 @@ def _build_documents_where(
         placeholders = ",".join("?" for _ in allowed)
         where.append(f"COALESCE(d.client_code, '') IN ({placeholders})")
         params.extend(allowed)
+
+    # Firm-scoped isolation: non-owner roles only see documents belonging to
+    # clients in their firm. Owner (and legacy OWNER firm) sees everything.
+    if ctx.get("role") != "owner" and ctx.get("firm_code") and ctx["firm_code"] != "OWNER":
+        where.append(
+            "d.client_code IN (SELECT client_code FROM clients WHERE firm_code = ?)"
+        )
+        params.append(ctx["firm_code"])
 
     if only_my_queue:
         where.append("COALESCE(da.assigned_to, d.assigned_to, '') = ?")
@@ -7384,12 +7444,18 @@ def _get_qr_clients() -> list[dict[str, Any]]:
 
 
 def _get_portal_base_url() -> str:
-    """Return the client portal base URL from config or fall back to localhost."""
+    """Return the client portal base URL.
+
+    Priority: BASE_URL env var > otocpa.config.json public_portal_url > localhost.
+    """
+    env_url = os.environ.get("BASE_URL", "").strip()
+    if env_url:
+        return env_url.rstrip("/")
     try:
         cfg = json.loads((ROOT_DIR / "otocpa.config.json").read_text(encoding="utf-8"))
         public_url = cfg.get("public_portal_url", "").strip()
         if public_url:
-            return public_url
+            return public_url.rstrip("/")
         port = cfg.get("client_portal", {}).get("port", 8788)
     except Exception:
         port = 8788
@@ -8205,6 +8271,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + _anav("/export", "export_nav_link")
             + _anav("/qr", "qr_nav_link")
             + _lic_link
+            + (f'<a href="/firms" style="color:#e2e8f0;font-size:12px;font-weight:500;text-decoration:none;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.08);white-space:nowrap;">🏢 Firms</a>' if user.get("role") == "owner" else "")
             + (_anav("/license/machines", "lic_machines_nav") if user.get("role") == "owner" else "")
             + (_anav("/admin/updates", "update_nav_link") if user.get("role") == "owner" else "")
             + (_anav("/admin/remote", "remote_nav_link") if user.get("role") == "owner" else "")
@@ -9094,6 +9161,232 @@ def render_user_management(ctx: dict[str, Any], user: dict[str, Any], flash: str
 
 
 # ---------------------------------------------------------------------------
+# CPA firms (owner-only)
+# ---------------------------------------------------------------------------
+
+def render_public_upload_page(client_code: str, flash: str = "",
+                              flash_error: str = "", lang: str = "fr") -> str:
+    """Public upload page — no login required. Scanned from client QR code."""
+    client_name = ""
+    firm_name = ""
+    if client_code:
+        try:
+            with open_db() as conn:
+                row = conn.execute(
+                    "SELECT c.client_name, c.firm_code, f.firm_name "
+                    "FROM clients c LEFT JOIN firms f ON f.firm_code = c.firm_code "
+                    "WHERE c.client_code = ? AND c.active = 1",
+                    (client_code,),
+                ).fetchone()
+            if row:
+                client_name = row.get("client_name") or client_code
+                firm_name = row.get("firm_name") or ""
+        except Exception:
+            pass
+
+    if not client_name:
+        body = (
+            '<div style="max-width:520px;margin:80px auto;background:white;border-radius:12px;'
+            'padding:32px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.08);">'
+            '<h2 style="color:#1F3864;">Invalid link</h2>'
+            '<p style="color:#6b7280;">This upload link is not valid. Please contact your CPA firm.</p>'
+            '</div>'
+        )
+        return (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>OtoCPA · Upload</title>"
+            "<style>body{font-family:system-ui,sans-serif;background:#f3f4f6;margin:0;}</style>"
+            f"</head><body>{body}</body></html>"
+        )
+
+    flash_html = ""
+    if flash:
+        flash_html = (f'<div style="background:#dcfce7;border:1px solid #86efac;color:#065f46;'
+                      f'padding:12px;border-radius:8px;margin-bottom:16px;">{esc(flash)}</div>')
+    if flash_error:
+        flash_html = (f'<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;'
+                      f'padding:12px;border-radius:8px;margin-bottom:16px;">{esc(flash_error)}</div>')
+
+    firm_line = (f'<div style="color:#6b7280;font-size:13px;">{esc(firm_name)}</div>'
+                 if firm_name else "")
+
+    return f"""<!doctype html>
+<html lang="{lang}"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OtoCPA · {esc(client_name)}</title>
+<style>
+body{{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;margin:0;padding:20px;color:#111827;}}
+.card{{max-width:560px;margin:24px auto;background:white;border-radius:12px;padding:28px;box-shadow:0 2px 10px rgba(0,0,0,.06);}}
+h1{{color:#1F3864;margin:0 0 8px;font-size:22px;}}
+.drop{{border:2px dashed #1F3864;border-radius:10px;padding:36px;text-align:center;color:#6b7280;background:#f9fafb;margin:16px 0;cursor:pointer;}}
+input[type=file]{{display:block;width:100%;margin:12px 0;}}
+input[type=tel]{{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;margin:6px 0 14px;font-size:15px;box-sizing:border-box;}}
+button{{background:#1F3864;color:white;border:none;padding:14px 24px;border-radius:8px;font-size:15px;cursor:pointer;width:100%;font-weight:600;}}
+button:disabled{{opacity:.6;}}
+.muted{{color:#6b7280;font-size:13px;}}
+</style>
+</head><body>
+<div class="card">
+    <h1>📤 Upload documents</h1>
+    <div style="color:#111827;font-weight:600;">{esc(client_name)}</div>
+    {firm_line}
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
+    {flash_html}
+    <form method="POST" action="/upload" enctype="multipart/form-data">
+        <input type="hidden" name="client_code" value="{esc(client_code)}">
+        <div class="drop" id="dz">📁 Drag &amp; drop files here / Glissez vos fichiers ici</div>
+        <input type="file" id="fi" name="files" multiple
+               accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
+        <label class="muted" for="wa">WhatsApp (optional / optionnel)</label>
+        <input type="tel" id="wa" name="whatsapp_number" placeholder="+15145551234">
+        <button type="submit" id="btn">✅ Upload / Téléverser</button>
+    </form>
+    <p class="muted" style="margin-top:16px;text-align:center;">
+        Secure upload · No login required<br>Téléversement sécurisé · Aucun compte requis
+    </p>
+</div>
+<script>
+(function(){{
+ var dz=document.getElementById('dz'),fi=document.getElementById('fi');
+ ['dragenter','dragover'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#e0e7ff';}});}});
+ ['dragleave','drop'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#f9fafb';}});}});
+ dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' file(s) selected';}});
+ dz.addEventListener('click',function(){{fi.click();}});
+ fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' file(s) selected';}});
+ document.querySelector('form').addEventListener('submit',function(){{var b=document.getElementById('btn');b.disabled=true;b.textContent='Uploading...';}});
+}})();
+</script>
+</body></html>"""
+
+
+def render_firms_page(ctx: dict[str, Any], user: dict[str, Any],
+                      flash: str = "", flash_error: str = "",
+                      lang: str = "fr") -> str:
+    with open_db() as conn:
+        firms = [dict(r) for r in conn.execute(
+            "SELECT firm_code, firm_name, contact_email, language, plan, active, created_at "
+            "FROM firms ORDER BY CASE WHEN firm_code='OWNER' THEN 0 ELSE 1 END, firm_name"
+        ).fetchall()]
+        client_counts = {r["firm_code"]: r["n"] for r in conn.execute(
+            "SELECT firm_code, COUNT(*) AS n FROM clients GROUP BY firm_code"
+        ).fetchall()}
+        doc_counts = {r["firm_code"]: r["n"] for r in conn.execute(
+            "SELECT c.firm_code AS firm_code, COUNT(*) AS n FROM documents d "
+            "JOIN clients c ON c.client_code = d.client_code GROUP BY c.firm_code"
+        ).fetchall()}
+        last_activity = {r["firm_code"]: r["last_at"] for r in conn.execute(
+            "SELECT c.firm_code AS firm_code, MAX(COALESCE(d.updated_at,d.created_at)) AS last_at "
+            "FROM documents d JOIN clients c ON c.client_code = d.client_code GROUP BY c.firm_code"
+        ).fetchall()}
+
+    rows = ""
+    for f in firms:
+        code = f["firm_code"]
+        rows += f"""
+        <tr>
+            <td style="color:#2ecc71;font-weight:bold;">{esc(code)}</td>
+            <td style="color:#e0e0e0;">{esc(f.get('firm_name') or '')}</td>
+            <td style="color:#aaa;">{esc(f.get('contact_email') or '')}</td>
+            <td style="color:#e0e0e0;">{esc(f.get('plan') or '')}</td>
+            <td style="color:#e0e0e0;">{int(client_counts.get(code, 0))}</td>
+            <td style="color:#e0e0e0;">{int(doc_counts.get(code, 0))}</td>
+            <td style="color:#aaa;">{esc(last_activity.get(code) or '—')}</td>
+            <td>{'✅' if f.get('active') else '❌'}</td>
+        </tr>"""
+
+    body = f"""
+    <div style="padding:24px;">
+        <a href="/" style="color:#aaa;text-decoration:none;margin-bottom:16px;display:inline-block;">&larr; Back</a>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="color:white;">🏢 CPA Firms</h2>
+            <a href="/firms/new" style="background:#2ecc71;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;">
+                + New firm / Nouveau cabinet
+            </a>
+        </div>
+        <table style="width:100%;border-collapse:collapse;background:#1a2e4a;border-radius:8px;">
+            <thead><tr style="background:#0d1b2a;">
+                <th style="color:#aaa;padding:12px;text-align:left;">Code</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Firm</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Email</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Plan</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Clients</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Docs</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Last activity</th>
+                <th style="color:#aaa;padding:12px;text-align:left;">Active</th>
+            </tr></thead>
+            <tbody>{rows}</tbody>
+        </table>
+    </div>
+    """
+    return page_layout("CPA Firms", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_firm_form(ctx: dict[str, Any], user: dict[str, Any],
+                     flash: str = "", flash_error: str = "",
+                     lang: str = "fr") -> str:
+    body = f"""
+    <div style="padding:24px;max-width:640px;">
+        <a href="/firms" style="color:#aaa;text-decoration:none;">&larr; Firms</a>
+        <h2 style="color:white;">🏢 New CPA firm / Nouveau cabinet</h2>
+        <form method="POST" action="/firms/save" style="display:flex;flex-direction:column;gap:12px;">
+            <label style="color:#e0e0e0;">Firm code (short, unique — e.g. BOLDUC) *
+                <input type="text" name="firm_code" required
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Firm name *
+                <input type="text" name="firm_name" required
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Contact email
+                <input type="email" name="contact_email"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Contact phone
+                <input type="text" name="contact_phone"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Language
+                <select name="language" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+                    <option value="fr">Français</option>
+                    <option value="en">English</option>
+                </select>
+            </label>
+            <label style="color:#e0e0e0;">Plan
+                <select name="plan" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+                    <option value="basic">Basic</option>
+                    <option value="pro">Pro</option>
+                    <option value="enterprise">Enterprise</option>
+                </select>
+            </label>
+            <hr style="border-color:#2c3e50;">
+            <h3 style="color:white;margin:0;">Firm admin login</h3>
+            <label style="color:#e0e0e0;">Username *
+                <input type="text" name="admin_username" required
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Password * (leave blank to auto-generate)
+                <input type="text" name="admin_password"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <label style="color:#e0e0e0;">Display name
+                <input type="text" name="admin_display_name"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <div style="display:flex;gap:12px;margin-top:8px;">
+                <button type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;">
+                    ✅ Create firm
+                </button>
+                <a href="/firms" style="background:#64748b;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">Cancel</a>
+            </div>
+        </form>
+    </div>
+    """
+    return page_layout("New firm", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # Home page
 # ---------------------------------------------------------------------------
 
@@ -9314,13 +9607,22 @@ def render_communications(
 def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = '', flash_error: str = '',
                         lang: str = 'fr') -> str:
+    firm_filter = ctx.get("firm_code") if ctx.get("role") != "owner" else None
     with open_db() as conn:
-        clients = conn.execute('''
-            SELECT client_code, client_name, contact_email,
-                   language, active, whatsapp_number
-            FROM clients
-            ORDER BY client_code
-        ''').fetchall()
+        if firm_filter and firm_filter != "OWNER":
+            clients = conn.execute('''
+                SELECT client_code, client_name, contact_email,
+                       language, active, whatsapp_number
+                FROM clients WHERE firm_code = ?
+                ORDER BY client_code
+            ''', (firm_filter,)).fetchall()
+        else:
+            clients = conn.execute('''
+                SELECT client_code, client_name, contact_email,
+                       language, active, whatsapp_number
+                FROM clients
+                ORDER BY client_code
+            ''').fetchall()
         # Fetch all WhatsApp numbers in one query, group by client_code.
         wa_by_client: dict[str, list[sqlite3.Row]] = {}
         try:
@@ -11764,6 +12066,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_privacy_page())
                 return
 
+            # Public client upload page — no login. Scanned from client QR code.
+            if path == "/upload":
+                upload_client = qs.get("client_code", [""])[0].strip()
+                lang_qs = qs.get("lang", [""])[0]
+                upload_lang = lang_qs if lang_qs in ("fr", "en") else "fr"
+                self._send_html(render_public_upload_page(
+                    upload_client, flash=flash, flash_error=flash_error, lang=upload_lang))
+                return
+
             user = get_session_user(self)
             if not user:
                 self._redirect("/login")
@@ -11915,13 +12226,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/bank/feeds":
+                firm_filter = ctx.get("firm_code") if ctx.get("role") != "owner" else None
                 with open_db() as conn:
-                    conns = [dict(r) for r in conn.execute(
-                        "SELECT * FROM bank_connections WHERE active=1 ORDER BY created_at DESC"
-                    ).fetchall()]
-                    tx_rows = [dict(r) for r in conn.execute(
-                        "SELECT * FROM bank_transactions ORDER BY date DESC LIMIT 500"
-                    ).fetchall()]
+                    if firm_filter and firm_filter != "OWNER":
+                        conns = [dict(r) for r in conn.execute(
+                            "SELECT * FROM bank_connections WHERE active=1 AND firm_code=? ORDER BY created_at DESC",
+                            (firm_filter,),
+                        ).fetchall()]
+                        tx_rows = [dict(r) for r in conn.execute(
+                            "SELECT bt.* FROM bank_transactions bt "
+                            "JOIN clients c ON c.client_code = bt.client_code "
+                            "WHERE c.firm_code=? ORDER BY bt.date DESC LIMIT 500",
+                            (firm_filter,),
+                        ).fetchall()]
+                    else:
+                        conns = [dict(r) for r in conn.execute(
+                            "SELECT * FROM bank_connections WHERE active=1 ORDER BY created_at DESC"
+                        ).fetchall()]
+                        tx_rows = [dict(r) for r in conn.execute(
+                            "SELECT * FROM bank_transactions ORDER BY date DESC LIMIT 500"
+                        ).fetchall()]
                 tx_by_client: dict[str, list[dict]] = {}
                 for tx in tx_rows:
                     tx_by_client.setdefault(tx.get("client_code") or "(unassigned)", []).append(tx)
@@ -11945,6 +12269,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             if path == "/users":
                 self._send_html(render_user_management(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/firms":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_firms_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/firms/new":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_firm_form(ctx, user, flash, flash_error, lang=lang))
                 return
 
             if path == "/troubleshoot":
@@ -13283,6 +13627,74 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_json(result, status=http_status)
                 return
 
+            # Public client upload (no login). Accepts documents when the
+            # POST body includes a valid client_code for an active client.
+            if path == "/upload" and not get_session_user(self):
+                ct = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ct:
+                    self._flash_redirect("/upload", error="No file uploaded")
+                    return
+                fields, files = _parse_multipart_files(raw, ct)
+                pub_client = normalize_text(fields.get("client_code", "")).strip()
+                pub_wa = (fields.get("whatsapp_number") or "").strip()
+                if not pub_client:
+                    self._flash_redirect("/upload", error="Missing client code")
+                    return
+                with open_db() as conn:
+                    row = conn.execute(
+                        "SELECT client_code FROM clients WHERE client_code=? AND active=1",
+                        (pub_client,),
+                    ).fetchone()
+                if not row:
+                    self._flash_redirect(
+                        f"/upload?client_code={urlquote(pub_client)}",
+                        error="Invalid client",
+                    )
+                    return
+                if not files:
+                    self._flash_redirect(
+                        f"/upload?client_code={urlquote(pub_client)}",
+                        error="No file selected",
+                    )
+                    return
+                from src.engines.ocr_engine import process_file  # noqa: PLC0415
+                ok_count = 0
+                fail_count = 0
+                for fname, fbytes in files:
+                    try:
+                        result = process_file(
+                            fbytes, fname,
+                            client_code=pub_client,
+                            ingest_source="public_upload",
+                            db_path=DB_PATH,
+                        )
+                        if result.get("ok"):
+                            ok_count += 1
+                        else:
+                            fail_count += 1
+                    except Exception:
+                        fail_count += 1
+                if pub_wa:
+                    try:
+                        with open_db() as conn:
+                            conn.execute(
+                                "INSERT OR IGNORE INTO client_whatsapp_numbers "
+                                "(client_code, whatsapp_number, contact_name, active) "
+                                "VALUES (?,?,?,1)",
+                                (pub_client, pub_wa, None),
+                            )
+                            conn.commit()
+                    except Exception:
+                        pass
+                msg = f"{ok_count} document(s) uploaded"
+                if fail_count:
+                    msg += f", {fail_count} failed"
+                self._flash_redirect(
+                    f"/upload?client_code={urlquote(pub_client)}",
+                    flash=msg,
+                )
+                return
+
             # All other POSTs require auth
             user = get_session_user(self)
             if not user:
@@ -13399,12 +13811,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                or (payload.get("client_code") or "").strip())
                 conn_id = secrets.token_hex(16)
                 with open_db() as conn:
+                    client_firm_row = conn.execute(
+                        "SELECT firm_code FROM clients WHERE client_code=?",
+                        (client_code,),
+                    ).fetchone() if client_code else None
+                    client_firm = (client_firm_row.get("firm_code") if client_firm_row else None) or \
+                                  (ctx.get("firm_code") if ctx.get("role") != "owner" else "OWNER") or "OWNER"
                     conn.execute(
                         "INSERT INTO bank_connections (id, client_code, plaid_access_token,"
-                        " plaid_item_id, institution_name, account_name, account_type, active)"
-                        " VALUES (?,?,?,?,?,?,?,1)",
+                        " plaid_item_id, institution_name, account_name, account_type, firm_code, active)"
+                        " VALUES (?,?,?,?,?,?,?,?,1)",
                         (conn_id, client_code, access_token, item_id, institution,
-                         acct.get("name", ""), acct.get("subtype", "")),
+                         acct.get("name", ""), acct.get("subtype", ""), client_firm),
                     )
                     conn.commit()
                 self._send_json({"ok": True, "id": conn_id})
@@ -14107,6 +14525,53 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     move_client_to_user(client_code, from_user, to_user, ctx["username"])
                 self._flash_redirect("/portfolios",
                     flash=f"{client_code} {t('flash_moved_to', lang)} {to_user}")
+                return
+
+            # --- Firms: create new CPA firm + firm_admin user ---
+            if path == "/firms/save":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                firm_code = normalize_text(form.get("firm_code", "")).strip().upper()
+                firm_name = form.get("firm_name", "").strip()
+                admin_username = normalize_text(form.get("admin_username", "")).strip()
+                admin_password = form.get("admin_password", "").strip()
+                if not firm_code or not firm_name or not admin_username:
+                    self._flash_redirect("/firms/new", error="firm_code, firm_name and admin_username are required")
+                    return
+                if firm_code == "OWNER":
+                    self._flash_redirect("/firms/new", error="OWNER is reserved")
+                    return
+                if not admin_password:
+                    admin_password = secrets.token_urlsafe(9)
+                firm_email = form.get("contact_email", "").strip()
+                firm_phone = form.get("contact_phone", "").strip()
+                firm_lang = form.get("language", "fr").strip()
+                if firm_lang not in ("fr", "en"):
+                    firm_lang = "fr"
+                firm_plan = form.get("plan", "basic").strip() or "basic"
+                display_name = form.get("admin_display_name", "").strip() or firm_name
+                try:
+                    with open_db() as conn:
+                        conn.execute(
+                            "INSERT INTO firms (firm_code, firm_name, contact_email, contact_phone, language, plan, active)"
+                            " VALUES (?,?,?,?,?,?,1)",
+                            (firm_code, firm_name, firm_email, firm_phone, firm_lang, firm_plan),
+                        )
+                        conn.execute(
+                            "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, language, firm_code, must_reset_password, created_at)"
+                            " VALUES (?,?,?,?,1,?,?,1,?)",
+                            (admin_username, hash_password(admin_password), "firm_admin",
+                             display_name, firm_lang, firm_code, utc_now_iso()),
+                        )
+                        conn.commit()
+                except sqlite3.IntegrityError as e:
+                    self._flash_redirect("/firms/new", error=f"Duplicate firm_code or username: {e}")
+                    return
+                self._flash_redirect(
+                    "/firms",
+                    flash=f"Firm {firm_code} created. Login: {admin_username} / {admin_password}",
+                )
                 return
 
             # User management routes
@@ -15669,12 +16134,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     language = "fr"
                 whatsapp_number = form.get("whatsapp_number", "").strip()
                 active = 1 if form.get("active") else 0
+                # Stamp firm_code: firm_admins save under their firm; owner
+                # keeps the existing firm_code (or defaults to OWNER for new).
+                client_firm = (ctx.get("firm_code") or "OWNER") if ctx.get("role") != "owner" else "OWNER"
                 with open_db() as conn:
+                    existing = conn.execute(
+                        "SELECT firm_code FROM clients WHERE client_code = ?",
+                        (client_code,),
+                    ).fetchone()
+                    if existing and existing.get("firm_code"):
+                        client_firm = existing["firm_code"]
                     conn.execute('''
                         INSERT OR REPLACE INTO clients
-                            (client_code, client_name, contact_email, language, active, whatsapp_number)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (client_code, client_name, contact_email, language, active, whatsapp_number))
+                            (client_code, client_name, contact_email, language, active, whatsapp_number, firm_code)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ''', (client_code, client_name, contact_email, language, active, whatsapp_number, client_firm))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
                 return
