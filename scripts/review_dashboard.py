@@ -302,22 +302,61 @@ def urlquote(value: Any) -> str:
     return urllib.parse.quote("" if value is None else str(value), safe="")
 
 
-def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, int]:
-    """Save Plaid transactions to bank_transactions and auto-match against documents.
+def _match_transaction_to_document(conn, client_code, amount, date, merchant_name):
+    """Find best candidate document for a bank transaction.
 
-    Matching rule: same client_code, amount within $0.01, date within 7 days,
-    vendor name similar to merchant_name (case-insensitive substring either way).
+    Amount within $0.02, date within 7 days, not already matched/ignored.
+    When multiple candidates, prefer one whose vendor shares a 3+ letter word
+    with the merchant name; otherwise fall back to the first candidate.
+    """
+    from datetime import datetime, timedelta
+    import re
+
+    try:
+        txn_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except Exception:
+        return None
+
+    date_from = (txn_date - timedelta(days=7)).isoformat()
+    date_to = (txn_date + timedelta(days=7)).isoformat()
+
+    candidates = conn.execute('''
+        SELECT document_id, vendor, amount, document_date
+        FROM documents
+        WHERE client_code = ?
+        AND ABS(amount - ?) < 0.02
+        AND document_date BETWEEN ? AND ?
+        AND matched_bank_transaction IS NULL
+        AND review_status != 'Ignored'
+    ''', (client_code, abs(amount), date_from, date_to)).fetchall()
+
+    if not candidates:
+        return None
+
+    if len(candidates) == 1:
+        return candidates[0][0]
+
+    merchant_lower = (merchant_name or '').lower()
+    merchant_words = set(re.findall(r'[a-z]{3,}', merchant_lower))
+    for doc_id, vendor, _doc_amount, _doc_date in candidates:
+        vendor_lower = (vendor or '').lower()
+        vendor_words = set(re.findall(r'[a-z]{3,}', vendor_lower))
+        if merchant_words & vendor_words:
+            return doc_id
+
+    return candidates[0][0]
+
+
+def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, int]:
+    """Save Plaid transactions and auto-match to documents.
+
+    Uses _match_transaction_to_document for candidate selection. Updates
+    documents.matched_bank_transaction and bank_transactions.matched_document_id.
     Returns (inserted_count, matched_count).
     """
-    import datetime as _dt
     inserted = 0
     matched = 0
     with open_db() as conn:
-        docs = [dict(r) for r in conn.execute(
-            "SELECT document_id, vendor, amount, document_date FROM documents "
-            "WHERE client_code=?", (client_code,)
-        ).fetchall()]
-
         for tx in plaid_txs:
             plaid_tx_id = getattr(tx, "transaction_id", None) or ""
             if not plaid_tx_id:
@@ -336,40 +375,20 @@ def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, in
             account_id = getattr(tx, "account_id", "") or ""
             pending = 1 if getattr(tx, "pending", False) else 0
 
-            # Try to match to a document
-            match_doc_id = None
-            try:
-                tx_date_obj = _dt.date.fromisoformat(tx_date_str) if tx_date_str else None
-            except ValueError:
-                tx_date_obj = None
-            merchant_lc = (merchant or description).lower().strip()
-            for d in docs:
-                d_amt = d.get("amount")
-                if d_amt is None:
-                    continue
-                if abs(float(d_amt) - tx_amount) > 0.01 and abs(float(d_amt) + tx_amount) > 0.01:
-                    continue
-                d_date_str = d.get("document_date") or ""
-                try:
-                    d_date = _dt.date.fromisoformat(d_date_str[:10]) if d_date_str else None
-                except ValueError:
-                    d_date = None
-                if tx_date_obj and d_date and abs((tx_date_obj - d_date).days) > 7:
-                    continue
-                vendor_lc = (d.get("vendor") or "").lower().strip()
-                if vendor_lc and merchant_lc and (vendor_lc in merchant_lc or merchant_lc in vendor_lc):
-                    match_doc_id = d.get("document_id")
-                    break
-                # If no vendor text available, accept match on amount+date alone
-                if not vendor_lc or not merchant_lc:
-                    match_doc_id = d.get("document_id")
-                    break
+            match_doc_id = _match_transaction_to_document(
+                conn, client_code, tx_amount, tx_date_str, merchant or description,
+            )
 
             if existing:
-                if match_doc_id and not existing.get("matched_document_id"):
+                tx_row_id = existing["id"]
+                if match_doc_id and not existing["matched_document_id"]:
                     conn.execute(
                         "UPDATE bank_transactions SET matched_document_id=?, reconciled=1 WHERE id=?",
-                        (match_doc_id, existing["id"]),
+                        (match_doc_id, tx_row_id),
+                    )
+                    conn.execute(
+                        "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
+                        (tx_row_id, match_doc_id),
                     )
                     matched += 1
                 continue
@@ -386,6 +405,10 @@ def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, in
             )
             inserted += 1
             if match_doc_id:
+                conn.execute(
+                    "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
+                    (row_id, match_doc_id),
+                )
                 matched += 1
         conn.commit()
     return inserted, matched
@@ -562,7 +585,8 @@ def bootstrap_schema() -> None:
 
         # Add columns to documents if missing
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
-        for col in ["assigned_to", "manual_hold_reason", "manual_hold_by", "manual_hold_at"]:
+        for col in ["assigned_to", "manual_hold_reason", "manual_hold_by", "manual_hold_at",
+                    "matched_bank_transaction"]:
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
         conn.commit()
@@ -8878,7 +8902,8 @@ def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str 
 
 def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str = "",
                         lang: str = "fr", client_code: str = "",
-                        plaid_configured: bool = True) -> str:
+                        plaid_configured: bool = True,
+                        clients: list | None = None) -> str:
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
     cc_js = json.dumps(client_code)
@@ -8886,17 +8911,36 @@ def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str 
     client_label = f" for <strong>{esc(client_code)}</strong>" if client_code else ""
     back_link = (f'<a href="/clients/edit?code={urlquote(client_code)}">&larr; Back to client</a>'
                  if client_code else '<a href="/bank/feeds">View connected accounts &rarr;</a>')
+
+    selector_html = ""
+    if not client_code:
+        opts = '<option value="">Select client...</option>'
+        for cl in (clients or []):
+            opts += (f'<option value="{esc(cl["client_code"])}">'
+                     f'{esc(cl["client_code"])} - {esc(cl.get("client_name") or cl["client_code"])}</option>')
+        selector_html = (
+            '<div style="margin:12px 0;">'
+            '<label for="client-select">Client: </label>'
+            f'<select id="client-select" name="client_code" style="padding:4px 8px;">{opts}</select>'
+            '</div>'
+        )
+
     inner = f"""
     <div class="card">
         <h2>Connect Bank Account{client_label}</h2>
         {flash_html}{err_html}
         <p>Connect a bank account via Plaid to automatically import transactions.</p>
+        {selector_html}
         <button id="connect-btn" class="btn-primary" style="margin-top:12px;">Connect Bank Account</button>
         <p style="margin-top:20px;">{back_link}</p>
     </div>
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <script>
-    const CLIENT_CODE = {cc_js};
+    let CLIENT_CODE = {cc_js};
+    const sel = document.getElementById('client-select');
+    if (sel) {{
+      sel.addEventListener('change', () => {{ CLIENT_CODE = sel.value; }});
+    }}
     fetch('/bank/link_token' + (CLIENT_CODE ? ('?client=' + encodeURIComponent(CLIENT_CODE)) : ''))
       .then(r => r.json())
       .then(data => {{
@@ -8931,17 +8975,32 @@ def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str 
 
 
 def render_bank_feeds(user: dict[str, Any], connections: list, tx_by_client: dict,
-                       flash: str = "", flash_error: str = "", lang: str = "fr") -> str:
+                       flash: str = "", flash_error: str = "", lang: str = "fr",
+                       clients: list | None = None) -> str:
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    clients = clients or []
     conn_rows = ""
     for c in connections:
         last_sync = c.get("last_sync") or "Never"
         cc = c.get("client_code") or ""
+        client_options = '<option value="">— unassigned —</option>'
+        for cl in clients:
+            sel = " selected" if cl["client_code"] == cc else ""
+            client_options += (
+                f'<option value="{esc(cl["client_code"])}"{sel}>'
+                f'{esc(cl["client_code"])} - {esc(cl.get("client_name") or cl["client_code"])}</option>'
+            )
+        assign_form = (
+            f"<form method='POST' action='/bank/assign' style='display:flex;gap:4px;align-items:center;'>"
+            f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
+            f"<select name='client_code' style='padding:2px 4px;font-size:12px;'>{client_options}</select>"
+            f"<button type='submit' style='padding:2px 8px;'>Assign</button></form>"
+        )
         conn_rows += (
             f"<tr><td>{esc(c.get('institution_name') or '')}</td>"
             f"<td>{esc(c.get('account_name') or '')}</td>"
-            f"<td>{esc(cc)}</td>"
+            f"<td>{assign_form}</td>"
             f"<td>{esc(last_sync)}</td>"
             f"<td>"
             f"<form method='POST' action='/bank/sync?client={urlquote(cc)}' style='display:inline;'>"
@@ -12217,9 +12276,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                         and os.environ.get("PLAID_SECRET"))
                 if not plaid_configured:
                     flash_error = flash_error or "Plaid credentials missing: set PLAID_CLIENT_ID and PLAID_SECRET in .env"
+                firm_filter = ctx.get("firm_code") if ctx.get("role") != "owner" else None
+                with open_db() as conn:
+                    if firm_filter and firm_filter != "OWNER":
+                        clients_rows = [dict(r) for r in conn.execute(
+                            "SELECT client_code, client_name FROM clients WHERE firm_code=? ORDER BY client_code",
+                            (firm_filter,),
+                        ).fetchall()]
+                    else:
+                        clients_rows = [dict(r) for r in conn.execute(
+                            "SELECT client_code, client_name FROM clients ORDER BY client_code"
+                        ).fetchall()]
                 self._send_html(render_bank_connect(user, flash=flash, flash_error=flash_error,
                                                      lang=lang, client_code=client_code,
-                                                     plaid_configured=plaid_configured))
+                                                     plaid_configured=plaid_configured,
+                                                     clients=clients_rows))
                 return
 
             if path == "/bank/link_token":
@@ -12258,6 +12329,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             "WHERE c.firm_code=? ORDER BY bt.date DESC LIMIT 500",
                             (firm_filter,),
                         ).fetchall()]
+                        clients_rows = [dict(r) for r in conn.execute(
+                            "SELECT client_code, client_name FROM clients WHERE firm_code=? ORDER BY client_code",
+                            (firm_filter,),
+                        ).fetchall()]
                     else:
                         conns = [dict(r) for r in conn.execute(
                             "SELECT * FROM bank_connections WHERE active=1 ORDER BY created_at DESC"
@@ -12265,11 +12340,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         tx_rows = [dict(r) for r in conn.execute(
                             "SELECT * FROM bank_transactions ORDER BY date DESC LIMIT 500"
                         ).fetchall()]
+                        clients_rows = [dict(r) for r in conn.execute(
+                            "SELECT client_code, client_name FROM clients ORDER BY client_code"
+                        ).fetchall()]
                 tx_by_client: dict[str, list[dict]] = {}
                 for tx in tx_rows:
                     tx_by_client.setdefault(tx.get("client_code") or "(unassigned)", []).append(tx)
                 self._send_html(render_bank_feeds(user, conns, tx_by_client, flash=flash,
-                                                  flash_error=flash_error, lang=lang))
+                                                  flash_error=flash_error, lang=lang,
+                                                  clients=clients_rows))
                 return
 
             if path == "/pdf":
@@ -13954,6 +14033,33 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 redir = (f"/clients/edit?code={urlquote(client_code)}"
                          if client_code else "/bank/feeds")
                 self._flash_redirect(redir, flash="Bank account disconnected.")
+                return
+
+            # --- Bank: assign connection to a client ---
+            if path == "/bank/assign":
+                conn_id = form.get("connection_id", "").strip()
+                client_code = form.get("client_code", "").strip()
+                if not conn_id:
+                    self._flash_redirect("/bank/feeds", error="Missing connection_id.")
+                    return
+                with open_db() as conn:
+                    if client_code:
+                        client_firm_row = conn.execute(
+                            "SELECT firm_code FROM clients WHERE client_code=?",
+                            (client_code,),
+                        ).fetchone()
+                        client_firm = (client_firm_row["firm_code"] if client_firm_row else None) or "OWNER"
+                        conn.execute(
+                            "UPDATE bank_connections SET client_code=?, firm_code=? WHERE id=?",
+                            (client_code, client_firm, conn_id),
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE bank_connections SET client_code=? WHERE id=?",
+                            (client_code, conn_id),
+                        )
+                    conn.commit()
+                self._flash_redirect("/bank/feeds", flash="Connection assigned.")
                 return
 
             # --- Bank: manual match transaction to document ---
@@ -16360,6 +16466,41 @@ def main() -> int:
         threading.Thread(target=start_whatsapp, daemon=True, name='WhatsAppWebhook').start()
     except Exception as e:
         print(f'⚠️ WhatsApp server not started: {e}')
+
+    # Nightly bank sync at 2am
+    def nightly_bank_sync():
+        import sqlite3, logging, datetime
+        from dotenv import load_dotenv
+        load_dotenv()
+        try:
+            conn = sqlite3.connect('data/otocpa_agent.db')
+            conn.row_factory = sqlite3.Row
+            connections = conn.execute('SELECT * FROM bank_connections WHERE active = 1').fetchall()
+            logging.info(f'Nightly bank sync: {len(connections)} connections')
+            for bc in connections:
+                try:
+                    from src.integrations.plaid_client import get_transactions
+                    end = datetime.date.today()
+                    start = end - datetime.timedelta(days=30)
+                    txns = get_transactions(bc['plaid_access_token'], start, end)
+                    _save_and_match_bank_txs(bc['client_code'], txns)
+                    conn.execute('UPDATE bank_connections SET last_sync = datetime("now") WHERE id = ?', (bc['id'],))
+                    conn.commit()
+                    logging.info(f'Synced {len(txns)} tx for {bc["client_code"]}')
+                except Exception as e:
+                    logging.error(f'Bank sync failed for {bc["id"]}: {e}')
+            conn.close()
+        except Exception as e:
+            logging.error(f'Nightly bank sync failed: {e}')
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(nightly_bank_sync, 'cron', hour=2, minute=0, id='nightly_bank_sync')
+        scheduler.start()
+        print('✅ Nightly bank sync scheduled at 02:00')
+    except Exception as e:
+        print(f'⚠️ Scheduler not started: {e}')
 
     server = ThreadingHTTPServer((HOST, PORT), ReviewDashboardHandler)
     try:
