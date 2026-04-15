@@ -9384,6 +9384,257 @@ def render_firms_page(ctx: dict[str, Any], user: dict[str, Any],
     return page_layout("CPA Firms", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+def render_signup_page() -> str:
+    return """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>OtoCPA — Commencer / Get Started</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #0d1b2a; color: white; }
+.hero { text-align: center; padding: 60px 24px 40px; }
+.hero h1 { font-size: 48px; color: white; margin-bottom: 16px; }
+.hero p { font-size: 20px; color: #aaa; max-width: 600px; margin: 0 auto; }
+.plans { display: flex; gap: 24px; max-width: 1100px; margin: 40px auto; padding: 0 24px; justify-content: center; flex-wrap: wrap; }
+.plan { background: #1a2e4a; border-radius: 12px; padding: 32px; width: 300px; position: relative; }
+.plan.popular { border: 2px solid #2ecc71; }
+.popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #2ecc71; color: #000; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; }
+.plan h2 { font-size: 24px; margin-bottom: 8px; }
+.plan .price { font-size: 48px; font-weight: bold; color: #2ecc71; margin: 16px 0; }
+.plan .price span { font-size: 18px; color: #aaa; }
+.plan .desc { color: #aaa; margin-bottom: 24px; font-size: 14px; }
+.plan ul { list-style: none; margin-bottom: 32px; }
+.plan ul li { padding: 8px 0; color: #ccc; font-size: 14px; }
+.plan ul li::before { content: "\\2713 "; color: #2ecc71; font-weight: bold; }
+.btn { display: block; width: 100%; padding: 14px; background: #2ecc71; color: #000; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; text-align: center; }
+.btn:hover { background: #27ae60; }
+.btn-outline { background: transparent; border: 2px solid #2ecc71; color: #2ecc71; }
+.btn-outline:hover { background: #2ecc71; color: #000; }
+.annual { text-align: center; color: #aaa; margin: 0 auto 40px; font-size: 16px; }
+.annual strong { color: #2ecc71; }
+footer { text-align: center; padding: 40px; color: #666; font-size: 14px; }
+footer a { color: #666; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>OtoCPA</h1>
+    <p>Automatisation comptable pour les cabinets CPA du Qu&eacute;bec.<br>Accounting automation for Quebec CPA firms.</p>
+</div>
+
+<p class="annual">&#128161; Abonnement annuel : <strong>2 mois gratuits</strong> (payez 10, obtenez 12) / Annual: <strong>2 months free</strong></p>
+
+<div class="plans">
+    <div class="plan">
+        <h2>D&eacute;marrage</h2>
+        <div class="price">$99<span>/mois</span></div>
+        <p class="desc">Pour les CPAs solo et petits cabinets</p>
+        <ul>
+            <li>~300 re&ccedil;us/mois</li>
+            <li>Clients illimit&eacute;s</li>
+            <li>Extraction IA automatique</li>
+            <li>WhatsApp intake</li>
+            <li>Export QuickBooks</li>
+            <li>Relev&eacute;s bancaires</li>
+            <li>Support par courriel</li>
+        </ul>
+        <a href="/signup/checkout?plan=starter" class="btn btn-outline">Commencer / Start</a>
+    </div>
+
+    <div class="plan popular">
+        <div class="popular-badge">&#9733; POPULAIRE</div>
+        <h2>Professionnel</h2>
+        <div class="price">$299<span>/mois</span></div>
+        <p class="desc">Pour la plupart des cabinets CPA</p>
+        <ul>
+            <li>~1,000 re&ccedil;us/mois</li>
+            <li>Clients illimit&eacute;s</li>
+            <li>Extraction IA automatique</li>
+            <li>WhatsApp intake</li>
+            <li>Export QuickBooks</li>
+            <li>Relev&eacute;s bancaires</li>
+            <li>Support prioritaire</li>
+            <li>Tableau de bord avanc&eacute;</li>
+        </ul>
+        <a href="/signup/checkout?plan=pro" class="btn">Commencer / Start</a>
+    </div>
+
+    <div class="plan">
+        <h2>Cabinet</h2>
+        <div class="price">$599<span>/mois</span></div>
+        <p class="desc">Pour les cabinets en croissance</p>
+        <ul>
+            <li>~5,000 re&ccedil;us/mois</li>
+            <li>Clients illimit&eacute;s</li>
+            <li>Extraction IA automatique</li>
+            <li>WhatsApp intake</li>
+            <li>Export QuickBooks</li>
+            <li>Relev&eacute;s bancaires</li>
+            <li>Support prioritaire</li>
+            <li>Onboarding d&eacute;di&eacute;</li>
+            <li>SLA garanti</li>
+        </ul>
+        <a href="/signup/checkout?plan=business" class="btn btn-outline">Commencer / Start</a>
+    </div>
+</div>
+
+<div style="text-align:center; margin-bottom: 40px;">
+    <p style="color:#aaa; margin-bottom: 16px;">Besoin de plus? / Need more?</p>
+    <a href="mailto:contact@otocpa.com" style="color:#2ecc71;">Contactez-nous pour Entreprise / Contact us for Enterprise &rarr;</a>
+</div>
+
+<footer>
+    <p>&copy; 2026 OtoCPA Inc. | <a href="/privacy">Politique de confidentialit&eacute;</a> | Conforme Loi 25 | Donn&eacute;es h&eacute;berg&eacute;es au Canada</p>
+    <p style="margin-top: 8px;">D&eacute;j&agrave; client? <a href="/login" style="color:#2ecc71;">Connexion &rarr;</a></p>
+</footer>
+</body>
+</html>"""
+
+
+def render_signup_success(firm_code: str, admin_username: str, admin_password: str) -> str:
+    fc = html.escape(firm_code or "")
+    un = html.escape(admin_username or "")
+    pw = html.escape(admin_password or "")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Bienvenue chez OtoCPA</title>
+<style>body{{font-family:Arial,sans-serif;background:#0d1b2a;color:white;max-width:640px;margin:60px auto;padding:24px;}}
+.card{{background:#1a2e4a;border-radius:12px;padding:32px;}}
+code{{background:#0d1b2a;padding:4px 8px;border-radius:4px;color:#2ecc71;}}
+.btn{{display:inline-block;background:#2ecc71;color:#000;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:24px;}}
+</style></head><body>
+<div class="card">
+<h1 style="color:#2ecc71;">&#10004; Paiement confirm&eacute; / Payment confirmed</h1>
+<p style="margin:16px 0;">Votre cabinet est pr&ecirc;t. Voici vos identifiants:</p>
+<p><strong>Firm code:</strong> <code>{fc}</code></p>
+<p><strong>Username:</strong> <code>{un}</code></p>
+<p><strong>Password:</strong> <code>{pw}</code></p>
+<p style="color:#f39c12;margin-top:16px;">&#9888; Conservez ces informations. Le mot de passe doit &ecirc;tre chang&eacute; &agrave; la premi&egrave;re connexion.</p>
+<a class="btn" href="/login">Se connecter &rarr;</a>
+</div></body></html>"""
+
+
+def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
+                        flash: str = "", flash_error: str = "",
+                        lang: str = "fr") -> str:
+    firm_code = user.get("firm_code") or ctx.get("firm_code") or ""
+    row = {}
+    if firm_code:
+        with open_db() as conn:
+            r = conn.execute(
+                "SELECT plan, subscription_status, trial_ends_at, stripe_customer_id, billing_email"
+                " FROM firms WHERE firm_code=?",
+                (firm_code,),
+            ).fetchone()
+            row = dict(r) if r else {}
+    plan = html.escape(row.get("plan") or "trial")
+    status = html.escape(row.get("subscription_status") or "trial")
+    trial_end = html.escape(row.get("trial_ends_at") or "")
+    has_customer = bool(row.get("stripe_customer_id"))
+    portal_btn = (
+        '<a href="/billing/portal" class="btn">G&eacute;rer mon abonnement / Manage billing</a>'
+        if has_customer
+        else '<a href="/signup" class="btn">Choisir un plan / Choose a plan</a>'
+    )
+    trial_html = f"<p><strong>Fin de l'essai:</strong> {trial_end}</p>" if trial_end else ""
+    body = f"""
+    <div style="padding:24px;max-width:720px;">
+        <h2 style="color:white;">&#128179; Facturation / Billing</h2>
+        <div class="card" style="background:#1a2e4a;border-radius:12px;padding:24px;margin-top:16px;">
+            <p><strong>Cabinet:</strong> {html.escape(firm_code)}</p>
+            <p><strong>Plan actuel:</strong> {plan}</p>
+            <p><strong>Statut:</strong> {status}</p>
+            {trial_html}
+            <div style="margin-top:24px;">{portal_btn}</div>
+        </div>
+        <style>.btn{{display:inline-block;background:#2ecc71;color:#000;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;}}</style>
+    </div>
+    """
+    return page_layout("Billing", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
+    plan_key = (session.get("metadata") or {}).get("plan", "pro")
+    email = session.get("customer_email") or session.get("customer_details", {}).get("email") or ""
+    customer_id = session.get("customer") or ""
+    subscription_id = session.get("subscription") or ""
+
+    firm_code = (session.get("metadata") or {}).get("firm_code") or ""
+    if not firm_code:
+        firm_code = "CPA" + secrets.token_hex(3).upper()
+    admin_username = email or f"admin_{firm_code.lower()}"
+    admin_password = secrets.token_urlsafe(9)
+    firm_name = email.split("@")[0] if email else firm_code
+
+    with open_db() as conn:
+        existing = conn.execute(
+            "SELECT firm_code FROM firms WHERE stripe_customer_id=?",
+            (customer_id,),
+        ).fetchone()
+        if existing:
+            firm_code = existing["firm_code"]
+            admin_row = conn.execute(
+                "SELECT username FROM dashboard_users WHERE firm_code=? AND role='firm_admin' LIMIT 1",
+                (firm_code,),
+            ).fetchone()
+            admin_username = admin_row["username"] if admin_row else admin_username
+            return firm_code, admin_username, "(existing account)"
+
+        conn.execute(
+            "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
+            " active, stripe_customer_id, stripe_subscription_id, subscription_status)"
+            " VALUES (?,?,?,?,?,?,1,?,?,?)",
+            (firm_code, firm_name, email, email, "fr", plan_key,
+             customer_id, subscription_id, "active"),
+        )
+        conn.execute(
+            "INSERT INTO dashboard_users (username, password_hash, role, display_name, active,"
+            " language, firm_code, must_reset_password, created_at)"
+            " VALUES (?,?,?,?,1,?,?,1,?)",
+            (admin_username, hash_password(admin_password), "firm_admin",
+             firm_name, "fr", firm_code, utc_now_iso()),
+        )
+        conn.commit()
+    return firm_code, admin_username, admin_password
+
+
+def _handle_stripe_event(event: Any) -> None:
+    etype = event.get("type", "") if isinstance(event, dict) else getattr(event, "type", "")
+    data = (event.get("data", {}) if isinstance(event, dict) else event.data).get("object", {})
+    customer_id = data.get("customer") or ""
+    if etype == "checkout.session.completed":
+        try:
+            _provision_firm_from_stripe(data)
+        except Exception:
+            logging.exception("provision firm failed in webhook")
+    elif etype in ("customer.subscription.updated", "customer.subscription.created"):
+        status = data.get("status", "")
+        if customer_id:
+            with open_db() as conn:
+                conn.execute(
+                    "UPDATE firms SET subscription_status=?, stripe_subscription_id=? WHERE stripe_customer_id=?",
+                    (status, data.get("id", ""), customer_id),
+                )
+                conn.commit()
+    elif etype == "customer.subscription.deleted":
+        if customer_id:
+            with open_db() as conn:
+                conn.execute(
+                    "UPDATE firms SET subscription_status='canceled', active=0 WHERE stripe_customer_id=?",
+                    (customer_id,),
+                )
+                conn.commit()
+    elif etype == "invoice.payment_failed":
+        if customer_id:
+            with open_db() as conn:
+                conn.execute(
+                    "UPDATE firms SET subscription_status='past_due' WHERE stripe_customer_id=?",
+                    (customer_id,),
+                )
+                conn.commit()
+
+
 def render_firm_form(ctx: dict[str, Any], user: dict[str, Any],
                      flash: str = "", flash_error: str = "",
                      lang: str = "fr") -> str:
@@ -12136,6 +12387,55 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     upload_client, flash=flash, flash_error=flash_error, lang=upload_lang))
                 return
 
+            # Public Stripe signup pages
+            if path == "/signup":
+                self._send_html(render_signup_page())
+                return
+
+            if path == "/signup/checkout":
+                plan_key = qs.get("plan", [""])[0].strip()
+                try:
+                    from src.integrations import stripe_client as _sc
+                    if plan_key not in _sc.PLANS:
+                        self._redirect("/signup")
+                        return
+                    host = self.headers.get("Host", "otocpa.com")
+                    scheme = "https" if _is_https(self) else "http"
+                    base = f"{scheme}://{host}"
+                    session = _sc.create_checkout_session(
+                        plan_key=plan_key,
+                        firm_code="",
+                        firm_email=qs.get("email", [""])[0] or None,
+                        success_url=f"{base}/signup/success?session_id={{CHECKOUT_SESSION_ID}}",
+                        cancel_url=f"{base}/signup",
+                    )
+                    self._redirect(session.url)
+                except Exception as e:
+                    logging.exception("stripe checkout failed")
+                    self._send_html(
+                        f"<h1>Billing unavailable</h1><p>{html.escape(str(e))}</p>"
+                        f"<p><a href='/signup'>Back</a></p>", status=500)
+                return
+
+            if path == "/signup/success":
+                session_id = qs.get("session_id", [""])[0].strip()
+                if not session_id:
+                    self._redirect("/signup")
+                    return
+                try:
+                    import stripe as _stripe
+                    from src.integrations import stripe_client as _sc  # noqa: F401
+                    sess = _stripe.checkout.Session.retrieve(session_id)
+                    firm_code, admin_username, admin_password = _provision_firm_from_stripe(sess)
+                    self._send_html(render_signup_success(firm_code, admin_username, admin_password))
+                except Exception as e:
+                    logging.exception("signup success failed")
+                    self._send_html(
+                        f"<h1>Error</h1><p>{html.escape(str(e))}</p>"
+                        f"<p>Contact support@otocpa.com with your Stripe receipt.</p>",
+                        status=500)
+                return
+
             user = get_session_user(self)
             if not user:
                 self._redirect("/login")
@@ -12377,6 +12677,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_firms_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/billing":
+                self._send_html(render_billing_page(ctx, user, flash, flash_error, lang=lang))
+                return
+
+            if path == "/billing/portal":
+                firm_code = user.get("firm_code") or ctx.get("firm_code")
+                try:
+                    from src.integrations import stripe_client as _sc
+                    with open_db() as conn:
+                        row = conn.execute(
+                            "SELECT stripe_customer_id FROM firms WHERE firm_code=?",
+                            (firm_code,),
+                        ).fetchone()
+                    cust = row["stripe_customer_id"] if row else None
+                    if not cust:
+                        self._flash_redirect("/billing", error="No Stripe customer on file")
+                        return
+                    host = self.headers.get("Host", "otocpa.com")
+                    scheme = "https" if _is_https(self) else "http"
+                    session = _sc.create_customer_portal_session(cust, f"{scheme}://{host}/billing")
+                    self._redirect(session.url)
+                except Exception as e:
+                    logging.exception("billing portal failed")
+                    self._flash_redirect("/billing", error=str(e))
                 return
 
             if path == "/firms/new":
@@ -13673,6 +13999,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 ])
                 return
 
+            # --- Stripe webhook (no auth) ---
+            if path == "/stripe/webhook":
+                try:
+                    from src.integrations import stripe_client as _sc
+                    sig = self.headers.get("Stripe-Signature", "")
+                    event = _sc.handle_webhook(raw, sig)
+                    _handle_stripe_event(event)
+                    self._send_json({"received": True})
+                except Exception as e:
+                    logging.exception("stripe webhook error")
+                    self._send_json({"error": str(e)}, status=400)
+                return
+
             # --- Logout (no auth required) ---
             if path == "/logout":
                 token = get_token_from_cookie(self)
@@ -14720,12 +15059,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     firm_lang = "fr"
                 firm_plan = form.get("plan", "basic").strip() or "basic"
                 display_name = form.get("admin_display_name", "").strip() or firm_name
+                trial_ends_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
                 try:
                     with open_db() as conn:
                         conn.execute(
-                            "INSERT INTO firms (firm_code, firm_name, contact_email, contact_phone, language, plan, active)"
-                            " VALUES (?,?,?,?,?,?,1)",
-                            (firm_code, firm_name, firm_email, firm_phone, firm_lang, firm_plan),
+                            "INSERT INTO firms (firm_code, firm_name, contact_email, contact_phone, language, plan, active,"
+                            " trial_ends_at, subscription_status, billing_email)"
+                            " VALUES (?,?,?,?,?,?,1,?,?,?)",
+                            (firm_code, firm_name, firm_email, firm_phone, firm_lang, firm_plan,
+                             trial_ends_at, "trial", firm_email),
                         )
                         conn.execute(
                             "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, language, firm_code, must_reset_password, created_at)"
