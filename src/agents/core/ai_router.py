@@ -1042,7 +1042,7 @@ class AIRouter:
     ) -> tuple[str | None, str | None, int]:
         """Returns (result, error, latency_ms).
 
-        Strategy: Anthropic SDK first → OpenRouter fallback.
+        Strategy: DeepSeek V3.2 (AWS Bedrock) first → Anthropic SDK → OpenRouter fallback.
         """
         system_prompt = (
             "You are a precise accounting AI assistant. "
@@ -1051,7 +1051,23 @@ class AIRouter:
             "If the response must be structured data, return valid JSON only."
         )
 
-        # --- Primary: Anthropic SDK ---
+        # --- Primary: DeepSeek V3.2 on AWS Bedrock ---
+        # Text-only tasks; vision tasks skip DeepSeek and fall through.
+        if image_bytes is None and os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+            t0 = time.monotonic()
+            try:
+                from src.engines.deepseek_client import call_deepseek
+                ds_result = call_deepseek(prompt, system=system_prompt)
+                latency_ms = int((time.monotonic() - t0) * 1_000)
+                if isinstance(ds_result, dict) and "text" in ds_result and len(ds_result) == 1:
+                    content = ds_result["text"]
+                else:
+                    content = json.dumps(ds_result, ensure_ascii=False)
+                return content, None, latency_ms
+            except Exception:
+                pass  # fall through to Anthropic
+
+        # --- Secondary: Anthropic SDK ---
         t0 = time.monotonic()
         try:
             content = self._try_anthropic_sdk(

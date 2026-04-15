@@ -1,15 +1,90 @@
-"""Validation-aware AI call wrappers and vendor-consistency memory.
+"""DeepSeek V3.2 (AWS Bedrock) client + validation-aware AI call wrappers.
 
-Despite the historical name, this module does not bind to any single
-provider. ``call_with_validation`` retries any JSON-returning callable
-when the validator rejects its output, appending the error context so
-the model can self-correct on the next attempt.
+``call_deepseek`` invokes DeepSeek V3.2 on AWS Bedrock using a Bedrock
+API bearer token (``AWS_BEARER_TOKEN_BEDROCK``). Returns parsed JSON
+when the model emits JSON, else wraps the raw text under ``{"text": ...}``.
+
+``call_with_validation`` retries any JSON-returning callable when the
+validator rejects its output, appending the error context so the model
+can self-correct on the next attempt.
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
+import re
 import sqlite3
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import requests
+
+
+_DEFAULT_BEDROCK_REGION = "us-west-2"
+_DEFAULT_DEEPSEEK_MODEL = "deepseek.v3-v1:0"
+
+
+def call_deepseek(prompt: str, *, max_tokens: int = 2048,
+                  temperature: float = 0.0, system: Optional[str] = None,
+                  timeout: float = 60.0) -> Dict[str, Any]:
+    """Call DeepSeek V3.2 on AWS Bedrock and return parsed JSON result.
+
+    Uses the Bedrock ``converse`` API with a bearer token
+    (``AWS_BEARER_TOKEN_BEDROCK``). Region / model id are overridable
+    via ``AWS_REGION`` and ``DEEPSEEK_MODEL_ID``.
+
+    If the model's reply contains a JSON object/array it is parsed and
+    returned. Otherwise the raw text is returned as ``{"text": ...}``.
+    """
+    token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip()
+    if not token:
+        raise RuntimeError("AWS_BEARER_TOKEN_BEDROCK not set")
+
+    region = os.environ.get("AWS_REGION", _DEFAULT_BEDROCK_REGION).strip() or _DEFAULT_BEDROCK_REGION
+    model_id = os.environ.get("DEEPSEEK_MODEL_ID", _DEFAULT_DEEPSEEK_MODEL).strip() or _DEFAULT_DEEPSEEK_MODEL
+
+    url = f"https://bedrock-runtime.{region}.amazonaws.com/model/{model_id}/converse"
+    payload: Dict[str, Any] = {
+        "messages": [
+            {"role": "user", "content": [{"text": prompt}]},
+        ],
+        "inferenceConfig": {
+            "maxTokens": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    if system:
+        payload["system"] = [{"text": system}]
+
+    resp = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    try:
+        blocks = data["output"]["message"]["content"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"unexpected Bedrock response shape: {exc}") from exc
+    text = "".join(b.get("text", "") for b in blocks)
+
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
+    match = re.search(r"(\{.*\}|\[.*\])", cleaned, re.DOTALL)
+    if match:
+        try:
+            parsed = json.loads(match.group(1))
+            if isinstance(parsed, dict):
+                return parsed
+            return {"items": parsed, "text": text}
+        except json.JSONDecodeError:
+            pass
+    return {"text": text}
 
 
 def call_with_validation(

@@ -1203,16 +1203,13 @@ def _process_docai_line_items(
     """Process line items extracted by Google DocAI.
 
     DocAI provides exact descriptions and amounts from the receipt image.
-    Claude Haiku classifies GL account and tax code only — no extraction needed.
+    DeepSeek V3.2 (AWS Bedrock) classifies GL account and tax code only.
     Then the standard per-line tax pipeline (place of supply, regime, calculation)
     runs on each line.
     """
-    import anthropic
-    import os
     from dotenv import load_dotenv
     load_dotenv()
 
-    # Ask Claude to classify GL and tax code only
     items_text = '\n'.join([
         f'{i+1}. "{item["description"]}" amount={item["total_price"]}'
         for i, item in enumerate(items)
@@ -1236,20 +1233,19 @@ Return JSON only:
 
     classifications: dict[int, dict] = {}
     try:
-        key = os.environ.get('ANTHROPIC_API_KEY', '')
-        client = anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=1000,
-            messages=[{'role': 'user', 'content': prompt}],
-        )
-        text = msg.content[0].text
-        text = re.sub(r'```json\s*', '', text)
-        text = re.sub(r'```\s*', '', text)
-        for cls in json.loads(text.strip()):
+        from src.engines.deepseek_client import call_deepseek
+        result = call_deepseek(prompt, max_tokens=1000)
+        rows = result.get('items') if isinstance(result, dict) else None
+        if rows is None and isinstance(result, list):
+            rows = result
+        if rows is None and isinstance(result, dict) and 'text' in result:
+            text = re.sub(r'```json\s*', '', result['text'])
+            text = re.sub(r'```\s*', '', text).strip()
+            rows = json.loads(text)
+        for cls in (rows or []):
             classifications[cls['line']] = cls
     except Exception as e:
-        logging.warning(f'Claude classification failed: {e}')
+        logging.warning(f'DeepSeek classification failed: {e}')
 
     # Grocery vendors sell food for home consumption, not restaurant meals.
     # Any 5640 (meals) classification on a grocery receipt is miscategorized.
@@ -1276,7 +1272,7 @@ Return JSON only:
                 gl = '5430'
             # Merchant overlays (e.g. Costco) pre-assign tax_code from
             # on-receipt codes (FP/P/F -> T, no code -> Z); respect that
-            # over Claude's classification.
+            # over the model's classification.
             overlay_tax_code = item.get('tax_code')
             tax_code = overlay_tax_code or cls.get('tax_code', 'T')
             desc_lc = str(item.get('description', '')).lower()

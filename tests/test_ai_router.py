@@ -29,6 +29,13 @@ if str(ROOT) not in sys.path:
 import src.agents.core.ai_router as ai_router
 
 
+@pytest.fixture(autouse=True)
+def _disable_deepseek(monkeypatch):
+    """Tests in this module exercise Claude/OpenRouter paths; disable the
+    DeepSeek primary so it doesn't pre-empt them."""
+    monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
