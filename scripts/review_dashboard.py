@@ -9396,6 +9396,11 @@ body { font-family: Arial, sans-serif; background: #0d1b2a; color: white; }
 .hero { text-align: center; padding: 60px 24px 40px; }
 .hero h1 { font-size: 48px; color: white; margin-bottom: 16px; }
 .hero p { font-size: 20px; color: #aaa; max-width: 600px; margin: 0 auto; }
+.toggle-wrap { text-align: center; margin: 20px auto 0; }
+.toggle { display: inline-flex; background: #1a2e4a; border-radius: 999px; padding: 4px; gap: 4px; }
+.toggle button { background: transparent; color: #aaa; border: none; padding: 10px 24px; border-radius: 999px; font-size: 15px; font-weight: bold; cursor: pointer; }
+.toggle button.active { background: #2ecc71; color: #000; }
+.save-badge { display: inline-block; margin-left: 10px; background: #f39c12; color: #000; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; vertical-align: middle; }
 .plans { display: flex; gap: 24px; max-width: 1100px; margin: 40px auto; padding: 0 24px; justify-content: center; flex-wrap: wrap; }
 .plan { background: #1a2e4a; border-radius: 12px; padding: 32px; width: 300px; position: relative; }
 .plan.popular { border: 2px solid #2ecc71; }
@@ -9403,6 +9408,7 @@ body { font-family: Arial, sans-serif; background: #0d1b2a; color: white; }
 .plan h2 { font-size: 24px; margin-bottom: 8px; }
 .plan .price { font-size: 48px; font-weight: bold; color: #2ecc71; margin: 16px 0; }
 .plan .price span { font-size: 18px; color: #aaa; }
+.plan .savings { color: #f39c12; font-size: 13px; margin: -8px 0 12px; font-weight: bold; min-height: 18px; }
 .plan .desc { color: #aaa; margin-bottom: 24px; font-size: 14px; }
 .plan ul { list-style: none; margin-bottom: 32px; }
 .plan ul li { padding: 8px 0; color: #ccc; font-size: 14px; }
@@ -9411,25 +9417,31 @@ body { font-family: Arial, sans-serif; background: #0d1b2a; color: white; }
 .btn:hover { background: #27ae60; }
 .btn-outline { background: transparent; border: 2px solid #2ecc71; color: #2ecc71; }
 .btn-outline:hover { background: #2ecc71; color: #000; }
-.annual { text-align: center; color: #aaa; margin: 0 auto 40px; font-size: 16px; }
-.annual strong { color: #2ecc71; }
 footer { text-align: center; padding: 40px; color: #666; font-size: 14px; }
 footer a { color: #666; }
+[data-billing="yearly"] .m-only { display: none; }
+[data-billing="monthly"] .y-only { display: none; }
 </style>
 </head>
-<body>
+<body data-billing="monthly">
 
 <div class="hero">
     <h1>OtoCPA</h1>
     <p>Automatisation comptable pour les cabinets CPA du Qu&eacute;bec.<br>Accounting automation for Quebec CPA firms.</p>
+    <div class="toggle-wrap">
+        <div class="toggle" role="tablist">
+            <button id="btn-monthly" class="active" onclick="setBilling('monthly')">Mensuel / Monthly</button>
+            <button id="btn-yearly" onclick="setBilling('yearly')">Annuel / Annual<span class="save-badge">2 mois gratuits</span></button>
+        </div>
+    </div>
 </div>
-
-<p class="annual">&#128161; Abonnement annuel : <strong>2 mois gratuits</strong> (payez 10, obtenez 12) / Annual: <strong>2 months free</strong></p>
 
 <div class="plans">
     <div class="plan">
         <h2>D&eacute;marrage</h2>
-        <div class="price">$99<span>/mois</span></div>
+        <div class="price m-only">$99<span>/mois</span></div>
+        <div class="price y-only">$990<span>/an</span></div>
+        <div class="savings y-only">&#128176; Économisez $198/an</div>
         <p class="desc">Pour les CPAs solo et petits cabinets</p>
         <ul>
             <li>~300 re&ccedil;us/mois</li>
@@ -9440,13 +9452,16 @@ footer a { color: #666; }
             <li>Relev&eacute;s bancaires</li>
             <li>Support par courriel</li>
         </ul>
-        <a href="/signup/checkout?plan=starter" class="btn btn-outline">Commencer / Start</a>
+        <a href="/signup/checkout?plan=starter_monthly" class="btn btn-outline m-only">Commencer / Start</a>
+        <a href="/signup/checkout?plan=starter_yearly" class="btn btn-outline y-only">Commencer / Start</a>
     </div>
 
     <div class="plan popular">
         <div class="popular-badge">&#9733; POPULAIRE</div>
         <h2>Professionnel</h2>
-        <div class="price">$299<span>/mois</span></div>
+        <div class="price m-only">$299<span>/mois</span></div>
+        <div class="price y-only">$2,990<span>/an</span></div>
+        <div class="savings y-only">&#128176; Économisez $598/an</div>
         <p class="desc">Pour la plupart des cabinets CPA</p>
         <ul>
             <li>~1,000 re&ccedil;us/mois</li>
@@ -9458,12 +9473,15 @@ footer a { color: #666; }
             <li>Support prioritaire</li>
             <li>Tableau de bord avanc&eacute;</li>
         </ul>
-        <a href="/signup/checkout?plan=pro" class="btn">Commencer / Start</a>
+        <a href="/signup/checkout?plan=pro_monthly" class="btn m-only">Commencer / Start</a>
+        <a href="/signup/checkout?plan=pro_yearly" class="btn y-only">Commencer / Start</a>
     </div>
 
     <div class="plan">
         <h2>Cabinet</h2>
-        <div class="price">$599<span>/mois</span></div>
+        <div class="price m-only">$599<span>/mois</span></div>
+        <div class="price y-only">$5,990<span>/an</span></div>
+        <div class="savings y-only">&#128176; Économisez $1,198/an</div>
         <p class="desc">Pour les cabinets en croissance</p>
         <ul>
             <li>~5,000 re&ccedil;us/mois</li>
@@ -9476,9 +9494,18 @@ footer a { color: #666; }
             <li>Onboarding d&eacute;di&eacute;</li>
             <li>SLA garanti</li>
         </ul>
-        <a href="/signup/checkout?plan=business" class="btn btn-outline">Commencer / Start</a>
+        <a href="/signup/checkout?plan=business_monthly" class="btn btn-outline m-only">Commencer / Start</a>
+        <a href="/signup/checkout?plan=business_yearly" class="btn btn-outline y-only">Commencer / Start</a>
     </div>
 </div>
+
+<script>
+function setBilling(mode) {
+    document.body.setAttribute('data-billing', mode);
+    document.getElementById('btn-monthly').classList.toggle('active', mode === 'monthly');
+    document.getElementById('btn-yearly').classList.toggle('active', mode === 'yearly');
+}
+</script>
 
 <div style="text-align:center; margin-bottom: 40px;">
     <p style="color:#aaa; margin-bottom: 16px;">Besoin de plus? / Need more?</p>

@@ -13,29 +13,47 @@ logger = logging.getLogger(__name__)
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', '')
 
 PLANS = {
-    'starter': {
+    'starter_monthly': {
         'name': 'Démarrage',
-        'price_id': os.environ.get('STRIPE_PRICE_STARTER', ''),
+        'price_id': os.environ.get('STRIPE_PRICE_STARTER_MONTHLY', ''),
         'amount': 99,
+        'interval': 'month',
         'currency': 'cad',
-        'receipts': 300,
-        'description': 'Pour les CPAs solo et petits cabinets',
     },
-    'pro': {
+    'starter_yearly': {
+        'name': 'Démarrage — Annuel',
+        'price_id': os.environ.get('STRIPE_PRICE_STARTER_YEARLY', ''),
+        'amount': 990,
+        'interval': 'year',
+        'currency': 'cad',
+    },
+    'pro_monthly': {
         'name': 'Professionnel',
-        'price_id': os.environ.get('STRIPE_PRICE_PRO', ''),
+        'price_id': os.environ.get('STRIPE_PRICE_PRO_MONTHLY', ''),
         'amount': 299,
+        'interval': 'month',
         'currency': 'cad',
-        'receipts': 1000,
-        'description': 'Pour la plupart des cabinets',
     },
-    'business': {
-        'name': 'Cabinet',
-        'price_id': os.environ.get('STRIPE_PRICE_BUSINESS', ''),
-        'amount': 599,
+    'pro_yearly': {
+        'name': 'Professionnel — Annuel',
+        'price_id': os.environ.get('STRIPE_PRICE_PRO_YEARLY', ''),
+        'amount': 2990,
+        'interval': 'year',
         'currency': 'cad',
-        'receipts': 5000,
-        'description': 'Pour les cabinets en croissance',
+    },
+    'business_monthly': {
+        'name': 'Cabinet',
+        'price_id': os.environ.get('STRIPE_PRICE_BUSINESS_MONTHLY', ''),
+        'amount': 599,
+        'interval': 'month',
+        'currency': 'cad',
+    },
+    'business_yearly': {
+        'name': 'Cabinet — Annuel',
+        'price_id': os.environ.get('STRIPE_PRICE_BUSINESS_YEARLY', ''),
+        'amount': 5990,
+        'interval': 'year',
+        'currency': 'cad',
     },
 }
 
