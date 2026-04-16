@@ -9542,6 +9542,33 @@ code{{background:#0d1b2a;padding:4px 8px;border-radius:4px;color:#2ecc71;}}
 </div></body></html>"""
 
 
+# Sentinel returned by _provision_firm_from_stripe when the firm/user already
+# exists. render_signup_existing is shown instead of rendering this as a
+# password string.
+EXISTING_ACCOUNT_SENTINEL = "(existing account)"
+
+
+def render_signup_existing(firm_code: str, admin_username: str) -> str:
+    fc = html.escape(firm_code or "")
+    un = html.escape(admin_username or "")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Compte existant / Existing account</title>
+<style>body{{font-family:Arial,sans-serif;background:#0d1b2a;color:white;max-width:640px;margin:60px auto;padding:24px;}}
+.card{{background:#1a2e4a;border-radius:12px;padding:32px;}}
+code{{background:#0d1b2a;padding:4px 8px;border-radius:4px;color:#2ecc71;}}
+.btn{{display:inline-block;background:#2ecc71;color:#000;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:24px;}}
+</style></head><body>
+<div class="card">
+<h1 style="color:#2ecc71;">&#10004; Paiement confirm&eacute; / Payment confirmed</h1>
+<p style="margin:16px 0;">Vous avez d&eacute;j&agrave; un compte OtoCPA. Connectez-vous avec vos identifiants existants.</p>
+<p style="margin:16px 0;">You already have an OtoCPA account. Please log in with your existing credentials.</p>
+<p><strong>Cabinet / Firm:</strong> <code>{fc}</code></p>
+<p><strong>Nom d'utilisateur / Username:</strong> <code>{un}</code></p>
+<p style="color:#f39c12;margin-top:16px;">&#9888; Si vous avez oubli&eacute; votre mot de passe, contactez support@otocpa.com.</p>
+<a class="btn" href="/login">Se connecter / Log in &rarr;</a>
+</div></body></html>"""
+
+
 def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = "", flash_error: str = "",
                         lang: str = "fr") -> str:
@@ -9623,7 +9650,7 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
                 (firm_code,),
             ).fetchone()
             admin_username = admin_row["username"] if admin_row else admin_username
-            return firm_code, admin_username, "(existing account)"
+            return firm_code, admin_username, EXISTING_ACCOUNT_SENTINEL
 
         # Same email paying again with a different Stripe customer_id (common in
         # test mode): the username (= email) would collide with an earlier row.
@@ -9636,7 +9663,7 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
             return (
                 existing_user["firm_code"] or firm_code,
                 existing_user["username"],
-                "(existing account)",
+                EXISTING_ACCOUNT_SENTINEL,
             )
 
         # Defensive: avoid the rare firm_code PK collision when a caller passes
@@ -12492,7 +12519,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     from src.integrations import stripe_client as _sc  # noqa: F401
                     sess = _stripe.checkout.Session.retrieve(session_id)
                     firm_code, admin_username, admin_password = _provision_firm_from_stripe(sess)
-                    self._send_html(render_signup_success(firm_code, admin_username, admin_password))
+                    if admin_password == EXISTING_ACCOUNT_SENTINEL:
+                        self._send_html(render_signup_existing(firm_code, admin_username))
+                    else:
+                        self._send_html(render_signup_success(firm_code, admin_username, admin_password))
                 except Exception as e:
                     logging.exception("signup success failed")
                     self._send_html(
