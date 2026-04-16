@@ -9625,6 +9625,27 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
             admin_username = admin_row["username"] if admin_row else admin_username
             return firm_code, admin_username, "(existing account)"
 
+        # Same email paying again with a different Stripe customer_id (common in
+        # test mode): the username (= email) would collide with an earlier row.
+        # Return the existing account instead of failing on UNIQUE.
+        existing_user = conn.execute(
+            "SELECT username, firm_code FROM dashboard_users WHERE username=? LIMIT 1",
+            (admin_username,),
+        ).fetchone()
+        if existing_user:
+            return (
+                existing_user["firm_code"] or firm_code,
+                existing_user["username"],
+                "(existing account)",
+            )
+
+        # Defensive: avoid the rare firm_code PK collision when a caller passes
+        # metadata.firm_code or the random token happens to clash.
+        while conn.execute(
+            "SELECT 1 FROM firms WHERE firm_code=? LIMIT 1", (firm_code,)
+        ).fetchone():
+            firm_code = "CPA" + secrets.token_hex(3).upper()
+
         conn.execute(
             "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
             " active, stripe_customer_id, stripe_subscription_id, subscription_status)"
