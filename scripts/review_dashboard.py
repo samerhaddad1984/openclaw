@@ -9688,6 +9688,22 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
              firm_name, "fr", firm_code, utc_now_iso()),
         )
         conn.commit()
+
+    # Email is best-effort: signup must not fail if SMTP is down. The success
+    # page still shows credentials regardless.
+    if email:
+        try:
+            from src.integrations.email_client import send_welcome_email
+            send_welcome_email(
+                to_email=email,
+                firm_name=firm_name,
+                firm_code=firm_code,
+                username=admin_username,
+                password=admin_password,
+            )
+        except Exception:
+            logging.exception("welcome email failed")
+
     return firm_code, admin_username, admin_password
 
 
