@@ -73,6 +73,7 @@ def create_checkout_session(plan_key, firm_code, firm_email, success_url, cancel
         success_url=success_url,
         cancel_url=cancel_url,
         customer_email=firm_email,
+        billing_address_collection='required',
         metadata={
             'firm_code': firm_code or '',
             'plan': plan_key,

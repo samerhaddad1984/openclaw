@@ -9581,13 +9581,30 @@ def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
     return page_layout("Billing", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
-def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
-    plan_key = (session.get("metadata") or {}).get("plan", "pro")
-    email = session.get("customer_email") or session.get("customer_details", {}).get("email") or ""
-    customer_id = session.get("customer") or ""
-    subscription_id = session.get("subscription") or ""
+# stripe-python >=8 dropped dict-subclassing on StripeObject, so `.get()` no
+# longer works on objects returned by Session.retrieve / webhook events. This
+# helper reads a field from either a StripeObject or a plain dict.
+def _sv(obj: Any, key: str, default: Any = None) -> Any:
+    if obj is None:
+        return default
+    try:
+        return obj[key] if key in obj else default
+    except Exception:
+        return default
 
-    firm_code = (session.get("metadata") or {}).get("firm_code") or ""
+
+def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
+    metadata = _sv(session, "metadata") or {}
+    plan_key = _sv(metadata, "plan", "pro")
+    email = (
+        _sv(session, "customer_email")
+        or _sv(_sv(session, "customer_details") or {}, "email")
+        or ""
+    )
+    customer_id = _sv(session, "customer") or ""
+    subscription_id = _sv(session, "subscription") or ""
+
+    firm_code = _sv(metadata, "firm_code") or ""
     if not firm_code:
         firm_code = "CPA" + secrets.token_hex(3).upper()
     admin_username = email or f"admin_{firm_code.lower()}"
@@ -9627,21 +9644,21 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
 
 
 def _handle_stripe_event(event: Any) -> None:
-    etype = event.get("type", "") if isinstance(event, dict) else getattr(event, "type", "")
-    data = (event.get("data", {}) if isinstance(event, dict) else event.data).get("object", {})
-    customer_id = data.get("customer") or ""
+    etype = _sv(event, "type", "") or ""
+    data = _sv(_sv(event, "data") or {}, "object") or {}
+    customer_id = _sv(data, "customer") or ""
     if etype == "checkout.session.completed":
         try:
             _provision_firm_from_stripe(data)
         except Exception:
             logging.exception("provision firm failed in webhook")
     elif etype in ("customer.subscription.updated", "customer.subscription.created"):
-        status = data.get("status", "")
+        status = _sv(data, "status", "") or ""
         if customer_id:
             with open_db() as conn:
                 conn.execute(
                     "UPDATE firms SET subscription_status=?, stripe_subscription_id=? WHERE stripe_customer_id=?",
-                    (status, data.get("id", ""), customer_id),
+                    (status, _sv(data, "id", "") or "", customer_id),
                 )
                 conn.commit()
     elif etype == "customer.subscription.deleted":
