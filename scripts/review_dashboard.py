@@ -554,6 +554,108 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Signed set-password / forgot-password links
+# ---------------------------------------------------------------------------
+
+import hmac as _hmac
+
+PASSWORD_LINK_SECRET_FILE = str(ROOT_DIR / "data" / "password_link_secret")
+
+
+def _get_password_link_secret() -> str:
+    if not os.path.exists(PASSWORD_LINK_SECRET_FILE):
+        os.makedirs(os.path.dirname(PASSWORD_LINK_SECRET_FILE), exist_ok=True)
+        with open(PASSWORD_LINK_SECRET_FILE, "w") as f:
+            f.write(secrets.token_urlsafe(48))
+        try:
+            os.chmod(PASSWORD_LINK_SECRET_FILE, 0o600)
+        except Exception:
+            pass
+    with open(PASSWORD_LINK_SECRET_FILE) as f:
+        return f.read().strip()
+
+
+def _generate_password_link(username: str, expires_hours: int = 72) -> str:
+    """Returns signed URL-safe token: base64(username.expiry.hmac)."""
+    expiry = int(time.time()) + (expires_hours * 3600)
+    payload = f"{username}.{expiry}"
+    sig = _hmac.new(
+        _get_password_link_secret().encode(),
+        payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+    token = base64.urlsafe_b64encode(f"{payload}.{sig}".encode()).decode().rstrip("=")
+    return token
+
+
+def _verify_password_link(token: str) -> str | None:
+    """Returns username if token is valid and not expired, else None."""
+    try:
+        padded = token + "=" * (4 - len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded).decode()
+        parts = decoded.rsplit(".", 2)
+        if len(parts) != 3:
+            return None
+        username, expiry, sig = parts
+        if int(expiry) < int(time.time()):
+            return None
+        payload = f"{username}.{expiry}"
+        expected = _hmac.new(
+            _get_password_link_secret().encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).hexdigest()[:32]
+        if not _hmac.compare_digest(sig, expected):
+            return None
+        return username
+    except Exception:
+        return None
+
+
+def _validate_password_strength(new_pw: str, confirm_pw: str) -> str:
+    """Returns an error string, or '' if the password is acceptable."""
+    if not new_pw or len(new_pw) < 10:
+        return "Minimum 10 caract\u00e8res / Minimum 10 characters"
+    if new_pw != confirm_pw:
+        return "Les mots de passe ne correspondent pas / Passwords don't match"
+    if not re.search(r"[A-Za-z]", new_pw):
+        return "Au moins 1 lettre / At least 1 letter"
+    if not re.search(r"[0-9]", new_pw):
+        return "Au moins 1 chiffre / At least 1 digit"
+    return ""
+
+
+_FORGOT_MAX_PER_HOUR = 3
+
+
+def _forgot_rate_limited(identifier: str) -> bool:
+    cutoff = (utc_now() - timedelta(hours=1)).replace(microsecond=0).isoformat()
+    with open_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM forgot_password_attempts"
+            " WHERE identifier=? AND attempted_at >= ?",
+            (identifier, cutoff),
+        ).fetchone()
+        c = row["c"] if row else 0
+    return c >= _FORGOT_MAX_PER_HOUR
+
+
+def _record_forgot_attempt(identifier: str) -> None:
+    with open_db() as conn:
+        conn.execute(
+            "INSERT INTO forgot_password_attempts (identifier, attempted_at) VALUES (?, ?)",
+            (identifier, utc_now_iso()),
+        )
+        # Opportunistic cleanup: drop entries older than 24h.
+        old = (utc_now() - timedelta(hours=24)).replace(microsecond=0).isoformat()
+        conn.execute(
+            "DELETE FROM forgot_password_attempts WHERE attempted_at < ?",
+            (old,),
+        )
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
 # Schema bootstrap
 # ---------------------------------------------------------------------------
 
@@ -674,6 +776,16 @@ def bootstrap_schema() -> None:
                 " WHERE firm_code IS NULL OR firm_code=''"
             )
             conn.commit()
+
+        # Rate limit /forgot requests (prevents enumeration + spam)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS forgot_password_attempts (
+                identifier  TEXT NOT NULL,
+                attempted_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_forgot_identifier ON forgot_password_attempts(identifier)")
+        conn.commit()
 
         # Pending 2FA tokens (issued after password ok, before TOTP verified)
         conn.execute("""
@@ -9470,13 +9582,15 @@ a:hover{color:#16C172;text-decoration:underline}
 # Login page
 # ---------------------------------------------------------------------------
 
-def render_login(flash_error: str = "", lang: str = "fr") -> str:
+def render_login(flash_error: str = "", flash: str = "", lang: str = "fr") -> str:
     err = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    info = f'<div class="flash info">{esc(flash)}</div>' if flash else ""
     switch_lang = "en" if lang == "fr" else "fr"
     switch_label = "English" if lang == "fr" else "Français"
     heading = "Connexion / Login"
     signup_label = "Pas encore client? Créer un compte" if lang == "fr" else "New to OtoCPA? Create an account"
     privacy_label = "Politique de confidentialité" if lang == "fr" else "Privacy policy"
+    forgot_label = "Mot de passe oublié?" if lang == "fr" else "Forgot password?"
     return f"""<!doctype html>
 <html lang="{lang}">
 <head>
@@ -9491,7 +9605,7 @@ def render_login(flash_error: str = "", lang: str = "fr") -> str:
     <div class="auth-card">
         <h1>{heading}</h1>
         <p class="sub">Tableau de bord OtoCPA</p>
-        {err}
+        {info}{err}
         <form method="POST" action="/login" autocomplete="on">
             <input type="hidden" name="lang" value="{lang}">
             <div class="field">
@@ -9505,6 +9619,7 @@ def render_login(flash_error: str = "", lang: str = "fr") -> str:
             <button class="btn-green" type="submit">{esc(t("login_btn", lang))}</button>
         </form>
         <div class="auth-links">
+            <a href="/forgot">{forgot_label}</a>
             <a href="/signup">{signup_label}</a>
             <a href="/privacy">{privacy_label}</a>
             <a href="/login?lang={switch_lang}">{switch_label}</a>
@@ -10745,10 +10860,44 @@ function setBilling(mode) {{
 </html>"""
 
 
-def render_signup_success(firm_code: str, admin_username: str, admin_password: str) -> str:
+def render_signup_success(firm_code: str, admin_username: str,
+                          set_password_url: str = "", email: str = "",
+                          email_sent: bool = False) -> str:
     fc = html.escape(firm_code or "")
     un = html.escape(admin_username or "")
-    pw = html.escape(admin_password or "")
+    url_esc = html.escape(set_password_url or "")
+    email_esc = html.escape(email or "your email")
+
+    if email_sent:
+        email_block = f"""
+        <div class="notice" style="background:rgba(22,193,114,0.08);border-color:rgba(22,193,114,0.35);color:#7AD66A;">
+            &#128231; Un lien de configuration a &eacute;t&eacute; envoy&eacute; &agrave; <strong>{email_esc}</strong>.<br>
+            A setup link was sent to <strong>{email_esc}</strong>.
+        </div>
+        <details style="margin-top:14px;color:#c0d0e0;font-size:13px;">
+            <summary style="cursor:pointer;">Courriel non re&ccedil;u? / Didn't receive the email?</summary>
+            <p style="margin:10px 0 6px;">Copiez ce lien (expire dans 72h) / Copy this link (expires in 72h):</p>
+            <div style="word-break:break-all;padding:10px;background:#081633;border:1px solid #1a2d45;border-radius:8px;font-family:monospace;font-size:12px;color:#7AD66A;">{url_esc}</div>
+            <form method="POST" action="/signup/resend-setup" style="margin-top:10px;">
+                <input type="hidden" name="firm_code" value="{fc}">
+                <button class="btn-outline" type="submit">Renvoyer le courriel / Resend email</button>
+            </form>
+        </details>
+        """
+    else:
+        email_block = f"""
+        <div class="notice">
+            &#9888; Livraison courriel &eacute;chou&eacute;e / Email delivery failed.<br>
+            Utilisez ce lien pour configurer votre mot de passe (expire dans 72h) / Use this link to set your password (expires in 72h):
+        </div>
+        <div style="word-break:break-all;margin:12px 0;padding:12px;background:#081633;border:1px solid #1a2d45;border-radius:8px;font-family:monospace;font-size:12px;color:#7AD66A;">{url_esc}</div>
+        <div style="margin-top:10px;"><a class="btn-green" href="{url_esc}">Configurer mon mot de passe / Set up my password &rarr;</a></div>
+        <form method="POST" action="/signup/resend-setup" style="margin-top:10px;">
+            <input type="hidden" name="firm_code" value="{fc}">
+            <button class="btn-outline" type="submit">Renvoyer le courriel / Resend email</button>
+        </form>
+        """
+
     return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -10797,13 +10946,11 @@ def render_signup_success(firm_code: str, admin_username: str, admin_password: s
                 <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#081633" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </div>
-        <h1>Paiement confirm&eacute; / Payment confirmed</h1>
-        <p class="sub">Votre cabinet est pr&ecirc;t. Voici vos identifiants :</p>
+        <h1>&#10003; Abonnement confirm&eacute; / Subscription confirmed</h1>
+        <p class="sub">Votre cabinet est pr&ecirc;t / Your firm is ready</p>
         <div class="cred-row"><span class="cred-label">Firm code</span><span class="cred-val">{fc}</span></div>
         <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">{un}</span></div>
-        <div class="cred-row"><span class="cred-label">Password</span><span class="cred-val">{pw}</span></div>
-        <div class="notice">&#9888; Conservez ces informations. Le mot de passe doit &ecirc;tre chang&eacute; &agrave; la premi&egrave;re connexion.</div>
-        <div style="margin-top:24px;"><a class="btn-green" href="/login">Se connecter &rarr;</a></div>
+        {email_block}
     </div>
     <div class="public-footer">&copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25</div>
 </div>
@@ -10880,6 +11027,100 @@ def render_signup_existing(firm_code: str, admin_username: str) -> str:
 </body></html>"""
 
 
+def render_set_password_page(token: str, flash_error: str = "") -> str:
+    tok = html.escape(token or "")
+    err = f'<div class="flash error">{html.escape(flash_error)}</div>' if flash_error else ""
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurer mot de passe / Set password</title>
+<style>{PUBLIC_CSS}</style>
+</head>
+<body>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="auth-card">
+        <h1>Configurer votre mot de passe / Set your password</h1>
+        <p class="sub">Minimum 10 caract&egrave;res, au moins 1 chiffre et 1 lettre.<br>
+        Minimum 10 characters, at least 1 digit and 1 letter.</p>
+        {err}
+        <form method="POST" action="/set-password" autocomplete="off">
+            <input type="hidden" name="token" value="{tok}">
+            <div class="field">
+                <label for="f-pw">Nouveau mot de passe / New password</label>
+                <input id="f-pw" type="password" name="new_password" autofocus minlength="10" required>
+            </div>
+            <div class="field">
+                <label for="f-pw2">Confirmer / Confirm</label>
+                <input id="f-pw2" type="password" name="confirm_password" minlength="10" required>
+            </div>
+            <button class="btn-green" type="submit">Enregistrer / Save &rarr;</button>
+        </form>
+    </div>
+    <div class="public-footer">&copy; 2026 OtoCPA Inc.</div>
+</div>
+</body></html>"""
+
+
+def render_set_password_invalid() -> str:
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lien invalide / Invalid link</title>
+<style>{PUBLIC_CSS}</style>
+</head>
+<body>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="auth-card">
+        <h1>Lien invalide ou expir&eacute; / Invalid or expired link</h1>
+        <p class="sub">Ce lien n'est plus valide. Demandez un nouveau lien.<br>
+        This link is no longer valid. Request a new one.</p>
+        <div style="margin-top:22px;"><a class="btn-green" href="/forgot">Demander un nouveau lien / Request new link &rarr;</a></div>
+    </div>
+    <div class="public-footer">&copy; 2026 OtoCPA Inc.</div>
+</div>
+</body></html>"""
+
+
+def render_forgot_password_page(flash: str = "", flash_error: str = "",
+                                lang: str = "fr") -> str:
+    msg_fr = "Entrez votre courriel ou nom d'utilisateur. Si un compte existe, vous recevrez un lien de r&eacute;initialisation."
+    msg_en = "Enter your email or username. If an account exists, you'll receive a reset link."
+    flash_html = f'<div class="flash info">{html.escape(flash)}</div>' if flash else ""
+    err_html = f'<div class="flash error">{html.escape(flash_error)}</div>' if flash_error else ""
+    return f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mot de passe oubli&eacute; / Forgot password</title>
+<style>{PUBLIC_CSS}</style>
+</head>
+<body>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="auth-card">
+        <h1>Mot de passe oubli&eacute; / Forgot password</h1>
+        <p class="sub">{msg_fr}<br>{msg_en}</p>
+        {flash_html}{err_html}
+        <form method="POST" action="/forgot" autocomplete="on">
+            <div class="field">
+                <label for="f-id">Courriel ou nom d'utilisateur / Email or username</label>
+                <input id="f-id" type="text" name="identifier" autofocus required>
+            </div>
+            <button class="btn-green" type="submit">Envoyer / Send &rarr;</button>
+        </form>
+        <div class="auth-links">
+            <a href="/login">&larr; Retour / Back to login</a>
+        </div>
+    </div>
+    <div class="public-footer">&copy; 2026 OtoCPA Inc.</div>
+</div>
+</body></html>"""
+
+
 def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = "", flash_error: str = "",
                         lang: str = "fr") -> str:
@@ -10931,7 +11172,12 @@ def _sv(obj: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
+def _provision_firm_from_stripe(session: Any, base_url: str = "") -> dict[str, Any]:
+    """Create firm + admin user from a Stripe checkout.
+
+    Returns a dict with keys: firm_code, admin_username, set_password_url,
+    email_sent, existing (bool), plan.
+    """
     metadata = _sv(session, "metadata") or {}
     plan_key = _sv(metadata, "plan", "pro")
     email = (
@@ -10946,8 +11192,9 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
     if not firm_code:
         firm_code = "CPA" + secrets.token_hex(3).upper()
     admin_username = email or f"admin_{firm_code.lower()}"
-    admin_password = secrets.token_urlsafe(9)
     firm_name = email.split("@")[0] if email else firm_code
+
+    portal_base = (base_url or _get_portal_base_url()).rstrip("/")
 
     with open_db() as conn:
         existing = conn.execute(
@@ -10961,21 +11208,32 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
                 (firm_code,),
             ).fetchone()
             admin_username = admin_row["username"] if admin_row else admin_username
-            return firm_code, admin_username, EXISTING_ACCOUNT_SENTINEL
+            return {
+                "firm_code": firm_code,
+                "admin_username": admin_username,
+                "set_password_url": "",
+                "email_sent": False,
+                "existing": True,
+                "plan": plan_key,
+                "email": email,
+            }
 
         # Same email paying again with a different Stripe customer_id (common in
         # test mode): the username (= email) would collide with an earlier row.
-        # Return the existing account instead of failing on UNIQUE.
         existing_user = conn.execute(
             "SELECT username, firm_code FROM dashboard_users WHERE username=? LIMIT 1",
             (admin_username,),
         ).fetchone()
         if existing_user:
-            return (
-                existing_user["firm_code"] or firm_code,
-                existing_user["username"],
-                EXISTING_ACCOUNT_SENTINEL,
-            )
+            return {
+                "firm_code": existing_user["firm_code"] or firm_code,
+                "admin_username": existing_user["username"],
+                "set_password_url": "",
+                "email_sent": False,
+                "existing": True,
+                "plan": plan_key,
+                "email": email,
+            }
 
         # Defensive: avoid the rare firm_code PK collision when a caller passes
         # metadata.firm_code or the random token happens to clash.
@@ -10983,6 +11241,9 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
             "SELECT 1 FROM firms WHERE firm_code=? LIMIT 1", (firm_code,)
         ).fetchone():
             firm_code = "CPA" + secrets.token_hex(3).upper()
+
+        # User never logs in with this; they must go through the set-password link.
+        placeholder_pw = secrets.token_urlsafe(32)
 
         conn.execute(
             "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
@@ -10993,29 +11254,40 @@ def _provision_firm_from_stripe(session: Any) -> tuple[str, str, str]:
         )
         conn.execute(
             "INSERT INTO dashboard_users (username, password_hash, role, display_name, active,"
-            " language, firm_code, must_reset_password, created_at)"
-            " VALUES (?,?,?,?,1,?,?,1,?)",
-            (admin_username, hash_password(admin_password), "firm_admin",
-             firm_name, "fr", firm_code, utc_now_iso()),
+            " language, firm_code, email, must_reset_password, created_at)"
+            " VALUES (?,?,?,?,1,?,?,?,1,?)",
+            (admin_username, hash_password(placeholder_pw), "firm_admin",
+             firm_name, "fr", firm_code, email, utc_now_iso()),
         )
         conn.commit()
 
-    # Email is best-effort: signup must not fail if SMTP is down. The success
-    # page still shows credentials regardless.
+    set_pw_token = _generate_password_link(admin_username, expires_hours=72)
+    set_pw_url = f"{portal_base}/set-password?token={set_pw_token}"
+
+    email_sent = False
     if email:
         try:
             from src.integrations.email_client import send_welcome_email
-            send_welcome_email(
+            email_sent = bool(send_welcome_email(
                 to_email=email,
                 firm_name=firm_name,
-                firm_code=firm_code,
                 username=admin_username,
-                password=admin_password,
-            )
+                set_password_url=set_pw_url,
+                plan=plan_key,
+            ))
         except Exception:
             logging.exception("welcome email failed")
+            email_sent = False
 
-    return firm_code, admin_username, admin_password
+    return {
+        "firm_code": firm_code,
+        "admin_username": admin_username,
+        "set_password_url": set_pw_url,
+        "email_sent": email_sent,
+        "existing": False,
+        "plan": plan_key,
+        "email": email,
+    }
 
 
 def _handle_stripe_event(event: Any) -> None:
@@ -13846,7 +14118,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path == "/login":
                 lang_qs = qs.get("lang", [""])[0]
                 lang = lang_qs if lang_qs in ("fr", "en") else self._get_lang_from_cookie()
-                self._send_html(render_login(flash_error, lang=lang))
+                self._send_html(render_login(flash_error, flash=flash, lang=lang))
                 return
 
             if path == "/login/totp":
@@ -13915,17 +14187,44 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     import stripe as _stripe
                     from src.integrations import stripe_client as _sc  # noqa: F401
                     sess = _stripe.checkout.Session.retrieve(session_id)
-                    firm_code, admin_username, admin_password = _provision_firm_from_stripe(sess)
-                    if admin_password == EXISTING_ACCOUNT_SENTINEL:
-                        self._send_html(render_signup_existing(firm_code, admin_username))
+                    host = self.headers.get("Host", "")
+                    scheme = "https" if _is_https(self) else "http"
+                    req_base = f"{scheme}://{host}" if host else ""
+                    result = _provision_firm_from_stripe(sess, base_url=req_base)
+                    if result.get("existing"):
+                        self._send_html(render_signup_existing(
+                            result["firm_code"], result["admin_username"]))
                     else:
-                        self._send_html(render_signup_success(firm_code, admin_username, admin_password))
+                        self._send_html(render_signup_success(
+                            firm_code=result["firm_code"],
+                            admin_username=result["admin_username"],
+                            set_password_url=result["set_password_url"],
+                            email=result.get("email", ""),
+                            email_sent=result.get("email_sent", False),
+                        ))
                 except Exception as e:
                     logging.exception("signup success failed")
                     self._send_html(
                         f"<h1>Error</h1><p>{html.escape(str(e))}</p>"
                         f"<p>Contact support@otocpa.com with your Stripe receipt.</p>",
                         status=500)
+                return
+
+            # Set-password page (from welcome / reset email)
+            if path == "/set-password":
+                token = qs.get("token", [""])[0].strip()
+                username = _verify_password_link(token) if token else None
+                if not username:
+                    self._send_html(render_set_password_invalid(), status=400)
+                    return
+                self._send_html(render_set_password_page(token, flash_error))
+                return
+
+            # Forgot password page
+            if path == "/forgot":
+                lang_qs = qs.get("lang", [""])[0]
+                lang = lang_qs if lang_qs in ("fr", "en") else self._get_lang_from_cookie()
+                self._send_html(render_forgot_password_page(flash=flash, flash_error=flash_error, lang=lang))
                 return
 
             user = get_session_user(self)
@@ -15636,6 +15935,125 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     logging.exception("stripe webhook error")
                     self._send_json({"error": str(e)}, status=400)
+                return
+
+            # --- Set password via signed link (no auth) ---
+            if path == "/set-password":
+                token = form.get("token", "").strip()
+                username = _verify_password_link(token) if token else None
+                if not username:
+                    self._send_html(render_set_password_invalid(), status=400)
+                    return
+                new_pw = form.get("new_password", "")
+                confirm_pw = form.get("confirm_password", "")
+                err = _validate_password_strength(new_pw, confirm_pw)
+                if err:
+                    self._send_html(render_set_password_page(token, flash_error=err))
+                    return
+                with open_db() as conn:
+                    exists = conn.execute(
+                        "SELECT 1 FROM dashboard_users WHERE username=? AND active=1",
+                        (username,),
+                    ).fetchone()
+                    if not exists:
+                        self._send_html(render_set_password_invalid(), status=400)
+                        return
+                    conn.execute(
+                        "UPDATE dashboard_users SET password_hash=?, must_reset_password=0 WHERE username=?",
+                        (hash_password(new_pw), username),
+                    )
+                    conn.commit()
+                self._flash_redirect("/login", flash="Mot de passe d\u00e9fini. Connectez-vous / Password set. Sign in.")
+                return
+
+            # --- Forgot password (no auth) ---
+            if path == "/forgot":
+                identifier = form.get("identifier", "").strip()
+                lang = self._get_lang_from_cookie()
+                generic_msg = ("Si un compte existe, un courriel a \u00e9t\u00e9 envoy\u00e9. / "
+                               "If an account exists, an email has been sent.")
+                if not identifier:
+                    self._send_html(render_forgot_password_page(
+                        flash_error="Entrez un courriel ou nom d'utilisateur / Enter email or username",
+                        lang=lang))
+                    return
+                if _forgot_rate_limited(identifier):
+                    self._send_html(render_forgot_password_page(
+                        flash=generic_msg, lang=lang))
+                    return
+                _record_forgot_attempt(identifier)
+                host = self.headers.get("Host", "")
+                scheme = "https" if _is_https(self) else "http"
+                portal_base = (f"{scheme}://{host}" if host else _get_portal_base_url()).rstrip("/")
+                try:
+                    with open_db() as conn:
+                        row = conn.execute(
+                            "SELECT username, email FROM dashboard_users"
+                            " WHERE active=1 AND (username=? OR email=?)"
+                            " LIMIT 1",
+                            (identifier, identifier),
+                        ).fetchone()
+                    if row:
+                        token = _generate_password_link(row["username"], expires_hours=72)
+                        set_pw_url = f"{portal_base}/set-password?token={token}"
+                        recipient = row.get("email") or (row["username"]
+                                                         if "@" in row["username"] else "")
+                        if recipient:
+                            try:
+                                from src.integrations.email_client import send_password_reset_email
+                                send_password_reset_email(recipient, row["username"], set_pw_url)
+                            except Exception:
+                                logging.exception("password reset email failed")
+                except Exception:
+                    logging.exception("forgot password lookup failed")
+                self._send_html(render_forgot_password_page(flash=generic_msg, lang=lang))
+                return
+
+            # --- Resend welcome/setup email (no auth: guarded by firm_code + must_reset) ---
+            if path == "/signup/resend-setup":
+                firm_code_in = (form.get("firm_code", "").strip()
+                                or qs.get("firm_id", [""])[0].strip())
+                if not firm_code_in:
+                    self._send_json({"ok": False, "error": "missing_firm_code"}, status=400)
+                    return
+                host = self.headers.get("Host", "")
+                scheme = "https" if _is_https(self) else "http"
+                portal_base = (f"{scheme}://{host}" if host else _get_portal_base_url()).rstrip("/")
+                try:
+                    with open_db() as conn:
+                        admin_row = conn.execute(
+                            "SELECT username, email, display_name FROM dashboard_users"
+                            " WHERE firm_code=? AND role='firm_admin' AND must_reset_password=1"
+                            " AND active=1 LIMIT 1",
+                            (firm_code_in,),
+                        ).fetchone()
+                        firm_row = conn.execute(
+                            "SELECT firm_name, plan FROM firms WHERE firm_code=? LIMIT 1",
+                            (firm_code_in,),
+                        ).fetchone()
+                    if not admin_row or not firm_row:
+                        # Generic success even when not found (no info leakage).
+                        self._send_json({"ok": True})
+                        return
+                    token = _generate_password_link(admin_row["username"], expires_hours=72)
+                    set_pw_url = f"{portal_base}/set-password?token={token}"
+                    recipient = admin_row.get("email") or (admin_row["username"]
+                                                           if "@" in admin_row["username"] else "")
+                    if recipient:
+                        try:
+                            from src.integrations.email_client import send_welcome_email
+                            send_welcome_email(
+                                to_email=recipient,
+                                firm_name=firm_row.get("firm_name") or firm_code_in,
+                                username=admin_row["username"],
+                                set_password_url=set_pw_url,
+                                plan=firm_row.get("plan") or "",
+                            )
+                        except Exception:
+                            logging.exception("resend welcome failed")
+                except Exception:
+                    logging.exception("resend setup failed")
+                self._flash_redirect("/login", flash="Courriel renvoy\u00e9 / Email resent")
                 return
 
             # --- Logout (no auth required) ---
