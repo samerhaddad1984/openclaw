@@ -183,3 +183,7 @@ data/backups/
 # Google credentials - never commit
 google-credentials.json
 *-credentials.json
+
+# Gmail OAuth - secrets, never commit
+gmail_oauth_credentials.json
+gmail_token.json
