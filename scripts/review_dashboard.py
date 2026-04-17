@@ -737,6 +737,11 @@ def bootstrap_schema() -> None:
                 contacted INTEGER DEFAULT 0
             )
         """)
+        _lead_cols = {row["name"] for row in conn.execute("PRAGMA table_info(contact_leads)").fetchall()}
+        if "archived" not in _lead_cols:
+            conn.execute("ALTER TABLE contact_leads ADD COLUMN archived INTEGER DEFAULT 0")
+        if "notes" not in _lead_cols:
+            conn.execute("ALTER TABLE contact_leads ADD COLUMN notes TEXT DEFAULT ''")
         conn.commit()
 
         # Client communications table
@@ -8661,7 +8666,19 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             )
 
         groups: list[str] = []
-        groups.append(_group_label(f"\U0001f4cb {esc(home_label)}", first=True))
+        if is_owner:
+            _pending_leads = _count_pending_leads()
+            _leads_badge = (
+                f'<span class="badge-unread" style="margin-left:6px;background:#f1c40f;'
+                f'color:#0d1a2e;border-radius:999px;padding:1px 8px;font-size:11px;'
+                f'font-weight:700;">{_pending_leads}</span>'
+                if _pending_leads > 0 else ""
+            )
+            groups.append(_group_label("\U0001f4e7 Leads & Ventes", first=True))
+            groups.append(_dlink("/leads", f"Leads{_leads_badge}"))
+            groups.append(_group_label(f"\U0001f4cb {esc(home_label)}"))
+        else:
+            groups.append(_group_label(f"\U0001f4cb {esc(home_label)}", first=True))
         groups.append(_dlink("/", esc(home_label)))
 
         groups.append(_group_label("\U0001f4c1 Audit"))
@@ -10028,6 +10045,317 @@ def render_firms_page(ctx: dict[str, Any], user: dict[str, Any],
     </div>
     """
     return page_layout("CPA Firms", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _count_pending_leads() -> int:
+    """Count leads that still need a callback (not contacted and not archived)."""
+    try:
+        with open_db() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM contact_leads "
+                "WHERE COALESCE(contacted,0)=0 AND COALESCE(archived,0)=0"
+            ).fetchone()
+            return int(row["n"] if row else 0)
+    except Exception:
+        return 0
+
+
+def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
+                      flash: str = "", flash_error: str = "",
+                      filter_mode: str = "all", search: str = "",
+                      lang: str = "fr") -> str:
+    filter_mode = (filter_mode or "all").lower()
+    if filter_mode not in ("all", "pending", "contacted", "archived"):
+        filter_mode = "all"
+
+    with open_db() as conn:
+        if filter_mode == "pending":
+            where_sql = "WHERE COALESCE(contacted,0)=0 AND COALESCE(archived,0)=0"
+        elif filter_mode == "contacted":
+            where_sql = "WHERE COALESCE(contacted,0)=1 AND COALESCE(archived,0)=0"
+        elif filter_mode == "archived":
+            where_sql = "WHERE COALESCE(archived,0)=1"
+        else:
+            where_sql = "WHERE COALESCE(archived,0)=0"
+
+        rows = conn.execute(
+            f"SELECT id, name, firm, email, phone, clients, message, source, "
+            f"       diagnostic_data, created_at, COALESCE(contacted,0) AS contacted, "
+            f"       COALESCE(archived,0) AS archived "
+            f"FROM contact_leads {where_sql} "
+            f"ORDER BY COALESCE(contacted,0) ASC, datetime(created_at) DESC"
+        ).fetchall()
+        leads = [dict(r) for r in rows]
+
+        stats_row = conn.execute(
+            "SELECT "
+            " COUNT(*) AS total, "
+            " SUM(CASE WHEN COALESCE(contacted,0)=0 AND COALESCE(archived,0)=0 THEN 1 ELSE 0 END) AS pending, "
+            " SUM(CASE WHEN COALESCE(contacted,0)=1 AND datetime(created_at) >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS contacted_week, "
+            " SUM(CASE WHEN datetime(created_at) >= datetime('now','start of month') THEN 1 ELSE 0 END) AS this_month "
+            "FROM contact_leads"
+        ).fetchone()
+
+    total = int(stats_row["total"] or 0) if stats_row else 0
+    pending = int(stats_row["pending"] or 0) if stats_row else 0
+    contacted_week = int(stats_row["contacted_week"] or 0) if stats_row else 0
+    this_month = int(stats_row["this_month"] or 0) if stats_row else 0
+
+    search_lc = (search or "").strip().lower()
+    if search_lc:
+        leads = [
+            lead for lead in leads
+            if search_lc in (lead.get("name") or "").lower()
+            or search_lc in (lead.get("firm") or "").lower()
+            or search_lc in (lead.get("email") or "").lower()
+        ]
+
+    def _stat_card(label: str, value: int, color: str) -> str:
+        return (
+            '<div style="background:#1a2e4a;border:1px solid #1a2d45;border-radius:10px;'
+            'padding:14px 18px;flex:1;min-width:140px;">'
+            f'<div style="color:#8fa3bf;font-size:11px;text-transform:uppercase;letter-spacing:1px;">{esc(label)}</div>'
+            f'<div style="color:{color};font-size:26px;font-weight:700;margin-top:4px;">{value}</div>'
+            "</div>"
+        )
+
+    def _filter_btn(mode: str, label: str) -> str:
+        active = mode == filter_mode
+        bg = "#16C172" if active else "rgba(255,255,255,0.06)"
+        fg = "#0d1a2e" if active else "#c8d8e8"
+        border = "#16C172" if active else "rgba(255,255,255,0.12)"
+        href = f"/leads?filter={urlquote(mode)}"
+        if search:
+            href += f"&q={urlquote(search)}"
+        return (
+            f'<a href="{href}" style="background:{bg};color:{fg};border:1px solid {border};'
+            'padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">'
+            f'{esc(label)}</a>'
+        )
+
+    def _copy_btn(text: str, tag: str) -> str:
+        safe = (text or "").replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ")
+        return (
+            f'<button type="button" onclick="navigator.clipboard.writeText(\'{safe}\');'
+            'this.innerText=\'\u2713\';setTimeout(()=>{this.innerText=\'' + tag + '\'},1200);" '
+            'style="background:rgba(22,193,114,0.12);color:#16C172;border:1px solid rgba(22,193,114,0.3);'
+            'padding:2px 8px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:6px;">'
+            f'{tag}</button>'
+        )
+
+    cards_html_parts: list[str] = []
+    for lead in leads:
+        contacted = bool(lead.get("contacted"))
+        archived = bool(lead.get("archived"))
+        created = lead.get("created_at") or ""
+        status_badge = (
+            '<span style="background:rgba(39,174,96,0.15);color:#2ecc71;border:1px solid rgba(39,174,96,0.4);'
+            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x2705; Contact&eacute;</span>'
+            if contacted
+            else '<span style="background:rgba(241,196,15,0.15);color:#f1c40f;border:1px solid rgba(241,196,15,0.4);'
+            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x1F7E1; &Agrave; contacter</span>'
+        )
+        if archived:
+            status_badge += (
+                ' <span style="background:rgba(127,140,141,0.15);color:#95a5a6;border:1px solid rgba(127,140,141,0.4);'
+                'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-left:6px;">'
+                '&#x1F5C3;&#xFE0F; Archiv&eacute;</span>'
+            )
+
+        clients_badge = ""
+        if lead.get("clients"):
+            clients_badge = (
+                '<span style="background:rgba(52,152,219,0.15);color:#3498db;border:1px solid rgba(52,152,219,0.4);'
+                'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">'
+                f'&#x1F465; {esc(str(lead["clients"]))} clients</span>'
+            )
+
+        source_line = ""
+        if lead.get("source"):
+            source_line = (
+                '<div style="color:#8fa3bf;font-size:12px;margin-top:4px;">'
+                f'Source: <span style="color:#c8d8e8;">{esc(lead["source"])}</span></div>'
+            )
+
+        phone_html = ""
+        if lead.get("phone"):
+            phone_html = (
+                '<div style="color:#c8d8e8;font-size:13px;margin-top:6px;">'
+                f'&#x260E;&#xFE0F; <a href="tel:{esc(lead["phone"])}" style="color:#c8d8e8;text-decoration:none;">'
+                f'{esc(lead["phone"])}</a>{_copy_btn(lead["phone"], "Copier")}</div>'
+            )
+
+        message_html = ""
+        if lead.get("message"):
+            message_html = (
+                '<blockquote style="margin:12px 0 0;padding:10px 14px;background:rgba(255,255,255,0.04);'
+                'border-left:3px solid #16C172;border-radius:6px;color:#d0dde8;font-size:13px;font-style:italic;">'
+                f'{esc(lead["message"])}</blockquote>'
+            )
+
+        diag_html = ""
+        raw_diag = lead.get("diagnostic_data") or ""
+        if raw_diag:
+            try:
+                d = json.loads(raw_diag) if isinstance(raw_diag, str) else dict(raw_diag)
+            except Exception:
+                d = None
+            if isinstance(d, dict) and d:
+                docs = d.get("docs", "?")
+                tpd = d.get("tpd", "?")
+                saved = d.get("saved", "?")
+                goal = d.get("goal", "?")
+                diag_html = (
+                    '<div style="margin-top:12px;padding:10px 14px;background:rgba(22,193,114,0.06);'
+                    'border:1px solid rgba(22,193,114,0.25);border-radius:8px;">'
+                    '<div style="color:#16C172;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">'
+                    '&#x1F4CA; Diagnostic</div>'
+                    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:12px;color:#c8d8e8;">'
+                    f'<div>Documents/mois: <strong style="color:white;">{esc(str(docs))}</strong></div>'
+                    f'<div>Temps/doc: <strong style="color:white;">{esc(str(tpd))} min</strong></div>'
+                    f'<div>Heures &eacute;conomis&eacute;es: <strong style="color:white;">{esc(str(saved))}</strong></div>'
+                    f'<div>Objectif: <strong style="color:white;">{esc(str(goal))}</strong></div>'
+                    "</div></div>"
+                )
+
+        mail_subject = urlquote(f"Re: Votre demande OtoCPA — {lead.get('firm') or ''}")
+        greeting = f"Bonjour {lead.get('name') or ''},"
+        mail_body_raw = (
+            f"{greeting}\n\n"
+            "Merci d'avoir pris contact avec OtoCPA. "
+            "Je vous propose un appel de 20 minutes pour discuter de votre cabinet "
+            f"{lead.get('firm') or ''} et vous montrer comment OtoCPA peut vous faire "
+            "gagner du temps.\n\n"
+            "Quelle plage horaire vous convient cette semaine ?\n\n"
+            "Cordialement,\n"
+            "L'&eacute;quipe OtoCPA"
+        )
+        mailto = (
+            f'mailto:{esc(lead.get("email") or "")}'
+            f'?subject={mail_subject}&body={urlquote(mail_body_raw)}'
+        )
+
+        lead_id = int(lead["id"])
+        actions_html = (
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;'
+            'padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">'
+            f'<a href="{mailto}" style="background:#3498db;color:white;padding:7px 12px;'
+            'border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;">'
+            '&#x1F4E7; Ouvrir dans Outlook</a>'
+        )
+        if not contacted:
+            actions_html += (
+                '<form method="POST" action="/leads/mark_contacted" style="display:inline;margin:0;">'
+                f'<input type="hidden" name="id" value="{lead_id}">'
+                f'<input type="hidden" name="filter" value="{esc(filter_mode)}">'
+                '<button type="submit" style="background:#27ae60;color:white;border:none;'
+                'padding:7px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">'
+                '&#x2713; Marquer contact&eacute;</button></form>'
+            )
+        else:
+            actions_html += (
+                '<form method="POST" action="/leads/unmark" style="display:inline;margin:0;">'
+                f'<input type="hidden" name="id" value="{lead_id}">'
+                f'<input type="hidden" name="filter" value="{esc(filter_mode)}">'
+                '<button type="submit" style="background:rgba(255,255,255,0.06);color:#c8d8e8;'
+                'border:1px solid rgba(255,255,255,0.12);padding:7px 12px;border-radius:6px;'
+                'cursor:pointer;font-size:12px;font-weight:600;">&#x21BA; Remettre en attente</button></form>'
+            )
+        if not archived:
+            actions_html += (
+                '<form method="POST" action="/leads/archive" style="display:inline;margin:0;" '
+                'onsubmit="return confirm(\'Archiver ce lead ?\');">'
+                f'<input type="hidden" name="id" value="{lead_id}">'
+                f'<input type="hidden" name="filter" value="{esc(filter_mode)}">'
+                '<button type="submit" style="background:rgba(231,76,60,0.1);color:#e74c3c;'
+                'border:1px solid rgba(231,76,60,0.4);padding:7px 12px;border-radius:6px;'
+                'cursor:pointer;font-size:12px;font-weight:600;">&#x1F5D1; Archiver</button></form>'
+            )
+        actions_html += "</div>"
+
+        card = (
+            '<div style="background:#0f1f38;border:1px solid #1a2d45;border-radius:12px;'
+            'padding:18px;box-shadow:0 2px 8px rgba(0,0,0,0.2);">'
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
+            '<div style="min-width:0;flex:1;">'
+            f'<div style="color:white;font-weight:700;font-size:18px;line-height:1.2;">{esc(lead.get("name") or "")}</div>'
+            f'<div style="color:#8fa3bf;font-size:13px;margin-top:2px;">{esc(lead.get("firm") or "")}</div>'
+            "</div>"
+            f'<div style="color:#8fa3bf;font-size:12px;white-space:nowrap;">{esc(created)}</div>'
+            "</div>"
+            f'<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">{status_badge} {clients_badge}</div>'
+            '<div style="margin-top:12px;color:#c8d8e8;font-size:13px;word-break:break-all;">'
+            f'&#x2709;&#xFE0F; <a href="mailto:{esc(lead.get("email") or "")}" style="color:#c8d8e8;text-decoration:none;">'
+            f'{esc(lead.get("email") or "")}</a>{_copy_btn(lead.get("email") or "", "Copier")}</div>'
+            f"{phone_html}"
+            f"{source_line}"
+            f"{message_html}"
+            f"{diag_html}"
+            f"{actions_html}"
+            "</div>"
+        )
+        cards_html_parts.append(card)
+
+    if not cards_html_parts:
+        empty_label = "Aucun lead ne correspond." if search_lc else "Aucun lead pour ce filtre."
+        cards_html = (
+            '<div style="grid-column:1/-1;padding:40px;text-align:center;color:#8fa3bf;'
+            'background:#0f1f38;border:1px dashed #1a2d45;border-radius:12px;">'
+            f'{esc(empty_label)}</div>'
+        )
+    else:
+        cards_html = "".join(cards_html_parts)
+
+    stats_html = (
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">'
+        + _stat_card("Total", total, "white")
+        + _stat_card("En attente", pending, "#f1c40f")
+        + _stat_card("Contact\u00e9s (7j)", contacted_week, "#2ecc71")
+        + _stat_card("Ce mois", this_month, "#3498db")
+        + "</div>"
+    )
+
+    filters_html = (
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'
+        + _filter_btn("all", "Tous")
+        + _filter_btn("pending", f"En attente ({pending})")
+        + _filter_btn("contacted", "Contact\u00e9s")
+        + _filter_btn("archived", "Archiv\u00e9s")
+        + "</div>"
+    )
+
+    search_html = (
+        '<form method="GET" action="/leads" style="margin-bottom:16px;">'
+        f'<input type="hidden" name="filter" value="{esc(filter_mode)}">'
+        '<input type="text" name="q" placeholder="Rechercher par nom, cabinet ou courriel\u2026" '
+        f'value="{esc(search)}" '
+        'style="width:100%;max-width:480px;padding:9px 12px;background:#0d1a2e;border:1px solid #1a2d45;'
+        'border-radius:8px;color:white;font-size:13px;">'
+        '</form>'
+    )
+
+    inbox_reminder = (
+        '<div style="background:rgba(52,152,219,0.08);border:1px solid rgba(52,152,219,0.3);'
+        'border-radius:10px;padding:10px 14px;margin-bottom:16px;color:#c8d8e8;font-size:13px;">'
+        '&#x1F4A1; Vous recevez aussi chaque lead par courriel &agrave; '
+        '<a href="mailto:sales@otocpa.com" style="color:#3498db;">sales@otocpa.com</a>'
+        "</div>"
+    )
+
+    body = f"""
+    <div style="padding:24px;">
+        <a href="/" style="color:#8fa3bf;text-decoration:none;margin-bottom:16px;display:inline-block;">&larr; Retour</a>
+        <h2 style="color:white;margin:0 0 14px;">&#x1F4E7; Leads &amp; Ventes</h2>
+        {inbox_reminder}
+        {stats_html}
+        {filters_html}
+        {search_html}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;">
+            {cards_html}
+        </div>
+    </div>
+    """
+    return page_layout("Leads", body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
 def render_signup_page() -> str:
@@ -13699,6 +14027,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_firms_page(ctx, user, flash, flash_error, lang=lang))
                 return
 
+            if path == "/leads":
+                if user.get("role") != "owner":
+                    self._redirect("/")
+                    return
+                filter_mode = qs.get("filter", ["all"])[0]
+                search_term = qs.get("q", [""])[0]
+                self._send_html(render_leads_page(
+                    ctx, user, flash, flash_error,
+                    filter_mode=filter_mode, search=search_term, lang=lang,
+                ))
+                return
+
             if path == "/billing":
                 self._send_html(render_billing_page(ctx, user, flash, flash_error, lang=lang))
                 return
@@ -16194,6 +16534,35 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "/firms",
                     flash=f"Firm {firm_code} created. Login: {admin_username} / {admin_password}",
                 )
+                return
+
+            # --- Leads dashboard actions (owner only) ---
+            if path in ("/leads/mark_contacted", "/leads/archive", "/leads/unmark"):
+                if user.get("role") != "owner":
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                try:
+                    lead_id = int(form.get("id", "0") or 0)
+                except ValueError:
+                    lead_id = 0
+                back_filter = form.get("filter", "all") or "all"
+                redirect_to_url = f"/leads?filter={urlquote(back_filter)}"
+                if lead_id <= 0:
+                    self._flash_redirect(redirect_to_url, error="Invalid lead id")
+                    return
+                if path == "/leads/mark_contacted":
+                    sql = "UPDATE contact_leads SET contacted = 1 WHERE id = ?"
+                    flash_msg = "Lead marqu\u00e9 comme contact\u00e9."
+                elif path == "/leads/archive":
+                    sql = "UPDATE contact_leads SET archived = 1 WHERE id = ?"
+                    flash_msg = "Lead archiv\u00e9."
+                else:
+                    sql = "UPDATE contact_leads SET contacted = 0 WHERE id = ?"
+                    flash_msg = "Lead remis en attente."
+                with open_db() as conn:
+                    conn.execute(sql, (lead_id,))
+                    conn.commit()
+                self._flash_redirect(redirect_to_url, flash=flash_msg)
                 return
 
             # User management routes
