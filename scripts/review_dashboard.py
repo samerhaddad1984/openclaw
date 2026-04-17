@@ -18,6 +18,7 @@ import logging
 import secrets
 import sqlite3
 import sys
+import threading
 import time
 import traceback
 import urllib.parse
@@ -174,6 +175,10 @@ ROLE_CONFIG: dict[str, dict[str, Any]] = {
         "can_assign": True,
         "can_post": True,
         "can_manage_team": True,
+        "can_manage_users": True,
+        "can_post_qbo": True,
+        "can_manage_journal_entries": True,
+        "can_export": True,
     },
     "manager": {
         "can_view_all_clients": True,
@@ -181,6 +186,10 @@ ROLE_CONFIG: dict[str, dict[str, Any]] = {
         "can_assign": True,
         "can_post": True,
         "can_manage_team": True,
+        "can_manage_users": False,
+        "can_post_qbo": True,
+        "can_manage_journal_entries": True,
+        "can_export": True,
     },
     "employee": {
         "can_view_all_clients": False,
@@ -188,6 +197,10 @@ ROLE_CONFIG: dict[str, dict[str, Any]] = {
         "can_assign": False,
         "can_post": False,
         "can_manage_team": False,
+        "can_manage_users": False,
+        "can_post_qbo": False,
+        "can_manage_journal_entries": False,
+        "can_export": False,
     },
     # Tier-2 CPA firm administrator. Has manager-equivalent powers but scoped
     # to their own firm_code by _build_documents_where + firm filters.
@@ -197,8 +210,14 @@ ROLE_CONFIG: dict[str, dict[str, Any]] = {
         "can_assign": True,
         "can_post": True,
         "can_manage_team": True,
+        "can_manage_users": True,
+        "can_post_qbo": True,
+        "can_manage_journal_entries": True,
+        "can_export": True,
     },
 }
+
+VALID_ROLES: tuple[str, ...] = ("owner", "firm_admin", "manager", "employee")
 
 
 # ---------------------------------------------------------------------------
@@ -1077,7 +1096,102 @@ def build_user_context(user: dict[str, Any]) -> dict[str, Any]:
         "can_assign": bool(base["can_assign"]),
         "can_post": bool(base["can_post"]),
         "can_manage_team": bool(base["can_manage_team"]),
+        "can_post_qbo": bool(base.get("can_post_qbo", False)),
+        "can_manage_journal_entries": bool(base.get("can_manage_journal_entries", False)),
+        "can_export": bool(base.get("can_export", False)),
+        "can_manage_users": bool(base.get("can_manage_users", False)),
     }
+
+
+# ---------------------------------------------------------------------------
+# Permission helpers — multi-tenant scoping and capability gating
+# ---------------------------------------------------------------------------
+
+def _require_client_in_firm(client_code: str | None, ctx: dict[str, Any]) -> bool:
+    """Return True when ctx is allowed to act on client_code.
+
+    Owner can access any client. Other roles must share a firm_code with the
+    client. Unknown clients always fail.
+    """
+    if not client_code:
+        return False
+    if ctx.get("role") == "owner":
+        return True
+    user_firm = ctx.get("firm_code")
+    if not user_firm:
+        return False
+    with open_db() as conn:
+        row = conn.execute(
+            "SELECT firm_code FROM clients WHERE client_code=?",
+            (client_code,),
+        ).fetchone()
+    return bool(row and row.get("firm_code") == user_firm)
+
+
+def _require_document_in_firm(document_id: str | None, ctx: dict[str, Any]) -> bool:
+    """Return True when ctx's firm owns the client that owns the document."""
+    if not document_id:
+        return False
+    if ctx.get("role") == "owner":
+        return True
+    user_firm = ctx.get("firm_code")
+    if not user_firm:
+        return False
+    with open_db() as conn:
+        row = conn.execute(
+            "SELECT c.firm_code AS firm_code FROM documents d "
+            "JOIN clients c ON c.client_code = d.client_code "
+            "WHERE d.document_id=?",
+            (document_id,),
+        ).fetchone()
+    return bool(row and row.get("firm_code") == user_firm)
+
+
+def _can_do(ctx: dict[str, Any], capability: str) -> bool:
+    """Check a ctx.can_<capability> flag from ROLE_CONFIG."""
+    return bool(ctx.get(f"can_{capability}", False))
+
+
+def _forbid(handler, message: str = "Forbidden") -> None:
+    """Send a 403 JSON response; safe to embed short messages (no quotes in msg)."""
+    handler.send_response(403)
+    handler.send_header("Content-Type", "application/json")
+    handler.end_headers()
+    handler.wfile.write(json.dumps({"error": message}).encode("utf-8"))
+
+
+def validate_role(role: str | None) -> str:
+    """Return role lowercased if valid; raise ValueError otherwise."""
+    normalized = normalize_key(role or "")
+    if normalized not in VALID_ROLES:
+        raise ValueError(f"invalid role: {role!r}")
+    return normalized
+
+
+# ---------------------------------------------------------------------------
+# Public upload rate limiting (per client_code, per IP)
+# ---------------------------------------------------------------------------
+
+_PUBLIC_UPLOAD_MAX_PER_MIN = 20
+_public_upload_log: dict[tuple[str, str], list[float]] = {}
+_public_upload_lock = threading.Lock()
+
+
+def _public_upload_allowed(client_code: str, ip: str) -> bool:
+    """Return False when this (client_code, ip) exceeds 20 uploads/minute."""
+    import time as _time
+    now = _time.time()
+    cutoff = now - 60.0
+    key = (client_code or "", ip or "")
+    with _public_upload_lock:
+        bucket = _public_upload_log.get(key, [])
+        bucket = [ts for ts in bucket if ts >= cutoff]
+        if len(bucket) >= _PUBLIC_UPLOAD_MAX_PER_MIN:
+            _public_upload_log[key] = bucket
+            return False
+        bucket.append(now)
+        _public_upload_log[key] = bucket
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -7832,14 +7946,35 @@ def render_risk_assessment(
     return page_layout(t("cas_risk_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
-def _get_qr_clients() -> list[dict[str, Any]]:
-    """Return all clients from the clients table (code + name), sorted by code."""
+def _get_qr_clients(ctx: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Return clients scoped to the caller's firm.
+
+    Owner sees every client; any other role sees only clients in
+    ``ctx['firm_code']``. Passing ctx=None yields an empty list to force
+    callers to scope the query.
+    """
+    if ctx is None:
+        return []
     try:
         with open_db() as conn:
-            rows = conn.execute(
-                "SELECT client_code, client_name FROM clients ORDER BY client_code"
-            ).fetchall()
-        return [{"client_code": r["client_code"], "client_name": r["client_name"] or r["client_code"]} for r in rows]
+            if ctx.get("role") == "owner":
+                rows = conn.execute(
+                    "SELECT client_code, client_name FROM clients ORDER BY client_code"
+                ).fetchall()
+            else:
+                firm = ctx.get("firm_code") or ""
+                if not firm:
+                    return []
+                rows = conn.execute(
+                    "SELECT client_code, client_name FROM clients "
+                    "WHERE firm_code = ? ORDER BY client_code",
+                    (firm,),
+                ).fetchall()
+        return [
+            {"client_code": r["client_code"],
+             "client_name": r["client_name"] or r["client_code"]}
+            for r in rows
+        ]
     except Exception:
         return []
 
@@ -7873,7 +8008,7 @@ def render_qr_page(
     """Render the /qr page — grid of QR codes for all clients (manager/owner)."""
     import base64 as _b64
 
-    clients = _get_qr_clients()
+    clients = _get_qr_clients(ctx)
     portal_base = _get_portal_base_url()
 
     if not clients:
@@ -8611,7 +8746,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             f'{logout_label}</button></form>'
         )
         comm_link_html = ""
-        if user.get("role") in ("manager", "owner"):
+        if user.get("role") in ("manager", "owner", "firm_admin"):
             try:
                 with open_db() as _conn:
                     _unread = _client_comms.get_unread_count(_conn)
@@ -8633,7 +8768,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
 
     # Sidebar navigation — single Menu dropdown (all items hidden until clicked)
     sidebar_nav_html = ""
-    if user and user.get("role") in ("manager", "owner"):
+    if user and user.get("role") in ("manager", "owner", "firm_admin"):
         is_owner = user.get("role") == "owner"
         home_label = "Tableau de bord" if lang == "fr" else "Dashboard"
         profil_label = "Profil" if lang == "fr" else "Profile"
@@ -9823,14 +9958,23 @@ def render_portfolios(ctx: dict[str, Any], user: dict[str, Any], flash: str,
 
 def render_user_management(ctx: dict[str, Any], user: dict[str, Any], flash: str,
                            flash_error: str, lang: str = "fr") -> str:
-    if ctx["role"] != "owner":
+    if not _can_do(ctx, "manage_users"):
         return page_layout(
             t("err_access_denied", lang),
             f'<div class="card"><h2>{esc(t("user_access_denied", lang))}</h2></div>',
             user=user, lang=lang)
 
     with open_db() as conn:
-        users = [dict(r) for r in conn.execute("SELECT * FROM dashboard_users ORDER BY username").fetchall()]
+        if ctx.get("role") == "owner":
+            users = [dict(r) for r in conn.execute(
+                "SELECT * FROM dashboard_users ORDER BY username"
+            ).fetchall()]
+        else:
+            # firm_admin: scope to users in the same firm
+            users = [dict(r) for r in conn.execute(
+                "SELECT * FROM dashboard_users WHERE firm_code=? ORDER BY username",
+                (ctx.get("firm_code") or "",),
+            ).fetchall()]
 
     rows_html = "".join(f"""
         <tr>
@@ -14014,6 +14158,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/users":
+                if not _can_do(ctx, "manage_users"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
                 self._send_html(render_user_management(ctx, user, flash, flash_error, lang=lang))
                 return
 
@@ -14115,7 +14265,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/filing_summary":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14151,7 +14301,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/period_close":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14166,7 +14316,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/period_close/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14179,7 +14329,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/time":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14197,7 +14347,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/bank_import":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14209,7 +14359,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/communications":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14224,7 +14374,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Bank Reconciliation routes ---
             if path == "/reconciliation":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14240,7 +14390,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/new":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14252,7 +14402,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/detail":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14266,7 +14416,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14324,7 +14474,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/calendar":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14340,7 +14490,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # ------------------------------------------------------------------
 
             if path == "/working_papers":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14355,7 +14505,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/working_papers/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14378,7 +14528,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/evidence":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14392,7 +14542,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/sample":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14409,7 +14559,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/financial_statements":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14423,7 +14573,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/financial_statements/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14445,7 +14595,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/analytical":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14459,7 +14609,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/analytical/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14481,7 +14631,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/engagements":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14495,7 +14645,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/engagements/detail":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14508,7 +14658,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/materiality":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14521,7 +14671,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/risk":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14547,7 +14697,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/controls":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14560,7 +14710,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/related_parties":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14573,7 +14723,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qr":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_qr_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
@@ -14584,7 +14734,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qr/download":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_qr_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
@@ -14597,9 +14747,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         '<div class="card"><h2>client_code required</h2></div>',
                         user=user, lang=lang), status=400)
                     return
+                if not _require_client_in_firm(client_code_qr, ctx):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
                 portal_base_qr = _get_portal_base_url()
                 upload_url_qr = _build_upload_url(portal_base_qr, client_code_qr)
-                clients_qr = _get_qr_clients()
+                clients_qr = _get_qr_clients(ctx)
                 client_name_qr = next(
                     (c["client_name"] for c in clients_qr if c["client_code"] == client_code_qr),
                     client_code_qr,
@@ -14616,14 +14772,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qr/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_qr_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_qr_forbidden", lang))}</h2>'
                         f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
                         user=user, lang=lang), status=403)
                     return
-                clients_pdf = _get_qr_clients()
+                clients_pdf = _get_qr_clients(ctx)
                 portal_base_pdf = _get_portal_base_url()
                 pdf_bytes = generate_all_qr_pdf(clients_pdf, portal_base_pdf)
                 self.send_response(200)
@@ -14733,7 +14889,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # FIX 7: Manual journal entries (manager/owner)
             # ------------------------------------------------------------------
             if path == "/journal_entries":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "manage_journal_entries"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14803,11 +14959,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # Export page and download endpoints
             # ------------------------------------------------------------------
             if path == "/export":
+                if not _can_do(ctx, "export"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
                 self._send_html(render_export_page(ctx, user, lang=lang))
                 return
 
             if path == "/export/count":
+                if not _can_do(ctx, "export"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
                 client_code = qs.get("client_code", [""])[0]
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
                 period = qs.get("period", [""])[0]
                 count = 0
                 if client_code and period:
@@ -14820,8 +14988,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"count": count})
                 return
 
-            if path == "/export/csv":
+            if path in (
+                "/export/csv", "/export/sage50", "/export/acomba", "/export/qbd",
+                "/export/xero", "/export/wave", "/export/excel", "/export/all",
+            ):
+                if not _can_do(ctx, "export"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
                 client_code = qs.get("client_code", [""])[0]
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+
+            if path == "/export/csv":
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14836,7 +15015,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/sage50":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14851,7 +15029,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/acomba":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14866,7 +15043,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/qbd":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14881,7 +15057,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/xero":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14896,7 +15071,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/wave":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14911,7 +15085,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/excel":
-                client_code = qs.get("client_code", [""])[0]
                 period = qs.get("period", [""])[0]
                 start, end = _export_period_dates(period)
                 docs = _export_fetch(client_code, start, end)
@@ -14926,7 +15099,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/export/all":
-                client_code = qs.get("client_code", [""])[0]
                 year = int(qs.get("year", ["2026"])[0])
                 data = _export_annual_zip(client_code, year)
                 fname = f"OtoCPA_{client_code}_{year}_All.zip"
@@ -14940,7 +15112,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Fixed Assets ---
             if path == "/fixed_assets":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14953,7 +15125,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/fixed_assets/schedule8":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14966,7 +15138,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Aging Reports ---
             if path == "/aging":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -14980,7 +15152,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/aging/csv":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
@@ -15012,7 +15184,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Accounts Receivable ---
             if path == "/ar":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15025,7 +15197,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/ar/new":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15038,7 +15210,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Cash Flow Statement ---
             if path == "/cashflow":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15053,7 +15225,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/cashflow/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
                     return
                 fc = qs.get("client_code", [""])[0].strip()
@@ -15083,7 +15255,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/cashflow/excel":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
                     return
                 fc = qs.get("client_code", [""])[0].strip()
@@ -15126,7 +15298,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- T2 Corporate Tax Pre-fill ---
             if path == "/t2":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15140,7 +15312,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/t2/pdf":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
                     return
                 fc = qs.get("client_code", [""])[0].strip()
@@ -15169,7 +15341,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/t2/excel":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
                     return
                 fc = qs.get("client_code", [""])[0].strip()
@@ -15206,7 +15378,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # Client management (owner/manager)
             # ------------------------------------------------------------------
             if path == "/clients":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15218,7 +15390,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/clients/new":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15229,7 +15401,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/clients/edit":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
@@ -15237,6 +15409,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(code, ctx):
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
                 with open_db() as conn:
                     row = conn.execute('SELECT * FROM clients WHERE client_code = ?', (code,)).fetchone()
                 if not row:
@@ -15530,6 +15705,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if not pub_client:
                     self._flash_redirect("/upload", error="Missing client code")
                     return
+                # Rate limit: 20 uploads/minute per (client_code, ip)
+                pub_ip = _get_client_ip(self)
+                if not _public_upload_allowed(pub_client, pub_ip):
+                    body = b'{"error":"rate_limited"}'
+                    self.send_response(429)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Retry-After", "60")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 with open_db() as conn:
                     row = conn.execute(
                         "SELECT client_code FROM clients WHERE client_code=? AND active=1",
@@ -15707,6 +15893,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     return
                 client_code = (qs.get("client", [""])[0].strip()
                                or (payload.get("client_code") or "").strip())
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
                 conn_id = secrets.token_hex(16)
                 try:
                     with open_db() as conn:
@@ -15764,6 +15953,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path == "/bank/sync":
                 conn_id = form.get("connection_id", "").strip()
                 client_qs = qs.get("client", [""])[0].strip()
+                if client_qs and not _require_client_in_firm(client_qs, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
                 try:
                     from src.integrations.plaid_client import get_transactions
                     import datetime as _dt
@@ -15817,6 +16009,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path == "/bank/disconnect":
                 conn_id = form.get("connection_id", "").strip()
                 client_code = form.get("client_code", "").strip()
+                if client_code and not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
                 with open_db() as conn:
                     conn.execute("UPDATE bank_connections SET active=0 WHERE id=?", (conn_id,))
                     conn.commit()
@@ -15831,6 +16026,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 client_code = form.get("client_code", "").strip()
                 if not conn_id:
                     self._flash_redirect("/bank/feeds", error="Missing connection_id.")
+                    return
+                if client_code and not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
                     return
                 with open_db() as conn:
                     if client_code:
@@ -15858,6 +16056,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 document_id = form.get("document_id", "").strip()
                 if not tx_id or not document_id:
                     self._flash_redirect("/bank/feeds", error="Missing tx_id or document_id.")
+                    return
+                if not _require_document_in_firm(document_id, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
                     return
                 with open_db() as conn:
                     conn.execute(
@@ -15897,6 +16098,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._flash_redirect("/", error="No file selected")
                     return
                 upload_client = normalize_text(fields.get("client_code", ""))
+                if upload_client and upload_client != "UNASSIGNED" \
+                        and not _require_client_in_firm(upload_client, ctx):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
                 # Clear AI cache to avoid stale results (fixes Google/PayPal stuck docs)
                 try:
                     _ai_clear_cache()
@@ -15956,6 +16161,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/document/update":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 _check_period_not_locked_for_doc(document_id, lang)
                 before_row = get_document(document_id)
                 if before_row is None:
@@ -16079,6 +16286,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/document/hold":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 _check_period_not_locked_for_doc(document_id, lang)
                 hold_reason = form.get("hold_reason", "")
                 if not normalize_text(hold_reason):
@@ -16088,6 +16297,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/document/return_ready":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 _check_period_not_locked_for_doc(document_id, lang)
                 clear_manual_hold(document_id)
                 set_document_status(document_id, "Ready")
@@ -16135,6 +16346,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             self._send_json({"ok": False, "error": "line_not_found"}, status=404)
                             return
                         owning_doc = _row["document_id"]
+                        if not _require_document_in_firm(owning_doc, ctx):
+                            self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                            return
                         _check_period_not_locked_for_doc(owning_doc, lang)
                         _lconn.execute(
                             "UPDATE invoice_lines SET gl_account = ?, tax_code = ?, "
@@ -16159,18 +16373,24 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/assign":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 assign_document(document_id, form.get("assigned_to", ""), ctx["username"])
                 dest = "/" if redirect_to == "home" else f"/document?id={urlquote(document_id)}"
                 self._flash_redirect(dest, flash=t("flash_assignment_updated", lang))
                 return
 
             if path == "/claim":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 assign_document(document_id, ctx["username"], ctx["username"], note="claimed from dashboard")
                 dest = "/" if redirect_to == "home" else f"/document?id={urlquote(document_id)}"
                 self._flash_redirect(dest, flash=t("flash_item_claimed", lang))
                 return
 
             if path == "/apply_suggestion":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 before_row = get_document(document_id)
                 if before_row is None:
                     raise ValueError(t("err_doc_not_found", lang))
@@ -16180,12 +16400,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/build":
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 payload = build_posting_job(document_id, target_system="qbo", entry_kind="expense")
                 self._flash_redirect(f"/document?id={urlquote(document_id)}",
                                      flash=t("flash_posting_job_created", lang) + ": " + normalize_text(payload["posting_id"]))
                 return
 
             if path == "/qbo/approve":
+                if not _can_do(ctx, "post_qbo"):
+                    _forbid(self); return
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 doc_row = get_document(document_id)
                 if doc_row is not None:
                     # --- FIX 1: Check fraud flags before allowing approval ---
@@ -16215,7 +16441,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             )
                             return
                         # Only manager and owner roles may override
-                        if ctx["role"] not in ("manager", "owner"):
+                        if not _can_do(ctx, "view_all_clients"):
                             self._flash_redirect(
                                 f"/document?id={urlquote(document_id)}",
                                 error=t("err_fraud_override_denied", lang),
@@ -16356,6 +16582,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/post":
+                if not _can_do(ctx, "post_qbo"):
+                    _forbid(self); return
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 posting = get_qbo_posting_job(document_id)
                 if posting is None:
                     build_posting_job(document_id, target_system="qbo", entry_kind="expense")
@@ -16416,6 +16646,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/retry":
+                if not _can_do(ctx, "post_qbo"):
+                    _forbid(self); return
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
                 # FIX 11: Retry is an approval action — check fraud flags
                 doc_row = get_document(document_id)
                 if doc_row is not None:
@@ -16453,7 +16687,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # Portfolio routes
             if path == "/portfolios/assign":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 username_target = form.get("username_target", "")
                 client_code = form.get("client_code", "")
@@ -16464,7 +16698,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/portfolios/remove":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 username_target = form.get("username_target", "")
                 client_code = form.get("client_code", "")
@@ -16475,7 +16709,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/portfolios/move":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 from_user = form.get("from_user", "")
                 to_user = form.get("to_user", "")
@@ -16567,18 +16801,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # User management routes
             if path == "/users/add":
-                if ctx["role"] != "owner":
-                    raise ValueError("Only owners can add users")
+                if not _can_do(ctx, "manage_users"):
+                    raise ValueError("Only owners or firm_admins can add users")
                 username = normalize_text(form.get("username", ""))
                 password = form.get("password", "")
-                role = normalize_text(form.get("role", "employee"))
+                try:
+                    role = validate_role(form.get("role", "employee"))
+                except ValueError as e:
+                    raise ValueError(str(e))
+                # firm_admins cannot promote users to owner
+                if ctx.get("role") != "owner" and role == "owner":
+                    raise ValueError("firm_admin cannot create owner accounts")
                 display_name = normalize_text(form.get("display_name", "")) or username
                 if not username or not password:
                     raise ValueError("Username and password are required")
+                # firm_admins always create users in their own firm; owner may
+                # pass firm_code explicitly (falls back to 'OWNER')
+                new_firm = (ctx.get("firm_code") or "OWNER") if ctx.get("role") != "owner" \
+                    else (normalize_text(form.get("firm_code", "")) or "OWNER")
                 with open_db() as conn:
                     conn.execute(
-                        "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, created_at) VALUES (?,?,?,?,1,?)",
-                        (username, hash_password(password), role, display_name, utc_now_iso()),
+                        "INSERT INTO dashboard_users (username, password_hash, role, display_name, active, firm_code, created_at) VALUES (?,?,?,?,1,?,?)",
+                        (username, hash_password(password), role, display_name,
+                         new_firm, utc_now_iso()),
                     )
                     conn.commit()
                 self._flash_redirect("/users",
@@ -16586,12 +16831,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/users/set_password":
-                if ctx["role"] != "owner":
-                    raise ValueError("Only owners can change passwords")
+                if not _can_do(ctx, "manage_users"):
+                    raise ValueError("Only owners or firm_admins can change passwords")
                 username_target = normalize_text(form.get("username_target", ""))
                 new_password = form.get("new_password", "")
                 if not username_target or not new_password:
                     raise ValueError("Username and new password are required")
+                # firm_admins may only reset passwords for users in their firm
+                if ctx.get("role") != "owner":
+                    with open_db() as conn:
+                        target_row = conn.execute(
+                            "SELECT firm_code FROM dashboard_users WHERE username=?",
+                            (username_target,),
+                        ).fetchone()
+                    if not target_row or target_row.get("firm_code") != ctx.get("firm_code"):
+                        raise ValueError("Cannot modify users outside your firm")
                 with open_db() as conn:
                     conn.execute(
                         "UPDATE dashboard_users SET password_hash=? WHERE username=?",
@@ -16692,7 +16946,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/period_close/check_item":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 item_id_str = normalize_text(form.get("item_id", ""))
                 if not item_id_str.isdigit():
@@ -16717,7 +16971,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/period_close/lock":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 pc_cc = normalize_text(form.get("client_code", ""))
                 pc_per = normalize_text(form.get("period", ""))
@@ -16757,7 +17011,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/invoice/generate":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 inv_client      = normalize_text(form.get("client_code", ""))
                 inv_start       = normalize_text(form.get("period_start", ""))
@@ -16841,7 +17095,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Bank Reconciliation POST routes ---
             if path == "/reconciliation/create":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 rc_client = normalize_text(form.get("client_code", ""))
                 rc_account = normalize_text(form.get("account_name", ""))
@@ -16866,7 +17120,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/add_item":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 ri_recon = normalize_text(form.get("reconciliation_id", ""))
                 ri_type = normalize_text(form.get("item_type", ""))
@@ -16884,7 +17138,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/clear_item":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 ci_item = normalize_text(form.get("item_id", ""))
                 ci_recon = normalize_text(form.get("reconciliation_id", ""))
@@ -16900,7 +17154,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/reconciliation/finalize":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 fi_recon = normalize_text(form.get("reconciliation_id", ""))
                 if not fi_recon:
@@ -16921,7 +17175,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Bank statement import ---
             if path == "/bank_import":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 ct = self.headers.get("Content-Type", "")
                 if "multipart/form-data" not in ct:
@@ -16976,7 +17230,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Manual bank transaction matching ---
             if path == "/bank_import/match":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 bank_doc_id = normalize_text(form.get("bank_document_id", ""))
                 inv_doc_id = normalize_text(form.get("invoice_document_id", ""))
@@ -16992,7 +17246,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- BLOCK 1: Confirm split payment ---
             if path == "/bank_import/confirm_split":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 sp_txn_id = normalize_text(form.get("transaction_id", ""))
                 if not sp_txn_id:
@@ -17024,7 +17278,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Draft client message (AI-generated, saved as unsent draft) ---
             if path == "/communications/draft":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 doc_id = normalize_text(form.get("document_id", ""))
                 if not doc_id:
@@ -17062,7 +17316,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Send a drafted client message via SMTP ---
             if path == "/communications/send":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 doc_id = normalize_text(form.get("document_id", ""))
                 comm_id_s = normalize_text(form.get("comm_id", ""))
@@ -17087,7 +17341,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Filing calendar: mark period as filed ---
             if path == "/calendar/mark_filed":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_cal_forbidden", lang))
                 cal_cc     = normalize_text(form.get("client_code",  ""))
                 cal_period = normalize_text(form.get("period_label", ""))
@@ -17108,7 +17362,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Filing calendar: save per-client filing config ---
             if path == "/calendar/save_config":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_cal_forbidden", lang))
                 cfg_cc    = normalize_text(form.get("client_code",             ""))
                 cfg_freq  = normalize_text(form.get("filing_frequency",        "monthly"))
@@ -17145,7 +17399,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # ------------------------------------------------------------------
 
             if path == "/working_papers/signoff":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 paper_id    = normalize_text(form.get("paper_id", ""))
                 wp_client   = normalize_text(form.get("client_code", ""))
@@ -17173,7 +17427,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # BLOCK 5: Save assertion coverage for a working paper
             if path == "/working_papers/save_assertions":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 a_paper_id   = normalize_text(form.get("paper_id", ""))
                 a_client     = normalize_text(form.get("client_code", ""))
@@ -17208,7 +17462,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/working_papers/create_from_coa":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 wp_client = normalize_text(form.get("client_code", ""))
                 wp_period = normalize_text(form.get("period", ""))
@@ -17264,7 +17518,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/evidence/link":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 evidence_id   = normalize_text(form.get("evidence_id", ""))
                 linked_raw    = normalize_text(form.get("linked_doc_ids", ""))
@@ -17282,7 +17536,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/sample/mark":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 samp_paper    = normalize_text(form.get("paper_id", ""))
                 samp_doc      = normalize_text(form.get("document_id", ""))
@@ -17304,7 +17558,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/engagements/create":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 eng_client   = normalize_text(form.get("client_code", ""))
                 eng_period   = normalize_text(form.get("period", ""))
@@ -17353,7 +17607,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/engagements/update":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 eng_id       = normalize_text(form.get("engagement_id", ""))
                 eng_status   = normalize_text(form.get("status", ""))
@@ -17415,7 +17669,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/engagements/issue":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 eng_id = normalize_text(form.get("engagement_id", ""))
                 if not eng_id:
@@ -17436,7 +17690,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/materiality/save":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_mat_forbidden", lang))
                 mat_eng_id = normalize_text(form.get("engagement_id", ""))
                 mat_basis = normalize_text(form.get("basis", ""))
@@ -17454,7 +17708,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/risk/generate":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_risk_forbidden", lang))
                 risk_eng_id = normalize_text(form.get("engagement_id", ""))
                 if not risk_eng_id:
@@ -17474,7 +17728,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/risk/reset":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_risk_forbidden", lang))
                 risk_eng_id = normalize_text(form.get("engagement_id", ""))
                 if not risk_eng_id:
@@ -17494,7 +17748,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/risk/update":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_risk_forbidden", lang))
                 risk_id = normalize_text(form.get("risk_id", ""))
                 risk_eng_id = normalize_text(form.get("engagement_id", ""))
@@ -17551,7 +17805,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # CAS 330 — Control testing routes
             if path == "/audit/controls/add":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_ctrl_forbidden", lang))
                 ctrl_eng_id = normalize_text(form.get("engagement_id", ""))
                 ctrl_name = normalize_text(form.get("control_name", ""))
@@ -17579,7 +17833,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/controls/results":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_ctrl_forbidden", lang))
                 ctrl_test_id = normalize_text(form.get("test_id", ""))
                 ctrl_eng_id = normalize_text(form.get("engagement_id", ""))
@@ -17605,7 +17859,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # CAS 550 — Related party routes
             if path == "/audit/related_parties/add":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_rp_forbidden", lang))
                 rp_eng_id = normalize_text(form.get("engagement_id", ""))
                 rp_client = normalize_text(form.get("client_code", ""))
@@ -17633,7 +17887,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/audit/related_parties/disclosure":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     raise ValueError(t("err_rp_forbidden", lang))
                 rp_eng_id = normalize_text(form.get("engagement_id", ""))
                 if not rp_eng_id:
@@ -17782,6 +18036,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 uname = normalize_text(form.get("username", ""))
                 role_s = normalize_text(form.get("role", "employee"))
                 pw = form.get("password", "")
+                # Only manager/employee can be added in onboarding — and the
+                # value must still be a valid role per VALID_ROLES.
+                try:
+                    role_s = validate_role(role_s)
+                except ValueError:
+                    role_s = "employee"
                 if role_s not in ("manager", "employee"):
                     role_s = "employee"
                 if not disp or not uname or not pw:
@@ -17901,7 +18161,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # FIX 7: Manual journal entries POST (manager/owner)
             # ------------------------------------------------------------------
             if path == "/journal_entries":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "manage_journal_entries"):
                     self._send_html(page_layout(
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
@@ -17912,6 +18172,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     import secrets as _mje_secrets
                     entry_id = f"MJE-{_mje_secrets.token_hex(6)}"
                     client_code = form.get("client_code", "").strip()
+                    if not _require_client_in_firm(client_code, ctx):
+                        self._flash_redirect("/journal_entries", error=t("err_forbidden", lang))
+                        return
                     period = form.get("period", "").strip()
                     entry_date = form.get("entry_date", "").strip()
                     debit_account = form.get("debit_account", "").strip()
@@ -17919,6 +18182,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     mje_amount = form.get("amount", "0").strip()
                     description = form.get("description", "").strip()
                     document_id_ref = form.get("document_id", "").strip()
+                    if document_id_ref and not _require_document_in_firm(document_id_ref, ctx):
+                        self._flash_redirect("/journal_entries", error=t("err_forbidden", lang))
+                        return
 
                     if not all([client_code, period, entry_date, debit_account, credit_account, mje_amount]):
                         self._flash_redirect("/journal_entries", error="All fields are required.")
@@ -18111,12 +18377,22 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Client management save ---
             if path == "/clients/save":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._flash_redirect("/", error=t("err_forbidden", lang))
                     return
                 client_code = normalize_text(form.get("client_code", "")).strip()
                 if not client_code:
                     self._flash_redirect("/clients", error="Client code is required")
+                    return
+                # Existing client: firm_admin may only edit clients in their firm.
+                # New client: allowed — firm_code is stamped below.
+                with open_db() as _chk_conn:
+                    _existing = _chk_conn.execute(
+                        "SELECT firm_code FROM clients WHERE client_code=?",
+                        (client_code,),
+                    ).fetchone()
+                if _existing and not _require_client_in_firm(client_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
                     return
                 client_name = form.get("client_name", "").strip()
                 contact_email = form.get("contact_email", "").strip()
@@ -18146,10 +18422,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Client WhatsApp number: add ---
             if path == "/clients/whatsapp/add":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._flash_redirect("/", error=t("err_forbidden", lang))
                     return
                 client_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(client_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
                 wa_number = form.get("whatsapp_number", "").strip()
                 contact_name = form.get("contact_name", "").strip() or None
                 if not client_code or not wa_number:
@@ -18179,11 +18458,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Client WhatsApp number: delete ---
             if path == "/clients/whatsapp/delete":
-                if ctx.get("role") not in ("manager", "owner"):
+                if not _can_do(ctx, "view_all_clients"):
                     self._flash_redirect("/", error=t("err_forbidden", lang))
                     return
                 row_id = form.get("id", "").strip()
                 client_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(client_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
                 if not row_id:
                     self._flash_redirect(
                         f"/clients/edit?code={urlquote(client_code)}",

@@ -467,8 +467,12 @@ class TestReviewDashboardTimeRoutes:
 
     def test_manager_owner_check_for_time(self):
         src = self._src()
-        # /time route should be guarded by manager/owner check
-        assert 'not in ("manager", "owner")' in src
+        # /time route must be gated — accept legacy tuple check or new
+        # capability-based check.
+        assert (
+            'not in ("manager", "owner")' in src
+            or '_can_do(ctx, "view_all_clients")' in src
+        )
 
 
 # ---------------------------------------------------------------------------

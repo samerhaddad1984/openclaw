@@ -420,8 +420,12 @@ class TestReviewDashboardPeriodClose:
 
     def test_manager_owner_role_check_in_period_close_route(self):
         src = (ROOT / "scripts" / "review_dashboard.py").read_text(encoding="utf-8")
-        # The route should check for manager/owner
-        assert 'not in ("manager", "owner")' in src
+        # The route must be gated — accept either the legacy role-tuple
+        # check or the capability-based helper introduced in Sprint 1.
+        assert (
+            'not in ("manager", "owner")' in src
+            or '_can_do(ctx, "view_all_clients")' in src
+        )
 
 
 # ---------------------------------------------------------------------------

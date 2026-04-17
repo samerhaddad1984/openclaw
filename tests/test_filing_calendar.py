@@ -395,11 +395,16 @@ class TestReviewDashboardCalendar:
 
     def test_manager_owner_role_check_in_calendar(self):
         source = (ROOT / "scripts" / "review_dashboard.py").read_text(encoding="utf-8")
-        # The /calendar GET handler must check for manager/owner
+        # The /calendar GET handler must be gated — either the legacy
+        # role-tuple check or the new capability check counts.
         idx = source.find('"/calendar"')
         assert idx != -1
         snippet = source[idx: idx + 500]
-        assert "manager" in snippet or "owner" in snippet
+        assert (
+            "manager" in snippet
+            or "owner" in snippet
+            or "_can_do(ctx" in snippet
+        )
 
 
 # ===========================================================================
