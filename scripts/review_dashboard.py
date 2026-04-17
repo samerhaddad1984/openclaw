@@ -722,6 +722,21 @@ def bootstrap_schema() -> None:
                 success      INTEGER NOT NULL DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS contact_leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                firm TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT,
+                clients TEXT,
+                message TEXT,
+                source TEXT,
+                diagnostic_data TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                contacted INTEGER DEFAULT 0
+            )
+        """)
         conn.commit()
 
         # Client communications table
@@ -14900,14 +14915,104 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_html(page_layout("Error",
                 f'<div class="card"><h2>Unhandled Error</h2><pre>{esc(traceback.format_exc())}</pre></div>'), status=500)
 
+    def do_OPTIONS(self) -> None:
+        parsed_url = urllib.parse.urlparse(self.path)
+        if parsed_url.path == '/api/contact':
+            self.send_response(204)
+            self.send_header('Access-Control-Allow-Origin', 'https://otocpa.com')
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.end_headers()
+            return
+        self.send_response(405)
+        self.end_headers()
+
     def do_POST(self) -> None:
         document_id = ""
         try:
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
+
+            # --- Public contact form (no auth, CORS-enabled) ---
+            if path == '/api/contact':
+                import json as _json, sqlite3 as _sqlite3
+                body_len = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(body_len).decode('utf-8') if body_len else ''
+
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', 'https://otocpa.com')
+                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+
+                try:
+                    data = _json.loads(body) if body else {}
+                    if not data.get('name') or not data.get('email') or not data.get('firm'):
+                        self.wfile.write(b'{"ok":false,"error":"missing_fields"}')
+                        return
+
+                    conn = _sqlite3.connect('data/otocpa_agent.db')
+                    conn.execute('''INSERT INTO contact_leads
+                        (name, firm, email, phone, clients, message, source, diagnostic_data)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (data.get('name'), data.get('firm'), data.get('email'),
+                         data.get('phone', ''), data.get('clients', ''), data.get('message', ''),
+                         data.get('source', 'website'), data.get('diagnostic_data', '')))
+                    conn.commit()
+                    lead_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+                    conn.close()
+
+                    try:
+                        from src.integrations.email_client import send_email
+                        diag = ''
+                        if data.get('diagnostic_data'):
+                            try:
+                                d = _json.loads(data['diagnostic_data'])
+                                diag = (
+                                    "<h3>Diagnostic result</h3><ul>"
+                                    f"<li>Documents/month: {d.get('docs', '?')}</li>"
+                                    f"<li>Time per doc: {d.get('tpd', '?')} min</li>"
+                                    f"<li>Review rate: {d.get('rr', '?')}%</li>"
+                                    f"<li>Hours saved: {d.get('saved', '?')}</li>"
+                                    f"<li>Goal: {d.get('goal', '?')}</li>"
+                                    "</ul>"
+                                )
+                            except Exception:
+                                diag = ''
+
+                        send_email(
+                            to_email='sales@otocpa.com',
+                            subject=f"New lead: {data['firm']} - {data['name']}",
+                            html_body=(
+                                "<h2>New contact from otocpa.com</h2>"
+                                f"<p><strong>Name:</strong> {data.get('name', '')}</p>"
+                                f"<p><strong>Firm:</strong> {data.get('firm', '')}</p>"
+                                f"<p><strong>Email:</strong> <a href=\"mailto:{data.get('email', '')}\">{data.get('email', '')}</a></p>"
+                                f"<p><strong>Phone:</strong> {data.get('phone', '')}</p>"
+                                f"<p><strong>Clients:</strong> {data.get('clients', '')}</p>"
+                                f"<p><strong>Source:</strong> {data.get('source', '')}</p>"
+                                "<h3>Message</h3>"
+                                f"<p>{data.get('message', '(none)')}</p>"
+                                f"{diag}"
+                                "<hr>"
+                                f"<p><small>Lead ID: {lead_id}</small></p>"
+                            ),
+                        )
+                    except Exception as e:
+                        import logging
+                        logging.error(f'Email notification failed: {e}')
+
+                    self.wfile.write(b'{"ok":true}')
+                except Exception:
+                    import logging
+                    logging.exception('Contact form error')
+                    self.wfile.write(b'{"ok":false,"error":"server_error"}')
+                return
+
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length)
             form = parse_form_body(raw)
-            parsed_url = urllib.parse.urlparse(self.path)
-            path = parsed_url.path
             qs = urllib.parse.parse_qs(parsed_url.query, keep_blank_values=True)
             document_id = form.get("document_id", "")
 
