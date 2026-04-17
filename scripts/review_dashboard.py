@@ -3254,8 +3254,10 @@ html,body{margin:0;padding:0;background:linear-gradient(180deg,#07152c 0%,#0b1b3
 ::selection{background:var(--brand-soft);color:var(--text)}
 
 /* ===== APP SHELL ===== */
-.app-shell{min-height:100vh;display:grid;grid-template-columns:240px 1fr}
-.app-sidebar{background:rgba(7,21,44,0.97);border-right:1px solid var(--border-2);padding:20px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.12) transparent}
+.app-shell{min-height:100vh;display:grid;grid-template-columns:1fr}
+.app-sidebar{display:none!important}
+.app-main{width:100%}
+.app-sidebar--legacy{background:rgba(7,21,44,0.97);border-right:1px solid var(--border-2);padding:20px 16px;position:sticky;top:0;height:100vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.12) transparent}
 .app-sidebar::-webkit-scrollbar{width:6px}
 .app-sidebar::-webkit-scrollbar-track{background:transparent}
 .app-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:3px}
@@ -8691,7 +8693,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_dlink("/settings/profile", esc(profil_label)))
 
         sidebar_nav_html = (
-            '<div class="nav-dropdown" style="position:relative;display:inline-block;margin-top:12px;">'
+            '<div class="nav-dropdown" style="position:relative;display:inline-block;">'
             '<button class="nav-dropdown-btn" onclick="toggleNavDropdown()" '
             'style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);'
             'color:#c8d8e8;padding:8px 16px;border-radius:8px;cursor:pointer;'
@@ -8707,12 +8709,9 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             + '</div></div>'
         )
 
-    sidebar_html = (
-        '<aside class="app-sidebar">'
-        f'<div class="sidebar-brand"><a href="/" aria-label="OtoCPA">{LOGO_SVG_NAV}</a></div>'
-        f'{sidebar_nav_html}'
-        '</aside>'
-    )
+    # Sidebar is hidden via CSS; keep element for backwards compat but empty.
+    sidebar_html = '<aside class="app-sidebar" aria-hidden="true"></aside>'
+    nav_menu_html = sidebar_nav_html
 
     return f"""<!doctype html>
 <html lang="{lang}">
@@ -8728,6 +8727,8 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
     <div class="app-main">
         <header class="app-topbar">
             <div class="topbar-left">
+                <a href="/" aria-label="OtoCPA" style="display:inline-flex;align-items:center;margin-right:6px;">{LOGO_SVG_NAV}</a>
+                {nav_menu_html}
                 <span class="topbar-title">{esc(title)}</span>
             </div>
             <div class="topbar-right">{right_controls}</div>
