@@ -3560,6 +3560,191 @@ html,body{margin:0;padding:0;background:linear-gradient(180deg,#07152c 0%,#0b1b3
     .nav-bar { display: none !important; }
     .nav-bar-mobile-only { display: none; }
 }
+
+/* ------------------------------------------------------------------
+   Queue page — table-first redesign
+   ------------------------------------------------------------------ */
+.queue-page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+.queue-header {
+  display: flex; justify-content: space-between;
+  align-items: flex-start; gap: 20px; margin-bottom: 18px;
+}
+.queue-header h1 {
+  margin: 0; font-size: 32px; font-weight: 800;
+  letter-spacing: -0.02em; color: #0b172a;
+}
+.queue-header p { margin: 6px 0 0; color: #64748b; font-size: 14px; }
+.queue-header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.queue-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap: 14px; margin-bottom: 18px;
+}
+.kpi-card {
+  background: #fff; border: 1px solid #dce6f0;
+  border-radius: 16px; padding: 18px;
+  box-shadow: 0 10px 28px rgba(10,24,45,0.08);
+}
+.kpi-label { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+.kpi-value { font-size: 32px; font-weight: 800; line-height: 1; }
+.kpi-needs .kpi-value { color: #b45309; }
+.kpi-hold .kpi-value { color: #92400e; }
+.kpi-ready .kpi-value { color: #047857; }
+.kpi-posted .kpi-value { color: #1d4ed8; }
+.kpi-visible .kpi-value { color: #0f172a; }
+
+.collapsible-card {
+  background: #fff; border: 1px solid #dce6f0;
+  border-radius: 16px; box-shadow: 0 10px 28px rgba(10,24,45,0.08);
+  margin-bottom: 16px; overflow: hidden;
+}
+.collapsible-head {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 12px;
+  padding: 16px 20px; cursor: pointer; user-select: none;
+}
+.collapsible-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: #0b172a; }
+.collapsible-head p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+.collapsible-chevron {
+  width: 18px; height: 18px; transition: transform 0.2s;
+  color: #64748b; flex-shrink: 0;
+}
+.collapsible-card[data-open="true"] .collapsible-chevron { transform: rotate(180deg); }
+.collapsible-body { display: none; padding: 0 20px 20px; }
+.collapsible-card[data-open="true"] .collapsible-body { display: block; }
+
+.ai-mini-grid {
+  display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px;
+}
+.ai-mini {
+  background: #f8fcfa; border: 1px solid #d8efe3;
+  border-radius: 12px; padding: 12px 14px;
+}
+.ai-mini-label { color: #64748b; font-size: 12px; margin-bottom: 6px; }
+.ai-mini-value { font-size: 20px; font-weight: 800; color: #0f172a; }
+.ai-footnote { margin-top: 12px; font-size: 13px; color: #2b7f59; font-weight: 700; }
+
+.upload-panel {
+  background: linear-gradient(180deg,#0d2342 0%,#07172e 100%);
+  color: #fff; border-radius: 12px; padding: 18px;
+}
+.upload-drop {
+  border: 2px dashed rgba(24,195,126,0.7);
+  border-radius: 12px; background: rgba(255,255,255,0.03);
+  min-height: 90px; display: flex; align-items: center;
+  justify-content: center; text-align: center;
+  padding: 16px; margin-bottom: 14px;
+}
+.upload-drop strong { display: block; font-size: 15px; margin-bottom: 4px; }
+.upload-drop span { font-size: 13px; color: rgba(255,255,255,0.7); }
+
+.action-bar {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 12px; align-items: center; margin-bottom: 16px;
+}
+.search-wrap input {
+  width: 100%; min-height: 44px; border-radius: 12px;
+  border: 1px solid #dce6f0; background: #fff;
+  padding: 10px 14px; font-size: 14px; color: #0f172a;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr)) 120px;
+  gap: 12px;
+}
+.filter-field label {
+  display: block; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: #64748b; margin-bottom: 6px;
+}
+.filter-field input,
+.filter-field select {
+  width: 100%; min-height: 42px; border-radius: 10px;
+  border: 1px solid #dce6f0; background: #fff;
+  padding: 8px 10px; font-size: 14px;
+}
+
+.table-shell {
+  background: #fff; border: 1px solid #dce6f0;
+  border-radius: 16px; box-shadow: 0 10px 28px rgba(10,24,45,0.08);
+  overflow: hidden;
+}
+.table-top {
+  padding: 16px 20px; border-bottom: 1px solid #dce6f0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.table-top h3 { margin: 0; font-size: 16px; font-weight: 700; color: #0b172a; }
+.table-top p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
+
+table.queue-table { width: 100%; border-collapse: collapse; }
+.table-shell table.queue-table thead th {
+  text-align: left; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #52657c; background: #f8fbff;
+  padding: 14px 14px; border-bottom: 1px solid #dce6f0; white-space: nowrap;
+}
+.table-shell table.queue-table tbody td {
+  padding: 16px 14px; border-bottom: 1px solid #edf2f7;
+  vertical-align: middle; font-size: 14px; color: #14253c;
+}
+.table-shell table.queue-table tbody tr:last-child td { border-bottom: none; }
+.table-shell table.queue-table tbody tr.data-row:hover { background: #fbfdff; cursor: pointer; }
+.table-shell table.queue-table tbody tr.data-row:hover td:first-child { border-left: 3px solid #18c37e; }
+
+.row-detail-tr { display: none; background: #f8fbff; }
+.row-detail-tr.open { display: table-row; }
+.detail-box {
+  border: 1px solid #dce6f0; background: #fff;
+  border-radius: 12px; padding: 16px; font-size: 13px; color: #334155;
+}
+
+.doc-link { color: #2563eb; text-decoration: none; font-weight: 700; font-size: 13px; }
+.doc-link:hover { text-decoration: underline; }
+.doc-sub { color: #64748b; font-size: 11px; margin-top: 3px; }
+
+.vendor-cell { font-weight: 700; color: #0f172a; }
+.amount-cell { font-weight: 800; color: #0f172a; }
+
+.status-pill {
+  display: inline-flex; align-items: center;
+  border-radius: 999px; padding: 5px 10px;
+  font-size: 11px; font-weight: 800; white-space: nowrap;
+}
+.s-review { background: #fef3c7; color: #92400e; }
+.s-ready { background: #dcfce7; color: #166534; }
+.s-hold { background: #fde68a; color: #78350f; }
+.s-posted { background: #dbeafe; color: #1e40af; }
+.s-error { background: #fee2e2; color: #991b1b; }
+.s-ignored { background: #f3f4f6; color: #6b7280; }
+
+.reason-cell { color: #64748b; font-size: 12px; line-height: 1.5; max-width: 200px; }
+
+.inline-select {
+  min-height: 36px; border-radius: 8px;
+  border: 1px solid #dce6f0; background: #fff;
+  padding: 6px 8px; font-size: 12px;
+}
+.claim-btn {
+  border: 0; background: #eff6ff; color: #1d4ed8;
+  border-radius: 8px; padding: 8px 12px;
+  font-weight: 700; font-size: 12px; cursor: pointer;
+  transition: background 0.15s;
+}
+.claim-btn:hover { background: #dbeafe; }
+
+@media (max-width: 1200px) {
+  .queue-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .ai-mini-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .filter-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .action-bar { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .queue-page { padding: 14px; }
+  .queue-header { flex-direction: column; }
+  .queue-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
 """
 
 
@@ -8541,6 +8726,18 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
     </div>
 </div>
 <script>
+// Queue collapsibles and row expanders
+function toggleCollapsible(id) {{
+    var el = document.getElementById(id);
+    if (!el) return;
+    var isOpen = el.getAttribute('data-open') === 'true';
+    el.setAttribute('data-open', isOpen ? 'false' : 'true');
+}}
+function toggleRowDetail(id) {{
+    var row = document.getElementById(id);
+    if (row) row.classList.toggle('open');
+}}
+
 // Mobile detection and layout fix
 function isMobile() {{
     return window.innerWidth <= 768;
@@ -10977,19 +11174,23 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         if ctx["can_manage_team"] else ""
     )
 
-    stats_html = f"""
-    <div class="card">
-        <div class="topbar">
-            <div><h2 style="margin-bottom:4px;">{esc(t("queue_title", lang))}</h2></div>
-            <div class="actions">{portfolio_btn}{users_btn}{period_close_btn}{time_btn}{comms_btn}{wp_btn}{engagements_btn}<a class="button-link btn-secondary" href="/">{esc(t("btn_reset", lang))}</a></div>
+    header_html = f"""
+    <div class="queue-header">
+        <div>
+            <h1>{esc(t("queue_title", lang))}</h1>
+            <p>{esc(t("stat_visible", lang))}: {total_rows}</p>
+        </div>
+        <div class="queue-header-actions">{portfolio_btn}{users_btn}{period_close_btn}{time_btn}{comms_btn}{wp_btn}{engagements_btn}
+            <button type="button" class="button-link btn-primary" onclick="toggleCollapsible('uploadCard')">\U0001f4e4 T\u00e9l\u00e9verser / Upload</button>
+            <a class="button-link btn-secondary" href="/">{esc(t("btn_reset", lang))}</a>
         </div>
     </div>
-    <div class="stats">
-        <div class="stat"><div class="small muted">{esc(t("stat_needs_review", lang))}</div><div><strong>{counts.get("Needs Review",0)}</strong></div></div>
-        <div class="stat"><div class="small muted">{esc(t("stat_on_hold", lang))}</div><div><strong>{counts.get("On Hold",0)}</strong></div></div>
-        <div class="stat"><div class="small muted">{esc(t("stat_ready_to_post", lang))}</div><div><strong>{counts.get("Ready to Post",0)}</strong></div></div>
-        <div class="stat"><div class="small muted">{esc(t("stat_posted", lang))}</div><div><strong>{counts.get("Posted",0)}</strong></div></div>
-        <div class="stat"><div class="small muted">{esc(t("stat_visible", lang))}</div><div><strong>{total_rows}</strong></div></div>
+    <div class="queue-kpis">
+        <div class="kpi-card kpi-needs"><div class="kpi-label">{esc(t("stat_needs_review", lang))}</div><div class="kpi-value">{counts.get("Needs Review",0)}</div></div>
+        <div class="kpi-card kpi-hold"><div class="kpi-label">{esc(t("stat_on_hold", lang))}</div><div class="kpi-value">{counts.get("On Hold",0)}</div></div>
+        <div class="kpi-card kpi-ready"><div class="kpi-label">{esc(t("stat_ready_to_post", lang))}</div><div class="kpi-value">{counts.get("Ready to Post",0)}</div></div>
+        <div class="kpi-card kpi-posted"><div class="kpi-label">{esc(t("stat_posted", lang))}</div><div class="kpi-value">{counts.get("Posted",0)}</div></div>
+        <div class="kpi-card kpi-visible"><div class="kpi-label">{esc(t("stat_visible", lang))}</div><div class="kpi-value">{total_rows}</div></div>
     </div>"""
 
     # Learning stats
@@ -11003,15 +11204,22 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             _pct_correction = round(100 * _lstats["needed_correction"] / _lstats["total"]) if _lstats["total"] else 0
             _pct_fraud = round(100 * _lstats["fraud_caught"] / _lstats["total"]) if _lstats["total"] else 0
             _learning_stats_html = f"""
-    <div class="card" style="background:#f0fdf4;border:1px solid #86efac;">
-        <h3>\U0001f4ca Apprentissage ce mois / Learning this month</h3>
-        <div style="font-size:14px;line-height:1.8;">
-            Documents ce mois / This month: <strong>{_lstats["total"]}</strong><br>
-            \u251c\u2500\u2500 Auto-approuv\u00e9s (sans r\u00e9vision): <strong>{_lstats["auto_approved"]}</strong> ({_pct_auto}%)<br>
-            \u251c\u2500\u2500 Sugg\u00e9r\u00e9 correctement: <strong>{_lstats["suggested_correctly"]}</strong> ({_pct_suggested}%)<br>
-            \u251c\u2500\u2500 Correction n\u00e9cessaire: <strong>{_lstats["needed_correction"]}</strong> ({_pct_correction}%)<br>
-            \u2514\u2500\u2500 Fraude d\u00e9tect\u00e9e: <strong>{_lstats["fraud_caught"]}</strong> ({_pct_fraud}%)<br>
-            <br>Temps \u00e9conomis\u00e9 / Time saved: <strong>~{_lstats["time_saved_hours"]} heures</strong>
+    <div class="collapsible-card" id="aiCard" data-open="false">
+        <div class="collapsible-head" onclick="toggleCollapsible('aiCard')">
+            <div>
+                <h3>\U0001f4ca Apprentissage ce mois / Learning this month</h3>
+                <p>{_lstats["total"]} documents \u00b7 ~{_lstats["time_saved_hours"]}h \u00e9conomis\u00e9es</p>
+            </div>
+            <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="collapsible-body">
+            <div class="ai-mini-grid">
+                <div class="ai-mini"><div class="ai-mini-label">Auto-approuv\u00e9s</div><div class="ai-mini-value">{_lstats["auto_approved"]} <small style="font-size:12px;color:#64748b;">({_pct_auto}%)</small></div></div>
+                <div class="ai-mini"><div class="ai-mini-label">Sugg\u00e9r\u00e9 correctement</div><div class="ai-mini-value">{_lstats["suggested_correctly"]} <small style="font-size:12px;color:#64748b;">({_pct_suggested}%)</small></div></div>
+                <div class="ai-mini"><div class="ai-mini-label">Correction n\u00e9cessaire</div><div class="ai-mini-value">{_lstats["needed_correction"]} <small style="font-size:12px;color:#64748b;">({_pct_correction}%)</small></div></div>
+                <div class="ai-mini"><div class="ai-mini-label">Fraude d\u00e9tect\u00e9e</div><div class="ai-mini-value">{_lstats["fraud_caught"]} <small style="font-size:12px;color:#64748b;">({_pct_fraud}%)</small></div></div>
+            </div>
+            <div class="ai-footnote">Temps \u00e9conomis\u00e9 / Time saved: ~{_lstats["time_saved_hours"]} heures</div>
         </div>
     </div>"""
     except Exception:
@@ -11027,26 +11235,35 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         pass
 
     upload_html = f"""
-    <!-- Upload Button -->
-    <div style="background:#1a2e4a;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center;">
-        <h3 style="color:white;margin:0 0 12px 0;">\U0001f4e4 T\u00e9l\u00e9verser des documents / Upload Documents</h3>
-        <form method="POST" action="/upload" enctype="multipart/form-data">
-            <div id="drop-zone" style="border:2px dashed #2ecc71;border-radius:8px;padding:32px;text-align:center;color:#aaa;margin-bottom:8px;background:#0d1b2a;">
-                \U0001f4c1 Glissez-d\u00e9posez ici / Drag &amp; drop here
+    <div class="collapsible-card" id="uploadCard" data-open="false">
+        <div class="collapsible-head" onclick="toggleCollapsible('uploadCard')">
+            <div>
+                <h3>\U0001f4e4 T\u00e9l\u00e9verser des documents / Upload Documents</h3>
+                <p>Glissez-d\u00e9posez ou s\u00e9lectionnez des fichiers PDF/images</p>
             </div>
-            <input type="file" id="upload-file-input" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp"
-                   style="color:white;margin-bottom:8px;display:block;width:100%;">
-            <select name="client_code" style="width:100%;padding:8px;margin-bottom:8px;border-radius:4px;">
-                <option value="">-- S\u00e9lectionner client / Select client --</option>
-                {_upload_client_options}
-            </select>
-            <button id="upload-btn" type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;width:100%;">
-                \u2705 T\u00e9l\u00e9verser / Upload
-            </button>
-            <div id="upload-spinner" style="display:none;text-align:center;padding:16px;color:#aaa;">
-                \u23f3 Traitement en cours... / Processing...
+            <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="collapsible-body">
+            <div class="upload-panel">
+                <form method="POST" action="/upload" enctype="multipart/form-data">
+                    <div id="drop-zone" class="upload-drop">
+                        <div><strong>\U0001f4c1 Glissez-d\u00e9posez ici / Drag &amp; drop here</strong><span>PDF, JPG, PNG, TIFF, HEIC, WEBP</span></div>
+                    </div>
+                    <input type="file" id="upload-file-input" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp"
+                           style="color:#fff;margin-bottom:10px;display:block;width:100%;">
+                    <select name="client_code" style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;">
+                        <option value="" style="color:#0f172a;">-- S\u00e9lectionner client / Select client --</option>
+                        {_upload_client_options}
+                    </select>
+                    <button id="upload-btn" type="submit" style="background:#18c37e;color:#041220;border:none;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;width:100%;">
+                        \u2705 T\u00e9l\u00e9verser / Upload
+                    </button>
+                    <div id="upload-spinner" style="display:none;text-align:center;padding:12px;color:rgba(255,255,255,0.7);">
+                        \u23f3 Traitement en cours... / Processing...
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
     <script>
     (function() {{
@@ -11089,27 +11306,40 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         for v in ["Needs Review", "On Hold", "Ready to Post", "Posted", "Ignored"]
     )
     filters_html = f"""
-    <div class="card">
-        <form method="GET" action="/">
-            <div class="filters">
-                <div class="field"><label>{esc(t("filter_status", lang))}</label><select name="status">
-                    <option value="">{esc(t("queue_all_visible", lang))}</option>
-                    {status_opts}
-                </select></div>
-                <div class="field"><label>{esc(t("filter_search", lang))}</label><input type="text" name="q" value="{esc(q)}" placeholder="{esc(t("filter_search_ph", lang))}"></div>
-                <div class="field"><label>{esc(t("filter_queue_view", lang))}</label><select name="queue_mode">
-                    <option value="all" {"selected" if not only_my_queue and not only_unassigned else ""}>{esc(t("queue_all_visible", lang))}</option>
-                    <option value="mine" {"selected" if only_my_queue else ""}>{esc(t("queue_mine", lang))}</option>
-                    <option value="unassigned" {"selected" if only_unassigned else ""}>{esc(t("queue_unassigned", lang))}</option>
-                </select></div>
-                <div class="field"><label>{esc(t("filter_ignored", lang))}</label><select name="include_ignored">
-                    <option value="0" {"selected" if not include_ignored else ""}>{esc(t("ignored_hide", lang))}</option>
-                    <option value="1" {"selected" if include_ignored else ""}>{esc(t("ignored_show", lang))}</option>
-                </select></div>
-                <div class="field" style="align-self:end;"><button class="btn-primary" type="submit">{esc(t("btn_filter", lang))}</button></div>
+    <form method="GET" action="/">
+        <div class="action-bar">
+            <div class="search-wrap"><input type="text" name="q" value="{esc(q)}" placeholder="{esc(t("filter_search_ph", lang))}"></div>
+            <button type="button" class="button-link btn-secondary" onclick="toggleCollapsible('filterCard')">\u2699\ufe0f More Filters</button>
+            <button class="button-link btn-primary" type="submit">{esc(t("btn_filter", lang))}</button>
+        </div>
+        <div class="collapsible-card" id="filterCard" data-open="false">
+            <div class="collapsible-head" onclick="toggleCollapsible('filterCard')">
+                <div>
+                    <h3>\u2699\ufe0f {esc(t("btn_filter", lang))}</h3>
+                    <p>{esc(t("filter_status", lang))} \u00b7 {esc(t("filter_queue_view", lang))} \u00b7 {esc(t("filter_ignored", lang))}</p>
+                </div>
+                <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
-        </form>
-    </div>"""
+            <div class="collapsible-body">
+                <div class="filter-grid">
+                    <div class="filter-field"><label>{esc(t("filter_status", lang))}</label><select name="status">
+                        <option value="">{esc(t("queue_all_visible", lang))}</option>
+                        {status_opts}
+                    </select></div>
+                    <div class="filter-field"><label>{esc(t("filter_queue_view", lang))}</label><select name="queue_mode">
+                        <option value="all" {"selected" if not only_my_queue and not only_unassigned else ""}>{esc(t("queue_all_visible", lang))}</option>
+                        <option value="mine" {"selected" if only_my_queue else ""}>{esc(t("queue_mine", lang))}</option>
+                        <option value="unassigned" {"selected" if only_unassigned else ""}>{esc(t("queue_unassigned", lang))}</option>
+                    </select></div>
+                    <div class="filter-field"><label>{esc(t("filter_ignored", lang))}</label><select name="include_ignored">
+                        <option value="0" {"selected" if not include_ignored else ""}>{esc(t("ignored_hide", lang))}</option>
+                        <option value="1" {"selected" if include_ignored else ""}>{esc(t("ignored_show", lang))}</option>
+                    </select></div>
+                    <div class="filter-field" style="align-self:end;"><button class="button-link btn-primary" type="submit">{esc(t("btn_filter", lang))}</button></div>
+                </div>
+            </div>
+        </div>
+    </form>"""
 
     all_usernames = get_available_usernames()
     _unassigned_badge = '<span class="badge badge-needsreview">\U0001F4C1 Non assign\u00e9</span>'
@@ -11121,26 +11351,27 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         pass
     row_html: list[str] = []
     card_html: list[str] = []
-    for row in rows:
+    for _row_idx, row in enumerate(rows):
         assigned = normalize_text(row["assigned_to"])
         is_mine = normalize_key(assigned) == normalize_key(ctx["username"])
         status_display = get_accounting_status(row)
         reason = get_plain_review_reason(row)
         next_action = get_next_action(row, ctx)
         next_action_display = esc(t(_NEXT_ACTION_KEYS.get(next_action, next_action), lang))
+        _detail_id = f"row{_row_idx}"
 
         if ctx["can_assign"]:
             opts = "".join(f'<option value="{esc(u)}" {"selected" if normalize_key(assigned)==normalize_key(u) else ""}>{esc(u)}</option>' for u in all_usernames)
-            assign_ctrl = f"""<form method="POST" action="/assign" class="inline-form">
+            assign_ctrl = f"""<form method="POST" action="/assign" class="inline-form" onclick="event.stopPropagation()">
                 <input type="hidden" name="document_id" value="{esc(row["document_id"])}">
                 <input type="hidden" name="redirect_to" value="home">
-                <select name="assigned_to" style="min-width:110px;"><option value="">{esc(t("option_unassigned", lang))}</option>{opts}</select>
-                <button class="btn-secondary" type="submit">{esc(t("btn_assign", lang))}</button></form>"""
+                <select name="assigned_to" class="inline-select" style="min-width:110px;"><option value="">{esc(t("option_unassigned", lang))}</option>{opts}</select>
+                <button class="claim-btn" type="submit">{esc(t("btn_assign", lang))}</button></form>"""
         elif not assigned:
-            assign_ctrl = f"""<form method="POST" action="/claim" class="inline-form">
+            assign_ctrl = f"""<form method="POST" action="/claim" class="inline-form" onclick="event.stopPropagation()">
                 <input type="hidden" name="document_id" value="{esc(row["document_id"])}">
                 <input type="hidden" name="redirect_to" value="home">
-                <button class="btn-secondary" type="submit">{esc(t("btn_claim", lang))}</button></form>"""
+                <button class="claim-btn" type="submit">{esc(t("btn_claim", lang))}</button></form>"""
         else:
             assign_ctrl = esc(assigned or t("unassigned_label", lang))
 
@@ -11156,16 +11387,35 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             except Exception:
                 pass
 
-        row_html.append(f"""<tr>
-            <td class="file-cell"><a href="/document?id={urlquote(row["document_id"])}">{esc(row["file_name"])}</a>
-                <div class="small muted">{esc(row["document_id"])}</div></td>
-            <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td><td>{esc(row["vendor"])}</td>
-            <td>{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
+        _doc_url = f"/document?id={urlquote(row['document_id'])}"
+        row_html.append(f"""<tr class="data-row" onclick="toggleRowDetail('{_detail_id}')">
+            <td class="file-cell"><a class="doc-link" href="{_doc_url}" onclick="event.stopPropagation()">{esc(row["file_name"])}</a>
+                <div class="doc-sub">{esc(row["document_id"])}</div></td>
+            <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td>
+            <td class="vendor-cell">{esc(row["vendor"])}</td>
+            <td class="amount-cell">{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
             <td>{esc(row["category"])}</td><td>{esc(row["gl_account"])}</td>
             <td>{review_status_badge(status_display)}</td>
             <td>{assign_ctrl}</td>
             <td class="reason-cell">{_ls_badge}{queue_fraud_badges(row)} {esc(reason)}</td>
-            <td>{next_action_display}</td></tr>""")
+            <td>{next_action_display}</td></tr>
+<tr id="{_detail_id}" class="row-detail-tr"><td colspan="11">
+    <div class="detail-box">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:240px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:700;margin-bottom:4px;">{esc(t("col_reason", lang))}</div>
+                <div style="color:#334155;">{_ls_badge}{queue_fraud_badges(row)} {esc(reason) or '&mdash;'}</div>
+            </div>
+            <div style="flex:1;min-width:240px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:700;margin-bottom:4px;">{esc(t("col_action", lang))}</div>
+                <div style="color:#334155;">{next_action_display}</div>
+            </div>
+            <div>
+                <a href="{_doc_url}" class="button-link btn-primary">{esc(t("btn_open", lang)) if t("btn_open", lang) != "btn_open" else "Ouvrir / Open"}</a>
+            </div>
+        </div>
+    </div>
+</td></tr>""")
 
         _fraud_badge_mobile = queue_fraud_badges(row)
         _status_class = "badge-needsreview" if "needs" in status_display.lower() else (
@@ -11189,18 +11439,25 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         </div>""")
 
     no_docs_cell = f'<tr><td colspan=11 class=muted>{esc(t("no_documents_found", lang))}</td></tr>'
-    table_html = f"""<div class="card"><table class="queue-table">
-        <thead><tr>
-            <th>{esc(t("col_document", lang))}</th><th>{esc(t("col_client", lang))}</th>
-            <th>{esc(t("col_vendor", lang))}</th><th>{esc(t("col_amount", lang))}</th>
-            <th>{esc(t("col_date", lang))}</th><th>{esc(t("col_category", lang))}</th>
-            <th>{esc(t("col_gl_account", lang))}</th><th>{esc(t("col_status", lang))}</th>
-            <th>{esc(t("col_assigned", lang))}</th><th>{esc(t("col_reason", lang))}</th>
-            <th>{esc(t("col_action", lang))}</th>
-        </tr></thead>
-        <tbody>{"".join(row_html) if row_html else no_docs_cell}</tbody>
-    </table>
-    <div class="queue-cards">{"".join(card_html) if card_html else '<p class="muted">' + esc(t("no_documents_found", lang)) + '</p>'}</div>
+    table_html = f"""<div class="table-shell">
+        <div class="table-top">
+            <div>
+                <h3>{esc(t("queue_title", lang))}</h3>
+                <p>{total_rows} documents \u00b7 Page {page} / {total_pages}</p>
+            </div>
+        </div>
+        <div style="overflow-x:auto;"><table class="queue-table">
+            <thead><tr>
+                <th>{esc(t("col_document", lang))}</th><th>{esc(t("col_client", lang))}</th>
+                <th>{esc(t("col_vendor", lang))}</th><th>{esc(t("col_amount", lang))}</th>
+                <th>{esc(t("col_date", lang))}</th><th>{esc(t("col_category", lang))}</th>
+                <th>{esc(t("col_gl_account", lang))}</th><th>{esc(t("col_status", lang))}</th>
+                <th>{esc(t("col_assigned", lang))}</th><th>{esc(t("col_reason", lang))}</th>
+                <th>{esc(t("col_action", lang))}</th>
+            </tr></thead>
+            <tbody>{"".join(row_html) if row_html else no_docs_cell}</tbody>
+        </table></div>
+        <div class="queue-cards" style="padding:0 16px 16px;">{"".join(card_html) if card_html else '<p class="muted">' + esc(t("no_documents_found", lang)) + '</p>'}</div>
     </div>"""
 
     # Pagination controls
@@ -11251,7 +11508,17 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             </div>
         </div>"""
 
-    return page_layout(t("dashboard_title", lang), stats_html + _learning_stats_html + upload_html + filters_html + table_html + pagination_html,
+    body_html = (
+        '<div class="queue-page">'
+        + header_html
+        + _learning_stats_html
+        + upload_html
+        + filters_html
+        + table_html
+        + pagination_html
+        + '</div>'
+    )
+    return page_layout(t("dashboard_title", lang), body_html,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
