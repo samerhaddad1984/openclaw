@@ -8318,7 +8318,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
 </head>
 <body>
 <header>
-    <h1>{esc(t("dashboard_header", lang))}</h1>
+    <a href="/" class="brand-logo" style="display:inline-flex;align-items:center;height:32px;text-decoration:none;" aria-label="OtoCPA">{LOGO_SVG_NAV}</a>
     <div class="header-controls-inline" style="display:flex;gap:12px;align-items:center;">{right_controls}</div>
 </header>
 <div class="nav-bar">
@@ -8705,6 +8705,164 @@ Email: <a href="mailto:privacy@otocpa.com">privacy@otocpa.com</a></p>
 
 
 # ---------------------------------------------------------------------------
+# Brand assets — shared SVG logo + shared public-page CSS
+# ---------------------------------------------------------------------------
+
+LOGO_SVG_LARGE = """<svg width="160" height="48" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" aria-label="OtoCPA">
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16C172"/>
+      <stop offset="100%" stop-color="#7AD66A"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(80,48)">
+    <circle cx="52" cy="118" r="14" fill="url(#lg)"/>
+    <circle cx="276" cy="118" r="14" fill="url(#lg)"/>
+    <path d="M52 132 C52 165,58 178,78 188 L78 148 C67 144,58 140,52 132Z" fill="url(#lg)"/>
+    <path d="M276 132 C276 165,270 178,250 188 L250 148 C261 144,270 140,276 132Z" fill="url(#lg)"/>
+    <path d="M92 86 Q160 28 228 86 L228 178 Q228 240 160 284 Q92 240 92 178 Z" fill="url(#lg)"/>
+    <path d="M160 53 Q194 54 228 86 L228 178 Q228 240 160 284 Z" fill="#0E8F61" opacity="0.20"/>
+    <rect x="120" y="78" width="80" height="64" rx="22" fill="#0B1837"/>
+    <circle cx="144" cy="126" r="13" fill="url(#lg)"/>
+    <circle cx="184" cy="126" r="13" fill="url(#lg)"/>
+    <path d="M152 184 Q160 190 168 184" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/>
+    <path d="M62 190 Q160 246 258 190" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(400,78)">
+    <text x="0" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#F4F6F8">Oto</text>
+    <text x="250" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="url(#lg)">CPA</text>
+  </g>
+</svg>"""
+
+LOGO_SVG_NAV = """<svg width="107" height="32" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" aria-label="OtoCPA" style="display:block;">
+  <defs>
+    <linearGradient id="lg_nav" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16C172"/>
+      <stop offset="100%" stop-color="#7AD66A"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(80,48)">
+    <circle cx="52" cy="118" r="14" fill="url(#lg_nav)"/>
+    <circle cx="276" cy="118" r="14" fill="url(#lg_nav)"/>
+    <path d="M52 132 C52 165,58 178,78 188 L78 148 C67 144,58 140,52 132Z" fill="url(#lg_nav)"/>
+    <path d="M276 132 C276 165,270 178,250 188 L250 148 C261 144,270 140,276 132Z" fill="url(#lg_nav)"/>
+    <path d="M92 86 Q160 28 228 86 L228 178 Q228 240 160 284 Q92 240 92 178 Z" fill="url(#lg_nav)"/>
+    <path d="M160 53 Q194 54 228 86 L228 178 Q228 240 160 284 Z" fill="#0E8F61" opacity="0.20"/>
+    <rect x="120" y="78" width="80" height="64" rx="22" fill="#0B1837"/>
+    <circle cx="144" cy="126" r="13" fill="url(#lg_nav)"/>
+    <circle cx="184" cy="126" r="13" fill="url(#lg_nav)"/>
+    <path d="M152 184 Q160 190 168 184" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/>
+    <path d="M62 190 Q160 246 258 190" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(400,78)">
+    <text x="0" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#F4F6F8">Oto</text>
+    <text x="250" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="url(#lg_nav)">CPA</text>
+  </g>
+</svg>"""
+
+# Shared public-page CSS (login, 2FA, signup, signup success).
+# Uses brand palette: --black #081633, --dark #0d1a2e, --card #0f1e30,
+# --border #1a2d45, --green #16C172, --green2 #7AD66A, --white #F4F6F8,
+# --muted #6b8099, --text #c0d0e0. Arial — no web fonts required.
+PUBLIC_CSS = """
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Arial,Helvetica,sans-serif;
+  background:#081633;
+  color:#F4F6F8;
+  min-height:100vh;
+  line-height:1.5;
+  background-image:
+    linear-gradient(rgba(26,45,69,0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,45,69,0.35) 1px, transparent 1px);
+  background-size:60px 60px;
+}
+a{color:#7AD66A;text-decoration:none}
+a:hover{color:#16C172;text-decoration:underline}
+.public-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px}
+.brand-top{margin-bottom:28px;display:flex;justify-content:center}
+.auth-card{
+  width:100%;
+  max-width:440px;
+  background:#0f1e30;
+  border:1px solid #1a2d45;
+  border-radius:16px;
+  padding:48px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.35);
+}
+.auth-card h1{margin:0 0 8px;font-size:26px;font-weight:700;color:#F4F6F8;letter-spacing:-0.3px}
+.auth-card .sub{margin:0 0 28px;color:#6b8099;font-size:14px}
+.field{margin-bottom:18px}
+.field label{
+  display:block;margin-bottom:8px;
+  font-size:13px;font-weight:600;color:#c0d0e0;letter-spacing:0.2px;
+}
+.field input[type=text],.field input[type=password],.field input[type=email]{
+  width:100%;
+  background:#081633;
+  border:1px solid #1a2d45;
+  color:#F4F6F8;
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:15px;
+  font-family:inherit;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.field input:focus{outline:none;border-color:#16C172;box-shadow:0 0 0 3px rgba(22,193,114,0.15)}
+.field input::placeholder{color:#6b8099}
+.btn-green{
+  display:block;width:100%;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  color:#000;
+  border:none;
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:15px;font-weight:700;
+  cursor:pointer;
+  font-family:inherit;
+  transition:transform .08s ease,filter .15s ease;
+  text-decoration:none;text-align:center;
+}
+.btn-green:hover{filter:brightness(1.05);text-decoration:none;color:#000}
+.btn-green:active{transform:translateY(1px)}
+.btn-outline{
+  display:block;width:100%;
+  background:transparent;
+  color:#7AD66A;
+  border:1px solid #16C172;
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:15px;font-weight:700;
+  cursor:pointer;
+  font-family:inherit;
+  text-decoration:none;text-align:center;
+  transition:background .15s ease,color .15s ease;
+}
+.btn-outline:hover{background:rgba(22,193,114,0.1);color:#16C172;text-decoration:none}
+.flash{
+  padding:12px 14px;border-radius:8px;margin-bottom:18px;
+  font-size:14px;font-weight:500;
+}
+.flash.error{background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.45);color:#fca5a5}
+.flash.info{background:rgba(22,193,114,0.1);border:1px solid rgba(22,193,114,0.35);color:#7AD66A}
+.auth-links{
+  display:flex;flex-direction:column;gap:10px;
+  margin-top:22px;text-align:center;font-size:13px;color:#6b8099;
+}
+.auth-links a{color:#7AD66A}
+.public-footer{
+  margin-top:32px;text-align:center;font-size:12px;color:#6b8099;
+}
+.public-footer a{color:#6b8099;text-decoration:underline}
+@media (max-width:520px){
+  .auth-card{padding:32px 22px;border-radius:12px}
+  .public-wrap{padding:28px 14px}
+}
+"""
+
+
+# ---------------------------------------------------------------------------
 # Login page
 # ---------------------------------------------------------------------------
 
@@ -8712,26 +8870,44 @@ def render_login(flash_error: str = "", lang: str = "fr") -> str:
     err = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
     switch_lang = "en" if lang == "fr" else "fr"
     switch_label = "English" if lang == "fr" else "Français"
+    heading = "Connexion / Login"
+    signup_label = "Pas encore client? Créer un compte" if lang == "fr" else "New to OtoCPA? Create an account"
+    privacy_label = "Politique de confidentialité" if lang == "fr" else "Privacy policy"
     return f"""<!doctype html>
 <html lang="{lang}">
-<head><meta charset="utf-8"><title>{esc(t("login_page_title", lang))}</title><style>{CSS}
-.login-wrap{{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f7fb}}
-.login-box{{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:2rem 2.5rem;min-width:320px;box-shadow:0 2px 8px rgba(0,0,0,.06)}}
-.login-lang{{text-align:center;margin-top:14px;font-size:12px;color:#6b7280}}
-.login-lang a{{color:#2563eb;text-decoration:none}}
-</style></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{esc(t("login_page_title", lang))}</title>
+<style>{PUBLIC_CSS}</style>
+</head>
 <body>
-<div class="login-wrap">
-    <div class="login-box">
-        <h2 style="margin-bottom:1.5rem;">OtoCPA</h2>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="auth-card">
+        <h1>{heading}</h1>
+        <p class="sub">Tableau de bord OtoCPA</p>
         {err}
-        <form method="POST" action="/login">
+        <form method="POST" action="/login" autocomplete="on">
             <input type="hidden" name="lang" value="{lang}">
-            <div class="field"><label>{esc(t("username", lang))}</label><input type="text" name="username" autofocus></div>
-            <div class="field"><label>{esc(t("password", lang))}</label><input type="password" name="password"></div>
-            <button class="btn-primary" type="submit" style="width:100%;padding:12px;">{esc(t("login_btn", lang))}</button>
+            <div class="field">
+                <label for="f-user">{esc(t("username", lang))}</label>
+                <input id="f-user" type="text" name="username" autofocus autocomplete="username">
+            </div>
+            <div class="field">
+                <label for="f-pw">{esc(t("password", lang))}</label>
+                <input id="f-pw" type="password" name="password" autocomplete="current-password">
+            </div>
+            <button class="btn-green" type="submit">{esc(t("login_btn", lang))}</button>
         </form>
-        <div class="login-lang"><a href="/login?lang={switch_lang}">{switch_label}</a></div>
+        <div class="auth-links">
+            <a href="/signup">{signup_label}</a>
+            <a href="/privacy">{privacy_label}</a>
+            <a href="/login?lang={switch_lang}">{switch_label}</a>
+        </div>
+    </div>
+    <div class="public-footer">
+        &copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25
     </div>
 </div>
 </body></html>"""
@@ -8775,25 +8951,43 @@ def render_change_password(user: dict[str, Any] | None = None, flash_error: str 
 
 def render_totp_challenge(flash_error: str = "", lang: str = "fr") -> str:
     err = f'<div class="flash error">{esc(flash_error)}</div>' if flash_error else ""
+    heading = "Authentification à deux facteurs" if lang == "fr" else "Two-Factor Authentication"
+    sub = ("Entrez le code à 6 chiffres de votre application d'authentification."
+           if lang == "fr" else "Enter the 6-digit code from your authenticator app.")
+    label = "Code"
+    verify = "Vérifier" if lang == "fr" else "Verify"
+    cancel = "Annuler" if lang == "fr" else "Cancel"
     return f"""<!doctype html>
 <html lang="{lang}">
-<head><meta charset="utf-8"><title>Two-Factor Authentication</title><style>{CSS}
-.login-wrap{{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f7fb}}
-.login-box{{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:2rem 2.5rem;min-width:340px;box-shadow:0 2px 8px rgba(0,0,0,.06)}}
-</style></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{heading} — OtoCPA</title>
+<style>{PUBLIC_CSS}
+.field input[name=code]{{letter-spacing:10px;text-align:center;font-size:22px;font-weight:700}}
+</style>
+</head>
 <body>
-<div class="login-wrap">
-    <div class="login-box">
-        <h2 style="margin-bottom:.5rem;">Two-Factor Authentication</h2>
-        <p class="muted" style="margin-bottom:1.5rem;">Enter the 6-digit code from your authenticator app.</p>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="auth-card">
+        <h1>{heading}</h1>
+        <p class="sub">{sub}</p>
         {err}
         <form method="POST" action="/login/totp">
-            <div class="field"><label>Code</label>
-                <input type="text" name="code" inputmode="numeric" pattern="[0-9]{{6}}"
-                       maxlength="6" autofocus autocomplete="one-time-code"></div>
-            <button class="btn-primary" type="submit" style="width:100%;padding:12px;">Verify</button>
+            <div class="field">
+                <label for="f-code">{label}</label>
+                <input id="f-code" type="text" name="code" inputmode="numeric" pattern="[0-9]{{6}}"
+                       maxlength="6" autofocus autocomplete="one-time-code" placeholder="123456">
+            </div>
+            <button class="btn-green" type="submit">{verify}</button>
         </form>
-        <p style="text-align:center;margin-top:14px;font-size:12px;"><a href="/logout">Cancel</a></p>
+        <div class="auth-links">
+            <a href="/logout">{cancel}</a>
+        </div>
+    </div>
+    <div class="public-footer">
+        &copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25
     </div>
 </div>
 </body></html>"""
@@ -9385,48 +9579,152 @@ def render_firms_page(ctx: dict[str, Any], user: dict[str, Any],
 
 
 def render_signup_page() -> str:
-    return """<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OtoCPA — Commencer / Get Started</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Arial, sans-serif; background: #0d1b2a; color: white; }
-.hero { text-align: center; padding: 60px 24px 40px; }
-.hero h1 { font-size: 48px; color: white; margin-bottom: 16px; }
-.hero p { font-size: 20px; color: #aaa; max-width: 600px; margin: 0 auto; }
-.toggle-wrap { text-align: center; margin: 20px auto 0; }
-.toggle { display: inline-flex; background: #1a2e4a; border-radius: 999px; padding: 4px; gap: 4px; }
-.toggle button { background: transparent; color: #aaa; border: none; padding: 10px 24px; border-radius: 999px; font-size: 15px; font-weight: bold; cursor: pointer; }
-.toggle button.active { background: #2ecc71; color: #000; }
-.save-badge { display: inline-block; margin-left: 10px; background: #f39c12; color: #000; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; vertical-align: middle; }
-.plans { display: flex; gap: 24px; max-width: 1100px; margin: 40px auto; padding: 0 24px; justify-content: center; flex-wrap: wrap; }
-.plan { background: #1a2e4a; border-radius: 12px; padding: 32px; width: 300px; position: relative; }
-.plan.popular { border: 2px solid #2ecc71; }
-.popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #2ecc71; color: #000; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; }
-.plan h2 { font-size: 24px; margin-bottom: 8px; }
-.plan .price { font-size: 48px; font-weight: bold; color: #2ecc71; margin: 16px 0; }
-.plan .price span { font-size: 18px; color: #aaa; }
-.plan .savings { color: #f39c12; font-size: 13px; margin: -8px 0 12px; font-weight: bold; min-height: 18px; }
-.plan .desc { color: #aaa; margin-bottom: 24px; font-size: 14px; }
-.plan ul { list-style: none; margin-bottom: 32px; }
-.plan ul li { padding: 8px 0; color: #ccc; font-size: 14px; }
-.plan ul li::before { content: "\\2713 "; color: #2ecc71; font-weight: bold; }
-.btn { display: block; width: 100%; padding: 14px; background: #2ecc71; color: #000; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; text-align: center; }
-.btn:hover { background: #27ae60; }
-.btn-outline { background: transparent; border: 2px solid #2ecc71; color: #2ecc71; }
-.btn-outline:hover { background: #2ecc71; color: #000; }
-footer { text-align: center; padding: 40px; color: #666; font-size: 14px; }
-footer a { color: #666; }
-[data-billing="yearly"] .m-only { display: none; }
-[data-billing="monthly"] .y-only { display: none; }
+*,*::before,*::after{{box-sizing:border-box}}
+html,body{{margin:0;padding:0}}
+body{{
+  font-family:Arial,Helvetica,sans-serif;
+  background:#081633;
+  color:#F4F6F8;
+  line-height:1.5;
+  background-image:
+    linear-gradient(rgba(26,45,69,0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,45,69,0.35) 1px, transparent 1px);
+  background-size:60px 60px;
+}}
+a{{color:#7AD66A;text-decoration:none}}
+a:hover{{color:#16C172}}
+.site-header{{
+  padding:28px 24px 8px;
+  display:flex;justify-content:center;
+}}
+.hero{{text-align:center;padding:32px 24px 24px;max-width:760px;margin:0 auto}}
+.hero h1{{
+  font-size:44px;font-weight:700;letter-spacing:-1px;
+  margin:0 0 14px;color:#F4F6F8;
+}}
+.hero h1 .accent{{
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}}
+.hero p{{color:#c0d0e0;font-size:18px;margin:0 auto;max-width:600px}}
+.toggle-wrap{{text-align:center;margin:28px auto 0}}
+.toggle{{
+  display:inline-flex;background:#0f1e30;border:1px solid #1a2d45;
+  border-radius:999px;padding:4px;gap:4px;
+}}
+.toggle button{{
+  background:transparent;color:#c0d0e0;border:none;
+  padding:10px 22px;border-radius:999px;
+  font-size:14px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:color .15s ease;
+}}
+.toggle button:hover{{color:#F4F6F8}}
+.toggle button.active{{
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  color:#000;
+}}
+.save-badge{{
+  display:inline-block;margin-left:10px;
+  background:rgba(122,214,106,0.18);color:#7AD66A;
+  padding:2px 10px;border-radius:999px;
+  font-size:11px;font-weight:700;letter-spacing:0.3px;vertical-align:middle;
+  border:1px solid rgba(122,214,106,0.35);
+}}
+.plans{{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:24px;
+  max-width:1120px;margin:48px auto;padding:0 24px;
+}}
+.plan{{
+  background:#0f1e30;border:1px solid #1a2d45;border-radius:16px;
+  padding:36px 32px;position:relative;
+  display:flex;flex-direction:column;
+  box-shadow:0 12px 32px rgba(0,0,0,0.25);
+}}
+.plan.popular{{
+  border:1px solid #16C172;
+  box-shadow:0 12px 48px rgba(22,193,114,0.18);
+}}
+.popular-badge{{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  color:#000;padding:5px 16px;border-radius:999px;
+  font-size:12px;font-weight:700;letter-spacing:0.5px;
+}}
+.plan h2{{font-size:22px;margin:0 0 8px;font-weight:700;color:#F4F6F8}}
+.plan .desc{{color:#6b8099;margin-bottom:18px;font-size:14px}}
+.plan .price{{
+  font-size:46px;font-weight:800;margin:12px 0 4px;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  line-height:1;
+}}
+.plan .price span{{
+  font-size:16px;color:#6b8099;font-weight:500;
+  -webkit-text-fill-color:#6b8099;
+}}
+.plan .savings{{
+  color:#7AD66A;font-size:13px;font-weight:600;
+  min-height:20px;margin:4px 0 18px;
+}}
+.plan ul{{list-style:none;padding:0;margin:0 0 28px;flex:1}}
+.plan ul li{{
+  padding:8px 0;color:#c0d0e0;font-size:14px;
+  display:flex;gap:10px;align-items:flex-start;
+}}
+.plan ul li::before{{
+  content:"";flex:0 0 18px;height:18px;border-radius:50%;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  background-size:12px 12px;background-position:center;background-repeat:no-repeat;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3 8l3.5 3.5L13 5' stroke='%23081633' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  margin-top:2px;
+}}
+.btn{{
+  display:block;width:100%;padding:14px;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  color:#000;border:none;border-radius:8px;
+  font-size:15px;font-weight:700;cursor:pointer;
+  text-decoration:none;text-align:center;
+  font-family:inherit;transition:filter .15s ease,transform .08s ease;
+}}
+.btn:hover{{filter:brightness(1.05);color:#000;text-decoration:none}}
+.btn:active{{transform:translateY(1px)}}
+.btn-outline{{
+  background:transparent;border:1px solid #16C172;color:#7AD66A;
+}}
+.btn-outline:hover{{background:rgba(22,193,114,0.1);color:#16C172;filter:none}}
+.enterprise{{
+  text-align:center;margin:0 auto 48px;padding:0 24px;max-width:760px;
+}}
+.enterprise p{{color:#c0d0e0;margin-bottom:10px}}
+.enterprise a{{color:#7AD66A;font-weight:600}}
+.public-footer{{
+  text-align:center;padding:32px 24px 40px;color:#6b8099;font-size:13px;
+}}
+.public-footer a{{color:#6b8099;text-decoration:underline}}
+.public-footer .sep{{margin:0 8px;color:#1a2d45}}
+.public-footer .login-line{{margin-top:10px}}
+.public-footer .login-line a{{color:#7AD66A;font-weight:600;text-decoration:none}}
+[data-billing="yearly"] .m-only{{display:none}}
+[data-billing="monthly"] .y-only{{display:none}}
+@media (max-width:940px){{
+  .plans{{grid-template-columns:1fr;max-width:440px}}
+  .hero h1{{font-size:36px}}
+}}
 </style>
 </head>
 <body data-billing="monthly">
 
+<header class="site-header">{LOGO_SVG_LARGE}</header>
+
 <div class="hero">
-    <h1>OtoCPA</h1>
+    <h1>Automatisation comptable pour les cabinets <span class="accent">CPA</span></h1>
     <p>Automatisation comptable pour les cabinets CPA du Qu&eacute;bec.<br>Accounting automation for Quebec CPA firms.</p>
     <div class="toggle-wrap">
         <div class="toggle" role="tablist">
@@ -9439,10 +9737,11 @@ footer a { color: #666; }
 <div class="plans">
     <div class="plan">
         <h2>D&eacute;marrage</h2>
+        <p class="desc">Pour les CPAs solo et petits cabinets</p>
         <div class="price m-only">$99<span>/mois</span></div>
         <div class="price y-only">$990<span>/an</span></div>
-        <div class="savings y-only">&#128176; Économisez $198/an</div>
-        <p class="desc">Pour les CPAs solo et petits cabinets</p>
+        <div class="savings m-only">&nbsp;</div>
+        <div class="savings y-only">&#128176; &Eacute;conomisez $198/an</div>
         <ul>
             <li>~300 re&ccedil;us/mois</li>
             <li>Clients illimit&eacute;s</li>
@@ -9459,10 +9758,11 @@ footer a { color: #666; }
     <div class="plan popular">
         <div class="popular-badge">&#9733; POPULAIRE</div>
         <h2>Professionnel</h2>
+        <p class="desc">Pour la plupart des cabinets CPA</p>
         <div class="price m-only">$299<span>/mois</span></div>
         <div class="price y-only">$2,990<span>/an</span></div>
-        <div class="savings y-only">&#128176; Économisez $598/an</div>
-        <p class="desc">Pour la plupart des cabinets CPA</p>
+        <div class="savings m-only">&nbsp;</div>
+        <div class="savings y-only">&#128176; &Eacute;conomisez $598/an</div>
         <ul>
             <li>~1,000 re&ccedil;us/mois</li>
             <li>Clients illimit&eacute;s</li>
@@ -9479,10 +9779,11 @@ footer a { color: #666; }
 
     <div class="plan">
         <h2>Cabinet</h2>
+        <p class="desc">Pour les cabinets en croissance</p>
         <div class="price m-only">$599<span>/mois</span></div>
         <div class="price y-only">$5,990<span>/an</span></div>
-        <div class="savings y-only">&#128176; Économisez $1,198/an</div>
-        <p class="desc">Pour les cabinets en croissance</p>
+        <div class="savings m-only">&nbsp;</div>
+        <div class="savings y-only">&#128176; &Eacute;conomisez $1,198/an</div>
         <ul>
             <li>~5,000 re&ccedil;us/mois</li>
             <li>Clients illimit&eacute;s</li>
@@ -9499,23 +9800,23 @@ footer a { color: #666; }
     </div>
 </div>
 
+<div class="enterprise">
+    <p>Besoin de plus? / Need more?</p>
+    <a href="mailto:contact@otocpa.com">Contactez-nous pour Entreprise / Contact us for Enterprise &rarr;</a>
+</div>
+
+<footer class="public-footer">
+    <p>&copy; 2026 OtoCPA Inc. <span class="sep">|</span> <a href="/privacy">Politique de confidentialit&eacute;</a> <span class="sep">|</span> Conforme Loi 25 <span class="sep">|</span> Donn&eacute;es h&eacute;berg&eacute;es au Canada</p>
+    <p class="login-line">D&eacute;j&agrave; client? <a href="/login">Connexion &rarr;</a></p>
+</footer>
+
 <script>
-function setBilling(mode) {
+function setBilling(mode) {{
     document.body.setAttribute('data-billing', mode);
     document.getElementById('btn-monthly').classList.toggle('active', mode === 'monthly');
     document.getElementById('btn-yearly').classList.toggle('active', mode === 'yearly');
-}
+}}
 </script>
-
-<div style="text-align:center; margin-bottom: 40px;">
-    <p style="color:#aaa; margin-bottom: 16px;">Besoin de plus? / Need more?</p>
-    <a href="mailto:contact@otocpa.com" style="color:#2ecc71;">Contactez-nous pour Entreprise / Contact us for Enterprise &rarr;</a>
-</div>
-
-<footer>
-    <p>&copy; 2026 OtoCPA Inc. | <a href="/privacy">Politique de confidentialit&eacute;</a> | Conforme Loi 25 | Donn&eacute;es h&eacute;berg&eacute;es au Canada</p>
-    <p style="margin-top: 8px;">D&eacute;j&agrave; client? <a href="/login" style="color:#2ecc71;">Connexion &rarr;</a></p>
-</footer>
 </body>
 </html>"""
 
@@ -9525,21 +9826,64 @@ def render_signup_success(firm_code: str, admin_username: str, admin_password: s
     un = html.escape(admin_username or "")
     pw = html.escape(admin_password or "")
     return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Bienvenue chez OtoCPA</title>
-<style>body{{font-family:Arial,sans-serif;background:#0d1b2a;color:white;max-width:640px;margin:60px auto;padding:24px;}}
-.card{{background:#1a2e4a;border-radius:12px;padding:32px;}}
-code{{background:#0d1b2a;padding:4px 8px;border-radius:4px;color:#2ecc71;}}
-.btn{{display:inline-block;background:#2ecc71;color:#000;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:24px;}}
-</style></head><body>
-<div class="card">
-<h1 style="color:#2ecc71;">&#10004; Paiement confirm&eacute; / Payment confirmed</h1>
-<p style="margin:16px 0;">Votre cabinet est pr&ecirc;t. Voici vos identifiants:</p>
-<p><strong>Firm code:</strong> <code>{fc}</code></p>
-<p><strong>Username:</strong> <code>{un}</code></p>
-<p><strong>Password:</strong> <code>{pw}</code></p>
-<p style="color:#f39c12;margin-top:16px;">&#9888; Conservez ces informations. Le mot de passe doit &ecirc;tre chang&eacute; &agrave; la premi&egrave;re connexion.</p>
-<a class="btn" href="/login">Se connecter &rarr;</a>
-</div></body></html>"""
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bienvenue chez OtoCPA</title>
+<style>{PUBLIC_CSS}
+.success-card{{
+  width:100%;max-width:560px;
+  background:#0f1e30;border:1px solid #1a2d45;border-radius:16px;
+  padding:48px;box-shadow:0 20px 60px rgba(0,0,0,0.35);
+}}
+.check-badge{{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  box-shadow:0 8px 24px rgba(22,193,114,0.35);
+}}
+.check-badge svg{{width:38px;height:38px}}
+.success-card h1{{
+  text-align:center;margin:0 0 8px;
+  font-size:26px;font-weight:700;color:#F4F6F8;letter-spacing:-0.3px;
+}}
+.success-card .sub{{text-align:center;margin:0 0 28px;color:#c0d0e0;font-size:15px}}
+.cred-row{{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:14px 16px;border:1px solid #1a2d45;border-radius:10px;
+  background:#081633;margin-bottom:10px;
+}}
+.cred-label{{color:#6b8099;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}}
+.cred-val{{font-family:Consolas,Menlo,monospace;color:#7AD66A;font-size:15px;word-break:break-all;text-align:right}}
+.notice{{
+  margin-top:22px;padding:14px 16px;border-radius:10px;
+  background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);
+  color:#facc15;font-size:13px;line-height:1.5;
+}}
+</style>
+</head>
+<body>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="success-card">
+        <div class="check-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#081633" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h1>Paiement confirm&eacute; / Payment confirmed</h1>
+        <p class="sub">Votre cabinet est pr&ecirc;t. Voici vos identifiants :</p>
+        <div class="cred-row"><span class="cred-label">Firm code</span><span class="cred-val">{fc}</span></div>
+        <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">{un}</span></div>
+        <div class="cred-row"><span class="cred-label">Password</span><span class="cred-val">{pw}</span></div>
+        <div class="notice">&#9888; Conservez ces informations. Le mot de passe doit &ecirc;tre chang&eacute; &agrave; la premi&egrave;re connexion.</div>
+        <div style="margin-top:24px;"><a class="btn-green" href="/login">Se connecter &rarr;</a></div>
+    </div>
+    <div class="public-footer">&copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25</div>
+</div>
+</body></html>"""
 
 
 # Sentinel returned by _provision_firm_from_stripe when the firm/user already
@@ -9552,21 +9896,64 @@ def render_signup_existing(firm_code: str, admin_username: str) -> str:
     fc = html.escape(firm_code or "")
     un = html.escape(admin_username or "")
     return f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Compte existant / Existing account</title>
-<style>body{{font-family:Arial,sans-serif;background:#0d1b2a;color:white;max-width:640px;margin:60px auto;padding:24px;}}
-.card{{background:#1a2e4a;border-radius:12px;padding:32px;}}
-code{{background:#0d1b2a;padding:4px 8px;border-radius:4px;color:#2ecc71;}}
-.btn{{display:inline-block;background:#2ecc71;color:#000;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;margin-top:24px;}}
-</style></head><body>
-<div class="card">
-<h1 style="color:#2ecc71;">&#10004; Paiement confirm&eacute; / Payment confirmed</h1>
-<p style="margin:16px 0;">Vous avez d&eacute;j&agrave; un compte OtoCPA. Connectez-vous avec vos identifiants existants.</p>
-<p style="margin:16px 0;">You already have an OtoCPA account. Please log in with your existing credentials.</p>
-<p><strong>Cabinet / Firm:</strong> <code>{fc}</code></p>
-<p><strong>Nom d'utilisateur / Username:</strong> <code>{un}</code></p>
-<p style="color:#f39c12;margin-top:16px;">&#9888; Si vous avez oubli&eacute; votre mot de passe, contactez support@otocpa.com.</p>
-<a class="btn" href="/login">Se connecter / Log in &rarr;</a>
-</div></body></html>"""
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compte existant / Existing account</title>
+<style>{PUBLIC_CSS}
+.success-card{{
+  width:100%;max-width:560px;
+  background:#0f1e30;border:1px solid #1a2d45;border-radius:16px;
+  padding:48px;box-shadow:0 20px 60px rgba(0,0,0,0.35);
+}}
+.check-badge{{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  box-shadow:0 8px 24px rgba(22,193,114,0.35);
+}}
+.check-badge svg{{width:38px;height:38px}}
+.success-card h1{{
+  text-align:center;margin:0 0 8px;
+  font-size:24px;font-weight:700;color:#F4F6F8;letter-spacing:-0.3px;
+}}
+.success-card .sub{{text-align:center;margin:0 0 22px;color:#c0d0e0;font-size:14px}}
+.cred-row{{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:14px 16px;border:1px solid #1a2d45;border-radius:10px;
+  background:#081633;margin-bottom:10px;
+}}
+.cred-label{{color:#6b8099;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}}
+.cred-val{{font-family:Consolas,Menlo,monospace;color:#7AD66A;font-size:15px;word-break:break-all;text-align:right}}
+.notice{{
+  margin-top:22px;padding:14px 16px;border-radius:10px;
+  background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);
+  color:#facc15;font-size:13px;line-height:1.5;
+}}
+</style>
+</head>
+<body>
+<div class="public-wrap">
+    <div class="brand-top">{LOGO_SVG_LARGE}</div>
+    <div class="success-card">
+        <div class="check-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#081633" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <h1>Paiement confirm&eacute; / Payment confirmed</h1>
+        <p class="sub">Vous avez d&eacute;j&agrave; un compte OtoCPA. Connectez-vous avec vos identifiants existants.<br>
+        You already have an OtoCPA account. Please log in with your existing credentials.</p>
+        <div class="cred-row"><span class="cred-label">Cabinet / Firm</span><span class="cred-val">{fc}</span></div>
+        <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">{un}</span></div>
+        <div class="notice">&#9888; Si vous avez oubli&eacute; votre mot de passe, contactez support@otocpa.com.</div>
+        <div style="margin-top:24px;"><a class="btn-green" href="/login">Se connecter / Log in &rarr;</a></div>
+    </div>
+    <div class="public-footer">&copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25</div>
+</div>
+</body></html>"""
 
 
 def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
