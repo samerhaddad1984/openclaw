@@ -1,6 +1,9 @@
 import html
 import logging
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 try:
     from dotenv import load_dotenv
@@ -8,21 +11,41 @@ try:
 except Exception:
     pass
 
-import resend
-
 logger = logging.getLogger(__name__)
 
-resend.api_key = os.environ.get('RESEND_API_KEY', '')
 
-FROM_ADDRESS = os.environ.get('RESEND_FROM', 'OtoCPA <noreply@otocpa.com>')
+def send_email(to_email: str, subject: str, html_body: str,
+               from_name: str = 'OtoCPA') -> bool:
+    smtp_host = os.environ.get('SMTP_HOST', '')
+    smtp_user = os.environ.get('SMTP_USER', '')
+    smtp_pass = os.environ.get('SMTP_PASSWORD', '')
+    smtp_from = os.environ.get('SMTP_FROM', smtp_user)
+    smtp_port = int(os.environ.get('SMTP_PORT', 587))
+
+    if not smtp_host or not smtp_user:
+        logger.warning('SMTP not configured - skipping email to %s', to_email)
+        return False
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = f'{from_name} <{smtp_from}>'
+        msg['To'] = to_email
+        msg.attach(MIMEText(html_body, 'html'))
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_from, to_email, msg.as_string())
+        logger.info('SMTP email sent to %s (%s)', to_email, subject)
+        return True
+    except Exception as e:
+        logger.error('SMTP email failed to %s: %s', to_email, e)
+        return False
 
 
 def send_welcome_email(to_email: str, firm_name: str, firm_code: str,
                        username: str, password: str) -> bool:
-    if not resend.api_key:
-        logger.warning('RESEND_API_KEY not set - skipping welcome email to %s', to_email)
-        return False
-
     # Values are user-controlled (via Stripe customer email). Escape before
     # interpolating into HTML so a crafted value can't inject markup.
     fn = html.escape(firm_name or '')
@@ -80,34 +103,9 @@ def send_welcome_email(to_email: str, firm_name: str, firm_code: str,
 </body>
 </html>"""
 
-    try:
-        resend.Emails.send({
-            "from": FROM_ADDRESS,
-            "to": [to_email],
-            "subject": "Bienvenue sur OtoCPA / Welcome to OtoCPA",
-            "html": html_body,
-        })
-        logger.info('welcome email sent to %s', to_email)
-        return True
-    except Exception as e:
-        logger.error('welcome email send failed to %s: %s', to_email, e)
-        return False
-
-
-def send_email(to_email: str, subject: str, html_body: str,
-               from_name: str = 'OtoCPA') -> bool:
-    if not resend.api_key:
-        logger.warning('RESEND_API_KEY not set - skipping email to %s', to_email)
-        return False
-    try:
-        resend.Emails.send({
-            "from": f"{from_name} <noreply@otocpa.com>",
-            "to": [to_email],
-            "subject": subject,
-            "html": html_body,
-        })
-        logger.info('email sent to %s (%s)', to_email, subject)
-        return True
-    except Exception as e:
-        logger.error('email send failed to %s: %s', to_email, e)
-        return False
+    return send_email(
+        to_email=to_email,
+        subject='Bienvenue sur OtoCPA / Welcome to OtoCPA',
+        html_body=html_body,
+        from_name='OtoCPA',
+    )

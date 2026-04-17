@@ -14981,8 +14981,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             except Exception:
                                 diag = ''
 
+                        notification_to = os.environ.get('NOTIFICATION_EMAIL', 'sales@otocpa.com')
                         send_email(
-                            to_email='sales@otocpa.com',
+                            to_email=notification_to,
                             subject=f"New lead: {data['firm']} - {data['name']}",
                             html_body=(
                                 "<h2>New contact from otocpa.com</h2>"
