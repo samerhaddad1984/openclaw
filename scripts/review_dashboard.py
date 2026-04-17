@@ -8609,83 +8609,103 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         )
         right_controls = f'{user_pill} {comm_link_html} {training_link_html} {lang_toggle} {logout_btn}'
 
-    # Sidebar navigation — visible to manager/owner only
+    # Sidebar navigation — single Menu dropdown (all items hidden until clicked)
     sidebar_nav_html = ""
     if user and user.get("role") in ("manager", "owner"):
-        def _snav(href: str, label_key: str) -> str:
-            return f'<a href="{href}">{esc(t(label_key, lang))}</a>'
         is_owner = user.get("role") == "owner"
         home_label = "Tableau de bord" if lang == "fr" else "Dashboard"
-        sections = []
-        sections.append(
-            '<div class="sidebar-label">' + (home_label) + '</div>'
-            '<nav class="sidebar-nav">'
-            f'<a href="/">{esc(home_label)}</a>'
-            '</nav>'
-        )
-        sections.append(
-            '<div class="sidebar-label">Audit</div>'
-            '<nav class="sidebar-nav">'
-            + _snav("/working_papers", "wp_nav_link")
-            + _snav("/audit/evidence", "ev_title")
-            + _snav("/audit/sample", "samp_title")
-            + _snav("/financial_statements", "fs_title")
-            + _snav("/audit/analytical", "anal_title")
-            + _snav("/engagements", "eng_title")
-            + _snav("/audit/materiality", "cas_materiality_nav")
-            + _snav("/audit/risk", "cas_risk_nav")
-            + _snav("/audit/rep_letter", "cas_rep_nav")
-            + _snav("/audit/controls", "cas_ctrl_nav")
-            + _snav("/audit/related_parties", "cas_rp_nav")
-            + '</nav>'
-        )
-        sections.append(
-            '<div class="sidebar-label">Finance</div>'
-            '<nav class="sidebar-nav">'
-            + _snav("/reconciliation", "recon_nav_link")
-            + _snav("/fixed_assets", "fa_nav_link")
-            + _snav("/aging", "aging_nav_link")
-            + _snav("/ar", "ar_nav_link")
-            + _snav("/cashflow", "cashflow_nav_link")
-            + _snav("/t2", "t2_nav_link")
-            + '</nav>'
-        )
-        sections.append(
-            '<div class="sidebar-label">Clients</div>'
-            '<nav class="sidebar-nav">'
-            + _snav("/clients", "clients_nav")
-            + _snav("/export", "export_nav_link")
-            + _snav("/qr", "qr_nav_link")
-            + '</nav>'
-        )
-        sections.append(
-            '<div class="sidebar-label">Banque</div>'
-            '<nav class="sidebar-nav">'
-            '<a href="/bank/connect">Connecter banque</a>'
-            '<a href="/bank/feeds">Transactions bancaires</a>'
-            '</nav>'
-        )
-        if is_owner:
-            sections.append(
-                '<div class="sidebar-label">Admin</div>'
-                '<nav class="sidebar-nav">'
-                + _snav("/license", "lic_nav_link")
-                + '<a href="/firms">Firms</a>'
-                + _snav("/license/machines", "lic_machines_nav")
-                + _snav("/admin/updates", "update_nav_link")
-                + _snav("/admin/remote", "remote_nav_link")
-                + _snav("/health/page", "health_nav_link")
-                + '</nav>'
-            )
         profil_label = "Profil" if lang == "fr" else "Profile"
-        sections.append(
-            f'<div class="sidebar-label">{profil_label}</div>'
-            '<nav class="sidebar-nav">'
-            '<a href="/settings/2fa">2FA / S&eacute;curit&eacute;</a>'
-            f'<a href="/settings/profile">{profil_label}</a>'
-            '</nav>'
+
+        _link_style = (
+            "display:block;padding:9px 12px;color:#c0d0e0;text-decoration:none;"
+            "border-radius:8px;font-size:14px;"
         )
-        sidebar_nav_html = "".join(sections)
+        _hover_on = (
+            "this.style.background='rgba(22,193,114,0.1)';"
+            "this.style.color='#16C172'"
+        )
+        _hover_off = "this.style.background='';this.style.color='#c0d0e0'"
+
+        def _dlink(href: str, label: str) -> str:
+            return (
+                f'<a href="{href}" style="{_link_style}" '
+                f'onmouseover="{_hover_on}" onmouseout="{_hover_off}">{label}</a>'
+            )
+
+        def _dnav(href: str, label_key: str) -> str:
+            return _dlink(href, esc(t(label_key, lang)))
+
+        def _group_label(text: str, first: bool = False) -> str:
+            border_top = "" if first else "margin-top:4px;border-top:1px solid #1a2d45;"
+            return (
+                '<span style="font-size:10px;font-weight:700;letter-spacing:1.5px;'
+                'text-transform:uppercase;color:#4a6080;padding:10px 12px 4px;'
+                f'display:block;{border_top}">{text}</span>'
+            )
+
+        groups: list[str] = []
+        groups.append(_group_label(f"\U0001f4cb {esc(home_label)}", first=True))
+        groups.append(_dlink("/", esc(home_label)))
+
+        groups.append(_group_label("\U0001f4c1 Audit"))
+        groups.append(_dnav("/working_papers", "wp_nav_link"))
+        groups.append(_dnav("/audit/evidence", "ev_title"))
+        groups.append(_dnav("/audit/sample", "samp_title"))
+        groups.append(_dnav("/financial_statements", "fs_title"))
+        groups.append(_dnav("/audit/analytical", "anal_title"))
+        groups.append(_dnav("/engagements", "eng_title"))
+        groups.append(_dnav("/audit/materiality", "cas_materiality_nav"))
+        groups.append(_dnav("/audit/risk", "cas_risk_nav"))
+        groups.append(_dnav("/audit/rep_letter", "cas_rep_nav"))
+        groups.append(_dnav("/audit/controls", "cas_ctrl_nav"))
+        groups.append(_dnav("/audit/related_parties", "cas_rp_nav"))
+
+        groups.append(_group_label("\U0001f4b0 Finance"))
+        groups.append(_dnav("/reconciliation", "recon_nav_link"))
+        groups.append(_dnav("/fixed_assets", "fa_nav_link"))
+        groups.append(_dnav("/aging", "aging_nav_link"))
+        groups.append(_dnav("/ar", "ar_nav_link"))
+        groups.append(_dnav("/cashflow", "cashflow_nav_link"))
+        groups.append(_dnav("/t2", "t2_nav_link"))
+
+        groups.append(_group_label("\U0001f465 Clients"))
+        groups.append(_dnav("/clients", "clients_nav"))
+        groups.append(_dnav("/export", "export_nav_link"))
+        groups.append(_dnav("/qr", "qr_nav_link"))
+
+        groups.append(_group_label("\U0001f3e6 Banque"))
+        groups.append(_dlink("/bank/connect", "Connecter banque"))
+        groups.append(_dlink("/bank/feeds", "Transactions bancaires"))
+
+        if is_owner:
+            groups.append(_group_label("\u2699\ufe0f Admin"))
+            groups.append(_dnav("/license", "lic_nav_link"))
+            groups.append(_dlink("/firms", "Firms"))
+            groups.append(_dnav("/license/machines", "lic_machines_nav"))
+            groups.append(_dnav("/admin/updates", "update_nav_link"))
+            groups.append(_dnav("/admin/remote", "remote_nav_link"))
+            groups.append(_dnav("/health/page", "health_nav_link"))
+
+        groups.append(_group_label(f"\U0001f464 {esc(profil_label)}"))
+        groups.append(_dlink("/settings/2fa", "2FA / S&eacute;curit&eacute;"))
+        groups.append(_dlink("/settings/profile", esc(profil_label)))
+
+        sidebar_nav_html = (
+            '<div class="nav-dropdown" style="position:relative;display:inline-block;margin-top:12px;">'
+            '<button class="nav-dropdown-btn" onclick="toggleNavDropdown()" '
+            'style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);'
+            'color:#c8d8e8;padding:8px 16px;border-radius:8px;cursor:pointer;'
+            'font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">'
+            '\u2630 Menu \u25be'
+            '</button>'
+            '<div class="nav-dropdown-menu" id="navDropdownMenu" '
+            'style="display:none;position:absolute;top:calc(100% + 8px);left:0;'
+            'background:#0d1a2e;border:1px solid #1a2d45;border-radius:12px;'
+            'padding:8px;min-width:240px;box-shadow:0 20px 60px rgba(0,0,0,0.4);'
+            'z-index:1000;max-height:calc(100vh - 120px);overflow-y:auto;">'
+            + "".join(groups)
+            + '</div></div>'
+        )
 
     sidebar_html = (
         '<aside class="app-sidebar">'
@@ -8737,6 +8757,18 @@ function toggleRowDetail(id) {{
     var row = document.getElementById(id);
     if (row) row.classList.toggle('open');
 }}
+
+// Nav dropdown — single Menu button
+function toggleNavDropdown() {{
+    var menu = document.getElementById('navDropdownMenu');
+    if (!menu) return;
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}}
+document.addEventListener('click', function(e) {{
+    var menu = document.getElementById('navDropdownMenu');
+    var btn = e.target.closest('.nav-dropdown');
+    if (!btn && menu) menu.style.display = 'none';
+}});
 
 // Mobile detection and layout fix
 function isMobile() {{
