@@ -1,9 +1,13 @@
+import base64
 import html
 import logging
 import os
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 try:
     from dotenv import load_dotenv
@@ -13,34 +17,44 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+GMAIL_TOKEN_FILE = '/opt/otocpa/gmail_token.json'
+GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+
+
+def _get_gmail_service():
+    if not os.path.exists(GMAIL_TOKEN_FILE):
+        logger.error('Gmail token not found at %s', GMAIL_TOKEN_FILE)
+        return None
+    try:
+        creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_FILE, GMAIL_SCOPES)
+        if not creds.valid and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            with open(GMAIL_TOKEN_FILE, 'w') as f:
+                f.write(creds.to_json())
+        return build('gmail', 'v1', credentials=creds, cache_discovery=False)
+    except Exception as e:
+        logger.error('Gmail auth failed: %s', e)
+        return None
+
 
 def send_email(to_email: str, subject: str, html_body: str,
                from_name: str = 'OtoCPA') -> bool:
-    smtp_host = os.environ.get('SMTP_HOST', '')
-    smtp_user = os.environ.get('SMTP_USER', '')
-    smtp_pass = os.environ.get('SMTP_PASSWORD', '')
-    smtp_from = os.environ.get('SMTP_FROM', smtp_user)
-    smtp_port = int(os.environ.get('SMTP_PORT', 587))
-
-    if not smtp_host or not smtp_user:
-        logger.warning('SMTP not configured - skipping email to %s', to_email)
+    service = _get_gmail_service()
+    if not service:
         return False
-
     try:
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
-        msg['From'] = f'{from_name} <{smtp_from}>'
         msg['To'] = to_email
+        sender = os.environ.get('GMAIL_SENDER', 'haddadsamer1984@gmail.com')
+        msg['From'] = f'{from_name} <{sender}>'
         msg.attach(MIMEText(html_body, 'html'))
-
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_from, to_email, msg.as_string())
-        logger.info('SMTP email sent to %s (%s)', to_email, subject)
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+        service.users().messages().send(userId='me', body={'raw': raw}).execute()
+        logger.info('Gmail API sent to %s (%s)', to_email, subject)
         return True
     except Exception as e:
-        logger.error('SMTP email failed to %s: %s', to_email, e)
+        logger.error('Gmail API send failed to %s: %s', to_email, e)
         return False
 
 
