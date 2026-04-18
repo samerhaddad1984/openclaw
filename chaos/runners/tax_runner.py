@@ -70,6 +70,11 @@ class TaxRunner:
             entry = TAX_CODE_REGISTRY.get(tax_code, {})
             computed["itc_pct"] = _str(entry.get("itc_pct"))
             computed["itr_pct"] = _str(entry.get("itr_pct"))
+            computed["tax_code"] = tax_code
+            # itc_allowed: whether the supply type permits ITC (zero-rated
+            # is allowed at 0%; exempt / foreign-VAT / insurance are not).
+            if "itc_allowed" in entry:
+                computed["itc_allowed"] = bool(entry.get("itc_allowed"))
             if "hst_rate" in entry:
                 computed["hst_rate"] = _str(entry.get("hst_rate"))
 

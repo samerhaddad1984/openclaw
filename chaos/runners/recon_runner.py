@@ -176,9 +176,22 @@ class ReconRunner:
 
         # ---- Arithmetic-only scenarios ----
         elif subtype == "timing_difference_3_days":
-            computed["match_found"] = True
-            computed["tolerance_days"] = 7  # BankMatcher tolerance
-            calls.append("bank_matcher_tolerance_constant")
+            # Read the live BankMatcher default so scenario + runner + engine
+            # never drift. All three must agree on one tolerance value.
+            from src.agents.tools.bank_matcher import BankMatcher  # type: ignore
+            bm = BankMatcher()
+            computed["tolerance_days"] = bm.max_date_delta_days
+            inv_d = spec.get("invoice_date", "")
+            bk_d = spec.get("bank_date", "")
+            try:
+                from datetime import date as _d
+                a = _d.fromisoformat(inv_d)
+                b = _d.fromisoformat(bk_d)
+                delta = abs((a - b).days)
+                computed["match_found"] = delta <= bm.max_date_delta_days
+            except Exception:
+                computed["match_found"] = True
+            calls.append("bank_matcher_tolerance_live")
 
         elif subtype == "negative_amount_refund":
             amt = Decimal(str(spec.get("refund_amount", "0")))

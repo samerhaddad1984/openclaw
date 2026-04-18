@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -1371,6 +1372,25 @@ def _normalize_invoice_number(raw: str) -> str:
     return s
 
 
+_INVOICE_NUM_RE = re.compile(r"(\d+)\s*$")
+
+
+def _extract_trailing_invoice_number(raw: str) -> int | None:
+    """Parse the trailing integer suffix from an invoice number string.
+
+    "INV-001" -> 1, "INV-002" -> 2, "12345" -> 12345, "ABC" -> None.
+    """
+    if not raw:
+        return None
+    m = _INVOICE_NUM_RE.search(str(raw).strip())
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
 def _rule_near_duplicate_invoice_number(
     conn: sqlite3.Connection,
     document_id: str,
@@ -1379,8 +1399,14 @@ def _rule_near_duplicate_invoice_number(
     invoice_number: str,
     doc_date: date,
 ) -> dict[str, Any] | None:
-    """Flag when a different document has an invoice number that normalizes
-    to the same value (catches OCR confusables like INV-001 vs INV-0O1)."""
+    """Flag two distinct patterns:
+
+    1. OCR confusables (INV-001 vs INV-0O1 — same after normalization).
+    2. Phantom-vendor sequences: 3+ strictly consecutive invoice numbers
+       from the same vendor inside a 180-day window (e.g. INV-001,
+       INV-002, INV-003). Real vendors do not issue consecutive invoice
+       numbers to a single client — a shell vendor often does.
+    """
     if not invoice_number:
         return None
     norm = _normalize_invoice_number(invoice_number)
@@ -1393,7 +1419,7 @@ def _rule_near_duplicate_invoice_number(
     window_start = (doc_date - timedelta(days=365)).isoformat()
     rows = conn.execute(
         """
-        SELECT document_id, invoice_number, vendor
+        SELECT document_id, invoice_number, vendor, document_date
           FROM documents
          WHERE LOWER(TRIM(COALESCE(client_code, ''))) = LOWER(TRIM(?))
            AND document_id != ?
@@ -1404,6 +1430,10 @@ def _rule_near_duplicate_invoice_number(
         """,
         (client_code, document_id, window_start),
     ).fetchall()
+
+    this_vendor = _normalize_vendor_key(vendor)
+
+    # ---- Pattern 1: OCR-confusable near-duplicate ----
     for r in rows:
         other_inv = str(r["invoice_number"] or "")
         if not other_inv:
@@ -1419,12 +1449,11 @@ def _rule_near_duplicate_invoice_number(
                     "other_invoice":  other_inv,
                     "other_doc_id":   str(r["document_id"]),
                     "normalized":     norm,
+                    "reason":         "ocr_confusable",
                 },
             }
-        # Also flag exact same invoice number from same vendor
         if other_norm == norm and other_inv == invoice_number:
             other_vendor = _normalize_vendor_key(str(r["vendor"] or ""))
-            this_vendor = _normalize_vendor_key(vendor)
             if this_vendor and other_vendor and this_vendor == other_vendor:
                 return {
                     "rule":     "near_duplicate_invoice_number",
@@ -1435,8 +1464,58 @@ def _rule_near_duplicate_invoice_number(
                         "other_invoice":  other_inv,
                         "other_doc_id":   str(r["document_id"]),
                         "normalized":     norm,
+                        "reason":         "same_number_same_vendor",
                     },
                 }
+
+    # ---- Pattern 2: Phantom-vendor consecutive numbering ----
+    this_num = _extract_trailing_invoice_number(invoice_number)
+    if this_num is None or not this_vendor:
+        return None
+
+    sequence_window_days = 180
+    window_min = (doc_date - timedelta(days=sequence_window_days)).isoformat()
+    window_max = (doc_date + timedelta(days=sequence_window_days)).isoformat()
+    neighbors: list[tuple[int, str]] = [(this_num, invoice_number)]
+    for r in rows:
+        other_date = str(r["document_date"] or "")
+        if not (window_min <= other_date <= window_max):
+            continue
+        other_vendor = _normalize_vendor_key(str(r["vendor"] or ""))
+        if other_vendor != this_vendor:
+            continue
+        other_num = _extract_trailing_invoice_number(str(r["invoice_number"] or ""))
+        if other_num is None:
+            continue
+        neighbors.append((other_num, str(r["invoice_number"])))
+    # Deduplicate by number, sort
+    seen_nums = {n for n, _ in neighbors}
+    ordered = sorted(seen_nums)
+    # Find longest consecutive run that includes this_num
+    best_run: list[int] = []
+    run: list[int] = []
+    for n in ordered:
+        if not run or n == run[-1] + 1:
+            run.append(n)
+        else:
+            if this_num in run and len(run) > len(best_run):
+                best_run = run
+            run = [n]
+    if this_num in run and len(run) > len(best_run):
+        best_run = run
+    if len(best_run) >= 3:
+        return {
+            "rule":     "near_duplicate_invoice_number",
+            "severity": HIGH,
+            "i18n_key": "fraud_near_duplicate_invoice_number",
+            "params": {
+                "invoice_number": invoice_number,
+                "sequence":       ",".join(str(n) for n in best_run),
+                "length":         str(len(best_run)),
+                "window_days":    str(sequence_window_days),
+                "reason":         "phantom_vendor_sequence",
+            },
+        }
     return None
 
 

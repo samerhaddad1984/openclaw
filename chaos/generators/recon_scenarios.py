@@ -25,9 +25,10 @@ RECON_SPECS: list[dict[str, Any]] = [
     {
         "subtype": "timing_difference_3_days",
         "difficulty": "hard",
-        "description": "Invoice date vs bank clearing 3 days apart",
+        "description": "Invoice date vs bank clearing 3 days apart (within 7-day prod tolerance)",
         "input": {"invoice_date": "2026-03-28", "bank_date": "2026-03-31"},
-        "expected": {"match_found": True, "tolerance_days": 5},
+        # Production BankMatcher default is 7 calendar days (≈5 business days).
+        "expected": {"match_found": True, "tolerance_days": 7},
         "severity_on_failure": "medium",
     },
     {

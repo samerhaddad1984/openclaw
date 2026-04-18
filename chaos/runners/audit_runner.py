@@ -161,10 +161,11 @@ def _seed_population(
 
     if subtype in ("one_duplicate_in_1000", "three_duplicates_200",
                    "duplicate_altered_date", "duplicate_rotated_image",
+                   "duplicate_with_rotated_image",
                    "vendor_name_typos"):
         n = 3 if subtype == "three_duplicates_200" else 1
         orig = conn.execute("SELECT * FROM documents LIMIT 1").fetchone()
-        for _ in range(n):
+        for dup_idx in range(n):
             dup = {
                 "client_code":   orig["client_code"],
                 "vendor":        orig["vendor"],
@@ -176,17 +177,34 @@ def _seed_population(
                 dup["document_date"] = (date.fromisoformat(orig["document_date"]) + timedelta(days=2)).isoformat()
             if subtype == "vendor_name_typos":
                 dup["vendor"] = orig["vendor"].replace(" ", ".")
+            if subtype in ("duplicate_rotated_image", "duplicate_with_rotated_image"):
+                # Rotated resubmission models an image-only re-upload: the
+                # OCR may not re-recover the invoice number, so the dup
+                # lacks the invoice-number signals. duplicate_exact should
+                # still fire on vendor+amount+date alone.
+                dup["invoice_number"] = ""
             targeted.append(_insert_doc(conn, dup))
         # Also add the original as targeted so the rule sees a 2+ cluster
         targeted.append(orig["document_id"])
 
     elif subtype == "cross_vendor_duplicate":
+        # Use vendor names that are NOT in `_VENDORS`, so they have no
+        # baseline history. Otherwise `_rule_vendor_amount_anomaly` fires
+        # as a true-positive-for-that-vendor but is noise for this
+        # scenario (which targets `duplicate_cross_vendor` only).
+        # Use weekday dates to avoid the weekend_transaction rule.
         amt = 1234.56
-        orig = {"client_code": client, "vendor": "IGA Des Sources", "amount": amt,
-                "document_date": base_date.isoformat()}
+        d1 = base_date
+        while d1.weekday() >= 5:
+            d1 -= timedelta(days=1)
+        d2 = d1 - timedelta(days=2)
+        while d2.weekday() >= 5:
+            d2 -= timedelta(days=1)
+        orig = {"client_code": client, "vendor": "Xvendor Alpha Ltd", "amount": amt,
+                "document_date": d1.isoformat()}
         targeted.append(_insert_doc(conn, orig))
-        other = {"client_code": client, "vendor": "Staples", "amount": amt,
-                 "document_date": (base_date - timedelta(days=3)).isoformat()}
+        other = {"client_code": client, "vendor": "Xvendor Beta Co", "amount": amt,
+                 "document_date": d2.isoformat()}
         targeted.append(_insert_doc(conn, other))
 
     elif subtype == "new_vendor_large_first":
@@ -251,11 +269,17 @@ def _seed_population(
              "John Doe Personal Withdrawal", 800.0, "CAD", did),
         )
 
-    elif subtype == "sequential_invoice_numbers":
+    elif subtype in ("sequential_invoice_numbers",
+                     "sequential_invoices_different_days"):
         for i, num in enumerate(("INV-001", "INV-002", "INV-003")):
+            # Use explicitly-weekday dates so weekend_transaction does
+            # not double-flag the largest/latest invoice.
+            d = base_date - timedelta(days=i * 30)
+            while d.weekday() >= 5:
+                d -= timedelta(days=1)
             doc = {"client_code": client, "vendor": "Seq Vendor",
                    "amount": 500.0 + i, "invoice_number": num,
-                   "document_date": (base_date - timedelta(days=i * 30)).isoformat()}
+                   "document_date": d.isoformat()}
             targeted.append(_insert_doc(conn, doc))
 
     elif subtype in ("split_to_avoid_approval_limit",

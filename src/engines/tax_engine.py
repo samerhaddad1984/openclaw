@@ -82,6 +82,11 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ONE,
         "itr_pct": _ONE,
+        # itc_allowed: whether the supply type permits ITC at all. Zero-rated
+        # supplies are "taxable at 0%" so ITC is allowed (amount = 0);
+        # exempt supplies do NOT permit ITC. Foreign VAT and Quebec insurance
+        # tax are non-recoverable charges.
+        "itc_allowed": True,
     },
     "Z": {
         "label": "Zero-rated",
@@ -90,6 +95,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": True,  # taxable-at-0% supply: ITC eligible (amount $0)
     },
     "E": {
         "label": "Exempt",
@@ -98,6 +104,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": False,  # exempt supplies do not permit ITC
     },
     "M": {
         "label": "Mixed / Meals (50% deductible)",
@@ -106,6 +113,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _HALF,
         "itr_pct": _HALF,
+        "itc_allowed": True,
     },
     "I": {
         "label": "Insurance — Quebec special rate",
@@ -117,6 +125,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": False,
     },
     # ---- Legacy codes from tax_code_resolver.py ----
     "GST_QST": {
@@ -126,6 +135,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ONE,
         "itr_pct": _ONE,
+        "itc_allowed": True,
     },
     "HST": {
         "label": "Harmonized Sales Tax (ON default: 13%)",
@@ -134,6 +144,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": HST_RATE_ON,
         "itc_pct": _ONE,
         "itr_pct": _ZERO,  # No QST in HST provinces
+        "itc_allowed": True,
     },
     "VAT": {
         "label": "Foreign VAT — not recoverable in Canada",
@@ -142,6 +153,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": False,
     },
     "HST_ATL": {
         "label": "Harmonized Sales Tax — Atlantic (NB/NS/NL/PE: 15%)",
@@ -150,6 +162,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": HST_RATE_ATL,
         "itc_pct": _ONE,
         "itr_pct": _ZERO,
+        "itc_allowed": True,
     },
     "GENERIC_TAX": {
         "label": "Generic / unclassified tax",
@@ -158,6 +171,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": False,
     },
     "GST_ONLY": {
         "label": "GST only (5%) — no provincial tax",
@@ -166,6 +180,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ONE,
         "itr_pct": _ZERO,
+        "itc_allowed": True,
     },
     "NONE": {
         "label": "No tax",
@@ -174,6 +189,7 @@ TAX_CODE_REGISTRY: dict[str, dict[str, Any]] = {
         "hst_rate": _ZERO,
         "itc_pct": _ZERO,
         "itr_pct": _ZERO,
+        "itc_allowed": False,
     },
 }
 
