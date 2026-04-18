@@ -749,16 +749,36 @@ def bootstrap_schema() -> None:
         # CPA firms (tier 2). 'OWNER' is reserved for the platform owner.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS firms (
-                firm_code     TEXT PRIMARY KEY,
-                firm_name     TEXT NOT NULL,
-                contact_email TEXT,
-                contact_phone TEXT,
-                language      TEXT DEFAULT 'fr',
-                plan          TEXT DEFAULT 'basic',
-                active        INTEGER DEFAULT 1,
-                created_at    TEXT DEFAULT (datetime('now'))
+                firm_code              TEXT PRIMARY KEY,
+                firm_name              TEXT NOT NULL,
+                contact_email          TEXT,
+                contact_phone          TEXT,
+                billing_email          TEXT,
+                language               TEXT DEFAULT 'fr',
+                plan                   TEXT DEFAULT 'basic',
+                active                 INTEGER DEFAULT 1,
+                stripe_customer_id     TEXT,
+                stripe_subscription_id TEXT,
+                subscription_status    TEXT DEFAULT 'none',
+                subscription_plan      TEXT,
+                current_period_end     INTEGER,
+                created_at             TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Idempotent migration for pre-existing installs whose firms table was
+        # created before the Stripe billing columns existed. _provision_firm_
+        # from_stripe + /billing + _handle_stripe_event all need these columns.
+        firm_cols = {row["name"] for row in conn.execute("PRAGMA table_info(firms)").fetchall()}
+        for col, ddl in (
+            ("billing_email",          "TEXT"),
+            ("stripe_customer_id",     "TEXT"),
+            ("stripe_subscription_id", "TEXT"),
+            ("subscription_status",    "TEXT DEFAULT 'none'"),
+            ("subscription_plan",      "TEXT"),
+            ("current_period_end",     "INTEGER"),
+        ):
+            if col not in firm_cols:
+                conn.execute(f"ALTER TABLE firms ADD COLUMN {col} {ddl}")
         conn.execute(
             "INSERT OR IGNORE INTO firms (firm_code, firm_name, language, plan) VALUES ('OWNER','OtoCPA (Owner)','fr','owner')"
         )
@@ -15852,7 +15872,6 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         return
                     self._send_json({"link_token": token})
                 except Exception as e:
-                    import traceback
                     traceback.print_exc()
                     self._send_json({"link_token": "", "error": str(e)}, status=200)
                 return
@@ -17199,8 +17218,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 user=user, lang=lang), status=404)
 
         except Exception:
-            self._send_html(page_layout("Error",
-                f'<div class="card"><h2>Unhandled Error</h2><pre>{esc(traceback.format_exc())}</pre></div>'), status=500)
+            tb = traceback.format_exc()
+            logging.exception("unhandled error in do_GET")
+            if os.environ.get("OTOCPA_DEBUG", "").lower() in ("1", "true", "yes"):
+                body = (f'<div class="card"><h2>Unhandled Error</h2>'
+                        f'<pre>{esc(tb)}</pre></div>')
+            else:
+                body = ('<div class="card"><h2>Internal Server Error</h2>'
+                        '<p>Something went wrong. The error has been logged.</p>'
+                        '<p><a href="/">Back</a></p></div>')
+            self._send_html(page_layout("Error", body), status=500)
 
     def do_OPTIONS(self) -> None:
         parsed_url = urllib.parse.urlparse(self.path)
@@ -20374,13 +20401,30 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         "SELECT firm_code FROM clients WHERE client_code = ?",
                         (client_code,),
                     ).fetchone()
-                    if existing and existing.get("firm_code"):
-                        client_firm = existing["firm_code"]
-                    conn.execute('''
-                        INSERT OR REPLACE INTO clients
-                            (client_code, client_name, contact_email, language, active, whatsapp_number, firm_code)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (client_code, client_name, contact_email, language, active, whatsapp_number, client_firm))
+                    if existing:
+                        # Edit: preserve firm_code + portal_token (INSERT OR
+                        # REPLACE would wipe portal_token and rotation count).
+                        if existing.get("firm_code"):
+                            client_firm = existing["firm_code"]
+                        conn.execute('''
+                            UPDATE clients
+                               SET client_name=?, contact_email=?, language=?,
+                                   active=?, whatsapp_number=?, firm_code=?
+                             WHERE client_code=?
+                        ''', (client_name, contact_email, language, active,
+                              whatsapp_number, client_firm, client_code))
+                    else:
+                        # New client: mint a portal_token up-front so the QR
+                        # flow works immediately; don't wait for bootstrap.
+                        new_token = generate_portal_token()
+                        conn.execute('''
+                            INSERT INTO clients
+                                (client_code, client_name, contact_email, language, active,
+                                 whatsapp_number, firm_code, portal_token,
+                                 portal_token_created_at, portal_token_rotated_count)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 0)
+                        ''', (client_code, client_name, contact_email, language, active,
+                              whatsapp_number, client_firm, new_token))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
                 return
