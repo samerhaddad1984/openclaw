@@ -151,6 +151,7 @@ data/client_uploads/
 data/incoming_documents/
 data/training/
 data/*.json
+data/password_link_secret
 
 # Build artifacts
 build/

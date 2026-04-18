@@ -140,9 +140,12 @@ def _request(url, *, data=None, headers=None, method=None):
 
 
 def _form_post(url, fields, *, headers=None):
-    from urllib.parse import urlencode
+    from urllib.parse import urlencode, urlparse
     body = urlencode(fields).encode()
+    parsed = urlparse(url)
+    same_origin = f"{parsed.scheme}://{parsed.netloc}"
     hdrs = {"Content-Type": "application/x-www-form-urlencoded",
+            "Origin": same_origin,
             **(headers or {})}
     return _request(url, data=body, headers=hdrs, method="POST")
 

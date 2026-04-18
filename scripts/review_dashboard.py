@@ -1187,6 +1187,111 @@ def _session_cookie_attrs(handler: BaseHTTPRequestHandler) -> str:
     return "SameSite=Lax"
 
 
+# ---------------------------------------------------------------------------
+# Contact form rate limiting (per-IP, 5 submissions / hour)
+# ---------------------------------------------------------------------------
+
+_contact_form_rate: dict[str, list[float]] = {}
+_contact_form_rate_lock = threading.Lock()
+_CONTACT_FORM_LIMIT = 5
+_CONTACT_FORM_WINDOW_SEC = 3600
+
+
+def _contact_form_rate_limited(ip: str) -> bool:
+    """Return True if this IP has hit the contact form ≥5 times in the last hour."""
+    now = time.time()
+    cutoff = now - _CONTACT_FORM_WINDOW_SEC
+    with _contact_form_rate_lock:
+        timestamps = [t for t in _contact_form_rate.get(ip, []) if t > cutoff]
+        if len(timestamps) >= _CONTACT_FORM_LIMIT:
+            _contact_form_rate[ip] = timestamps
+            return True
+        timestamps.append(now)
+        _contact_form_rate[ip] = timestamps
+        return False
+
+
+# ---------------------------------------------------------------------------
+# CSRF Origin/Referer check for state-changing POST routes
+# ---------------------------------------------------------------------------
+
+# Webhooks and cross-origin entry points that authenticate by other means
+# (signature header, API key, CORS allowlist, per-route rate limiting, or
+# pre-auth routes where CSRF adds no protection).
+_CSRF_EXEMPT_POSTS = frozenset({
+    # Webhooks / machine-to-machine callers with their own auth
+    "/stripe/webhook",       # Stripe-Signature verified in handler
+    "/ingest/openclaw",      # API key auth
+    "/api/contact",          # CORS-bound public form + per-IP rate limit
+    "/bank/callback",        # Plaid public-token exchange
+    # Pre-auth entry points (no authenticated session to hijack)
+    "/login",
+    "/login/totp",
+    "/logout",
+    "/forgot",
+    "/signup",
+    "/signup/checkout",
+    "/signup/success",
+    # Public uploads (auth by client_code + rate limit)
+    "/upload",
+    # Language toggle (cookie-only)
+    "/set_language",
+})
+
+
+def _csrf_path_exempt(path: str) -> bool:
+    """Return True if this path is exempt from the CSRF Origin/Referer check."""
+    if path in _CSRF_EXEMPT_POSTS:
+        return True
+    # Portal routes (/c/<token>/...) — the URL-embedded token is the auth.
+    if path.startswith("/c/"):
+        return True
+    return False
+
+
+def _csrf_check(handler: BaseHTTPRequestHandler) -> bool:
+    """Return True if this POST's Origin/Referer matches our own host.
+
+    State-changing POSTs must either carry an Origin header matching the
+    server host (or an allowlisted otocpa domain), or — when Origin is
+    absent — a Referer with a matching origin. Missing both = reject.
+    """
+    origin = handler.headers.get("Origin", "")
+    referer = handler.headers.get("Referer", "")
+    host = handler.headers.get("Host", "")
+
+    allowed_origins = {
+        f"https://{host}",
+        f"http://{host}",
+        "https://app.otocpa.com",
+        "https://otocpa.com",
+    }
+
+    if origin:
+        return origin in allowed_origins
+
+    if referer:
+        try:
+            parsed = urllib.parse.urlparse(referer)
+            ref_origin = f"{parsed.scheme}://{parsed.netloc}"
+            return ref_origin in allowed_origins
+        except Exception:
+            return False
+
+    # No Origin AND no Referer on a state-changing POST = reject.
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Dummy bcrypt hash — used to equalise login timing for unknown users so
+# attackers cannot enumerate accounts by response-time differences.
+# ---------------------------------------------------------------------------
+try:
+    _DUMMY_BCRYPT_HASH = bcrypt.hashpw(b"otocpa_timing_equalizer", bcrypt.gensalt()).decode()
+except Exception:
+    _DUMMY_BCRYPT_HASH = "$2b$12$" + "a" * 53
+
+
 def record_login_attempt(ip: str, username: str, success: bool) -> None:
     """Record a login attempt in the login_attempts table."""
     with open_db() as conn:
@@ -17253,6 +17358,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 body_len = int(self.headers.get('Content-Length', 0))
                 body = self.rfile.read(body_len).decode('utf-8') if body_len else ''
 
+                client_ip = _get_client_ip(self)
+                if _contact_form_rate_limited(client_ip):
+                    logging.warning("contact form rate-limited ip=%s", client_ip)
+                    resp = b'{"ok":false,"error":"rate_limited"}'
+                    self.send_response(429)
+                    self.send_header('Access-Control-Allow-Origin', 'https://otocpa.com')
+                    self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Retry-After', '3600')
+                    self.send_header('Content-Length', str(len(resp)))
+                    self.end_headers()
+                    self.wfile.write(resp)
+                    return
+
                 self.send_response(200)
                 self.send_header('Access-Control-Allow-Origin', 'https://otocpa.com')
                 self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -17315,14 +17435,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             ),
                         )
                     except Exception as e:
-                        import logging
                         logging.error(f'Email notification failed: {e}')
 
                     self.wfile.write(b'{"ok":true}')
                 except Exception:
-                    import logging
                     logging.exception('Contact form error')
                     self.wfile.write(b'{"ok":false,"error":"server_error"}')
+                return
+
+            # CSRF protection for state-changing POSTs. Exempt webhooks and
+            # cross-origin public forms (which authenticate by signature / API
+            # key / CORS + rate limit) are listed in _CSRF_EXEMPT_POSTS.
+            if not _csrf_path_exempt(path) and not _csrf_check(self):
+                logging.warning(
+                    "CSRF check failed: path=%s origin=%s referer=%s ip=%s",
+                    path,
+                    self.headers.get("Origin", ""),
+                    self.headers.get("Referer", ""),
+                    _get_client_ip(self),
+                )
+                self._send_json({"error": "csrf_check_failed"}, status=403)
                 return
 
             length = int(self.headers.get("Content-Length", "0"))
@@ -17357,8 +17489,20 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         "SELECT * FROM dashboard_users WHERE username=? AND active=1", (username,)
                     ).fetchone()
                     user_row = dict(_user_raw) if _user_raw else None
+                # Always run bcrypt compare — even when the user doesn't exist —
+                # so response timing cannot be used to enumerate accounts. The
+                # dummy hash is generated at module load; bcrypt.checkpw is safe
+                # on bytes/str and returns False.
+                if user_row:
+                    password_ok = verify_password(password, user_row["password_hash"])
+                else:
+                    try:
+                        bcrypt.checkpw(password.encode("utf-8"), _DUMMY_BCRYPT_HASH.encode("utf-8"))
+                    except Exception:
+                        pass
+                    password_ok = False
                 # Unified error message for both "user not found" and "wrong password"
-                if not user_row or not verify_password(password, user_row["password_hash"]):
+                if not password_ok:
                     record_login_attempt(ip, username, False)
                     self._send_html(render_login(t("login_invalid", lang), lang=lang))
                     return
@@ -17426,15 +17570,25 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Stripe webhook (no auth) ---
             if path == "/stripe/webhook":
+                from src.integrations import stripe_client as _sc
+                sig = self.headers.get("Stripe-Signature", "")
                 try:
-                    from src.integrations import stripe_client as _sc
-                    sig = self.headers.get("Stripe-Signature", "")
                     event = _sc.handle_webhook(raw, sig)
+                except Exception:
+                    # Signature verification (or JSON parse) failed.
+                    # Return 400 without leaking exception detail so forged
+                    # requests cannot probe for internal error messages.
+                    logging.exception("stripe webhook signature verification failed")
+                    self._send_json({"error": "invalid_signature"}, status=400)
+                    return
+                try:
                     _handle_stripe_event(event)
-                    self._send_json({"received": True})
-                except Exception as e:
-                    logging.exception("stripe webhook error")
-                    self._send_json({"error": str(e)}, status=400)
+                except Exception:
+                    # Processing error on a signature-valid event: log and ack
+                    # 200 so Stripe does not retry-storm us; the event is
+                    # recorded via the logger for follow-up.
+                    logging.exception("stripe webhook processing error")
+                self._send_json({"received": True})
                 return
 
             # --- Set password via signed link (no auth) ---

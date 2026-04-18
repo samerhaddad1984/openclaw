@@ -197,9 +197,17 @@ def _request(url, *, data=None, headers=None, method=None, follow_redirects=Fals
 
 
 def _form_post(url, fields, *, headers=None, method="POST"):
-    from urllib.parse import urlencode
+    from urllib.parse import urlencode, urlparse
     body = urlencode(fields).encode()
-    hdrs = {"Content-Type": "application/x-www-form-urlencoded", **(headers or {})}
+    # Set a same-origin Origin header so the dashboard's CSRF check passes
+    # (tests simulate a browser that would send this automatically).
+    parsed = urlparse(url)
+    same_origin = f"{parsed.scheme}://{parsed.netloc}"
+    hdrs = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": same_origin,
+        **(headers or {}),
+    }
     return _request(url, data=body, headers=hdrs, method=method)
 
 
