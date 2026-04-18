@@ -833,6 +833,49 @@ def bootstrap_schema() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_tx_date ON bank_transactions(date)")
         conn.commit()
 
+        # Per-client QuickBooks Online OAuth connections (Sprint 3)
+        # Replaces the single-realm data/qbo_config.json approach so each
+        # (firm_code, client_code) pair owns its own tokens + realm.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qbo_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                realm_id TEXT NOT NULL,
+                access_token TEXT NOT NULL,
+                refresh_token TEXT NOT NULL,
+                expires_at INTEGER NOT NULL,
+                connected_at TEXT DEFAULT (datetime('now')),
+                connected_by TEXT,
+                last_refreshed_at TEXT,
+                last_error TEXT,
+                status TEXT DEFAULT 'active',
+                UNIQUE(firm_code, client_code)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_qbo_firm_client "
+            "ON qbo_connections(firm_code, client_code)"
+        )
+        conn.commit()
+
+        # Warn once if a legacy single-connection data/qbo_config.json exists
+        # but no per-client rows have been seeded. We intentionally do NOT
+        # auto-assign the legacy realm to an arbitrary client — the firm
+        # must reconnect each client so tokens land in the right realm.
+        try:
+            legacy_cfg = ROOT_DIR / "data" / "qbo_config.json"
+            has_rows = conn.execute(
+                "SELECT 1 FROM qbo_connections LIMIT 1"
+            ).fetchone() is not None
+            if legacy_cfg.exists() and not has_rows:
+                print(
+                    "  [bootstrap] Legacy data/qbo_config.json detected but "
+                    "qbo_connections is empty. Per-client reconnection required."
+                )
+        except Exception:
+            pass
+
         # Seed a default admin account if no users exist
         count = list(conn.execute("SELECT COUNT(*) FROM dashboard_users").fetchone().values())[0]
         if count == 0:
@@ -11607,6 +11650,224 @@ def render_communications(
 # Client management pages
 # ---------------------------------------------------------------------------
 
+def _get_firm_clients(firm_code: str | None) -> list[dict[str, Any]]:
+    """Return all clients for a firm (or all clients when ``firm_code`` is
+    None, used by the owner). Used by the QBO status page to enumerate the
+    'not yet connected' rows alongside existing connections."""
+    with open_db() as conn:
+        if firm_code is None:
+            rows = conn.execute(
+                "SELECT client_code, client_name, firm_code FROM clients "
+                "WHERE active=1 ORDER BY firm_code, client_code"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT client_code, client_name, firm_code FROM clients "
+                "WHERE active=1 AND firm_code=? ORDER BY client_code",
+                (firm_code,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _qbo_connection_map(firm_code: str | None) -> dict[tuple[str, str], dict[str, Any]]:
+    """Return {(firm_code, client_code): connection_row} for fast lookup."""
+    from src.agents.tools.qbo_oauth import list_qbo_connections
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in list_qbo_connections(firm_code):
+        out[(row["firm_code"], row["client_code"])] = row
+    return out
+
+
+def render_qbo_status_page(ctx: dict[str, Any], user: dict[str, Any],
+                           flash: str = '', flash_error: str = '',
+                           lang: str = 'fr') -> str:
+    """Per-client QuickBooks connection status.
+
+    Owners see every firm's connections; firm_admin/manager see only their
+    own firm. Employees don't get here — ``post_qbo`` gates the link in
+    the navigation.
+    """
+    from src.agents.tools.qbo_oauth import legacy_config_exists
+
+    role = ctx.get("role")
+    firm_code = ctx.get("firm_code")
+    firm_scope: str | None = None if role == "owner" else firm_code
+
+    clients = _get_firm_clients(firm_scope)
+    conn_map = _qbo_connection_map(firm_scope)
+
+    legacy_banner = ''
+    if legacy_config_exists() and not conn_map:
+        legacy_banner = (
+            '<div class="card" style="background:#3a2a0a;border:1px solid '
+            '#d97706;color:#fde68a;padding:12px 16px;margin-bottom:16px;">'
+            '<strong>Legacy QuickBooks connection detected.</strong> '
+            'The previous single-realm connection has been retired. '
+            'Please reconnect each client below.</div>'
+        )
+
+    rows_html = ''
+    if not clients:
+        rows_html = (
+            '<tr><td colspan="6" style="color:#888;padding:16px;'
+            'text-align:center;">No clients yet.</td></tr>'
+        )
+    for c in clients:
+        key = (c["firm_code"], c["client_code"])
+        conn_row = conn_map.get(key)
+        client_label = esc(c["client_name"] or c["client_code"])
+        client_code_enc = urlquote(c["client_code"])
+
+        if conn_row is None:
+            status_badge = ('<span style="color:#e74c3c;">'
+                            '&#x1F534; Not connected</span>')
+            realm_cell = '<span style="color:#888;">&mdash;</span>'
+            connected_cell = '<span style="color:#888;">&mdash;</span>'
+            refresh_cell = '<span style="color:#888;">&mdash;</span>'
+            actions_cell = (
+                f'<a href="/qbo/connect?client_code={client_code_enc}" '
+                'style="background:#2CA01C;color:white;padding:6px 12px;'
+                'border-radius:4px;text-decoration:none;">Connect &rarr;</a>'
+            )
+        else:
+            status = conn_row.get("status") or "active"
+            if status == "active":
+                status_badge = ('<span style="color:#2ecc71;">'
+                                '&#x2705; Active</span>')
+            elif status == "expired":
+                status_badge = ('<span style="color:#f39c12;">'
+                                '&#x26A0;&#xFE0F; Expired</span>')
+            else:
+                status_badge = f'<span style="color:#aaa;">{esc(status)}</span>'
+            realm_cell = esc(conn_row.get("realm_id") or "")
+            connected_cell = esc(conn_row.get("connected_at") or "")
+            refresh_cell = esc(conn_row.get("last_refreshed_at")
+                               or conn_row.get("last_error") or "just now")
+            actions_cell = (
+                f'<form method="POST" action="/qbo/disconnect" '
+                'style="display:inline;margin-right:6px;" '
+                'onsubmit="return confirm(\'Disconnect this client?\');">'
+                f'<input type="hidden" name="client_code" '
+                f'value="{esc(c["client_code"])}">'
+                '<button type="submit" style="background:#e74c3c;color:white;'
+                'border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">'
+                'Disconnect</button></form>'
+                f'<a href="/qbo/connect?client_code={client_code_enc}" '
+                'style="background:#3498db;color:white;padding:6px 12px;'
+                'border-radius:4px;text-decoration:none;">Reconnect</a>'
+            )
+
+        rows_html += (
+            '<tr>'
+            f'<td style="color:#2ecc71;font-weight:bold;padding:8px;">'
+            f'{esc(c["client_code"])}</td>'
+            f'<td style="color:#e0e0e0;padding:8px;">{client_label}</td>'
+            f'<td style="padding:8px;">{status_badge}</td>'
+            f'<td style="color:#aaa;padding:8px;">{realm_cell}</td>'
+            f'<td style="color:#aaa;padding:8px;">{connected_cell}</td>'
+            f'<td style="color:#aaa;padding:8px;">{refresh_cell}</td>'
+            f'<td style="padding:8px;">{actions_cell}</td>'
+            '</tr>'
+        )
+
+    firm_col = ''
+    firm_hdr = ''
+    if role == "owner":
+        # Owner sees all firms — prepend a firm column so rows stay unambiguous.
+        firm_hdr = ('<th style="color:#aaa;padding:12px;text-align:left;">'
+                    'Firm</th>')
+        # Rewrite rows to include firm_code in first column
+        rebuilt = ''
+        for c in clients:
+            key = (c["firm_code"], c["client_code"])
+            conn_row = conn_map.get(key)
+            client_label = esc(c["client_name"] or c["client_code"])
+            client_code_enc = urlquote(c["client_code"])
+            if conn_row is None:
+                status_badge = ('<span style="color:#e74c3c;">'
+                                '&#x1F534; Not connected</span>')
+                realm_cell = '<span style="color:#888;">&mdash;</span>'
+                connected_cell = '<span style="color:#888;">&mdash;</span>'
+                refresh_cell = '<span style="color:#888;">&mdash;</span>'
+                actions_cell = (
+                    f'<a href="/qbo/connect?client_code={client_code_enc}" '
+                    'style="background:#2CA01C;color:white;padding:6px 12px;'
+                    'border-radius:4px;text-decoration:none;">Connect &rarr;</a>'
+                )
+            else:
+                status = conn_row.get("status") or "active"
+                if status == "active":
+                    status_badge = ('<span style="color:#2ecc71;">'
+                                    '&#x2705; Active</span>')
+                elif status == "expired":
+                    status_badge = ('<span style="color:#f39c12;">'
+                                    '&#x26A0;&#xFE0F; Expired</span>')
+                else:
+                    status_badge = f'<span style="color:#aaa;">{esc(status)}</span>'
+                realm_cell = esc(conn_row.get("realm_id") or "")
+                connected_cell = esc(conn_row.get("connected_at") or "")
+                refresh_cell = esc(conn_row.get("last_refreshed_at")
+                                   or conn_row.get("last_error") or "just now")
+                actions_cell = (
+                    f'<form method="POST" action="/qbo/disconnect" '
+                    'style="display:inline;margin-right:6px;" '
+                    'onsubmit="return confirm(\'Disconnect this client?\');">'
+                    f'<input type="hidden" name="client_code" '
+                    f'value="{esc(c["client_code"])}">'
+                    '<button type="submit" style="background:#e74c3c;color:white;'
+                    'border:none;padding:6px 12px;border-radius:4px;cursor:pointer;">'
+                    'Disconnect</button></form>'
+                    f'<a href="/qbo/connect?client_code={client_code_enc}" '
+                    'style="background:#3498db;color:white;padding:6px 12px;'
+                    'border-radius:4px;text-decoration:none;">Reconnect</a>'
+                )
+            rebuilt += (
+                '<tr>'
+                f'<td style="color:#aaa;padding:8px;">{esc(c["firm_code"] or "")}</td>'
+                f'<td style="color:#2ecc71;font-weight:bold;padding:8px;">'
+                f'{esc(c["client_code"])}</td>'
+                f'<td style="color:#e0e0e0;padding:8px;">{client_label}</td>'
+                f'<td style="padding:8px;">{status_badge}</td>'
+                f'<td style="color:#aaa;padding:8px;">{realm_cell}</td>'
+                f'<td style="color:#aaa;padding:8px;">{connected_cell}</td>'
+                f'<td style="color:#aaa;padding:8px;">{refresh_cell}</td>'
+                f'<td style="padding:8px;">{actions_cell}</td>'
+                '</tr>'
+            )
+        if rebuilt:
+            rows_html = rebuilt
+        firm_col = '1'
+
+    body = f'''
+    <div style="padding:24px;">
+        <a href="/" style="color:#aaa;text-decoration:none;">&larr; Back to queue</a>
+        <h2 style="color:white;">&#x1F4D2; QuickBooks Connections</h2>
+        {legacy_banner}
+        <p style="color:#aaa;">Each client maps to its own QuickBooks Online
+        company (realm). Connect below — tokens are stored per-client and
+        refreshed automatically.</p>
+        <table style="width:100%;border-collapse:collapse;background:#1a2e4a;
+                      border-radius:8px;">
+            <thead>
+                <tr style="background:#0d1b2a;">
+                    {firm_hdr}
+                    <th style="color:#aaa;padding:12px;text-align:left;">Client</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Name</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Status</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Realm ID</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Connected</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Last refresh</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>{rows_html}</tbody>
+        </table>
+    </div>
+    '''
+    return page_layout("QBO Status", body, user=user, flash=flash,
+                       flash_error=flash_error, lang=lang)
+
+
 def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = '', flash_error: str = '',
                         lang: str = 'fr') -> str:
@@ -11652,6 +11913,18 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
         except sqlite3.OperationalError:
             pass
 
+        # Sprint 3: per-client QBO connection badge on the client list
+        qbo_by_client: dict[str, dict[str, Any]] = {}
+        try:
+            qbo_rows = conn.execute('''
+                SELECT client_code, status, realm_id
+                FROM qbo_connections
+            ''').fetchall()
+            for qr in qbo_rows:
+                qbo_by_client[qr['client_code']] = dict(qr)
+        except sqlite3.OperationalError:
+            pass
+
     rows = ''
     for c in clients:
         wa_list = wa_by_client.get(c['client_code'], [])
@@ -11685,6 +11958,28 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
         )
         bank_cell = ''.join(bank_parts)
 
+        qbo_row = qbo_by_client.get(c['client_code'])
+        if qbo_row and qbo_row.get('status') == 'active':
+            qbo_cell = (
+                '<div style="color:#2ecc71;">&#x2705; Connected</div>'
+                f'<div style="color:#888;font-size:11px;">realm '
+                f'{esc(qbo_row.get("realm_id") or "")}</div>'
+            )
+        elif qbo_row and qbo_row.get('status') == 'expired':
+            qbo_cell = (
+                '<div style="color:#f39c12;">&#x26A0;&#xFE0F; Expired</div>'
+                f'<a href="/qbo/connect?client_code={urlquote(c["client_code"])}" '
+                'style="color:#3498db;font-size:12px;text-decoration:none;">'
+                'Reconnect</a>'
+            )
+        else:
+            qbo_cell = (
+                '<div style="color:#aaa;">Not connected</div>'
+                f'<a href="/qbo/connect?client_code={urlquote(c["client_code"])}" '
+                'style="color:#2ecc71;font-size:12px;text-decoration:none;">'
+                'Connect &rarr;</a>'
+            )
+
         rows += f"""
         <tr>
             <td style="color:#2ecc71;font-weight:bold;vertical-align:top;">{esc(c['client_code'])}</td>
@@ -11694,6 +11989,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             <td style="vertical-align:top;">{'&#x2705;' if c['active'] else '&#x274C;'}</td>
             <td style="vertical-align:top;">{wa_cell}</td>
             <td style="vertical-align:top;">{bank_cell}</td>
+            <td style="vertical-align:top;">{qbo_cell}</td>
             <td style="vertical-align:top;">
                 <a href="/clients/edit?code={urlquote(c['client_code'])}"
                    style="background:#3498db;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;">
@@ -11724,6 +12020,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                     <th style="color:#aaa;padding:12px;text-align:left;">Actif</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4F1; WhatsApp</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F3E6; Bank</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4D2; QBO</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Actions</th>
                 </tr>
             </thead>
@@ -11873,6 +12170,61 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
             </form>
         </div>"""
 
+    # Sprint 3: per-client QBO section (edit mode only).
+    qbo_section = ''
+    if is_edit:
+        qbo_row = None
+        try:
+            with open_db() as _qb_conn:
+                qr = _qb_conn.execute(
+                    "SELECT realm_id, status, connected_at, last_refreshed_at, "
+                    "last_error FROM qbo_connections WHERE client_code=?",
+                    (client['client_code'],),
+                ).fetchone()
+                qbo_row = dict(qr) if qr else None
+        except sqlite3.OperationalError:
+            pass
+
+        if qbo_row is None:
+            qbo_body = (
+                '<div style="color:#aaa;">Not connected to QuickBooks.</div>'
+                f'<a href="/qbo/connect?client_code={urlquote(client["client_code"])}" '
+                'style="display:inline-block;margin-top:12px;background:#2CA01C;'
+                'color:white;padding:8px 16px;border-radius:4px;'
+                'text-decoration:none;">Connect &rarr;</a>'
+            )
+        else:
+            status = qbo_row.get("status") or "active"
+            badge = ('<span style="color:#2ecc71;">&#x2705; Active</span>'
+                     if status == "active"
+                     else '<span style="color:#f39c12;">&#x26A0;&#xFE0F; '
+                          f'{esc(status)}</span>')
+            qbo_body = (
+                f'<div style="color:#e0e0e0;">Status: {badge}</div>'
+                f'<div style="color:#888;font-size:12px;">Realm: '
+                f'{esc(qbo_row.get("realm_id") or "")} &middot; Connected: '
+                f'{esc(qbo_row.get("connected_at") or "")}</div>'
+                '<div style="margin-top:12px;display:flex;gap:8px;">'
+                f'<form method="POST" action="/qbo/disconnect" '
+                'style="margin:0;" '
+                'onsubmit="return confirm(\'Disconnect QBO for this client?\');">'
+                f'<input type="hidden" name="client_code" '
+                f'value="{esc(client["client_code"])}">'
+                '<button type="submit" style="background:#e74c3c;color:white;'
+                'border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">'
+                'Disconnect</button></form>'
+                f'<a href="/qbo/connect?client_code={urlquote(client["client_code"])}" '
+                'style="background:#3498db;color:white;padding:6px 14px;'
+                'border-radius:4px;text-decoration:none;">Reconnect</a>'
+                '</div>'
+            )
+
+        qbo_section = f"""
+        <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <h3 style="color:white;margin-top:0;">&#x1F4D2; QuickBooks Online</h3>
+            {qbo_body}
+        </div>"""
+
     return page_layout(title, f"""
     <div style="padding:24px;max-width:600px;">
         <h2 style="color:white;">{esc(title)}</h2>
@@ -11916,6 +12268,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
         </form>
         {wa_section}
         {bank_section}
+        {qbo_section}
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
@@ -14244,65 +14597,99 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/qbo/connect":
-                from src.agents.tools.qbo_oauth import get_authorize_url, is_connected as _qbo_is_connected
-                if _qbo_is_connected():
-                    self._redirect("/qbo/status")
+                # Per-client OAuth start. Requires the caller to be able to
+                # post to QBO (owner / firm_admin / manager) AND to have
+                # access to the target client_code.
+                from src.agents.tools.qbo_oauth import get_authorize_url
+                client_code = qs.get("client_code", [""])[0].strip()
+                if not client_code:
+                    self._flash_redirect("/qbo/status",
+                                         error="client_code is required.")
                     return
-                auth_url, _state = get_authorize_url()
-                html_doc = f'''<!DOCTYPE html>
-<html><head><title>Connect QuickBooks</title>
-<style>body{{font-family:sans-serif;max-width:600px;margin:80px auto;text-align:center;background:#0d1b2a;color:white;}}
-.btn{{background:#2CA01C;color:white;padding:16px 32px;border-radius:8px;text-decoration:none;font-size:18px;display:inline-block;margin-top:24px;}}
-</style></head>
-<body>
-<h1>Connect to QuickBooks Online</h1>
-<p>Click below to authorize OtoCPA to post expenses to your QuickBooks account.</p>
-<a href="{auth_url}" class="btn">Connect QuickBooks</a>
-<br><br>
-<a href="/" style="color:#aaa;">&larr; Back to queue</a>
-</body></html>'''
-                self._send_html(html_doc)
+                if not _can_do(ctx, "post_qbo"):
+                    self._send_html(page_layout(
+                        "Forbidden",
+                        '<div class="card"><h2>Forbidden</h2>'
+                        '<p>Only managers/admins can connect QuickBooks.</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                if not _require_client_in_firm(client_code, ctx):
+                    self._flash_redirect("/qbo/status",
+                                         error="Client not found in your firm.")
+                    return
+                auth_url, csrf_nonce = get_authorize_url(client_code)
+                # Short-lived CSRF cookie so the callback can verify the
+                # state parameter really came from this browser.
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", auth_url)
+                self.send_header(
+                    "Set-Cookie",
+                    f"qbo_oauth_csrf={csrf_nonce}; Path=/; Max-Age=600; "
+                    "HttpOnly; SameSite=Lax",
+                )
+                self.end_headers()
                 return
 
             if path == "/qbo/callback":
-                from src.agents.tools.qbo_oauth import exchange_code_for_token
+                from src.agents.tools.qbo_oauth import (
+                    decode_state, exchange_code_for_token, store_qbo_tokens,
+                )
                 code = qs.get("code", [""])[0]
                 realm_id = qs.get("realmId", [""])[0]
-                if code and realm_id:
-                    try:
-                        exchange_code_for_token(code, realm_id)
-                        self._redirect("/qbo/status")
-                    except Exception as e:
-                        self._send_html(f"<h1>Error: {html.escape(str(e))}</h1>")
-                else:
-                    self._send_html("<h1>Missing code or realmId</h1>")
+                state = qs.get("state", [""])[0]
+                state_client, state_nonce = decode_state(state)
+
+                # CSRF: the nonce in state must match the one we set in the
+                # cookie at /qbo/connect time.
+                cookie_header = self.headers.get("Cookie", "")
+                cookie_nonce = ""
+                for part in cookie_header.split(";"):
+                    part = part.strip()
+                    if part.startswith("qbo_oauth_csrf="):
+                        cookie_nonce = part[len("qbo_oauth_csrf="):]
+                        break
+
+                if not (code and realm_id and state_client and state_nonce
+                        and cookie_nonce and cookie_nonce == state_nonce):
+                    self._flash_redirect(
+                        "/qbo/status",
+                        error="OAuth callback failed CSRF / missing params.")
+                    return
+                if not _require_client_in_firm(state_client, ctx):
+                    self._flash_redirect(
+                        "/qbo/status",
+                        error="Client not found in your firm.")
+                    return
+                try:
+                    token_data = exchange_code_for_token(code)
+                    store_qbo_tokens(
+                        firm_code=ctx["firm_code"],
+                        client_code=state_client,
+                        realm_id=realm_id,
+                        access_token=token_data["access_token"],
+                        refresh_token=token_data.get("refresh_token", ""),
+                        expires_in=int(token_data.get("expires_in", 3600)),
+                        connected_by=user.get("username"),
+                    )
+                except Exception as e:
+                    self._flash_redirect("/qbo/status",
+                                         error=f"OAuth exchange failed: {e}")
+                    return
+
+                # Clear the CSRF cookie now that it's been consumed.
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location",
+                                 f"/qbo/status?flash=Connected+{urlquote(state_client)}+to+QuickBooks.")
+                self.send_header(
+                    "Set-Cookie",
+                    "qbo_oauth_csrf=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+                )
+                self.end_headers()
                 return
 
             if path == "/qbo/status":
-                from src.agents.tools.qbo_oauth import is_connected as _qbo_is_connected, load_config as _qbo_load_config
-                config = _qbo_load_config()
-                connected = _qbo_is_connected()
-                status_txt = "Connected" if connected else "Not connected"
-                realm = config.get("realm_id", "N/A")
-                env = config.get("environment", "N/A")
-                html_doc = f'''<!DOCTYPE html>
-<html><head><title>QBO Status</title>
-<style>body{{font-family:sans-serif;max-width:600px;margin:80px auto;background:#0d1b2a;color:white;padding:24px;}}
-.card{{background:#1a2e4a;border-radius:8px;padding:24px;}}
-.btn{{background:#2CA01C;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:16px;}}
-</style></head>
-<body>
-<h1>QuickBooks Status</h1>
-<div class="card">
-<p>Status: <strong>{html.escape(status_txt)}</strong></p>
-<p>Realm ID: {html.escape(str(realm))}</p>
-<p>Environment: {html.escape(str(env))}</p>
-</div>
-<br>
-<a href="/qbo/connect" class="btn">Reconnect</a>
-<a href="/" style="color:#aaa;margin-left:16px;">&larr; Back to queue</a>
-</body></html>'''
-                self._send_html(html_doc)
+                self._send_html(render_qbo_status_page(
+                    ctx, user, flash=flash, flash_error=flash_error, lang=lang))
                 return
 
             if path == "/":
@@ -16421,6 +16808,33 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     redir = (f"/clients/edit?code={urlquote(client_qs)}"
                              if client_qs else "/bank/feeds")
                     self._flash_redirect(redir, error=f"Sync failed: {e}")
+                return
+
+            # --- QBO: disconnect a per-client connection ---
+            if path == "/qbo/disconnect":
+                from src.agents.tools.qbo_oauth import disconnect_qbo
+                client_code = form.get("client_code", "").strip()
+                if not client_code:
+                    self._flash_redirect("/qbo/status",
+                                         error="client_code is required.")
+                    return
+                if not _can_do(ctx, "post_qbo"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                # Lookup the firm_code from the client itself so an owner
+                # disconnects the right (firm, client) pair.
+                with open_db() as conn:
+                    row = conn.execute(
+                        "SELECT firm_code FROM clients WHERE client_code=?",
+                        (client_code,),
+                    ).fetchone()
+                firm_for_client = (row["firm_code"] if row else None) or ctx.get("firm_code")
+                disconnect_qbo(firm_for_client, client_code)
+                self._flash_redirect("/qbo/status",
+                                     flash=f"Disconnected {client_code}.")
                 return
 
             # --- Bank: disconnect ---

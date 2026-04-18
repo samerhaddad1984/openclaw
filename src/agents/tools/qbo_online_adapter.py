@@ -24,6 +24,10 @@ from src.agents.tools.qbo_reference_resolver import (
     find_vendor_by_name,
     load_qbo_config,
 )
+from src.agents.tools.qbo_oauth import (
+    get_qbo_tokens as _oauth_get_qbo_tokens,
+    refresh_access_token as _oauth_refresh_access_token,
+)
 
 
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
@@ -604,6 +608,77 @@ def extract_external_id(response_json: dict[str, Any], entry_kind: str) -> Optio
     return None
 
 
+def _lookup_firm_code(client_code: str, db_path: Path = DB_PATH) -> Optional[str]:
+    """Resolve the owning firm_code for a client_code (None when unknown)."""
+    try:
+        with open_db(db_path) as conn:
+            row = conn.execute(
+                "SELECT firm_code FROM clients WHERE client_code=?",
+                (client_code,),
+            ).fetchone()
+        return row["firm_code"] if row and row["firm_code"] else None
+    except Exception:
+        return None
+
+
+def _build_qbo_config_from_tokens(
+    tokens: dict[str, Any],
+    base_config: Optional[QBOConfig] = None,
+) -> QBOConfig:
+    """Create a QBOConfig that uses the stored per-client tokens/realm.
+
+    ``base_config`` supplies the environment-level defaults (base_url,
+    minor_version, auto_create_vendors flag) since those are global to the
+    QBO app, not per-client.
+    """
+    base = base_config or load_qbo_config()
+    return QBOConfig(
+        access_token=tokens["access_token"],
+        realm_id=tokens["realm_id"],
+        base_url=base.base_url,
+        minor_version=base.minor_version,
+        auto_create_vendors=base.auto_create_vendors,
+    )
+
+
+def _resolve_client_qbo_config(
+    posting_payload: dict[str, Any],
+    db_path: Path = DB_PATH,
+    base_config: Optional[QBOConfig] = None,
+) -> tuple[Optional[QBOConfig], Optional[str], Optional[str], Optional[str]]:
+    """Look up QBO tokens for this posting's client.
+
+    Returns ``(qbo_config, firm_code, client_code, error_text)``.
+    ``qbo_config`` is None (with error_text populated) when the client has no
+    active QBO connection — the caller should skip the job in that case.
+    """
+    client_code = normalize_text(posting_payload.get("client_code"))
+    if not client_code:
+        return None, None, None, "Posting payload missing client_code"
+
+    firm_code = _lookup_firm_code(client_code, db_path)
+    if not firm_code:
+        return None, None, client_code, f"No firm_code for client_code={client_code}"
+
+    tokens = _oauth_get_qbo_tokens(firm_code, client_code)
+    if tokens is None:
+        return None, firm_code, client_code, (
+            f"No QBO connection for firm={firm_code} client={client_code}"
+        )
+    if tokens.get("status") != "active":
+        return None, firm_code, client_code, (
+            f"QBO connection status={tokens.get('status')} "
+            f"error={tokens.get('last_error') or ''}".strip()
+        )
+
+    return _build_qbo_config_from_tokens(tokens, base_config), firm_code, client_code, None
+
+
+def _is_401(exc: Exception) -> bool:
+    """True when a RuntimeError message looks like a QBO HTTP 401 response."""
+    return "QBO HTTP 401" in str(exc)
+
+
 def post_one_ready_job(
     posting_id: str,
     *,
@@ -611,7 +686,10 @@ def post_one_ready_job(
     db_path: Path = DB_PATH,
 ) -> dict[str, Any]:
     ensure_posting_jobs_table(db_path)
-    qbo_config = qbo_config or load_qbo_config()
+    # ``qbo_config`` is now only used for the environment-level defaults
+    # (base_url/minor_version). Per-client access_token + realm_id are looked
+    # up from the ``qbo_connections`` table.
+    base_config = qbo_config or load_qbo_config()
     mappings = load_qbo_mappings()
 
     row = get_posting_job(posting_id, db_path=db_path)
@@ -632,28 +710,68 @@ def post_one_ready_job(
     if blocking_issues:
         raise ValueError(f"Posting job has blocking issues: {blocking_issues}")
 
+    per_client_config, firm_code, client_code, connection_err = (
+        _resolve_client_qbo_config(payload, db_path, base_config)
+    )
+    if per_client_config is None:
+        update_posting_job_after_attempt(
+            posting_id=posting_id,
+            posting_status="post_failed",
+            external_id=None,
+            error_text=connection_err or "No QBO connection for this client",
+            payload=payload,
+            db_path=db_path,
+        )
+        return {
+            "posting_id": posting_id,
+            "status": "skipped_no_connection",
+            "error": connection_err,
+        }
+
     entry_kind = normalize_text(payload.get("entry_kind")) or "expense"
     qbo_payload = build_qbo_api_payload(
         payload,
-        qbo_config=qbo_config,
+        qbo_config=per_client_config,
         mappings=mappings,
     )
 
-    try:
-        if entry_kind.lower() == "expense":
-            encoded_realm = urllib.parse.quote(qbo_config.realm_id)
-            url = f"{qbo_config.base_url}/v3/company/{encoded_realm}/purchase?minorversion={urllib.parse.quote(qbo_config.minor_version)}"
-        elif entry_kind.lower() == "bill":
-            encoded_realm = urllib.parse.quote(qbo_config.realm_id)
-            url = f"{qbo_config.base_url}/v3/company/{encoded_realm}/bill?minorversion={urllib.parse.quote(qbo_config.minor_version)}"
-        else:
-            raise ValueError(f"Unsupported entry kind: {entry_kind}")
+    def _url_for(kind: str, cfg: QBOConfig) -> str:
+        encoded_realm = urllib.parse.quote(cfg.realm_id)
+        encoded_minor = urllib.parse.quote(cfg.minor_version)
+        if kind == "expense":
+            return f"{cfg.base_url}/v3/company/{encoded_realm}/purchase?minorversion={encoded_minor}"
+        if kind == "bill":
+            return f"{cfg.base_url}/v3/company/{encoded_realm}/bill?minorversion={encoded_minor}"
+        raise ValueError(f"Unsupported entry kind: {kind}")
 
-        response_json = post_json(
-            url=url,
-            access_token=qbo_config.access_token,
-            payload=qbo_payload,
-        )
+    kind_lc = entry_kind.lower()
+    try:
+        url = _url_for(kind_lc, per_client_config)
+
+        try:
+            response_json = post_json(
+                url=url,
+                access_token=per_client_config.access_token,
+                payload=qbo_payload,
+            )
+        except RuntimeError as exc:
+            # 401 → try a refresh, retry once. On refresh failure surface
+            # the original 401 so the UI flags the connection as expired.
+            if not _is_401(exc):
+                raise
+            refreshed = _oauth_refresh_access_token(firm_code, client_code)
+            if refreshed is None:
+                raise RuntimeError(
+                    f"QBO 401 and refresh failed for "
+                    f"firm={firm_code} client={client_code}: {exc}"
+                ) from exc
+            per_client_config = _build_qbo_config_from_tokens(refreshed, base_config)
+            url = _url_for(kind_lc, per_client_config)
+            response_json = post_json(
+                url=url,
+                access_token=per_client_config.access_token,
+                payload=qbo_payload,
+            )
 
         external_id = extract_external_id(response_json, entry_kind)
         if not external_id:
@@ -674,6 +792,8 @@ def post_one_ready_job(
             "posting_id": posting_id,
             "status": "posted",
             "external_id": external_id,
+            "firm_code": firm_code,
+            "client_code": client_code,
             "qbo_request": qbo_payload,
             "qbo_response": response_json,
         }
@@ -691,6 +811,8 @@ def post_one_ready_job(
             "posting_id": posting_id,
             "status": "post_failed",
             "error": str(exc),
+            "firm_code": firm_code,
+            "client_code": client_code,
             "qbo_request": qbo_payload,
         }
 
