@@ -337,18 +337,18 @@ def test_portal_upload_creates_document(portal_env, http_server, monkeypatch):
     token = _get_token(rd, "ACME")
 
     # Stub the OCR pipeline so the test stays offline and deterministic.
+    # Async flow: save_and_queue_document inserts a placeholder row, then the
+    # worker thread invokes process_file, which should UPDATE that same row
+    # (honouring document_id passed in).
     import src.engines.ocr_engine as ocr
-    import secrets as _secrets
-    def _fake_process_file(fbytes, fname, *, client_code, **kwargs):
-        doc_id = "doc_" + _secrets.token_hex(6)
+    def _fake_process_file(fbytes, fname, *, document_id, client_code, **kwargs):
         with sqlite3.connect(rd.DB_PATH) as conn:
             conn.execute(
-                "INSERT INTO documents (document_id, file_name, client_code, review_status, created_at) "
-                "VALUES (?,?,?,?,datetime('now'))",
-                (doc_id, fname, client_code, "New"),
+                "UPDATE documents SET review_status='New' WHERE document_id=?",
+                (document_id,),
             )
             conn.commit()
-        return {"ok": True, "document_id": doc_id, "file_name": fname}
+        return {"ok": True, "document_id": document_id, "file_name": fname}
     monkeypatch.setattr(ocr, "process_file", _fake_process_file)
 
     # Multipart upload.
@@ -366,6 +366,11 @@ def test_portal_upload_creates_document(portal_env, http_server, monkeypatch):
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     assert status in (200, 303)
+
+    # Wait for the background worker to finish.
+    from src.engines import upload_queue as _uq
+    _uq.get_upload_queue().wait_idle()
+
     with sqlite3.connect(rd.DB_PATH) as conn:
         rows = conn.execute(
             "SELECT document_id, client_code, file_name FROM documents"

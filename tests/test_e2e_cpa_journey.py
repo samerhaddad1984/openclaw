@@ -478,23 +478,27 @@ class TestE2ECpaJourney:
                 "portal_token, portal_token_created_at) VALUES (?,?,?,1,?,datetime('now'))",
                 ("ACME", "Acme Corp", firm_code, tok))
             conn.commit()
-        # Stub OCR pipeline — writes a minimal documents row.
+        # Stub OCR pipeline — async flow pre-inserts a placeholder row and the
+        # worker invokes process_file, which should UPDATE that same row.
         import src.engines.ocr_engine as ocr
 
-        def _fake(fbytes, fname, *, client_code, **kwargs):
-            doc_id = "doc_" + os.urandom(6).hex()
+        def _fake(fbytes, fname, *, document_id, client_code, **kwargs):
             with sqlite3.connect(str(rd.DB_PATH)) as conn:
                 conn.execute(
-                    "INSERT INTO documents (document_id, file_name, client_code, "
-                    "review_status, created_at) VALUES (?,?,?,?,datetime('now'))",
-                    (doc_id, fname, client_code, "New"))
+                    "UPDATE documents SET review_status='New' WHERE document_id=?",
+                    (document_id,))
                 conn.commit()
-            return {"ok": True, "document_id": doc_id, "file_name": fname}
+            return {"ok": True, "document_id": document_id, "file_name": fname}
         monkeypatch.setattr(ocr, "process_file", _fake)
 
         status, _h, _b = _multipart_post(
             f"{http_server}/c/{tok}/upload", "receipt.pdf", b"%PDF-fake")
         assert status in (200, 303)
+
+        # Wait for the background worker to finish.
+        from src.engines import upload_queue as _uq
+        _uq.get_upload_queue().wait_idle()
+
         with sqlite3.connect(str(rd.DB_PATH)) as conn:
             rows = conn.execute(
                 "SELECT client_code, review_status FROM documents"

@@ -1535,6 +1535,31 @@ _PUBLIC_UPLOAD_MAX_PER_MIN = 20
 _public_upload_log: dict[tuple[str, str], list[float]] = {}
 _public_upload_lock = threading.Lock()
 
+# Bulk upload safeguards so a single request can't starve the queue or
+# blow past the HTTP body size we're willing to buffer.
+MAX_UPLOAD_FILES = 50
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB per request
+
+
+def _batch_limit_error(files: list[tuple[str, bytes]]) -> str | None:
+    """Return an error message if the batch violates size/count limits."""
+    if len(files) > MAX_UPLOAD_FILES:
+        return f"Too many files in one upload: {len(files)} (max {MAX_UPLOAD_FILES})"
+    total = sum(len(b or b"") for _, b in files)
+    if total > MAX_UPLOAD_BYTES:
+        mb = total // (1024 * 1024)
+        return f"Upload too large: {mb} MB (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"
+    return None
+
+
+def _wants_async_upload(handler) -> bool:
+    """True when the client opted into the async JSON response.
+
+    Browsers that still submit the HTML form (no JS) fall back to the
+    classic redirect-with-flash flow for backwards compatibility.
+    """
+    return handler.headers.get("X-Async-Upload", "").strip() == "1"
+
 
 def _public_upload_allowed(client_code: str, ip: str) -> bool:
     """Return False when this (client_code, ip) exceeds 20 uploads/minute."""
@@ -10671,26 +10696,30 @@ def render_portal_upload(client: dict, token: str,
     body = f"""
     <div class="card">
         <h2>&#128228; Envoyer un document / Upload a document</h2>
-        <form method="POST" action="/c/{esc(token)}/upload" enctype="multipart/form-data">
+        <form method="POST" action="/c/{esc(token)}/upload" enctype="multipart/form-data" id="pform">
             <div class="drop" id="dz">&#128193; Glissez vos fichiers / Drop files here</div>
             <input type="file" id="fi" name="files" multiple
                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
             <label class="muted">Note (optional)</label>
             <textarea name="note" rows="2" placeholder="Ex: facture d'&eacute;picerie / grocery invoice"></textarea>
-            <button type="submit" style="margin-top:10px;width:100%;">
+            <button type="submit" id="pbtn" style="margin-top:10px;width:100%;">
                 &#9989; Envoyer / Upload
             </button>
         </form>
+        <div id="pprog" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:14px;"></div>
         <p class="muted" style="margin-top:12px;">Formats: PDF, JPG, PNG. 20 MB max par fichier.</p>
     </div>
     <script>
     (function(){{
-     var dz=document.getElementById('dz'),fi=document.getElementById('fi');
+     var dz=document.getElementById('dz'),fi=document.getElementById('fi'),form=document.getElementById('pform'),btn=document.getElementById('pbtn'),prog=document.getElementById('pprog');
      dz.addEventListener('click',function(){{fi.click();}});
      ['dragover','dragenter'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#e0e7ff';}});}});
      ['dragleave','drop'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#f9fafb';}});}});
      dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' file(s) selected';}});
      fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' file(s) selected';}});
+     function show(m){{prog.style.display='block';prog.textContent=m;}}
+     function poll(ids){{fetch('/upload/status?document_ids='+encodeURIComponent(ids.join(','))).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok)return;var c=j.counts||{{}};var done=(c.ready||0)+(c.error||0);show('Processing '+ids.length+'... '+done+' done, '+(c.processing||0)+' processing, '+(c.queued||0)+' queued');if(done>=ids.length){{clearInterval(window._ppt);show('\u2705 '+ids.length+' document(s) uploaded ('+(c.error||0)+' failed).');btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';}}}}).catch(function(){{}});}}
+     form.addEventListener('submit',function(ev){{ev.preventDefault();btn.disabled=true;btn.textContent='Uploading...';var fd=new FormData(form);fetch(form.action,{{method:'POST',body:fd,headers:{{'X-Async-Upload':'1'}}}}).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok){{show('\u274c '+(j.error||'Upload failed'));btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';return;}}var ids=j.document_ids||[];if(!ids.length){{show('\u26a0\ufe0f Nothing queued');btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';return;}}show('Queued '+ids.length+' document(s). Processing...');poll(ids);window._ppt=setInterval(function(){{poll(ids);}},5000);}}).catch(function(e){{show('\u274c '+e);btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';}});}});
     }})();
     </script>
     """
@@ -11067,7 +11096,7 @@ button:disabled{{opacity:.6;}}
     </div>
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
     {flash_html}
-    <form method="POST" action="/upload" enctype="multipart/form-data">
+    <form method="POST" action="/upload" enctype="multipart/form-data" id="upform">
         <input type="hidden" name="client_code" value="{esc(client_code)}">
         <div class="drop" id="dz">📁 Drag &amp; drop files here / Glissez vos fichiers ici</div>
         <input type="file" id="fi" name="files" multiple
@@ -11076,19 +11105,36 @@ button:disabled{{opacity:.6;}}
         <input type="tel" id="wa" name="whatsapp_number" placeholder="+15145551234">
         <button type="submit" id="btn">✅ Upload / Téléverser</button>
     </form>
+    <div id="prog" style="display:none;margin-top:14px;padding:12px;border-radius:8px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:14px;"></div>
     <p class="muted" style="margin-top:16px;text-align:center;">
         Secure upload · No login required<br>Téléversement sécurisé · Aucun compte requis
     </p>
 </div>
 <script>
 (function(){{
- var dz=document.getElementById('dz'),fi=document.getElementById('fi');
+ var dz=document.getElementById('dz'),fi=document.getElementById('fi'),btn=document.getElementById('btn'),form=document.getElementById('upform'),prog=document.getElementById('prog');
  ['dragenter','dragover'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#e0e7ff';}});}});
  ['dragleave','drop'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#f9fafb';}});}});
  dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' file(s) selected';}});
  dz.addEventListener('click',function(){{fi.click();}});
  fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' file(s) selected';}});
- document.querySelector('form').addEventListener('submit',function(){{var b=document.getElementById('btn');b.disabled=true;b.textContent='Uploading...';}});
+ function show(msg){{prog.style.display='block';prog.textContent=msg;}}
+ function poll(ids){{
+   fetch('/upload/status?document_ids='+encodeURIComponent(ids.join(','))).then(function(r){{return r.json();}}).then(function(j){{
+     if(!j.ok)return;var c=j.counts||{{}};var done=(c.ready||0)+(c.error||0);
+     show('Processing '+ids.length+'... '+done+' done, '+(c.processing||0)+' processing, '+(c.queued||0)+' queued');
+     if(done>=ids.length){{clearInterval(window._pt);show('\u2705 '+ids.length+' document(s) uploaded ('+((c.error||0))+' failed).');btn.disabled=false;btn.textContent='\u2705 Upload / T\u00e9l\u00e9verser';}}
+   }}).catch(function(){{}});
+ }}
+ form.addEventListener('submit',function(ev){{
+   ev.preventDefault();btn.disabled=true;btn.textContent='Uploading...';
+   var fd=new FormData(form);
+   fetch('/upload',{{method:'POST',body:fd,headers:{{'X-Async-Upload':'1'}}}}).then(function(r){{return r.json();}}).then(function(j){{
+     if(!j.ok){{show('\u274c '+(j.error||'Upload failed'));btn.disabled=false;btn.textContent='\u2705 Upload / T\u00e9l\u00e9verser';return;}}
+     var ids=j.document_ids||[];if(!ids.length){{show('\u26a0\ufe0f Nothing queued');btn.disabled=false;btn.textContent='\u2705 Upload / T\u00e9l\u00e9verser';return;}}
+     show('Queued '+ids.length+' document(s). Processing...');poll(ids);window._pt=setInterval(function(){{poll(ids);}},5000);
+   }}).catch(function(e){{show('\u274c '+e);btn.disabled=false;btn.textContent='\u2705 Upload / T\u00e9l\u00e9verser';}});
+ }});
 }})();
 </script>
 </body></html>"""
@@ -13344,15 +13390,85 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
             </div>
         </div>
     </div>
+    <div id="upload-progress" style="display:none;padding:14px;margin-top:12px;border-radius:10px;background:rgba(24,195,126,0.08);border:1px solid rgba(24,195,126,0.3);color:#fff;">
+        <div id="upload-progress-text" style="font-weight:700;font-size:14px;">Processing...</div>
+        <div id="upload-progress-details" style="font-size:12px;opacity:0.8;margin-top:4px;"></div>
+    </div>
     <script>
     (function() {{
         var uploadForm = document.querySelector('form[action="/upload"]');
         if (!uploadForm) return;
-        uploadForm.addEventListener('submit', function() {{
-            var btn = document.getElementById('upload-btn');
-            var spinner = document.getElementById('upload-spinner');
+        var btn = document.getElementById('upload-btn');
+        var spinner = document.getElementById('upload-spinner');
+        var progress = document.getElementById('upload-progress');
+        var progressText = document.getElementById('upload-progress-text');
+        var progressDetails = document.getElementById('upload-progress-details');
+        var pollTimer = null;
+
+        function showProgress(msg, detail) {{
+            if (progress) progress.style.display = 'block';
+            if (progressText) progressText.textContent = msg;
+            if (progressDetails) progressDetails.textContent = detail || '';
+        }}
+
+        function resetButton() {{
+            if (btn) {{ btn.disabled = false; btn.innerText = '\u2705 T\u00e9l\u00e9verser / Upload'; }}
+            if (spinner) spinner.style.display = 'none';
+        }}
+
+        function pollStatus(ids) {{
+            if (!ids.length) return;
+            fetch('/upload/status?document_ids=' + encodeURIComponent(ids.join(',')))
+                .then(function(r) {{ return r.json(); }})
+                .then(function(j) {{
+                    if (!j.ok) return;
+                    var c = j.counts || {{}};
+                    var ready = c.ready || 0, proc = c.processing || 0, q = c.queued || 0, err = c.error || 0;
+                    showProgress(
+                        'Processing ' + ids.length + ' document(s)...',
+                        ready + ' ready, ' + proc + ' processing, ' + q + ' queued' + (err ? (', ' + err + ' failed') : '')
+                    );
+                    var done = (ready + err) >= ids.length;
+                    if (done) {{
+                        clearInterval(pollTimer);
+                        showProgress('\u2705 All ' + ids.length + ' document(s) processed (' + err + ' failed).',
+                            'Refreshing dashboard...');
+                        setTimeout(function() {{ window.location.reload(); }}, 1500);
+                    }}
+                }})
+                .catch(function() {{ /* keep polling */ }});
+        }}
+
+        uploadForm.addEventListener('submit', function(ev) {{
+            ev.preventDefault();
             if (btn) {{ btn.disabled = true; btn.innerText = 'T\u00e9l\u00e9versement... / Uploading...'; }}
-            if (spinner) {{ spinner.style.display = 'block'; }}
+            if (spinner) spinner.style.display = 'block';
+            var fd = new FormData(uploadForm);
+            fetch('/upload', {{ method: 'POST', body: fd, headers: {{ 'X-Async-Upload': '1' }} }})
+                .then(function(r) {{ return r.json().then(function(j) {{ return [r.status, j]; }}); }})
+                .then(function(pair) {{
+                    var status = pair[0], j = pair[1];
+                    if (!j.ok) {{
+                        showProgress('\u274c Upload failed', j.error || ('HTTP ' + status));
+                        resetButton();
+                        return;
+                    }}
+                    var ids = j.document_ids || [];
+                    if (!ids.length) {{
+                        showProgress('\u26a0\ufe0f Nothing queued',
+                            (j.skipped ? (j.skipped + ' duplicate(s) skipped') : ''));
+                        resetButton();
+                        return;
+                    }}
+                    showProgress('Uploaded ' + ids.length + ' document(s). Processing in background...', '');
+                    resetButton();
+                    pollStatus(ids);
+                    pollTimer = setInterval(function() {{ pollStatus(ids); }}, 5000);
+                }})
+                .catch(function(e) {{
+                    showProgress('\u274c Upload error', String(e));
+                    resetButton();
+                }});
         }});
     }})();
     </script>
@@ -15501,50 +15617,56 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         section = section.strip("/").lower()
 
         if section == "upload":
+            is_async = _wants_async_upload(self)
             if "multipart/form-data" not in ct:
+                if is_async:
+                    self._send_json({"ok": False, "error": "No file uploaded"}, status=400)
+                    return True
                 self._portal_redirect(token, "", error="No file uploaded")
                 return True
             fields, files = _parse_multipart_files(raw, ct)
             if not files:
+                if is_async:
+                    self._send_json({"ok": False, "error": "No file selected"}, status=400)
+                    return True
                 self._portal_redirect(token, "", error="No file selected")
                 return True
-            from src.engines.ocr_engine import process_file  # noqa: PLC0415
+            limit_err = _batch_limit_error(files)
+            if limit_err:
+                if is_async:
+                    self._send_json({"ok": False, "error": limit_err}, status=400)
+                    return True
+                self._portal_redirect(token, "", error=limit_err)
+                return True
+            from src.engines.upload_queue import save_and_queue_document  # noqa: PLC0415
             note = (fields.get("note") or "").strip()
-            ok_count = 0
+            document_ids: list[str] = []
             fail_count = 0
             for fname, fbytes in files:
                 try:
-                    result = process_file(
+                    doc_id = save_and_queue_document(
                         fbytes, fname,
                         client_code=client_code,
                         ingest_source="portal",
-                        client_note=note or None,
+                        client_note=note,
                         db_path=DB_PATH,
                     )
-                    if result.get("ok"):
-                        ok_count += 1
-                    else:
-                        fail_count += 1
-                except TypeError:
-                    try:
-                        result = process_file(
-                            fbytes, fname,
-                            client_code=client_code,
-                            ingest_source="portal",
-                            db_path=DB_PATH,
-                        )
-                        if result.get("ok"):
-                            ok_count += 1
-                        else:
-                            fail_count += 1
-                    except Exception:
-                        fail_count += 1
+                    document_ids.append(doc_id)
                 except Exception:
+                    logging.exception("save_and_queue_document failed for %s", fname)
                     fail_count += 1
             log_portal_access(client_code, firm_code, token, self, "upload")
-            msg = f"{ok_count} document(s) uploaded"
+            if is_async:
+                self._send_json({
+                    "ok": True,
+                    "document_ids": document_ids,
+                    "queued": len(document_ids),
+                    "failed": fail_count,
+                })
+                return True
+            msg = f"{len(document_ids)} document(s) queued for processing"
             if fail_count:
-                msg += f", {fail_count} failed"
+                msg += f", {fail_count} failed to queue"
             self._portal_redirect(token, "documents", flash=msg)
             return True
 
@@ -15668,6 +15790,41 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # --- /health (no authentication) ---
             if path == "/health":
                 self._send_json(self._build_health_response())
+                return
+
+            # --- /upload/status (no auth; document_ids are unguessable) ---
+            if path == "/upload/status":
+                raw_ids = qs.get("document_ids", [""])[0]
+                ids = [s.strip() for s in raw_ids.split(",") if s.strip()][:200]
+                try:
+                    from src.engines.upload_queue import (  # noqa: PLC0415
+                        get_document_statuses,
+                        get_upload_queue,
+                    )
+                    statuses = get_document_statuses(ids)
+                    queue_size = get_upload_queue().queue_size()
+                except Exception as e:
+                    self._send_json({"ok": False, "error": str(e)}, status=500)
+                    return
+                counts = {"queued": 0, "processing": 0, "ready": 0, "error": 0, "unknown": 0}
+                for _id in ids:
+                    s = (statuses.get(_id) or "").strip()
+                    if s == "Queued":
+                        counts["queued"] += 1
+                    elif s == "Processing":
+                        counts["processing"] += 1
+                    elif s == "Error":
+                        counts["error"] += 1
+                    elif s:
+                        counts["ready"] += 1
+                    else:
+                        counts["unknown"] += 1
+                self._send_json({
+                    "ok": True,
+                    "statuses": statuses,
+                    "counts": counts,
+                    "queue_size": queue_size,
+                })
                 return
 
             elif path == '/privacy':
@@ -17774,16 +17931,22 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # POST body includes a valid client_code for an active client.
             if path == "/upload" and not get_session_user(self):
                 ct = self.headers.get("Content-Type", "")
+                is_async = _wants_async_upload(self)
                 if "multipart/form-data" not in ct:
+                    if is_async:
+                        self._send_json({"ok": False, "error": "No file uploaded"}, status=400)
+                        return
                     self._flash_redirect("/upload", error="No file uploaded")
                     return
                 fields, files = _parse_multipart_files(raw, ct)
                 pub_client = normalize_text(fields.get("client_code", "")).strip()
                 pub_wa = (fields.get("whatsapp_number") or "").strip()
                 if not pub_client:
+                    if is_async:
+                        self._send_json({"ok": False, "error": "Missing client code"}, status=400)
+                        return
                     self._flash_redirect("/upload", error="Missing client code")
                     return
-                # Rate limit: 20 uploads/minute per (client_code, ip)
                 pub_ip = _get_client_ip(self)
                 if not _public_upload_allowed(pub_client, pub_ip):
                     body = b'{"error":"rate_limited"}'
@@ -17800,33 +17963,47 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (pub_client,),
                     ).fetchone()
                 if not row:
+                    if is_async:
+                        self._send_json({"ok": False, "error": "Invalid client"}, status=400)
+                        return
                     self._flash_redirect(
                         f"/upload?client_code={urlquote(pub_client)}",
                         error="Invalid client",
                     )
                     return
                 if not files:
+                    if is_async:
+                        self._send_json({"ok": False, "error": "No file selected"}, status=400)
+                        return
                     self._flash_redirect(
                         f"/upload?client_code={urlquote(pub_client)}",
                         error="No file selected",
                     )
                     return
-                from src.engines.ocr_engine import process_file  # noqa: PLC0415
-                ok_count = 0
+                limit_err = _batch_limit_error(files)
+                if limit_err:
+                    if is_async:
+                        self._send_json({"ok": False, "error": limit_err}, status=400)
+                        return
+                    self._flash_redirect(
+                        f"/upload?client_code={urlquote(pub_client)}",
+                        error=limit_err,
+                    )
+                    return
+                from src.engines.upload_queue import save_and_queue_document  # noqa: PLC0415
+                document_ids: list[str] = []
                 fail_count = 0
                 for fname, fbytes in files:
                     try:
-                        result = process_file(
+                        doc_id = save_and_queue_document(
                             fbytes, fname,
                             client_code=pub_client,
                             ingest_source="public_upload",
                             db_path=DB_PATH,
                         )
-                        if result.get("ok"):
-                            ok_count += 1
-                        else:
-                            fail_count += 1
+                        document_ids.append(doc_id)
                     except Exception:
+                        logging.exception("save_and_queue_document failed for %s", fname)
                         fail_count += 1
                 if pub_wa:
                     try:
@@ -17840,9 +18017,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             conn.commit()
                     except Exception:
                         pass
-                msg = f"{ok_count} document(s) uploaded"
+                if is_async:
+                    self._send_json({
+                        "ok": True,
+                        "document_ids": document_ids,
+                        "queued": len(document_ids),
+                        "failed": fail_count,
+                    })
+                    return
+                msg = f"{len(document_ids)} document(s) queued for processing"
                 if fail_count:
-                    msg += f", {fail_count} failed"
+                    msg += f", {fail_count} failed to queue"
                 self._flash_redirect(
                     f"/upload?client_code={urlquote(pub_client)}",
                     flash=msg,
@@ -18192,32 +18377,46 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 ])
                 return
 
-            # --- Upload documents ---
+            # --- Upload documents (async) ---
             if path == "/upload":
                 ct = self.headers.get("Content-Type", "")
                 if "multipart/form-data" not in ct:
+                    if _wants_async_upload(self):
+                        self._send_json({"ok": False, "error": "No file uploaded"}, status=400)
+                        return
                     self._flash_redirect("/", error="No file uploaded")
                     return
                 fields, files = _parse_multipart_files(raw, ct)
                 if not files:
+                    if _wants_async_upload(self):
+                        self._send_json({"ok": False, "error": "No file selected"}, status=400)
+                        return
                     self._flash_redirect("/", error="No file selected")
+                    return
+                limit_err = _batch_limit_error(files)
+                if limit_err:
+                    if _wants_async_upload(self):
+                        self._send_json({"ok": False, "error": limit_err}, status=400)
+                        return
+                    self._flash_redirect("/", error=limit_err)
                     return
                 upload_client = normalize_text(fields.get("client_code", ""))
                 if upload_client and upload_client != "UNASSIGNED" \
                         and not _require_client_in_firm(upload_client, ctx):
+                    if _wants_async_upload(self):
+                        self._send_json({"ok": False, "error": t("err_forbidden", lang)}, status=403)
+                        return
                     self._flash_redirect("/", error=t("err_forbidden", lang))
                     return
-                # Clear AI cache to avoid stale results (fixes Google/PayPal stuck docs)
                 try:
                     _ai_clear_cache()
                 except Exception:
                     pass
-                from src.engines.ocr_engine import process_file  # noqa: PLC0415
-                ok_count = 0
-                fail_count = 0
+                from src.engines.upload_queue import save_and_queue_document  # noqa: PLC0415
+                document_ids: list[str] = []
                 skip_count = 0
+                fail_count = 0
                 for fname, fbytes in files:
-                    # Duplicate guard: skip if same filename uploaded within last 60s
                     try:
                         with open_db() as _dup_conn:
                             _dup_existing = _dup_conn.execute(
@@ -18231,35 +18430,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                     try:
-                        result = process_file(
-                            fbytes,
-                            fname,
+                        doc_id = save_and_queue_document(
+                            fbytes, fname,
                             client_code=upload_client or "UNASSIGNED",
                             ingest_source="web_upload",
+                            submitted_by=user.get("username", "") if user else "",
                             db_path=DB_PATH,
                         )
-                        if result.get("ok"):
-                            ok_count += 1
-                            # Reset "Ignored" documents to NeedsReview so they appear
-                            doc_id = result.get("document_id")
-                            if doc_id:
-                                try:
-                                    with open_db() as _uc:
-                                        _uc.execute(
-                                            "UPDATE documents SET review_status = 'Needs Review' "
-                                            "WHERE document_id = ? AND review_status = 'Ignored'",
-                                            (doc_id,),
-                                        )
-                                        _uc.commit()
-                                except Exception:
-                                    pass
-                        else:
-                            fail_count += 1
+                        document_ids.append(doc_id)
                     except Exception:
+                        logging.exception("save_and_queue_document failed for %s", fname)
                         fail_count += 1
-                msg = f"{ok_count} document(s) uploaded"
+                if _wants_async_upload(self):
+                    self._send_json({
+                        "ok": True,
+                        "document_ids": document_ids,
+                        "queued": len(document_ids),
+                        "skipped": skip_count,
+                        "failed": fail_count,
+                    })
+                    return
+                msg = f"{len(document_ids)} document(s) queued for processing"
                 if fail_count:
-                    msg += f", {fail_count} failed"
+                    msg += f", {fail_count} failed to queue"
                 if skip_count:
                     msg += f" — {skip_count} déjà téléversé(s) / already uploaded"
                 self._flash_redirect("/", flash=msg)
