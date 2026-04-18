@@ -129,7 +129,12 @@ from src.engines.license_engine import (
     MAX_MACHINES_PER_FIRM,
 )
 from src.agents.core.ai_router import get_cache_stats as _get_cache_stats, _clear_cache as _ai_clear_cache
-from src.integrations.qr_generator import generate_client_qr_png, generate_all_qr_pdf, _build_upload_url
+from src.integrations.qr_generator import (
+    generate_client_qr_png,
+    generate_all_qr_pdf,
+    _build_upload_url,
+    build_portal_url,
+)
 
 
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
@@ -859,6 +864,80 @@ def bootstrap_schema() -> None:
         )
         conn.commit()
 
+        # Sprint 4: client portal via QR token.
+        # portal_token gives a client direct, cookieless-until-first-hit access
+        # to their own upload/documents/bank/messages page. Tokens are long,
+        # random, and stored per client; rotating issues a fresh one and the
+        # old one stops resolving immediately.
+        client_cols_s4 = {
+            row["name"] for row in conn.execute("PRAGMA table_info(clients)").fetchall()
+        }
+        if "portal_token" not in client_cols_s4:
+            conn.execute("ALTER TABLE clients ADD COLUMN portal_token TEXT")
+        if "portal_token_created_at" not in client_cols_s4:
+            conn.execute("ALTER TABLE clients ADD COLUMN portal_token_created_at TEXT")
+        if "portal_token_rotated_count" not in client_cols_s4:
+            conn.execute(
+                "ALTER TABLE clients ADD COLUMN portal_token_rotated_count INTEGER DEFAULT 0"
+            )
+        # Unique index on portal_token (NULLs allowed; one-shot idempotent).
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_portal_token "
+            "ON clients(portal_token) WHERE portal_token IS NOT NULL"
+        )
+        conn.commit()
+
+        # Backfill portal_token for every client missing one.
+        missing = conn.execute(
+            "SELECT client_code FROM clients WHERE portal_token IS NULL OR portal_token=''"
+        ).fetchall()
+        for _row in missing:
+            _tok = secrets.token_urlsafe(32)
+            conn.execute(
+                "UPDATE clients SET portal_token=?, portal_token_created_at=datetime('now'), "
+                "portal_token_rotated_count=COALESCE(portal_token_rotated_count,0) "
+                "WHERE client_code=?",
+                (_tok, _row["client_code"]),
+            )
+        if missing:
+            conn.commit()
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_code TEXT NOT NULL,
+                firm_code TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                sender_name TEXT,
+                sender_type TEXT NOT NULL,
+                body TEXT NOT NULL,
+                related_document_id TEXT,
+                read_at TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_messages_client "
+            "ON client_messages(client_code)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_portal_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_code TEXT NOT NULL,
+                firm_code TEXT NOT NULL,
+                portal_token_prefix TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                action TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_portal_access_client "
+            "ON client_portal_access(client_code, created_at)"
+        )
+        conn.commit()
+
         # Warn once if a legacy single-connection data/qbo_config.json exists
         # but no per-client rows have been seeded. We intentionally do NOT
         # auto-assign the legacy realm to an arbitrary client — the firm
@@ -1347,6 +1426,146 @@ def _public_upload_allowed(client_code: str, ip: str) -> bool:
         bucket.append(now)
         _public_upload_log[key] = bucket
     return True
+
+
+# ---------------------------------------------------------------------------
+# Sprint 4: Client portal — tokens, access log, rate limits
+# ---------------------------------------------------------------------------
+
+_PORTAL_PER_TOKEN_MAX_PER_MIN = 100
+_PORTAL_PER_IP_MAX_PER_MIN = 20
+_portal_token_log: dict[str, list[float]] = {}
+_portal_ip_log: dict[str, list[float]] = {}
+_portal_rate_lock = threading.Lock()
+
+
+def generate_portal_token() -> str:
+    """Return a fresh URL-safe portal token (~43 chars)."""
+    return secrets.token_urlsafe(32)
+
+
+def resolve_portal_token(token: str | None) -> sqlite3.Row | None:
+    """Return the client row for a valid portal token, else None.
+
+    Rejects empty/short tokens early. Only resolves active clients.
+    """
+    if not token or len(token) < 30:
+        return None
+    with open_db() as conn:
+        return conn.execute(
+            "SELECT client_code, firm_code, client_name, portal_token, "
+            "portal_token_created_at, portal_token_rotated_count "
+            "FROM clients WHERE portal_token=? AND active=1",
+            (token,),
+        ).fetchone()
+
+
+def log_portal_access(
+    client_code: str,
+    firm_code: str,
+    token: str,
+    request_handler: BaseHTTPRequestHandler,
+    action: str,
+) -> None:
+    """Append a row to client_portal_access for audit trail."""
+    try:
+        ip = ""
+        try:
+            ip = _get_client_ip(request_handler)
+        except Exception:
+            ip = getattr(request_handler, "client_address", ("",))[0] or ""
+        ua = (request_handler.headers.get("User-Agent", "") or "")[:200]
+        with open_db() as conn:
+            conn.execute(
+                "INSERT INTO client_portal_access "
+                "(client_code, firm_code, portal_token_prefix, ip, user_agent, action) "
+                "VALUES (?,?,?,?,?,?)",
+                (client_code, firm_code, (token or "")[:8], ip, ua, action),
+            )
+            conn.commit()
+    except Exception:
+        # Audit logging must never break the request.
+        pass
+
+
+def rotate_portal_token(client_code: str, ctx: dict[str, Any]) -> str | None:
+    """Invalidate the old portal token and issue a new one. Firm-scoped.
+
+    Returns the new token string, or None when the caller cannot act on the
+    client (cross-firm attempt or unknown client).
+    """
+    if not _require_client_in_firm(client_code, ctx):
+        return None
+    new_token = generate_portal_token()
+    with open_db() as conn:
+        conn.execute(
+            "UPDATE clients SET portal_token=?, portal_token_created_at=datetime('now'), "
+            "portal_token_rotated_count=COALESCE(portal_token_rotated_count,0)+1 "
+            "WHERE client_code=?",
+            (new_token, client_code),
+        )
+        conn.commit()
+    return new_token
+
+
+def _portal_rate_allowed(token: str, ip: str) -> bool:
+    """Per-token (100/min) and per-IP fallback (20/min) in-memory limiter."""
+    import time as _time
+    now = _time.time()
+    cutoff = now - 60.0
+    with _portal_rate_lock:
+        if token:
+            bucket = [ts for ts in _portal_token_log.get(token, []) if ts >= cutoff]
+            if len(bucket) >= _PORTAL_PER_TOKEN_MAX_PER_MIN:
+                _portal_token_log[token] = bucket
+                return False
+            bucket.append(now)
+            _portal_token_log[token] = bucket
+        else:
+            bucket = [ts for ts in _portal_ip_log.get(ip or "", []) if ts >= cutoff]
+            if len(bucket) >= _PORTAL_PER_IP_MAX_PER_MIN:
+                _portal_ip_log[ip or ""] = bucket
+                return False
+            bucket.append(now)
+            _portal_ip_log[ip or ""] = bucket
+    return True
+
+
+def insert_portal_system_message(
+    client_code: str, firm_code: str, body: str,
+    related_document_id: str | None = None,
+) -> None:
+    """Append a system-direction message to the client portal thread.
+
+    Stub-only for Sprint 4: no email/WhatsApp fanout. The client sees it the
+    next time they open /c/{token}/messages.
+    """
+    try:
+        with open_db() as conn:
+            conn.execute(
+                "INSERT INTO client_messages "
+                "(client_code, firm_code, direction, sender_name, sender_type, body, related_document_id) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (client_code, firm_code or "OWNER", "system", "OtoCPA", "system",
+                 body, related_document_id),
+            )
+            conn.commit()
+    except Exception:
+        # System messages must never break the caller flow.
+        pass
+
+
+def portal_url_for(base_url: str, client_code: str) -> str | None:
+    """Return the /c/<token> URL for a client, or None if no token/client."""
+    with open_db() as conn:
+        row = conn.execute(
+            "SELECT portal_token FROM clients WHERE client_code=? AND active=1",
+            (client_code,),
+        ).fetchone()
+    if not row or not row["portal_token"]:
+        return None
+    base = (base_url or "").rstrip("/")
+    return f"{base}/c/{row['portal_token']}"
 
 
 # ---------------------------------------------------------------------------
@@ -8112,24 +8331,34 @@ def _get_qr_clients(ctx: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         return []
     try:
         with open_db() as conn:
+            # portal_token may not exist on legacy/minimal schemas.
+            col_rows = conn.execute("PRAGMA table_info(clients)").fetchall()
+            cols = {row["name"] for row in col_rows}
+            select_cols = "client_code, client_name"
+            if "portal_token" in cols:
+                select_cols += ", portal_token"
             if ctx.get("role") == "owner":
                 rows = conn.execute(
-                    "SELECT client_code, client_name FROM clients ORDER BY client_code"
+                    f"SELECT {select_cols} FROM clients ORDER BY client_code"
                 ).fetchall()
             else:
                 firm = ctx.get("firm_code") or ""
                 if not firm:
                     return []
                 rows = conn.execute(
-                    "SELECT client_code, client_name FROM clients "
+                    f"SELECT {select_cols} FROM clients "
                     "WHERE firm_code = ? ORDER BY client_code",
                     (firm,),
                 ).fetchall()
-        return [
-            {"client_code": r["client_code"],
-             "client_name": r["client_name"] or r["client_code"]}
-            for r in rows
-        ]
+        out = []
+        for r in rows:
+            keys = r.keys() if hasattr(r, "keys") else []
+            out.append({
+                "client_code": r["client_code"],
+                "client_name": r["client_name"] or r["client_code"],
+                "portal_token": (r["portal_token"] if "portal_token" in keys else "") or "",
+            })
+        return out
     except Exception:
         return []
 
@@ -8179,7 +8408,11 @@ def render_qr_page(
     for cl in clients:
         code = cl["client_code"]
         name = cl["client_name"]
-        upload_url = _build_upload_url(portal_base, code)
+        token = cl.get("portal_token") or ""
+        if token:
+            upload_url = build_portal_url(portal_base, token)
+        else:
+            upload_url = _build_upload_url(portal_base, code)
         png_bytes = generate_client_qr_png(code, name, upload_url)
         b64 = _b64.b64encode(png_bytes).decode("ascii")
         cards_html += (
@@ -8197,7 +8430,18 @@ def render_qr_page(
             f'</div>'
         )
 
+    warning_banner = (
+        '<div class="card" style="background:#fff7ed;border:1px solid #fed7aa;'
+        'color:#9a3412;margin-bottom:16px;">'
+        '<strong>&#9888; Attention / Warning:</strong> '
+        'Ces codes QR donnent acc&egrave;s au portail client &mdash; '
+        'traitez-les comme confidentiels. '
+        'These QR codes give access to the client portal &mdash; '
+        'treat as confidential.'
+        '</div>'
+    )
     body = (
+        f'{warning_banner}'
         f'<div class="card">'
         f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;">'
         f'<div>'
@@ -10190,6 +10434,439 @@ def render_user_management(ctx: dict[str, Any], user: dict[str, Any], flash: str
 # CPA firms (owner-only)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Sprint 4: Client portal rendering (/c/{token})
+# ---------------------------------------------------------------------------
+
+_PORTAL_STYLE = """
+body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;margin:0;padding:0;color:#111827;}
+.wrap{max-width:720px;margin:0 auto;padding:16px 16px 80px;}
+header.portal{background:#1F3864;color:white;padding:16px;}
+header.portal h1{margin:0;font-size:20px;}
+header.portal .sub{opacity:.85;font-size:13px;margin-top:2px;}
+.tabs{display:flex;gap:4px;background:white;border-radius:10px;padding:4px;margin:16px 0;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.tabs a{flex:1;text-align:center;padding:10px 8px;border-radius:8px;color:#374151;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;}
+.tabs a.active{background:#1F3864;color:white;}
+.card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;}
+.card h2{margin:0 0 12px;font-size:18px;color:#1F3864;}
+.muted{color:#6b7280;font-size:13px;}
+.drop{border:2px dashed #1F3864;border-radius:10px;padding:28px;text-align:center;color:#6b7280;background:#f9fafb;cursor:pointer;}
+input[type=file]{display:block;margin:12px 0;width:100%;}
+textarea,input[type=text]{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;box-sizing:border-box;}
+button,.btn{background:#1F3864;color:white;border:none;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;display:inline-block;text-decoration:none;}
+button.secondary{background:#e5e7eb;color:#111827;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #f3f4f6;}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;}
+.badge-new{background:#dbeafe;color:#1e40af;}
+.badge-review{background:#fef3c7;color:#92400e;}
+.badge-ready{background:#dcfce7;color:#166534;}
+.badge-posted{background:#bbf7d0;color:#166534;}
+.flash{padding:12px;border-radius:8px;margin-bottom:12px;font-weight:600;}
+.flash.ok{background:#dcfce7;border:1px solid #86efac;color:#065f46;}
+.flash.err{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;}
+.msg{padding:10px 12px;border-radius:10px;margin:6px 0;max-width:85%;word-wrap:break-word;}
+.msg.in{background:#e0e7ff;}
+.msg.out{background:#1F3864;color:white;margin-left:auto;}
+.msg.sys{background:#fef3c7;color:#92400e;font-size:13px;font-style:italic;text-align:center;max-width:100%;}
+.msg .ts{display:block;font-size:11px;opacity:.7;margin-top:4px;}
+.thread{display:flex;flex-direction:column;max-height:420px;overflow-y:auto;padding:8px 4px;}
+"""
+
+
+def _portal_status_badge(status: str) -> str:
+    s = (status or "").strip().casefold()
+    if s in {"new", ""}:
+        return '<span class="badge badge-new">New / Re&ccedil;u</span>'
+    if s in {"needsreview", "needs review", "exception", "on hold", "hold"}:
+        return '<span class="badge badge-review">In Review / En r&eacute;vision</span>'
+    if s in {"posted"}:
+        return '<span class="badge badge-posted">Posted / Valid&eacute;</span>'
+    if s in {"ready", "ready to post"}:
+        return '<span class="badge badge-ready">Ready / Pr&ecirc;t</span>'
+    return f'<span class="badge badge-review">{esc(status)}</span>'
+
+
+def _portal_tabs(active: str, token: str) -> str:
+    items = [
+        ("upload", "&#128228; Upload"),
+        ("documents", "&#128196; Documents"),
+        ("bank", "&#127970; Bank"),
+        ("messages", "&#128172; Messages"),
+    ]
+    parts = []
+    for key, label in items:
+        path = "" if key == "upload" else f"/{key}"
+        cls = "active" if active == key else ""
+        parts.append(
+            f'<a class="{cls}" href="/c/{esc(token)}{path}">{label}</a>'
+        )
+    return f'<nav class="tabs">{"".join(parts)}</nav>'
+
+
+def render_portal_invalid_page() -> str:
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>OtoCPA &middot; Invalid link</title>"
+        f"<style>{_PORTAL_STYLE}</style></head><body>"
+        "<div class='wrap'><div class='card' style='margin-top:48px;text-align:center;'>"
+        "<h2 style='color:#991b1b;'>&#x26A0;&#xFE0F; Lien invalide / Invalid link</h2>"
+        "<p class='muted'>Ce lien de portail client n'est pas valide ou a &eacute;t&eacute; "
+        "remplac&eacute;. Veuillez contacter votre cabinet comptable pour obtenir un nouveau lien.</p>"
+        "<p class='muted'>This client portal link is not valid or has been rotated. "
+        "Please contact your accounting firm for a new link.</p>"
+        "</div></div></body></html>"
+    )
+
+
+def _portal_page_shell(client: dict, token: str, tab: str, body: str,
+                       flash: str = "", flash_error: str = "") -> str:
+    """Wrap portal body in common shell (header + tabs + flash)."""
+    name = esc(client.get("client_name") or client.get("client_code") or "")
+    flash_html = ""
+    if flash:
+        flash_html = f'<div class="flash ok">{esc(flash)}</div>'
+    elif flash_error:
+        flash_html = f'<div class="flash err">{esc(flash_error)}</div>'
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>OtoCPA &middot; {name}</title>"
+        f"<style>{_PORTAL_STYLE}</style></head><body>"
+        f"<header class='portal'><h1>OtoCPA</h1>"
+        f"<div class='sub'>{name}</div></header>"
+        f"<div class='wrap'>{_portal_tabs(tab, token)}{flash_html}{body}</div>"
+        "</body></html>"
+    )
+
+
+def render_portal_upload(client: dict, token: str,
+                          flash: str = "", flash_error: str = "") -> str:
+    body = f"""
+    <div class="card">
+        <h2>&#128228; Envoyer un document / Upload a document</h2>
+        <form method="POST" action="/c/{esc(token)}/upload" enctype="multipart/form-data">
+            <div class="drop" id="dz">&#128193; Glissez vos fichiers / Drop files here</div>
+            <input type="file" id="fi" name="files" multiple
+                   accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
+            <label class="muted">Note (optional)</label>
+            <textarea name="note" rows="2" placeholder="Ex: facture d'&eacute;picerie / grocery invoice"></textarea>
+            <button type="submit" style="margin-top:10px;width:100%;">
+                &#9989; Envoyer / Upload
+            </button>
+        </form>
+        <p class="muted" style="margin-top:12px;">Formats: PDF, JPG, PNG. 20 MB max par fichier.</p>
+    </div>
+    <script>
+    (function(){{
+     var dz=document.getElementById('dz'),fi=document.getElementById('fi');
+     dz.addEventListener('click',function(){{fi.click();}});
+     ['dragover','dragenter'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#e0e7ff';}});}});
+     ['dragleave','drop'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#f9fafb';}});}});
+     dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' file(s) selected';}});
+     fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' file(s) selected';}});
+    }})();
+    </script>
+    """
+    return _portal_page_shell(client, token, "upload", body, flash, flash_error)
+
+
+def render_portal_documents(client: dict, token: str) -> str:
+    with open_db() as conn:
+        rows = conn.execute(
+            "SELECT document_id, file_name, review_status, created_at, "
+            "vendor, amount, manual_hold_reason "
+            "FROM documents WHERE client_code=? "
+            "ORDER BY created_at DESC LIMIT 200",
+            (client["client_code"],),
+        ).fetchall()
+    if not rows:
+        body = (
+            '<div class="card"><h2>&#128196; Mes documents / My documents</h2>'
+            '<p class="muted">Aucun document encore soumis. / No documents submitted yet.</p>'
+            '</div>'
+        )
+        return _portal_page_shell(client, token, "documents", body)
+    items = ""
+    for r in rows:
+        date = (r["created_at"] or "")[:10]
+        vendor = r["vendor"] or ""
+        amt = r["amount"]
+        amt_str = f"${amt:.2f}" if amt is not None else ""
+        reason = r["manual_hold_reason"] or ""
+        reason_html = f'<div class="muted">{esc(reason)}</div>' if reason else ""
+        items += (
+            f'<tr><td>{esc(r["file_name"] or "")}</td>'
+            f'<td class="muted">{esc(date)}</td>'
+            f'<td>{esc(vendor)}</td>'
+            f'<td>{esc(amt_str)}</td>'
+            f'<td>{_portal_status_badge(r["review_status"] or "")}{reason_html}</td></tr>'
+        )
+    body = f"""
+    <div class="card">
+        <h2>&#128196; Mes documents / My documents</h2>
+        <table>
+            <thead><tr>
+                <th>Fichier / File</th>
+                <th>Date</th>
+                <th>Vendeur / Vendor</th>
+                <th>Montant</th>
+                <th>Statut</th>
+            </tr></thead>
+            <tbody>{items}</tbody>
+        </table>
+    </div>
+    """
+    return _portal_page_shell(client, token, "documents", body)
+
+
+def render_portal_bank(client: dict, token: str,
+                        flash: str = "", flash_error: str = "") -> str:
+    with open_db() as conn:
+        conns = conn.execute(
+            "SELECT id, institution_name, account_name, last_sync "
+            "FROM bank_connections WHERE client_code=? AND active=1 "
+            "ORDER BY created_at DESC",
+            (client["client_code"],),
+        ).fetchall()
+    if conns:
+        items = ""
+        for bc in conns:
+            items += (
+                f'<div style="padding:10px;border-bottom:1px solid #f3f4f6;">'
+                f'<strong>{esc(bc["institution_name"] or "")}</strong>'
+                f' &middot; <span class="muted">{esc(bc["account_name"] or "")}</span>'
+                f'<div class="muted">Last sync: {esc(bc["last_sync"] or "never")}</div>'
+                f'</div>'
+            )
+        body = f"""
+        <div class="card">
+            <h2>&#127970; Compte bancaire / Bank account</h2>
+            <p class="muted">Connect&eacute; via Plaid. Votre CPA voit les transactions mais pas vos identifiants bancaires.</p>
+            {items}
+        </div>
+        """
+    else:
+        body = f"""
+        <div class="card">
+            <h2>&#127970; Connectez votre banque / Connect your bank</h2>
+            <p class="muted">Connectez votre compte bancaire de fa&ccedil;on s&eacute;curis&eacute;e via Plaid.
+            Votre CPA peut lire les transactions sans voir vos mots de passe.</p>
+            <button id="plaid-link-btn" class="btn" style="margin-top:10px;">
+                &#127970; Connecter / Connect bank
+            </button>
+            <p id="plaid-status" class="muted" style="margin-top:10px;"></p>
+        </div>
+        <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+        <script>
+        (function(){{
+         var btn=document.getElementById('plaid-link-btn');
+         var status=document.getElementById('plaid-status');
+         btn.addEventListener('click',function(){{
+          status.textContent='Loading...';
+          fetch('/c/{esc(token)}/bank/link-token',{{method:'POST'}})
+           .then(function(r){{return r.json();}})
+           .then(function(d){{
+            if(!d.link_token){{status.textContent=d.error||'Plaid not configured';return;}}
+            status.textContent='';
+            var h=Plaid.create({{
+             token:d.link_token,
+             onSuccess:function(public_token,metadata){{
+              fetch('/c/{esc(token)}/bank/exchange',{{
+               method:'POST',
+               headers:{{'Content-Type':'application/json'}},
+               body:JSON.stringify({{public_token:public_token,metadata:metadata}})
+              }}).then(function(r){{return r.json();}})
+                .then(function(res){{
+                 if(res.ok){{window.location.reload();}}
+                 else{{status.textContent='Connection failed: '+(res.error||'unknown');}}
+                }});
+             }},
+             onExit:function(){{status.textContent='';}}
+            }});
+            h.open();
+           }})
+           .catch(function(e){{status.textContent='Error: '+e.message;}});
+         }});
+        }})();
+        </script>
+        """
+    return _portal_page_shell(client, token, "bank", body, flash, flash_error)
+
+
+def render_portal_messages(client: dict, token: str,
+                            flash: str = "", flash_error: str = "") -> str:
+    # Mark inbound (cpa-sent) messages as read when client views them.
+    with open_db() as conn:
+        conn.execute(
+            "UPDATE client_messages SET read_at=datetime('now') "
+            "WHERE client_code=? AND direction='outbound' AND read_at IS NULL",
+            (client["client_code"],),
+        )
+        conn.commit()
+        msgs = conn.execute(
+            "SELECT direction, sender_name, sender_type, body, created_at "
+            "FROM client_messages WHERE client_code=? "
+            "ORDER BY created_at ASC LIMIT 500",
+            (client["client_code"],),
+        ).fetchall()
+    thread_html = ""
+    for m in msgs:
+        direction = m["direction"] or ""
+        sender_type = m["sender_type"] or ""
+        body = esc(m["body"] or "")
+        ts = esc((m["created_at"] or "")[:16].replace("T", " "))
+        name = esc(m["sender_name"] or "")
+        if sender_type == "system":
+            thread_html += f'<div class="msg sys">{body}<span class="ts">{ts}</span></div>'
+        elif direction == "outbound":
+            thread_html += (
+                f'<div class="msg in"><strong>{name or "CPA"}</strong><br>'
+                f'{body}<span class="ts">{ts}</span></div>'
+            )
+        else:
+            thread_html += (
+                f'<div class="msg out">{body}<span class="ts">{ts}</span></div>'
+            )
+    if not thread_html:
+        thread_html = (
+            '<p class="muted" style="text-align:center;">Aucun message. '
+            'Envoyez un message &agrave; votre CPA ci-dessous. / '
+            'No messages yet. Send one below.</p>'
+        )
+    body = f"""
+    <div class="card">
+        <h2>&#128172; Messages</h2>
+        <div class="thread">{thread_html}</div>
+        <form method="POST" action="/c/{esc(token)}/messages" style="margin-top:14px;">
+            <textarea name="body" rows="3" required
+                placeholder="&Eacute;crivez &agrave; votre CPA... / Write to your CPA..."></textarea>
+            <button type="submit" style="margin-top:8px;">&#128228; Envoyer / Send</button>
+        </form>
+    </div>
+    """
+    return _portal_page_shell(client, token, "messages", body, flash, flash_error)
+
+
+def render_portal_whatsapp(client: dict, token: str) -> str:
+    # Try a configured WhatsApp number; fall back to a guidance note.
+    with open_db() as conn:
+        wa_rows = []
+        try:
+            wa_rows = conn.execute(
+                "SELECT whatsapp_number FROM client_whatsapp_numbers "
+                "WHERE client_code=? AND active=1 LIMIT 1",
+                (client["client_code"],),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            pass
+    wa_number = wa_rows[0]["whatsapp_number"] if wa_rows else ""
+    qr_html = ""
+    if wa_number and qrcode is not None:
+        import base64 as _b64
+        clean = wa_number.lstrip("+")
+        wa_url = f"https://wa.me/{clean}"
+        img = qrcode.make(wa_url)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        b64 = _b64.b64encode(buf.getvalue()).decode("ascii")
+        qr_html = (
+            f'<div style="text-align:center;margin:12px 0;">'
+            f'<img src="data:image/png;base64,{b64}" alt="WhatsApp QR" '
+            f'style="width:220px;height:220px;">'
+            f'<div><a class="btn" href="{esc(wa_url)}">Open chat</a></div></div>'
+        )
+    body = f"""
+    <div class="card">
+        <h2>&#128241; WhatsApp</h2>
+        {'<p>Texter / Text: <strong>' + esc(wa_number) + '</strong></p>' if wa_number else
+         '<p class="muted">Votre CPA n\'a pas encore activ&eacute; WhatsApp. / Your CPA hasn\'t enabled WhatsApp yet.</p>'}
+        {qr_html}
+    </div>
+    """
+    return _portal_page_shell(client, token, "messages", body)
+
+
+def render_cpa_messages(ctx: dict[str, Any], user: dict[str, Any],
+                         client_code: str, flash: str = "",
+                         flash_error: str = "", lang: str = "fr") -> str:
+    """Render the CPA-side client_messages thread for a single client."""
+    with open_db() as conn:
+        client_row = conn.execute(
+            "SELECT client_code, client_name FROM clients WHERE client_code=?",
+            (client_code,),
+        ).fetchone()
+        # Mark inbound (client-sent) messages as read when the CPA opens the thread.
+        conn.execute(
+            "UPDATE client_messages SET read_at=datetime('now') "
+            "WHERE client_code=? AND direction='inbound' AND read_at IS NULL",
+            (client_code,),
+        )
+        conn.commit()
+        msgs = conn.execute(
+            "SELECT direction, sender_name, sender_type, body, created_at, read_at "
+            "FROM client_messages WHERE client_code=? "
+            "ORDER BY created_at ASC LIMIT 500",
+            (client_code,),
+        ).fetchall()
+    client_name = (client_row["client_name"] if client_row else client_code) or client_code
+    thread_items = ""
+    for m in msgs:
+        direction = m["direction"] or ""
+        sender_type = m["sender_type"] or ""
+        body = esc(m["body"] or "").replace("\n", "<br>")
+        ts = esc((m["created_at"] or "")[:16].replace("T", " "))
+        name = esc(m["sender_name"] or "")
+        if sender_type == "system":
+            thread_items += (
+                f'<div style="background:#fef3c7;color:#92400e;padding:6px 10px;'
+                f'border-radius:8px;margin:6px auto;max-width:85%;font-style:italic;font-size:13px;text-align:center;">'
+                f'{body}<div style="font-size:11px;opacity:.7;">{ts}</div></div>'
+            )
+        elif direction == "outbound":
+            thread_items += (
+                f'<div style="background:#1F3864;color:white;padding:10px 12px;'
+                f'border-radius:10px;margin:6px 0 6px auto;max-width:80%;">'
+                f'<strong>{name or "CPA"}</strong><br>{body}'
+                f'<div style="font-size:11px;opacity:.7;margin-top:4px;">{ts}</div></div>'
+            )
+        else:
+            thread_items += (
+                f'<div style="background:#e0e7ff;color:#111827;padding:10px 12px;'
+                f'border-radius:10px;margin:6px auto 6px 0;max-width:80%;">'
+                f'<strong>{name or esc(client_name)}</strong><br>{body}'
+                f'<div style="font-size:11px;color:#64748b;margin-top:4px;">{ts}</div></div>'
+            )
+    if not thread_items:
+        thread_items = (
+            '<p style="color:#888;text-align:center;padding:20px;">'
+            'No messages yet. Send one below.</p>'
+        )
+    body = f"""
+    <div style="padding:24px;max-width:820px;">
+        <a href="/clients" style="color:#aaa;text-decoration:none;">&larr; Clients</a>
+        <h2 style="color:white;margin:8px 0 4px;">&#128172; Messages &mdash; {esc(client_name)}</h2>
+        <p style="color:#aaa;">Client code: <code>{esc(client_code)}</code></p>
+        <div style="background:#0d1b2a;border:1px solid #2c3e50;border-radius:8px;padding:16px;max-height:540px;overflow-y:auto;display:flex;flex-direction:column;">
+            {thread_items}
+        </div>
+        <form method="POST" action="/clients/messages" style="margin-top:16px;display:flex;gap:8px;flex-direction:column;">
+            <input type="hidden" name="client_code" value="{esc(client_code)}">
+            <textarea name="body" rows="3" required
+                      placeholder="Write to client..."
+                      style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:10px;border-radius:6px;width:100%;box-sizing:border-box;"></textarea>
+            <button type="submit"
+                    style="background:#2ecc71;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;align-self:flex-start;">
+                &#128228; Send message
+            </button>
+        </form>
+    </div>
+    """
+    return page_layout(f"Messages — {client_name}", body,
+                       user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
 def render_public_upload_page(client_code: str, flash: str = "",
                               flash_error: str = "", lang: str = "fr") -> str:
     """Public upload page — no login required. Scanned from client QR code."""
@@ -10258,6 +10935,11 @@ button:disabled{{opacity:.6;}}
     <h1>📤 Upload documents</h1>
     <div style="color:#111827;font-weight:600;">{esc(client_name)}</div>
     {firm_line}
+    <div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;
+                padding:10px 12px;border-radius:8px;margin:14px 0;font-size:13px;">
+        &#9888; Ce lien est d&eacute;pr&eacute;ci&eacute;. Demandez &agrave; votre CPA votre nouveau lien de portail.
+        <br>This link is deprecated. Ask your CPA for your new portal link.
+    </div>
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
     {flash_html}
     <form method="POST" action="/upload" enctype="multipart/form-data">
@@ -11925,6 +12607,34 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
         except sqlite3.OperationalError:
             pass
 
+        # Sprint 4: portal access counts + last access + unread message count
+        access_by_client: dict[str, dict[str, Any]] = {}
+        try:
+            access_rows = conn.execute('''
+                SELECT client_code, COUNT(*) AS n, MAX(created_at) AS last_at
+                FROM client_portal_access
+                GROUP BY client_code
+            ''').fetchall()
+            for ar in access_rows:
+                access_by_client[ar['client_code']] = {
+                    'n': int(ar['n'] or 0),
+                    'last_at': ar['last_at'] or '',
+                }
+        except sqlite3.OperationalError:
+            pass
+        unread_by_client: dict[str, int] = {}
+        try:
+            unread_rows = conn.execute('''
+                SELECT client_code, COUNT(*) AS n
+                FROM client_messages
+                WHERE direction='inbound' AND read_at IS NULL
+                GROUP BY client_code
+            ''').fetchall()
+            for ur in unread_rows:
+                unread_by_client[ur['client_code']] = int(ur['n'] or 0)
+        except sqlite3.OperationalError:
+            pass
+
     rows = ''
     for c in clients:
         wa_list = wa_by_client.get(c['client_code'], [])
@@ -11980,6 +12690,19 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                 'Connect &rarr;</a>'
             )
 
+        pa = access_by_client.get(c['client_code'], {'n': 0, 'last_at': ''})
+        unread = unread_by_client.get(c['client_code'], 0)
+        last_access = (pa['last_at'] or '—')[:10] if pa['last_at'] else '—'
+        portal_cell = (
+            f'<div style="color:#e0e0e0;">Accessed <strong>{pa["n"]}</strong>&times;</div>'
+            f'<div style="color:#888;font-size:11px;">Last: {esc(last_access)}</div>'
+        )
+        if unread:
+            portal_cell += (
+                f'<div style="background:#e74c3c;color:white;border-radius:10px;'
+                f'padding:1px 8px;display:inline-block;font-size:11px;margin-top:4px;">'
+                f'&#128172; {unread} new</div>'
+            )
         rows += f"""
         <tr>
             <td style="color:#2ecc71;font-weight:bold;vertical-align:top;">{esc(c['client_code'])}</td>
@@ -11990,6 +12713,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             <td style="vertical-align:top;">{wa_cell}</td>
             <td style="vertical-align:top;">{bank_cell}</td>
             <td style="vertical-align:top;">{qbo_cell}</td>
+            <td style="vertical-align:top;">{portal_cell}</td>
             <td style="vertical-align:top;">
                 <a href="/clients/edit?code={urlquote(c['client_code'])}"
                    style="background:#3498db;color:white;padding:4px 8px;border-radius:4px;text-decoration:none;">
@@ -12021,6 +12745,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4F1; WhatsApp</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F3E6; Bank</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4D2; QBO</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">&#128241; Portal</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Actions</th>
                 </tr>
             </thead>
@@ -12225,6 +12950,89 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
             {qbo_body}
         </div>"""
 
+    # Sprint 4: Client portal link section (edit mode only).
+    portal_section = ''
+    if is_edit:
+        portal_base = _get_portal_base_url()
+        pt_token = client.get('portal_token') or ''
+        pt_created = client.get('portal_token_created_at') or ''
+        pt_rotated = client.get('portal_token_rotated_count') or 0
+        # Access count + last access
+        try:
+            with open_db() as _pa_conn:
+                pa_row = _pa_conn.execute(
+                    "SELECT COUNT(*) AS n, MAX(created_at) AS last_at "
+                    "FROM client_portal_access WHERE client_code=?",
+                    (client['client_code'],),
+                ).fetchone()
+                pa_count = int(pa_row['n'] or 0) if pa_row else 0
+                pa_last = (pa_row['last_at'] or '—') if pa_row else '—'
+        except sqlite3.OperationalError:
+            pa_count = 0
+            pa_last = '—'
+        portal_url = f"{portal_base.rstrip('/')}/c/{pt_token}" if pt_token else ''
+        import base64 as _b64
+        qr_img_html = ''
+        if pt_token and qrcode is not None:
+            try:
+                qr_png = generate_client_qr_png(
+                    client['client_code'],
+                    client.get('client_name') or client['client_code'],
+                    portal_url,
+                )
+                qr_b64 = _b64.b64encode(qr_png).decode('ascii')
+                qr_img_html = (
+                    f'<img src="data:image/png;base64,{qr_b64}" alt="Portal QR" '
+                    f'style="width:200px;height:auto;background:white;padding:8px;border-radius:6px;">'
+                )
+            except Exception:
+                qr_img_html = ''
+        portal_section = f"""
+        <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <h3 style="color:white;margin-top:0;">&#128241; Portail client / Client portal</h3>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+                <div>{qr_img_html}</div>
+                <div style="flex:1;min-width:260px;color:#e0e0e0;">
+                    <div style="font-size:12px;color:#888;">URL</div>
+                    <div style="word-break:break-all;background:#1a2e4a;padding:6px 8px;border-radius:4px;font-family:monospace;font-size:12px;">
+                        {esc(portal_url) or '<em>no token</em>'}
+                    </div>
+                    <div style="font-size:12px;color:#888;margin-top:10px;">
+                        Created: {esc(pt_created or '—')} &middot; Rotated: {int(pt_rotated)}&times;<br>
+                        Access events: <strong>{pa_count}</strong> &middot; Last: {esc(pa_last)}
+                    </div>
+                    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" onclick="navigator.clipboard.writeText('{esc(portal_url)}');this.textContent='Copied!';"
+                                style="background:#3498db;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">
+                            &#128203; Copy link
+                        </button>
+                        <form method="POST" action="/clients/rotate-token" style="margin:0;"
+                              onsubmit="return confirm('Rotate token? The old QR code will stop working.');">
+                            <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
+                            <button type="submit"
+                                    style="background:#e67e22;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">
+                                &#128260; Rotate token
+                            </button>
+                        </form>
+                        <form method="POST" action="/clients/send-portal-link" style="margin:0;">
+                            <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
+                            <button type="submit"
+                                    style="background:#2ecc71;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">
+                                &#128231; Send by email
+                            </button>
+                        </form>
+                        <a href="/clients/messages?code={urlquote(client['client_code'])}"
+                           style="background:#9b59b6;color:white;padding:6px 14px;border-radius:4px;text-decoration:none;">
+                            &#128172; Messages
+                        </a>
+                    </div>
+                    <p style="color:#f39c12;font-size:11px;margin-top:10px;">
+                        &#9888; Ce lien donne acc&egrave;s direct au portail &mdash; gardez-le confidentiel.
+                    </p>
+                </div>
+            </div>
+        </div>"""
+
     return page_layout(title, f"""
     <div style="padding:24px;max-width:600px;">
         <h2 style="color:white;">{esc(title)}</h2>
@@ -12266,6 +13074,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                 </a>
             </div>
         </form>
+        {portal_section}
         {wa_section}
         {bank_section}
         {qbo_section}
@@ -14460,6 +15269,254 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return val if val in ("fr", "en") else "fr"
         return "fr"
 
+    # ---- Sprint 4: Client portal via QR token ----
+
+    def _portal_parse(self, path: str) -> tuple[str, str] | None:
+        """Parse ``/c/<token>[/<section>]`` into (token, section).
+
+        Returns None if the path isn't a valid portal path.
+        ``section`` is normalized: empty string => upload landing.
+        """
+        if not path.startswith("/c/"):
+            return None
+        tail = path[3:]
+        if not tail:
+            return None
+        parts = tail.split("/", 1)
+        token = parts[0]
+        section = parts[1] if len(parts) > 1 else ""
+        if not token:
+            return None
+        return token, section
+
+    def _portal_headers(self, token: str) -> list[tuple[str, str]]:
+        """Shared portal response headers: session cookie + referrer policy."""
+        secure = "Secure; " if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
+        return [
+            ("Set-Cookie",
+             f"otocpa_portal_token={token}; HttpOnly; {secure}SameSite=Lax; "
+             f"Path=/c/; Max-Age={90*24*3600}"),
+            ("Referrer-Policy", "no-referrer"),
+        ]
+
+    def _portal_send_invalid(self) -> None:
+        body = render_portal_invalid_page().encode("utf-8")
+        self.send_response(404)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _portal_rate_limit_or_send(self, token: str) -> bool:
+        """Return True when allowed; False after sending a 429 response."""
+        try:
+            ip = _get_client_ip(self)
+        except Exception:
+            ip = ""
+        if _portal_rate_allowed(token, ip):
+            return True
+        body = b'{"error":"rate_limited"}'
+        self.send_response(429)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Retry-After", "60")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
+    def _handle_portal_get(self, path: str, qs: dict, flash: str, flash_error: str) -> None:
+        parsed = self._portal_parse(path)
+        if not parsed:
+            self._portal_send_invalid()
+            return
+        token, section = parsed
+        client = resolve_portal_token(token)
+        # Rate limit by token if known, else by IP.
+        if not self._portal_rate_limit_or_send(token if client else ""):
+            return
+        if not client:
+            self._portal_send_invalid()
+            return
+        section = section.strip("/").lower()
+        if section in ("", "upload"):
+            log_portal_access(client["client_code"], client["firm_code"], token, self, "view_upload")
+            html_str = render_portal_upload(dict(client), token, flash, flash_error)
+        elif section == "documents":
+            log_portal_access(client["client_code"], client["firm_code"], token, self, "view_documents")
+            html_str = render_portal_documents(dict(client), token)
+        elif section == "bank":
+            log_portal_access(client["client_code"], client["firm_code"], token, self, "view_bank")
+            html_str = render_portal_bank(dict(client), token, flash, flash_error)
+        elif section == "messages":
+            log_portal_access(client["client_code"], client["firm_code"], token, self, "view_messages")
+            html_str = render_portal_messages(dict(client), token, flash, flash_error)
+        elif section == "whatsapp":
+            log_portal_access(client["client_code"], client["firm_code"], token, self, "view_whatsapp")
+            html_str = render_portal_whatsapp(dict(client), token)
+        else:
+            self._portal_send_invalid()
+            return
+        self._send_html(html_str, extra_headers=self._portal_headers(token))
+
+    def _handle_portal_post(self, path: str, raw: bytes, ct: str, qs: dict) -> bool:
+        """Handle POST /c/{token}/<action>. Returns True if handled."""
+        parsed = self._portal_parse(path)
+        if not parsed:
+            return False
+        token, section = parsed
+        client = resolve_portal_token(token)
+        if not self._portal_rate_limit_or_send(token if client else ""):
+            return True
+        if not client:
+            self._portal_send_invalid()
+            return True
+        client_code = client["client_code"]
+        firm_code = client["firm_code"] or "OWNER"
+        section = section.strip("/").lower()
+
+        if section == "upload":
+            if "multipart/form-data" not in ct:
+                self._portal_redirect(token, "", error="No file uploaded")
+                return True
+            fields, files = _parse_multipart_files(raw, ct)
+            if not files:
+                self._portal_redirect(token, "", error="No file selected")
+                return True
+            from src.engines.ocr_engine import process_file  # noqa: PLC0415
+            note = (fields.get("note") or "").strip()
+            ok_count = 0
+            fail_count = 0
+            for fname, fbytes in files:
+                try:
+                    result = process_file(
+                        fbytes, fname,
+                        client_code=client_code,
+                        ingest_source="portal",
+                        client_note=note or None,
+                        db_path=DB_PATH,
+                    )
+                    if result.get("ok"):
+                        ok_count += 1
+                    else:
+                        fail_count += 1
+                except TypeError:
+                    try:
+                        result = process_file(
+                            fbytes, fname,
+                            client_code=client_code,
+                            ingest_source="portal",
+                            db_path=DB_PATH,
+                        )
+                        if result.get("ok"):
+                            ok_count += 1
+                        else:
+                            fail_count += 1
+                    except Exception:
+                        fail_count += 1
+                except Exception:
+                    fail_count += 1
+            log_portal_access(client_code, firm_code, token, self, "upload")
+            msg = f"{ok_count} document(s) uploaded"
+            if fail_count:
+                msg += f", {fail_count} failed"
+            self._portal_redirect(token, "documents", flash=msg)
+            return True
+
+        if section == "bank/link-token":
+            client_id = os.environ.get("PLAID_CLIENT_ID", "").strip()
+            secret = os.environ.get("PLAID_SECRET", "").strip()
+            if not client_id or not secret:
+                self._send_json({"link_token": "",
+                                 "error": "Plaid credentials not configured"}, status=200)
+                return True
+            try:
+                from src.integrations.plaid_client import create_link_token
+                # Fix identity bug: Plaid's client_user_id is the *client_code*,
+                # not the CPA's username.
+                tok = create_link_token(client_code, client_code)
+                self._send_json({"link_token": tok or "",
+                                 "error": "" if tok else "Empty token"})
+            except Exception as e:
+                self._send_json({"link_token": "", "error": str(e)}, status=200)
+            return True
+
+        if section == "bank/exchange":
+            try:
+                payload = json.loads(raw.decode("utf-8")) if raw else {}
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"invalid_json: {e}"}, status=400)
+                return True
+            public_token = payload.get("public_token", "")
+            if not public_token:
+                self._send_json({"ok": False, "error": "missing public_token"}, status=400)
+                return True
+            metadata = payload.get("metadata") or {}
+            institution = (metadata.get("institution") or {}).get("name", "")
+            accounts = metadata.get("accounts") or []
+            acct = accounts[0] if accounts else {}
+            try:
+                from src.integrations.plaid_client import exchange_public_token
+                access_token, item_id = exchange_public_token(public_token)
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"exchange_failed: {e}"}, status=400)
+                return True
+            conn_id = secrets.token_hex(16)
+            try:
+                with open_db() as conn:
+                    conn.execute(
+                        "INSERT INTO bank_connections (id, client_code, plaid_access_token,"
+                        " plaid_item_id, institution_name, account_name, account_type, firm_code, active)"
+                        " VALUES (?,?,?,?,?,?,?,?,1)",
+                        (conn_id, client_code, access_token, item_id, institution,
+                         acct.get("name", ""), acct.get("subtype", ""), firm_code),
+                    )
+                    conn.commit()
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"db_insert_failed: {e}"}, status=500)
+                return True
+            log_portal_access(client_code, firm_code, token, self, "bank_connected")
+            self._send_json({"ok": True, "id": conn_id})
+            return True
+
+        if section == "messages":
+            form = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+            body_txt = (form.get("body", [""])[0] or "").strip()
+            if not body_txt:
+                self._portal_redirect(token, "messages", error="Empty message")
+                return True
+            try:
+                with open_db() as conn:
+                    conn.execute(
+                        "INSERT INTO client_messages "
+                        "(client_code, firm_code, direction, sender_name, sender_type, body) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (client_code, firm_code, "inbound",
+                         client["client_name"] or client_code, "client", body_txt),
+                    )
+                    conn.commit()
+            except Exception:
+                self._portal_redirect(token, "messages", error="Save failed")
+                return True
+            log_portal_access(client_code, firm_code, token, self, "message_sent")
+            self._portal_redirect(token, "messages", flash="Message envoy&eacute; / Message sent")
+            return True
+
+        self._portal_send_invalid()
+        return True
+
+    def _portal_redirect(self, token: str, section: str,
+                         flash: str = "", error: str = "") -> None:
+        base = f"/c/{token}" if not section else f"/c/{token}/{section}"
+        sep = "?"
+        location = base
+        if flash:
+            location += sep + "flash=" + urlquote(flash)
+            sep = "&"
+        if error:
+            location += sep + "error=" + urlquote(error)
+        self._redirect(location, extra_headers=self._portal_headers(token))
+
     def do_GET(self) -> None:
         try:
             parsed = urllib.parse.urlparse(self.path)
@@ -14492,7 +15549,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_privacy_page())
                 return
 
+            # Sprint 4: Client portal via QR token — /c/{token}[/section]
+            if path.startswith("/c/"):
+                self._handle_portal_get(path, qs, flash, flash_error)
+                return
+
             # Public client upload page — no login. Scanned from client QR code.
+            # DEPRECATED: replaced by /c/{portal_token} portal routes.
+            # TODO(sprint-4+3mo, 2026-07-18): remove once legacy QR codes are out of use.
             if path == "/upload":
                 upload_client = qs.get("client_code", [""])[0].strip()
                 lang_qs = qs.get("lang", [""])[0]
@@ -15440,12 +16504,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=403)
                     return
                 portal_base_qr = _get_portal_base_url()
-                upload_url_qr = _build_upload_url(portal_base_qr, client_code_qr)
                 clients_qr = _get_qr_clients(ctx)
-                client_name_qr = next(
-                    (c["client_name"] for c in clients_qr if c["client_code"] == client_code_qr),
-                    client_code_qr,
+                client_qr_row = next(
+                    (c for c in clients_qr if c["client_code"] == client_code_qr),
+                    None,
                 )
+                client_name_qr = (client_qr_row or {}).get("client_name", client_code_qr)
+                portal_token_qr = (client_qr_row or {}).get("portal_token", "") or ""
+                if portal_token_qr:
+                    upload_url_qr = build_portal_url(portal_base_qr, portal_token_qr)
+                else:
+                    upload_url_qr = _build_upload_url(portal_base_qr, client_code_qr)
                 png_bytes = generate_client_qr_png(client_code_qr, client_name_qr, upload_url_qr)
                 safe_code = "".join(c for c in client_code_qr if c.isalnum() or c in "-_")
                 filename = f"qr_{safe_code}.png"
@@ -16106,6 +17175,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
                 return
 
+            # Sprint 4: CPA-side messages thread for a client
+            if path == "/clients/messages":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(code, ctx):
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
+                self._send_html(render_cpa_messages(ctx, user, code,
+                                                    flash=flash, flash_error=flash_error,
+                                                    lang=lang))
+                return
+
             self._send_html(page_layout(
                 t("err_not_found", lang),
                 f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2>'
@@ -16496,6 +17582,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 self._send_json(result, status=http_status)
                 return
+
+            # --- Sprint 4: Client portal via QR token (no session auth) ---
+            if path.startswith("/c/"):
+                ct_hdr = self.headers.get("Content-Type", "")
+                if self._handle_portal_post(path, raw, ct_hdr, qs):
+                    return
 
             # Public client upload (no login). Accepts documents when the
             # POST body includes a valid client_code for an active client.
@@ -17002,6 +18094,47 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 submitted = {k: form.get(k, "") for k in ["vendor","client_code","doc_type","amount","document_date","gl_account","tax_code","category","review_status"]}
                 update_document_fields(document_id, submitted)
                 record_learning_corrections(document_id, before_row, submitted)
+                # Sprint 4: system message to portal on status change (stub).
+                try:
+                    _old_status = normalize_text(before_row.get("review_status", "")) if before_row else ""
+                    _new_status = normalize_text(submitted.get("review_status", ""))
+                    _doc_client = normalize_text(submitted.get("client_code") or before_row.get("client_code", ""))
+                    if _doc_client and _new_status and _old_status != _new_status:
+                        _vendor_txt = normalize_text(
+                            submitted.get("vendor") or (before_row.get("vendor", "") if before_row else "")
+                        )
+                        _amt = submitted.get("amount") or (before_row.get("amount") if before_row else "")
+                        try:
+                            _amt_f = float(_amt)
+                            _amt_str = f"${_amt_f:.2f}"
+                        except (TypeError, ValueError):
+                            _amt_str = ""
+                        _pieces = [p for p in (_amt_str, f"at {_vendor_txt}" if _vendor_txt else "") if p]
+                        _ref = " ".join(_pieces) if _pieces else "Your document"
+                        _msg_map = {
+                            "Ready": f"{_ref} is ready.",
+                            "Ready to Post": f"{_ref} is ready to post.",
+                            "Posted": f"{_ref} has been posted.",
+                            "NeedsReview": f"{_ref} is under review.",
+                            "Needs Review": f"{_ref} is under review.",
+                            "Exception": f"{_ref} flagged for review.",
+                            "On Hold": f"{_ref} is on hold.",
+                            "Ignored": f"{_ref} was rejected.",
+                        }
+                        _sys_body = _msg_map.get(
+                            _new_status, f"{_ref} status: {_new_status}"
+                        )
+                        with open_db() as _fc:
+                            _fcrow = _fc.execute(
+                                "SELECT firm_code FROM clients WHERE client_code=?",
+                                (_doc_client,),
+                            ).fetchone()
+                        _fcc = (_fcrow["firm_code"] if _fcrow else None) or "OWNER"
+                        insert_portal_system_message(
+                            _doc_client, _fcc, _sys_body, related_document_id=document_id,
+                        )
+                except Exception:
+                    pass
                 try:
                     from src.agents.core.hallucination_guard import track_correction_count
                     track_correction_count(document_id, before_row, submitted, db_path=DB_PATH)
@@ -19250,6 +20383,120 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     ''', (client_code, client_name, contact_email, language, active, whatsapp_number, client_firm))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
+                return
+
+            # --- Sprint 4: Rotate client portal token ---
+            if path == "/clients/rotate-token":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                rt_code = normalize_text(form.get("client_code", "")).strip()
+                new_tok = rotate_portal_token(rt_code, ctx)
+                if not new_tok:
+                    self._flash_redirect("/clients", error="Forbidden or unknown client")
+                    return
+                self._flash_redirect(
+                    f"/clients/edit?code={urlquote(rt_code)}",
+                    flash="Portal token rotated — the old QR code no longer works.",
+                )
+                return
+
+            # --- Sprint 4: Send portal link to client by email ---
+            if path == "/clients/send-portal-link":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                sc_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(sc_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
+                with open_db() as _conn:
+                    _row = _conn.execute(
+                        "SELECT client_name, contact_email, portal_token "
+                        "FROM clients WHERE client_code=?",
+                        (sc_code,),
+                    ).fetchone()
+                if not _row or not _row["contact_email"]:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(sc_code)}",
+                        error="Client has no contact email on file.",
+                    )
+                    return
+                portal_url = f"{_get_portal_base_url().rstrip('/')}/c/{_row['portal_token']}"
+                try:
+                    from src.integrations import email_client as _email_mod
+                    subject = "Your OtoCPA client portal"
+                    body_text = (
+                        f"Hello {_row['client_name'] or sc_code},\n\n"
+                        f"Your secure portal link is below. Use it to upload documents, "
+                        f"connect your bank, and message us:\n\n{portal_url}\n\n"
+                        "Keep this link private.\n\n— OtoCPA"
+                    )
+                    sent = False
+                    for _attr in ("send_email", "send"):
+                        fn = getattr(_email_mod, _attr, None)
+                        if callable(fn):
+                            try:
+                                fn(_row["contact_email"], subject, body_text)
+                                sent = True
+                                break
+                            except Exception:
+                                continue
+                    if not sent:
+                        self._flash_redirect(
+                            f"/clients/edit?code={urlquote(sc_code)}",
+                            error="Email not configured — copy the link manually.",
+                        )
+                        return
+                except Exception as _exc:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(sc_code)}",
+                        error=f"Email failed: {_exc}",
+                    )
+                    return
+                self._flash_redirect(
+                    f"/clients/edit?code={urlquote(sc_code)}",
+                    flash=f"Portal link sent to {_row['contact_email']}",
+                )
+                return
+
+            # --- Sprint 4: CPA sends a message to a client ---
+            if path == "/clients/messages":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                cm_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(cm_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
+                cm_body = (form.get("body", "") or "").strip()
+                if not cm_body:
+                    self._flash_redirect(
+                        f"/clients/messages?code={urlquote(cm_code)}",
+                        error="Empty message",
+                    )
+                    return
+                firm = ctx.get("firm_code") or "OWNER"
+                sender = ctx.get("display_name") or ctx.get("username") or "CPA"
+                try:
+                    with open_db() as _cmc:
+                        _cmc.execute(
+                            "INSERT INTO client_messages "
+                            "(client_code, firm_code, direction, sender_name, sender_type, body) "
+                            "VALUES (?,?,?,?,?,?)",
+                            (cm_code, firm, "outbound", sender, "cpa", cm_body),
+                        )
+                        _cmc.commit()
+                except Exception as _exc:
+                    self._flash_redirect(
+                        f"/clients/messages?code={urlquote(cm_code)}",
+                        error=f"Save failed: {_exc}",
+                    )
+                    return
+                self._flash_redirect(
+                    f"/clients/messages?code={urlquote(cm_code)}",
+                    flash="Message sent",
+                )
                 return
 
             # --- Client WhatsApp number: add ---

@@ -35,8 +35,19 @@ _INSTRUCTIONS_FR = "Scannez pour soumettre vos documents"
 _INSTRUCTIONS_EN = "Scan to submit your documents"
 
 
+def build_portal_url(base_url: str, portal_token: str) -> str:
+    """Return the tokenized client portal URL ``<base>/c/<token>``."""
+    base = (base_url or "").rstrip("/")
+    return f"{base}/c/{portal_token}"
+
+
 def _build_upload_url(portal_base_url: str, client_code: str) -> str:
-    """Return the direct upload URL for a client (public, no login)."""
+    """Legacy per-client upload URL.
+
+    Deprecated: the client portal now uses ``/c/<portal_token>`` (see
+    ``build_portal_url``). Kept for backwards compatibility while legacy
+    QR codes are still in circulation.
+    """
     base = portal_base_url.rstrip("/")
     encoded = urllib.parse.quote(client_code, safe="")
     return f"{base}/upload?client_code={encoded}"
@@ -126,7 +137,13 @@ def generate_all_qr_pdf(
     for client in clients_list:
         code = client.get("client_code") or ""
         name = client.get("client_name") or code
-        upload_url = _build_upload_url(portal_base_url, code)
+        token = client.get("portal_token") or ""
+        if token:
+            upload_url = build_portal_url(portal_base_url, token)
+        else:
+            # Legacy clients without a portal_token — fall back to the
+            # old upload URL so existing QR codes keep working.
+            upload_url = _build_upload_url(portal_base_url, code)
 
         # ---- Header -------------------------------------------------------
         c.setFillColorRGB(blue_r, blue_g, blue_b)
