@@ -5,10 +5,9 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
+# google.auth / googleapiclient are only needed for the Gmail send path and are
+# imported lazily inside _get_gmail_service so this module can be imported in
+# environments (tests, minimal installs) that don't have the google SDK wheels.
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -26,6 +25,10 @@ def _get_gmail_service():
         logger.error('Gmail token not found at %s', GMAIL_TOKEN_FILE)
         return None
     try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+
         creds = Credentials.from_authorized_user_file(GMAIL_TOKEN_FILE, GMAIL_SCOPES)
         if not creds.valid and creds.expired and creds.refresh_token:
             creds.refresh(Request())
