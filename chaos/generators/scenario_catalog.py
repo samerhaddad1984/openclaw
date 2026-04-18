@@ -77,6 +77,8 @@ def build_all_scenarios(
             sc["_seed"] = seed
             sc["category"] = sc.get("category") or track
             sc["id"] = sc.get("id") or _stable_id(sc)
+            sc.setdefault("expected_fail", False)
+            sc.setdefault("future_feature", False)
             if difficulty and sc.get("difficulty") != difficulty:
                 continue
             out.append(sc)

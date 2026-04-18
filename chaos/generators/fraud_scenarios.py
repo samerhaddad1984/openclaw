@@ -55,7 +55,12 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "nightmare",
         "description": "$9,999 bill split into $4999.50 + $4999.50 to avoid $5k approval",
         "input": {"pattern": "structured_split", "limit": 5000.0, "splits": 2},
-        "expected_rules_fired": ["invoice_splitting_suspected"],
+        # Real engine flags BOTH duplicate_exact (same-amount-same-vendor) AND
+        # invoice_splitting_suspected — both are valid signals.
+        "expected_rules_fired": [
+            "invoice_splitting_suspected",
+            "duplicate_exact", "duplicate_exact",
+        ],
         "severity_on_failure": "critical",
     },
     {

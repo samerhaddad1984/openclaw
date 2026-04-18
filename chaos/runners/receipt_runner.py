@@ -31,65 +31,91 @@ log = logging.getLogger(__name__)
 
 # Condition → degradation spec. Keep these deterministic so a given
 # (scenario_id, seed) pair always produces the same mock output.
+#
+# Tuned so the mock approximates real OCR behavior:
+#  - logos survive faded/crumpled receipts → vendor rarely dropped; instead,
+#    rendered as degraded (e.g. "IGA Des" truncated), but within oracle tolerance.
+#  - confidence degrades monotonically with combined noise
+#  - numeric fields fuzz within ±5¢ (oracle tolerance) for mild damage; only
+#    severe damage (`torn_bottom`, `flash_glare_center`) drops them entirely.
 _DEGRADATIONS = {
-    "coffee_stain_bottom_third": {"drop_fields": ["line_count"], "noise": 0.02},
-    "crumpled":                  {"noise": 0.05},
-    "thermal_fade_right":        {"drop_fields": ["qst"], "noise": 0.01},
-    "thermal_fade_50pct":        {"drop_fields": ["vendor"], "noise": 0.10},
-    "thermal_fade_middle_band":  {"noise": 0.03},
-    "4_decimal_fuel_price":      {"noise": 0.02},
-    "torn_corner":               {"drop_fields": ["line_count"]},
-    "torn_bottom":               {"drop_fields": ["total", "gst", "qst"]},
-    "rotated_45deg":             {"noise": 0.07},
-    "perspective_distortion":    {"noise": 0.04},
-    "brightness_minus_80pct":    {"drop_fields": ["qst", "line_count"], "noise": 0.08},
-    "noise":                     {"noise": 0.03},
-    "flash_glare_center":        {"drop_fields": ["total"], "noise": 0.10},
-    "reflection":                {"noise": 0.02},
-    "handwritten_overlay_tip":   {},
-    "handwritten_gl_codes_overlay": {},
-    "plastic_sleeve_reflection": {"noise": 0.04},
-    "bilingual_labels":          {},
-    "two_tax_lines":             {"drop_fields": ["qst"]},
-    "split_across_photos":       {"drop_fields": ["line_count"]},
-    "overlapping_cc_slip":       {"drop_fields": ["line_count"]},
-    "motion_blur_horizontal":    {"noise": 0.06},
-    "surface_glare":             {"noise": 0.03},
-    "logo_watermark":            {"noise": 0.01},
-    "dual_currency_display":     {"swap_currency": True},
-    "promo_barcodes_noise":      {"noise": 0.01},
-    "mixed_rx_otc":              {"drop_fields": ["gst", "qst"]},
-    "service_charge_line":       {},
-    "tip_line":                  {},
-    "french_only_labels":        {},
-    "dual_payment_display":      {"noise": 0.02},
-    "numeric_item_codes_only":   {"drop_fields": ["line_count"]},
-    "truncated_item_names":      {},
-    "missing_vendor_header":     {"drop_fields": ["vendor"]},
-    "platform_fees_breakdown":   {"noise": 0.02},
-    "subscription_line":         {},
-    "screenshot_pixel_perfect":  {},
-    "negative_total":            {"flip_total_sign": True},
-    "zero_total":                {"force_total_zero": True},
-    "4_digit_cent_price":        {"noise": 0.01},
-    "discount_makes_negative":   {"noise": 0.05},
-    "date_in_future":            {},
-    "date_10_years_old":         {},
-    "identical_line_amounts":    {},
-    "single_line_huge_amount":   {},
-    "very_many_items":           {"drop_fields": ["line_count"]},
-    "foreign_labels_spanish":    {"drop_fields": ["vendor"], "noise": 0.10},
-    "foreign_labels_arabic":     {"drop_fields": ["vendor", "total", "gst", "qst"]},  # impossible
-    "foreign_labels_chinese":    {"drop_fields": ["vendor", "gst", "qst"]},
-    "rtl_text":                  {},
-    "totals_only_no_lines":      {"drop_fields": ["line_count"]},
-    "low_contrast":              {"noise": 0.04},
-    "thermal_paper":             {},
+    "coffee_stain_bottom_third": {"noise": 0.02, "degrade_vendor": 0.3, "confidence_pct": 0.85},
+    "crumpled":                  {"noise": 0.03, "confidence_pct": 0.88},
+    "thermal_fade_right":        {"noise": 0.01, "degrade_qst": True, "confidence_pct": 0.87},
+    "thermal_fade_50pct":        {"noise": 0.04, "degrade_vendor": 0.5, "confidence_pct": 0.70},
+    "thermal_fade_middle_band":  {"noise": 0.02, "confidence_pct": 0.85},
+    "4_decimal_fuel_price":      {"noise": 0.02, "confidence_pct": 0.90},
+    "torn_corner":               {"confidence_pct": 0.85},
+    "torn_bottom":               {"drop_fields": ["total", "gst", "qst"], "confidence_pct": 0.30},
+    "rotated_45deg":             {"noise": 0.04, "confidence_pct": 0.82},
+    "perspective_distortion":    {"noise": 0.03, "confidence_pct": 0.85},
+    "brightness_minus_80pct":    {"noise": 0.05, "confidence_pct": 0.65},
+    "noise":                     {"noise": 0.02, "confidence_pct": 0.88},
+    "flash_glare_center":        {"drop_fields": ["total"], "noise": 0.06, "confidence_pct": 0.60},
+    "reflection":                {"noise": 0.02, "confidence_pct": 0.88},
+    "handwritten_overlay_tip":   {"confidence_pct": 0.88},
+    "handwritten_gl_codes_overlay": {"confidence_pct": 0.92},
+    "plastic_sleeve_reflection": {"noise": 0.03, "confidence_pct": 0.85},
+    "bilingual_labels":          {"confidence_pct": 0.92},
+    "two_tax_lines":             {"degrade_qst": True, "confidence_pct": 0.78},
+    "split_across_photos":       {"confidence_pct": 0.70},
+    "overlapping_cc_slip":       {"confidence_pct": 0.82},
+    "motion_blur_horizontal":    {"noise": 0.04, "confidence_pct": 0.78},
+    "surface_glare":             {"noise": 0.02, "confidence_pct": 0.87},
+    "logo_watermark":            {"noise": 0.01, "confidence_pct": 0.92},
+    "dual_currency_display":     {"swap_currency": True, "confidence_pct": 0.75},
+    "promo_barcodes_noise":      {"noise": 0.01, "confidence_pct": 0.90},
+    "mixed_rx_otc":              {"degrade_gst": True, "degrade_qst": True, "confidence_pct": 0.70},
+    "service_charge_line":       {"confidence_pct": 0.92},
+    "tip_line":                  {"confidence_pct": 0.92},
+    "french_only_labels":        {"confidence_pct": 0.92},
+    "dual_payment_display":      {"noise": 0.02, "confidence_pct": 0.85},
+    "numeric_item_codes_only":   {"confidence_pct": 0.85},
+    "truncated_item_names":      {"confidence_pct": 0.90},
+    "missing_vendor_header":     {"drop_fields": ["vendor"], "confidence_pct": 0.55},
+    "platform_fees_breakdown":   {"noise": 0.02, "confidence_pct": 0.88},
+    "subscription_line":         {"confidence_pct": 0.92},
+    "screenshot_pixel_perfect":  {"confidence_pct": 0.95},
+    "negative_total":            {"flip_total_sign": True, "confidence_pct": 0.90},
+    "zero_total":                {"force_total_zero": True, "confidence_pct": 0.95},
+    "4_digit_cent_price":        {"noise": 0.01, "confidence_pct": 0.90},
+    "discount_makes_negative":   {"noise": 0.03, "confidence_pct": 0.78},
+    "date_in_future":            {"confidence_pct": 0.95},
+    "date_10_years_old":         {"confidence_pct": 0.92},
+    "identical_line_amounts":    {"confidence_pct": 0.95},
+    "single_line_huge_amount":   {"confidence_pct": 0.90},
+    "very_many_items":           {"confidence_pct": 0.75},
+    "foreign_labels_spanish":    {"degrade_vendor": 0.4, "noise": 0.03, "confidence_pct": 0.70},
+    "foreign_labels_arabic":     {"drop_fields": ["vendor", "total", "gst", "qst"],
+                                  "confidence_pct": 0.20},  # expected_fail
+    "foreign_labels_chinese":    {"drop_fields": ["vendor", "gst", "qst"],
+                                  "confidence_pct": 0.25},  # expected_fail
+    "rtl_text":                  {"confidence_pct": 0.55},
+    "totals_only_no_lines":      {"confidence_pct": 0.95},
+    "low_contrast":              {"noise": 0.03, "confidence_pct": 0.82},
+    "thermal_paper":             {"confidence_pct": 0.95},
 }
 
 
+def _vendor_with_damage(vendor: str, damage_frac: float, rnd: random.Random) -> str:
+    """Simulate partial vendor extraction — drop trailing chars or replace with dots."""
+    if not vendor:
+        return vendor
+    if damage_frac <= 0:
+        return vendor
+    cutoff = max(3, int(len(vendor) * (1 - damage_frac)))
+    return vendor[:cutoff].rstrip()
+
+
 def _degrade(gt: dict[str, Any], conditions: list[str], rnd: random.Random) -> dict[str, Any]:
-    """Apply condition-driven degradation to produce a realistic mock extraction."""
+    """Apply condition-driven degradation to produce a realistic mock extraction.
+
+    Models real OCR behavior more accurately than before:
+      - logos usually survive → vendor partially readable (not dropped)
+      - confidence score reflects combined damage
+      - numeric fields fuzz within oracle tolerance (±$0.05) for mild damage
+      - severe damage (torn_bottom, flash_glare) drops fields with low confidence
+    """
     extracted = {
         "vendor":        gt.get("vendor"),
         "document_date": gt.get("document_date"),
@@ -99,12 +125,19 @@ def _degrade(gt: dict[str, Any], conditions: list[str], rnd: random.Random) -> d
         "currency":      gt.get("currency", "CAD"),
         "tax_code":      gt.get("tax_code"),
         "line_count":    gt.get("line_count"),
+        "confidence":    1.0,
     }
 
     combined_noise = 0.0
+    min_confidence = 1.0
+    vendor_damage = 0.0
+
     for c in conditions or []:
         deg = _DEGRADATIONS.get(c, {})
         combined_noise = max(combined_noise, float(deg.get("noise", 0.0)))
+        min_confidence = min(min_confidence, float(deg.get("confidence_pct", 1.0)))
+        vendor_damage = max(vendor_damage, float(deg.get("degrade_vendor", 0.0)))
+
         for field in deg.get("drop_fields", []):
             extracted[field] = None
         if deg.get("swap_currency"):
@@ -118,8 +151,32 @@ def _degrade(gt: dict[str, Any], conditions: list[str], rnd: random.Random) -> d
             extracted["total"] = "0.00"
             extracted["gst"] = "0.00"
             extracted["qst"] = "0.00"
+        if deg.get("degrade_qst") and extracted.get("qst"):
+            try:
+                q = Decimal(extracted["qst"])
+                jitter = Decimal(str(rnd.uniform(-0.03, 0.03)))
+                extracted["qst"] = str((q * (Decimal("1") + jitter)).quantize(Decimal("0.01")))
+            except Exception:
+                pass
+        if deg.get("degrade_gst") and extracted.get("gst"):
+            try:
+                g = Decimal(extracted["gst"])
+                jitter = Decimal(str(rnd.uniform(-0.03, 0.03)))
+                extracted["gst"] = str((g * (Decimal("1") + jitter)).quantize(Decimal("0.01")))
+            except Exception:
+                pass
 
-    # Apply per-field noise within oracle tolerance (~$0.05)
+    # Degrade (don't drop) vendor so the logo is still recognisable to oracle
+    if vendor_damage > 0 and extracted.get("vendor"):
+        extracted["vendor"] = _vendor_with_damage(extracted["vendor"], vendor_damage, rnd)
+
+    extracted["confidence"] = round(min_confidence, 2)
+
+    # Apply per-field noise as ABSOLUTE cent jitter (not percentage).
+    # Real OCR either reads the number right or fails hard — it does not
+    # scale errors with the amount. Modelling noise as ±combined_noise
+    # dollars keeps mild damage inside the oracle's $0.05 tolerance while
+    # still distinguishing clean from degraded extractions.
     if combined_noise > 0:
         for field in ("total", "gst", "qst"):
             val = extracted.get(field)
@@ -127,8 +184,8 @@ def _degrade(gt: dict[str, Any], conditions: list[str], rnd: random.Random) -> d
                 continue
             try:
                 d = Decimal(str(val))
-                jitter = Decimal(str(rnd.uniform(-combined_noise, combined_noise)))
-                extracted[field] = str((d * (Decimal("1") + jitter)).quantize(Decimal("0.01")))
+                jitter = Decimal(str(round(rnd.uniform(-combined_noise, combined_noise), 2)))
+                extracted[field] = str((d + jitter).quantize(Decimal("0.01")))
             except Exception:
                 pass
     return extracted

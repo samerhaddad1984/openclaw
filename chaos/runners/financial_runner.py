@@ -72,8 +72,16 @@ class FinancialRunner:
         computed: dict[str, Any] = {}
         calls: list[str] = []
 
+        # ---- JE unbalanced must match BEFORE the je_ prefix branch ----
+        if subtype == "je_unbalanced_debits_credits":
+            d = Decimal(str(spec.get("debit_total", "0")))
+            c = Decimal(str(spec.get("credit_total", "0")))
+            computed["rejected"] = d != c
+            computed["delta"] = str(abs(d - c))
+            calls.append("decimal_balance_check")
+
         # ---- JE balancing: deterministic arithmetic, no engine ----
-        if subtype.startswith("je_"):
+        elif subtype.startswith("je_"):
             lines = int(spec.get("lines", 0))
             debits = [Decimal("1.00")] * (lines // 2)
             credits = [Decimal("1.00")] * (lines // 2)
@@ -87,13 +95,6 @@ class FinancialRunner:
             delta = Decimal(td) - Decimal(tc)
             computed["balanced"] = (delta == 0)
             computed["delta"] = str(abs(delta).quantize(Decimal("0.01")))
-            calls.append("decimal_balance_check")
-
-        elif subtype == "je_unbalanced_debits_credits":
-            d = Decimal(str(spec.get("debit_total", "0")))
-            c = Decimal(str(spec.get("credit_total", "0")))
-            computed["rejected"] = d != c
-            computed["delta"] = str(abs(d - c))
             calls.append("decimal_balance_check")
 
         # ---- Currency rounding: real multicurrency_engine path via Decimal ----
@@ -242,6 +243,53 @@ class FinancialRunner:
             computed["balanced"] = True
             computed["re_sign"] = "negative" if loss > 0 else "positive"
             calls.append("decimal_re_sign_check")
+
+        # ---- Indirect cash flow: invoke cashflow_engine.generate_cash_flow_statement ----
+        elif subtype == "cashflow_indirect_method":
+            from src.engines.cashflow_engine import generate_cash_flow_statement  # type: ignore
+            db = self.chaos_db_path or Path("/tmp/chaos_cf.db")
+            conn = _fresh_db(db)
+            try:
+                # Minimal schema for the engine — it sums GL ranges from documents
+                # and reads fixed_assets for CCA / disposals.
+                conn.executescript("""
+                    CREATE TABLE documents (
+                        document_id TEXT PRIMARY KEY, client_code TEXT,
+                        amount REAL, document_date TEXT, gl_account TEXT,
+                        review_status TEXT
+                    );
+                    CREATE TABLE posting_jobs (
+                        posting_id TEXT PRIMARY KEY, document_id TEXT,
+                        posting_status TEXT, created_at TEXT, updated_at TEXT
+                    );
+                    CREATE TABLE fixed_assets (
+                        asset_id TEXT PRIMARY KEY, client_code TEXT,
+                        cost REAL, current_ucc REAL, accumulated_cca REAL,
+                        status TEXT, disposal_date TEXT, disposal_proceeds REAL,
+                        acquisition_date TEXT
+                    );
+                """)
+                # Seed a tiny set of posted transactions so the engine has something
+                import uuid as _u
+                for gl, amt, d in (
+                    ("4000", 10000, "2026-03-10"),
+                    ("5000",  3000, "2026-03-15"),
+                    ("1100",  2000, "2026-03-20"),
+                    ("2000",  1500, "2026-03-25"),
+                ):
+                    conn.execute(
+                        "INSERT INTO documents VALUES (?, 'CHAOS', ?, ?, ?, 'Posted')",
+                        (f"d_{_u.uuid4().hex[:8]}", amt, d, gl),
+                    )
+                conn.commit()
+                stmt = generate_cash_flow_statement(
+                    "CHAOS", "2026-03-01", "2026-03-31", conn,
+                )
+                computed["method"] = "indirect"
+                computed["statement_built"] = isinstance(stmt, dict) and bool(stmt)
+            finally:
+                conn.close()
+            calls.append("cashflow_engine.generate_cash_flow_statement")
 
         # ---- Things we explicitly can't fully compute yet — don't fake ----
         else:

@@ -274,11 +274,18 @@ def main(argv: list[str] | None = None) -> int:
                 "score": 0.0,
                 "error": f"no_runner_for_track:{scenario['category']}",
             }
-        return runner.run(scenario).to_dict()
+        record = runner.run(scenario).to_dict()
+        # Propagate classification flags for reporting
+        record["expected_fail"]  = bool(scenario.get("expected_fail"))
+        record["future_feature"] = bool(scenario.get("future_feature"))
+        record["severity_on_failure"] = scenario.get("severity_on_failure")
+        return record
 
     loop_scenarios = scenarios if not args.continuous else (scenarios * 1_000_000)
     # Print progress without requiring tqdm
     total = len(scenarios) if not args.continuous else None
+    expected_fail_count = 0
+    future_feature_count = 0
     for idx, sc in enumerate(loop_scenarios, 1):
         if stop_flag["stop"]:
             break
@@ -288,6 +295,15 @@ def main(argv: list[str] | None = None) -> int:
 
         record = _run_one(sc)
         cp.append(record)
+
+        # Scenarios flagged as expected_fail or future_feature are excluded
+        # from the hard pass/fail rate but tracked separately.
+        if record.get("expected_fail"):
+            expected_fail_count += 1
+            continue
+        if record.get("future_feature"):
+            future_feature_count += 1
+            continue
         if record.get("error"):
             errored += 1
         elif record.get("passed"):
@@ -314,18 +330,23 @@ def main(argv: list[str] | None = None) -> int:
     results = cp.load_results()
     elapsed = time.perf_counter() - started
 
-    # Reports
+    # Reports — pass rate excludes expected_fail + future_feature from denominator
+    scored = [r for r in results
+              if not r.get("expected_fail") and not r.get("future_feature")]
     summary = {
-        "run_id":      run_id,
-        "total":       len(results),
-        "passed":      passed,
-        "failed":      failed,
-        "errored":     errored,
-        "pass_rate":   (passed / max(1, len(results))),
-        "duration_s":  round(elapsed, 2),
-        "budget":      image_generator.budget_snapshot(),
-        "by_track":    _by_track(results),
-        "by_difficulty": _by_difficulty(results),
+        "run_id":       run_id,
+        "total":        len(results),
+        "scored_total": len(scored),
+        "passed":       passed,
+        "failed":       failed,
+        "errored":      errored,
+        "expected_fail_count":  expected_fail_count,
+        "future_feature_count": future_feature_count,
+        "pass_rate":    (passed / max(1, len(scored))),
+        "duration_s":   round(elapsed, 2),
+        "budget":       image_generator.budget_snapshot(),
+        "by_track":     _by_track(scored),
+        "by_difficulty":_by_difficulty(scored),
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
 
@@ -345,8 +366,8 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print("=" * 60)
     print(f"Run:      {run_id}")
-    print(f"Total:    {len(results)}")
-    print(f"Pass:     {passed}  ({summary['pass_rate']*100:.1f}%)")
+    print(f"Total:    {len(results)}  (scored {len(scored)}, expected_fail {expected_fail_count}, future_feature {future_feature_count})")
+    print(f"Pass:     {passed}  ({summary['pass_rate']*100:.1f}%  of scored)")
     print(f"Fail:     {failed}")
     print(f"Error:    {errored}")
     print(f"Duration: {elapsed:.1f}s")

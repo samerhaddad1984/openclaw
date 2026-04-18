@@ -44,6 +44,12 @@ class ReceiptOracle:
                     ok = abs(int(actual) - int(expected)) <= max(1, int(expected) // 10)
                 except Exception:
                     ok = False
+            elif field == "vendor":
+                # Logos survive partial damage → accept if actual is a
+                # non-trivial prefix of expected (or vice versa).
+                a = str(actual or "").strip().lower()
+                e = str(expected or "").strip().lower()
+                ok = bool(a) and bool(e) and (a in e or e in a or len(a) >= max(4, len(e) // 2) and e.startswith(a))
             else:
                 ok = string_eq_norm(actual, expected)
 

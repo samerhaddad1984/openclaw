@@ -49,7 +49,7 @@ class FinancialOracle:
             "proration_required", "reversal_posted", "opening_balance_changed",
             "consolidated_net", "deferred_tax_line_required", "lead_sheet_required",
             "mismatch_flagged", "new_ytd_starts_at_zero", "sum_matches_entity",
-            "mutation_blocked", "auto_adjusted",
+            "mutation_blocked", "auto_adjusted", "statement_built",
         ):
             if flag in expected:
                 total_checks += 1

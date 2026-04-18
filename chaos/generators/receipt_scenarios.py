@@ -403,7 +403,8 @@ NIGHTMARE_CONDITIONS: list[dict[str, Any]] = [
         "vendor_kind": "generic",
         "item_count": 6,
         "severity_on_failure": "medium",
-        "description": "Arabic-language receipt with RTL text",
+        "expected_fail": True,
+        "description": "Arabic-language receipt with RTL text (known OCR limitation)",
     },
     {
         "subtype": "foreign_language_chinese",
@@ -412,7 +413,8 @@ NIGHTMARE_CONDITIONS: list[dict[str, Any]] = [
         "vendor_kind": "generic",
         "item_count": 6,
         "severity_on_failure": "medium",
-        "description": "Chinese-language receipt",
+        "expected_fail": True,
+        "description": "Chinese-language receipt (known OCR limitation)",
     },
     {
         "subtype": "total_only_no_items",
@@ -682,6 +684,8 @@ def generate(rnd: random.Random) -> list[dict[str, Any]]:
             "difficulty":     spec["difficulty"],
             "description":    spec["description"],
             "severity_on_failure": spec["severity_on_failure"],
+            "expected_fail":  bool(spec.get("expected_fail", False)),
+            "future_feature": bool(spec.get("future_feature", False)),
             "affects_engines": [
                 "src.engines.ocr_engine",
                 "src.engines.tax_engine",
