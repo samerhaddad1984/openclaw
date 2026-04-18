@@ -1,0 +1,323 @@
+{
+  "gt_parse": {
+    "menu": [
+      {
+        "nm": "Serbu 1",
+        "cnt": "2",
+        "price": "40.000"
+      },
+      {
+        "nm": "Choco Peanut Bread",
+        "cnt": "2",
+        "price": "20.000"
+      }
+    ],
+    "total": {
+      "total_price": "60.000",
+      "cashprice": "60.000",
+      "changeprice": "0"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 10,
+    "image_size": {
+      "width": 864,
+      "height": 1296
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 124,
+            "y3": 606,
+            "x3": 124,
+            "y4": 606,
+            "x1": 104,
+            "y1": 576,
+            "x4": 104,
+            "y2": 576
+          },
+          "is_key": 0,
+          "row_id": 2114324,
+          "text": "2"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 62,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 247,
+            "y3": 611,
+            "x3": 245,
+            "y4": 607,
+            "x1": 166,
+            "y1": 577,
+            "x4": 164,
+            "y2": 580
+          },
+          "is_key": 0,
+          "row_id": 2114324,
+          "text": "Serbu"
+        },
+        {
+          "quad": {
+            "x2": 274,
+            "y3": 610,
+            "x3": 274,
+            "y4": 610,
+            "x1": 258,
+            "y1": 582,
+            "x4": 258,
+            "y2": 582
+          },
+          "is_key": 0,
+          "row_id": 2114324,
+          "text": "1"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 62,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 699,
+            "y3": 626,
+            "x3": 697,
+            "y4": 622,
+            "x1": 602,
+            "y1": 591,
+            "x4": 601,
+            "y2": 595
+          },
+          "is_key": 0,
+          "row_id": 2114324,
+          "text": "40.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 62,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 124,
+            "y3": 642,
+            "x3": 124,
+            "y4": 642,
+            "x1": 102,
+            "y1": 612,
+            "x4": 102,
+            "y2": 612
+          },
+          "is_key": 0,
+          "row_id": 2114325,
+          "text": "2"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 63,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 246,
+            "y3": 646,
+            "x3": 245,
+            "y4": 643,
+            "x1": 164,
+            "y1": 611,
+            "x4": 163,
+            "y2": 614
+          },
+          "is_key": 0,
+          "row_id": 2114325,
+          "text": "Choco"
+        },
+        {
+          "quad": {
+            "x2": 346,
+            "y3": 648,
+            "x3": 345,
+            "y4": 646,
+            "x1": 256,
+            "y1": 615,
+            "x4": 255,
+            "y2": 618
+          },
+          "is_key": 0,
+          "row_id": 2114325,
+          "text": "Peanut"
+        },
+        {
+          "quad": {
+            "x2": 436,
+            "y3": 650,
+            "x3": 435,
+            "y4": 648,
+            "x1": 356,
+            "y1": 617,
+            "x4": 355,
+            "y2": 620
+          },
+          "is_key": 0,
+          "row_id": 2114325,
+          "text": "Bread"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 63,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 699,
+            "y3": 661,
+            "x3": 697,
+            "y4": 656,
+            "x1": 602,
+            "y1": 625,
+            "x4": 600,
+            "y2": 630
+          },
+          "is_key": 0,
+          "row_id": 2114325,
+          "text": "20.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 63,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 476,
+            "y3": 744,
+            "x3": 476,
+            "y4": 744,
+            "x1": 398,
+            "y1": 712,
+            "x4": 398,
+            "y2": 712
+          },
+          "is_key": 1,
+          "row_id": 2114326,
+          "text": "TOTAL"
+        },
+        {
+          "quad": {
+            "x2": 701,
+            "y3": 754,
+            "x3": 699,
+            "y4": 751,
+            "x1": 596,
+            "y1": 691,
+            "x4": 594,
+            "y2": 694
+          },
+          "is_key": 0,
+          "row_id": 2114326,
+          "text": "60.000"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 8,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 164,
+            "y3": 816,
+            "x3": 164,
+            "y4": 816,
+            "x1": 96,
+            "y1": 782,
+            "x4": 96,
+            "y2": 782
+          },
+          "is_key": 1,
+          "row_id": 2114327,
+          "text": "CASH"
+        },
+        {
+          "quad": {
+            "x2": 695,
+            "y3": 826,
+            "x3": 693,
+            "y4": 821,
+            "x1": 600,
+            "y1": 788,
+            "x4": 598,
+            "y2": 793
+          },
+          "is_key": 0,
+          "row_id": 2114327,
+          "text": "60.000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 8,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 208,
+            "y3": 854,
+            "x3": 208,
+            "y4": 854,
+            "x1": 92,
+            "y1": 820,
+            "x4": 92,
+            "y2": 820
+          },
+          "is_key": 1,
+          "row_id": 2114328,
+          "text": "CHANGED"
+        },
+        {
+          "quad": {
+            "x2": 692,
+            "y3": 860,
+            "x3": 692,
+            "y4": 860,
+            "x1": 672,
+            "y1": 830,
+            "x4": 672,
+            "y2": 830
+          },
+          "is_key": 0,
+          "row_id": 2114328,
+          "text": "0"
+        }
+      ],
+      "category": "total.changeprice",
+      "group_id": 8,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

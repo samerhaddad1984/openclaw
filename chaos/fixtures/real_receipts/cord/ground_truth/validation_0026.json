@@ -1,0 +1,615 @@
+{
+  "gt_parse": {
+    "menu": [
+      {
+        "nm": "NASI MERAH/PUTIH",
+        "unitprice": "5.000",
+        "cnt": "1x",
+        "price": "5.000"
+      },
+      {
+        "nm": "SAYUR",
+        "unitprice": "4.000",
+        "cnt": "2x",
+        "price": "8.000"
+      },
+      {
+        "nm": "KERUPUK/SAMBEL",
+        "unitprice": "2.000",
+        "cnt": "1x",
+        "price": "2.000"
+      },
+      {
+        "nm": "AYAM",
+        "unitprice": "14.000",
+        "cnt": "1x",
+        "price": "14.000"
+      },
+      {
+        "nm": "MINUMAN KEMASAN/REFILL",
+        "unitprice": "6.000",
+        "cnt": "1x",
+        "price": "6.000"
+      }
+    ],
+    "total": {
+      "total_price": "Rp. 35.000"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 26,
+    "image_size": {
+      "width": 1108,
+      "height": 1478
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 308,
+            "y3": 784,
+            "x3": 308,
+            "y4": 781,
+            "x1": 230,
+            "y1": 741,
+            "x4": 224,
+            "y2": 742
+          },
+          "is_key": 0,
+          "row_id": 874272,
+          "text": "NASI"
+        },
+        {
+          "quad": {
+            "x2": 522,
+            "y3": 791,
+            "x3": 520,
+            "y4": 784,
+            "x1": 307,
+            "y1": 740,
+            "x4": 306,
+            "y2": 745
+          },
+          "is_key": 0,
+          "row_id": 874272,
+          "text": "MERAH/PUTIH"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 279,
+            "y3": 829,
+            "x3": 277,
+            "y4": 827,
+            "x1": 233,
+            "y1": 784,
+            "x4": 235,
+            "y2": 785
+          },
+          "is_key": 0,
+          "row_id": 874273,
+          "text": "1x"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 368,
+            "y3": 825,
+            "x3": 369,
+            "y4": 828,
+            "x1": 276,
+            "y1": 784,
+            "x4": 276,
+            "y2": 786
+          },
+          "is_key": 0,
+          "row_id": 874273,
+          "text": "5.000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 827,
+            "y3": 829,
+            "x3": 831,
+            "y4": 830,
+            "x1": 736,
+            "y1": 781,
+            "x4": 734,
+            "y2": 785
+          },
+          "is_key": 0,
+          "row_id": 874273,
+          "text": "5.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 328,
+            "y3": 872,
+            "x3": 332,
+            "y4": 872,
+            "x1": 224,
+            "y1": 827,
+            "x4": 220,
+            "y2": 828
+          },
+          "is_key": 0,
+          "row_id": 874274,
+          "text": "SAYUR"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 273,
+            "y3": 913,
+            "x3": 275,
+            "y4": 916,
+            "x1": 227,
+            "y1": 874,
+            "x4": 223,
+            "y2": 876
+          },
+          "is_key": 0,
+          "row_id": 874275,
+          "text": "2x"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 366,
+            "y3": 915,
+            "x3": 366,
+            "y4": 914,
+            "x1": 273,
+            "y1": 872,
+            "x4": 270,
+            "y2": 871
+          },
+          "is_key": 0,
+          "row_id": 874275,
+          "text": "4.000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 828,
+            "y3": 916,
+            "x3": 830,
+            "y4": 918,
+            "x1": 736,
+            "y1": 874,
+            "x4": 738,
+            "y2": 875
+          },
+          "is_key": 0,
+          "row_id": 874275,
+          "text": "8.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 496,
+            "y3": 964,
+            "x3": 496,
+            "y4": 966,
+            "x1": 218,
+            "y1": 911,
+            "x4": 214,
+            "y2": 917
+          },
+          "is_key": 0,
+          "row_id": 874276,
+          "text": "KERUPUK/SAMBEL"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 270,
+            "y3": 1006,
+            "x3": 270,
+            "y4": 1003,
+            "x1": 228,
+            "y1": 961,
+            "x4": 221,
+            "y2": 963
+          },
+          "is_key": 0,
+          "row_id": 874277,
+          "text": "1x"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 360,
+            "y3": 1005,
+            "x3": 363,
+            "y4": 1005,
+            "x1": 269,
+            "y1": 964,
+            "x4": 267,
+            "y2": 963
+          },
+          "is_key": 0,
+          "row_id": 874277,
+          "text": "2.000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 836,
+            "y3": 1009,
+            "x3": 836,
+            "y4": 1015,
+            "x1": 734,
+            "y1": 963,
+            "x4": 740,
+            "y2": 965
+          },
+          "is_key": 0,
+          "row_id": 874277,
+          "text": "2.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 312,
+            "y3": 1049,
+            "x3": 310,
+            "y4": 1050,
+            "x1": 217,
+            "y1": 1001,
+            "x4": 206,
+            "y2": 1003
+          },
+          "is_key": 0,
+          "row_id": 874278,
+          "text": "AYAM"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 269,
+            "y3": 1097,
+            "x3": 269,
+            "y4": 1096,
+            "x1": 221,
+            "y1": 1054,
+            "x4": 221,
+            "y2": 1055
+          },
+          "is_key": 0,
+          "row_id": 874279,
+          "text": "1x"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 376,
+            "y3": 1096,
+            "x3": 375,
+            "y4": 1097,
+            "x1": 266,
+            "y1": 1051,
+            "x4": 265,
+            "y2": 1051
+          },
+          "is_key": 0,
+          "row_id": 874279,
+          "text": "14.000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 837,
+            "y3": 1103,
+            "x3": 838,
+            "y4": 1110,
+            "x1": 721,
+            "y1": 1058,
+            "x4": 722,
+            "y2": 1051
+          },
+          "is_key": 0,
+          "row_id": 874279,
+          "text": "14.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 369,
+            "y3": 1141,
+            "x3": 370,
+            "y4": 1142,
+            "x1": 211,
+            "y1": 1098,
+            "x4": 210,
+            "y2": 1100
+          },
+          "is_key": 0,
+          "row_id": 874280,
+          "text": "MINUMAN"
+        },
+        {
+          "quad": {
+            "x2": 644,
+            "y3": 1150,
+            "x3": 646,
+            "y4": 1148,
+            "x1": 371,
+            "y1": 1098,
+            "x4": 369,
+            "y2": 1101
+          },
+          "is_key": 0,
+          "row_id": 874280,
+          "text": "KEMASAN/REFILL"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 7,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 265,
+            "y3": 1193,
+            "x3": 266,
+            "y4": 1193,
+            "x1": 218,
+            "y1": 1143,
+            "x4": 218,
+            "y2": 1147
+          },
+          "is_key": 0,
+          "row_id": 874281,
+          "text": "1x"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 7,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 358,
+            "y3": 1189,
+            "x3": 356,
+            "y4": 1192,
+            "x1": 264,
+            "y1": 1144,
+            "x4": 264,
+            "y2": 1145
+          },
+          "is_key": 0,
+          "row_id": 874281,
+          "text": "6.000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 7,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 840,
+            "y3": 1200,
+            "x3": 839,
+            "y4": 1198,
+            "x1": 742,
+            "y1": 1152,
+            "x4": 741,
+            "y2": 1154
+          },
+          "is_key": 0,
+          "row_id": 874281,
+          "text": "6.000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 7,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 630,
+            "y3": 1294,
+            "x3": 636,
+            "y4": 1294,
+            "x1": 542,
+            "y1": 1246,
+            "x4": 547,
+            "y2": 1246
+          },
+          "is_key": 1,
+          "row_id": 874282,
+          "text": "Total"
+        },
+        {
+          "quad": {
+            "x2": 729,
+            "y3": 1310,
+            "x3": 729,
+            "y4": 1301,
+            "x1": 664,
+            "y1": 1249,
+            "x4": 664,
+            "y2": 1255
+          },
+          "is_key": 0,
+          "row_id": 874282,
+          "text": "Rp."
+        },
+        {
+          "quad": {
+            "x2": 840,
+            "y3": 1297,
+            "x3": 842,
+            "y4": 1296,
+            "x1": 727,
+            "y1": 1249,
+            "x4": 724,
+            "y2": 1250
+          },
+          "is_key": 0,
+          "row_id": 874282,
+          "text": "35.000"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 8,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {
+    "x2": 885,
+    "y3": 1368,
+    "x3": 939,
+    "y4": 1340,
+    "x1": 147,
+    "y1": 133,
+    "x4": 104,
+    "y2": 123
+  },
+  "repeating_symbol": [
+    [
+      {
+        "quad": {
+          "x2": 753,
+          "y3": 738,
+          "x3": 757,
+          "y4": 736,
+          "x1": 206,
+          "y1": 708,
+          "x4": 204,
+          "y2": 706
+        },
+        "text": "-"
+      }
+    ],
+    [
+      {
+        "quad": {
+          "x2": 764,
+          "y3": 1245,
+          "x3": 763,
+          "y4": 1230,
+          "x1": 180,
+          "y1": 1200,
+          "x4": 183,
+          "y2": 1210
+        },
+        "text": "-"
+      }
+    ]
+  ],
+  "dontcare": []
+}

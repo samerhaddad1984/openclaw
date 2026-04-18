@@ -20,7 +20,10 @@ class ValidationResult:
         return {
             "total_score":    round(self.total_score, 4),
             "passed":         self.passed,
-            "field_scores":   {k: round(v, 4) for k, v in self.field_scores.items()},
+            "field_scores":   {
+                k: (None if v is None else round(v, 4))
+                for k, v in self.field_scores.items()
+            },
             "errors":         self.errors,
             "hallucinations": self.hallucinations,
             "omissions":      self.omissions,

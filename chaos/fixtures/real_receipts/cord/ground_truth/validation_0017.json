@@ -1,0 +1,268 @@
+{
+  "gt_parse": {
+    "menu": {
+      "nm": "LEMONADE 16OZ",
+      "unitprice": "20,000",
+      "cnt": "1",
+      "price": "20,000"
+    },
+    "sub_total": {
+      "subtotal_price": "20,000"
+    },
+    "total": {
+      "total_price": "20,000",
+      "cashprice": "100,000",
+      "changeprice": "80.000"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 17,
+    "image_size": {
+      "width": 576,
+      "height": 864
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 262,
+            "y3": 364,
+            "x3": 262,
+            "y4": 364,
+            "x1": 144,
+            "y1": 346,
+            "x4": 144,
+            "y2": 346
+          },
+          "is_key": 0,
+          "row_id": 2090138,
+          "text": "LEMONADE 16OZ"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 156,
+            "y3": 382,
+            "x3": 156,
+            "y4": 382,
+            "x1": 146,
+            "y1": 368,
+            "x4": 146,
+            "y2": 368
+          },
+          "is_key": 0,
+          "row_id": 2090139,
+          "text": "1"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 240,
+            "y3": 382,
+            "x3": 240,
+            "y4": 382,
+            "x1": 194,
+            "y1": 364,
+            "x4": 194,
+            "y2": 364
+          },
+          "is_key": 0,
+          "row_id": 2090139,
+          "text": "20,000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 435,
+            "y3": 379,
+            "x3": 436,
+            "y4": 382,
+            "x1": 385,
+            "y1": 365,
+            "x4": 386,
+            "y2": 362
+          },
+          "is_key": 0,
+          "row_id": 2090139,
+          "text": "20,000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 208,
+            "y3": 410,
+            "x3": 208,
+            "y4": 410,
+            "x1": 128,
+            "y1": 392,
+            "x4": 128,
+            "y2": 392
+          },
+          "is_key": 1,
+          "row_id": 2090140,
+          "text": "SUB TOTAL"
+        },
+        {
+          "quad": {
+            "x2": 436,
+            "y3": 410,
+            "x3": 436,
+            "y4": 410,
+            "x1": 388,
+            "y1": 392,
+            "x4": 388,
+            "y2": 392
+          },
+          "is_key": 0,
+          "row_id": 2090140,
+          "text": "20,000"
+        }
+      ],
+      "category": "sub_total.subtotal_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 228,
+            "y3": 450,
+            "x3": 228,
+            "y4": 450,
+            "x1": 126,
+            "y1": 432,
+            "x4": 126,
+            "y2": 432
+          },
+          "is_key": 1,
+          "row_id": 2090141,
+          "text": "GRAND TOTAL"
+        },
+        {
+          "quad": {
+            "x2": 438,
+            "y3": 450,
+            "x3": 438,
+            "y4": 450,
+            "x1": 388,
+            "y1": 432,
+            "x4": 388,
+            "y2": 432
+          },
+          "is_key": 0,
+          "row_id": 2090141,
+          "text": "20,000"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 196,
+            "y3": 478,
+            "x3": 196,
+            "y4": 478,
+            "x1": 124,
+            "y1": 462,
+            "x4": 124,
+            "y2": 462
+          },
+          "is_key": 1,
+          "row_id": 2090142,
+          "text": "CASH IDR"
+        },
+        {
+          "quad": {
+            "x2": 440,
+            "y3": 480,
+            "x3": 440,
+            "y4": 480,
+            "x1": 384,
+            "y1": 462,
+            "x4": 384,
+            "y2": 462
+          },
+          "is_key": 0,
+          "row_id": 2090142,
+          "text": "100,000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 222,
+            "y3": 510,
+            "x3": 222,
+            "y4": 510,
+            "x1": 120,
+            "y1": 492,
+            "x4": 120,
+            "y2": 492
+          },
+          "is_key": 1,
+          "row_id": 2090143,
+          "text": "CHANGE DUE"
+        },
+        {
+          "quad": {
+            "x2": 442,
+            "y3": 510,
+            "x3": 442,
+            "y4": 510,
+            "x1": 392,
+            "y1": 492,
+            "x4": 392,
+            "y2": 492
+          },
+          "is_key": 0,
+          "row_id": 2090143,
+          "text": "80.000"
+        }
+      ],
+      "category": "total.changeprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

@@ -143,6 +143,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run-id", default=None,
                    help="Resume an existing run id")
     p.add_argument("--verbose", "-v", action="store_true")
+    p.add_argument("--dataset", default=None, choices=["cord", "sroie"],
+                   help="Use a real receipt dataset instead of generated scenarios. "
+                        "Implies --track receipts. Pairs well with --real-ocr.")
+    p.add_argument("--dataset-difficulty", default="all",
+                   choices=["all", "easy", "normal", "hard", "nightmare"],
+                   help="Filter real dataset by auto-classified difficulty.")
     return p
 
 
@@ -180,8 +186,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.reproduce:
         return _run_reproduce(args)
 
-    # Resolve scenario list
-    if args.difficulty:
+    # Resolve scenario list — real dataset OR generated
+    if args.dataset:
+        from chaos.generators.real_receipt_loader import RealReceiptLoader
+        loader = RealReceiptLoader(args.dataset)
+        sampled = loader.sample(n=count, difficulty=args.dataset_difficulty)
+        scenarios = [r.to_scenario() for r in sampled]
+        log.info("Loaded %d real receipts from %s (difficulty=%s)",
+                 len(scenarios), args.dataset, args.dataset_difficulty)
+    elif args.difficulty:
         scenarios = sample_scenarios(
             tracks=args.track,
             count=count,

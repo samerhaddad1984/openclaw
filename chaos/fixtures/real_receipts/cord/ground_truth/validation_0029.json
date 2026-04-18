@@ -1,0 +1,268 @@
+{
+  "gt_parse": {
+    "menu": {
+      "nm": "Sabun Beras",
+      "unitprice": "30000",
+      "cnt": "1",
+      "price": "30000"
+    },
+    "sub_total": {
+      "subtotal_price": "30000",
+      "discount_price": "Discount(0%)"
+    },
+    "total": {
+      "cashprice": "50000",
+      "changeprice": "20000"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 29,
+    "image_size": {
+      "width": 576,
+      "height": 864
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 163,
+            "y3": 332,
+            "x3": 161,
+            "y4": 321,
+            "x1": 18,
+            "y1": 296,
+            "x4": 16,
+            "y2": 307
+          },
+          "is_key": 0,
+          "row_id": 2101835,
+          "text": "Sabun Beras"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 180,
+            "y3": 330,
+            "x3": 180,
+            "y4": 330,
+            "x1": 168,
+            "y1": 308,
+            "x4": 168,
+            "y2": 308
+          },
+          "is_key": 0,
+          "row_id": 2101835,
+          "text": "1"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 91,
+            "y3": 353,
+            "x3": 89,
+            "y4": 349,
+            "x1": 16,
+            "y1": 322,
+            "x4": 14,
+            "y2": 327
+          },
+          "is_key": 0,
+          "row_id": 2101836,
+          "text": "30000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 344,
+            "y3": 348,
+            "x3": 344,
+            "y4": 348,
+            "x1": 278,
+            "y1": 324,
+            "x4": 278,
+            "y2": 324
+          },
+          "is_key": 0,
+          "row_id": 2101836,
+          "text": "30000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 62,
+            "y3": 422,
+            "x3": 62,
+            "y4": 422,
+            "x1": 12,
+            "y1": 396,
+            "x4": 12,
+            "y2": 396
+          },
+          "is_key": 1,
+          "row_id": 2101837,
+          "text": "Sub"
+        },
+        {
+          "quad": {
+            "x2": 122,
+            "y3": 422,
+            "x3": 122,
+            "y4": 422,
+            "x1": 66,
+            "y1": 398,
+            "x4": 66,
+            "y2": 398
+          },
+          "is_key": 1,
+          "row_id": 2101837,
+          "text": "Total"
+        },
+        {
+          "quad": {
+            "x2": 346,
+            "y3": 442,
+            "x3": 346,
+            "y4": 442,
+            "x1": 276,
+            "y1": 416,
+            "x4": 276,
+            "y2": 416
+          },
+          "is_key": 0,
+          "row_id": 2101838,
+          "text": "30000"
+        }
+      ],
+      "category": "sub_total.subtotal_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 176,
+            "y3": 471,
+            "x3": 175,
+            "y4": 468,
+            "x1": 10,
+            "y1": 439,
+            "x4": 9,
+            "y2": 442
+          },
+          "is_key": 0,
+          "row_id": 2101839,
+          "text": "Discount(0%)"
+        }
+      ],
+      "category": "sub_total.discount_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 76,
+            "y3": 508,
+            "x3": 76,
+            "y4": 508,
+            "x1": 8,
+            "y1": 482,
+            "x4": 8,
+            "y2": 482
+          },
+          "is_key": 1,
+          "row_id": 2101840,
+          "text": "Tunai"
+        },
+        {
+          "quad": {
+            "x2": 346,
+            "y3": 526,
+            "x3": 346,
+            "y4": 526,
+            "x1": 276,
+            "y1": 500,
+            "x4": 276,
+            "y2": 500
+          },
+          "is_key": 0,
+          "row_id": 2101841,
+          "text": "50000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 128,
+            "y3": 598,
+            "x3": 128,
+            "y4": 598,
+            "x1": 4,
+            "y1": 570,
+            "x4": 4,
+            "y2": 570
+          },
+          "is_key": 1,
+          "row_id": 2101843,
+          "text": "Kembalian"
+        },
+        {
+          "quad": {
+            "x2": 346,
+            "y3": 612,
+            "x3": 346,
+            "y4": 612,
+            "x1": 274,
+            "y1": 586,
+            "x4": 274,
+            "y2": 586
+          },
+          "is_key": 0,
+          "row_id": 2101843,
+          "text": "20000"
+        }
+      ],
+      "category": "total.changeprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

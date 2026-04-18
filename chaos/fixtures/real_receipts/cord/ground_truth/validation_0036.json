@@ -1,0 +1,466 @@
+{
+  "gt_parse": {
+    "menu": {
+      "nm": "Soft Ori 3 Top",
+      "cnt": "1",
+      "price": "17,272",
+      "sub": [
+        {
+          "nm": "Top Oreo",
+          "price": "0"
+        },
+        {
+          "nm": "Top Oreo",
+          "price": "0"
+        },
+        {
+          "nm": "Top Banana",
+          "price": "0"
+        }
+      ]
+    },
+    "sub_total": {
+      "subtotal_price": "17,272",
+      "tax_price": "1,727"
+    },
+    "total": {
+      "total_price": "18,999",
+      "cashprice": "18,999"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 36,
+    "image_size": {
+      "width": 864,
+      "height": 1296
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 136,
+            "y3": 658,
+            "x3": 136,
+            "y4": 658,
+            "x1": 118,
+            "y1": 630,
+            "x4": 118,
+            "y2": 630
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "1"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 224,
+            "y3": 656,
+            "x3": 224,
+            "y4": 656,
+            "x1": 160,
+            "y1": 626,
+            "x4": 160,
+            "y2": 626
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "Soft"
+        },
+        {
+          "quad": {
+            "x2": 276,
+            "y3": 652,
+            "x3": 276,
+            "y4": 652,
+            "x1": 230,
+            "y1": 624,
+            "x4": 230,
+            "y2": 624
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "Ori"
+        },
+        {
+          "quad": {
+            "x2": 306,
+            "y3": 652,
+            "x3": 306,
+            "y4": 652,
+            "x1": 286,
+            "y1": 622,
+            "x4": 286,
+            "y2": 622
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "3"
+        },
+        {
+          "quad": {
+            "x2": 362,
+            "y3": 654,
+            "x3": 358,
+            "y4": 647,
+            "x1": 314,
+            "y1": 620,
+            "x4": 310,
+            "y2": 626
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "Top"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 668,
+            "y3": 644,
+            "x3": 668,
+            "y4": 644,
+            "x1": 576,
+            "y1": 612,
+            "x4": 576,
+            "y2": 612
+          },
+          "is_key": 0,
+          "row_id": 2060846,
+          "text": "17,272"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 225,
+            "y3": 699,
+            "x3": 223,
+            "y4": 695,
+            "x1": 178,
+            "y1": 665,
+            "x4": 176,
+            "y2": 668
+          },
+          "is_key": 0,
+          "row_id": 2060847,
+          "text": "Top"
+        },
+        {
+          "quad": {
+            "x2": 294,
+            "y3": 690,
+            "x3": 294,
+            "y4": 690,
+            "x1": 234,
+            "y1": 662,
+            "x4": 234,
+            "y2": 662
+          },
+          "is_key": 0,
+          "row_id": 2060847,
+          "text": "Oreo"
+        }
+      ],
+      "category": "menu.sub.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 656,
+            "y3": 678,
+            "x3": 656,
+            "y4": 678,
+            "x1": 636,
+            "y1": 650,
+            "x4": 636,
+            "y2": 650
+          },
+          "is_key": 0,
+          "row_id": 2060847,
+          "text": "0"
+        }
+      ],
+      "category": "menu.sub.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 654,
+            "y3": 718,
+            "x3": 654,
+            "y4": 718,
+            "x1": 636,
+            "y1": 690,
+            "x4": 636,
+            "y2": 690
+          },
+          "is_key": 0,
+          "row_id": 2060848,
+          "text": "0"
+        }
+      ],
+      "category": "menu.sub.price",
+      "group_id": 3,
+      "sub_group_id": 1
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 293,
+            "y3": 733,
+            "x3": 294,
+            "y4": 737,
+            "x1": 175,
+            "y1": 704,
+            "x4": 176,
+            "y2": 699
+          },
+          "is_key": 0,
+          "row_id": 2060849,
+          "text": "Top Oreo"
+        }
+      ],
+      "category": "menu.sub.nm",
+      "group_id": 3,
+      "sub_group_id": 1
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 229,
+            "y3": 777,
+            "x3": 227,
+            "y4": 773,
+            "x1": 182,
+            "y1": 743,
+            "x4": 180,
+            "y2": 746
+          },
+          "is_key": 0,
+          "row_id": 2060850,
+          "text": "Top"
+        },
+        {
+          "quad": {
+            "x2": 323,
+            "y3": 763,
+            "x3": 324,
+            "y4": 766,
+            "x1": 235,
+            "y1": 740,
+            "x4": 236,
+            "y2": 737
+          },
+          "is_key": 0,
+          "row_id": 2060850,
+          "text": "Banana"
+        }
+      ],
+      "category": "menu.sub.nm",
+      "group_id": 3,
+      "sub_group_id": 2
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 656,
+            "y3": 756,
+            "x3": 656,
+            "y4": 756,
+            "x1": 638,
+            "y1": 728,
+            "x4": 638,
+            "y2": 728
+          },
+          "is_key": 0,
+          "row_id": 2060850,
+          "text": "0"
+        }
+      ],
+      "category": "menu.sub.price",
+      "group_id": 3,
+      "sub_group_id": 2
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 463,
+            "y3": 829,
+            "x3": 464,
+            "y4": 835,
+            "x1": 332,
+            "y1": 806,
+            "x4": 334,
+            "y2": 800
+          },
+          "is_key": 1,
+          "row_id": 2060851,
+          "text": "SubTotal:"
+        },
+        {
+          "quad": {
+            "x2": 664,
+            "y3": 838,
+            "x3": 664,
+            "y4": 838,
+            "x1": 572,
+            "y1": 806,
+            "x4": 572,
+            "y2": 806
+          },
+          "is_key": 0,
+          "row_id": 2060851,
+          "text": "17,272"
+        }
+      ],
+      "category": "sub_total.subtotal_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 462,
+            "y3": 868,
+            "x3": 462,
+            "y4": 868,
+            "x1": 402,
+            "y1": 840,
+            "x4": 402,
+            "y2": 840
+          },
+          "is_key": 1,
+          "row_id": 2060852,
+          "text": "PB1:"
+        },
+        {
+          "quad": {
+            "x2": 662,
+            "y3": 878,
+            "x3": 662,
+            "y4": 878,
+            "x1": 586,
+            "y1": 844,
+            "x4": 586,
+            "y2": 844
+          },
+          "is_key": 0,
+          "row_id": 2060852,
+          "text": "1,727"
+        }
+      ],
+      "category": "sub_total.tax_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 433,
+            "y3": 965,
+            "x3": 438,
+            "y4": 974,
+            "x1": 328,
+            "y1": 924,
+            "x4": 333,
+            "y2": 915
+          },
+          "is_key": 1,
+          "row_id": 2060853,
+          "text": "Total:"
+        },
+        {
+          "quad": {
+            "x2": 683,
+            "y3": 990,
+            "x3": 678,
+            "y4": 982,
+            "x1": 564,
+            "y1": 916,
+            "x4": 560,
+            "y2": 924
+          },
+          "is_key": 0,
+          "row_id": 2060853,
+          "text": "18,999"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 488,
+            "y3": 1010,
+            "x3": 488,
+            "y4": 1010,
+            "x1": 416,
+            "y1": 982,
+            "x4": 416,
+            "y2": 982
+          },
+          "is_key": 1,
+          "row_id": 2060854,
+          "text": "cash:"
+        },
+        {
+          "quad": {
+            "x2": 690,
+            "y3": 1026,
+            "x3": 690,
+            "y4": 1026,
+            "x1": 598,
+            "y1": 992,
+            "x4": 598,
+            "y2": 992
+          },
+          "is_key": 0,
+          "row_id": 2060854,
+          "text": "18,999"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

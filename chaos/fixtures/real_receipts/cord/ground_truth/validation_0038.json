@@ -1,0 +1,228 @@
+{
+  "gt_parse": {
+    "menu": {
+      "nm": "TT",
+      "unitprice": "20,000",
+      "cnt": "1",
+      "price": "20,000"
+    },
+    "total": {
+      "total_price": "20,000",
+      "cashprice": "100,000",
+      "changeprice": "80,000"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 38,
+    "image_size": {
+      "width": 2376,
+      "height": 4224
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 915,
+            "y3": 2508,
+            "x3": 915,
+            "y4": 2508,
+            "x1": 880,
+            "y1": 2446,
+            "x4": 880,
+            "y2": 2446
+          },
+          "is_key": 0,
+          "row_id": 2075619,
+          "text": "1"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 1496,
+            "y3": 2499,
+            "x3": 1496,
+            "y4": 2499,
+            "x1": 1267,
+            "y1": 2428,
+            "x4": 1267,
+            "y2": 2428
+          },
+          "is_key": 0,
+          "row_id": 2075619,
+          "text": "20,000"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 708,
+            "y3": 2596,
+            "x3": 708,
+            "y4": 2596,
+            "x1": 616,
+            "y1": 2525,
+            "x4": 616,
+            "y2": 2525
+          },
+          "is_key": 0,
+          "row_id": 2075620,
+          "text": "TT"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 1619,
+            "y3": 2569,
+            "x3": 1619,
+            "y4": 2569,
+            "x1": 1372,
+            "y1": 2499,
+            "x4": 1372,
+            "y2": 2499
+          },
+          "is_key": 0,
+          "row_id": 2075620,
+          "text": "20,000"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 839,
+            "y3": 2665,
+            "x3": 841,
+            "y4": 2673,
+            "x1": 614,
+            "y1": 2602,
+            "x4": 616,
+            "y2": 2594
+          },
+          "is_key": 1,
+          "row_id": 2075621,
+          "text": "TOTAL"
+        },
+        {
+          "quad": {
+            "x2": 1601,
+            "y3": 2639,
+            "x3": 1602,
+            "y4": 2645,
+            "x1": 1178,
+            "y1": 2577,
+            "x4": 1179,
+            "y2": 2571
+          },
+          "is_key": 0,
+          "row_id": 2075621,
+          "text": "20,000"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 795,
+            "y3": 2739,
+            "x3": 798,
+            "y4": 2745,
+            "x1": 614,
+            "y1": 2675,
+            "x4": 616,
+            "y2": 2669
+          },
+          "is_key": 1,
+          "row_id": 2075622,
+          "text": "CASH"
+        },
+        {
+          "quad": {
+            "x2": 1618,
+            "y3": 2708,
+            "x3": 1621,
+            "y4": 2719,
+            "x1": 1335,
+            "y1": 2649,
+            "x4": 1338,
+            "y2": 2639
+          },
+          "is_key": 0,
+          "row_id": 2075622,
+          "text": "100,000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 879,
+            "y3": 2806,
+            "x3": 881,
+            "y4": 2813,
+            "x1": 614,
+            "y1": 2744,
+            "x4": 616,
+            "y2": 2737
+          },
+          "is_key": 1,
+          "row_id": 2075623,
+          "text": "CHANGE"
+        },
+        {
+          "quad": {
+            "x2": 1614,
+            "y3": 2780,
+            "x3": 1614,
+            "y4": 2780,
+            "x1": 1372,
+            "y1": 2714,
+            "x4": 1372,
+            "y2": 2714
+          },
+          "is_key": 0,
+          "row_id": 2075623,
+          "text": "80,000"
+        }
+      ],
+      "category": "total.changeprice",
+      "group_id": 4,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

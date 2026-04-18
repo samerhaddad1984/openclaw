@@ -1,0 +1,500 @@
+{
+  "gt_parse": {
+    "menu": [
+      {
+        "nm": "TALAM UNGU",
+        "unitprice": "@6500",
+        "cnt": "3X",
+        "discountprice": "-7,800",
+        "price": "19,500"
+      },
+      {
+        "nm": "MIKA KECIL",
+        "unitprice": "@0",
+        "cnt": "1X",
+        "price": "0"
+      }
+    ],
+    "sub_total": {
+      "subtotal_price": "11,700"
+    },
+    "total": {
+      "total_price": "11,700",
+      "cashprice": "20,000",
+      "changeprice": "8,300",
+      "menuqty_cnt": "4.00xITEMs"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 8,
+    "image_size": {
+      "width": 576,
+      "height": 864
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 164,
+            "y3": 402,
+            "x3": 164,
+            "y4": 402,
+            "x1": 140,
+            "y1": 382,
+            "x4": 140,
+            "y2": 382
+          },
+          "is_key": 0,
+          "row_id": 2099600,
+          "text": "3X"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 326,
+            "y3": 406,
+            "x3": 326,
+            "y4": 406,
+            "x1": 276,
+            "y1": 384,
+            "x4": 276,
+            "y2": 384
+          },
+          "is_key": 0,
+          "row_id": 2099600,
+          "text": "@6500"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 191,
+            "y3": 426,
+            "x3": 189,
+            "y4": 423,
+            "x1": 140,
+            "y1": 400,
+            "x4": 139,
+            "y2": 403
+          },
+          "is_key": 0,
+          "row_id": 2099601,
+          "text": "TALAM"
+        },
+        {
+          "quad": {
+            "x2": 236,
+            "y3": 426,
+            "x3": 236,
+            "y4": 426,
+            "x1": 194,
+            "y1": 406,
+            "x4": 194,
+            "y2": 406
+          },
+          "is_key": 0,
+          "row_id": 2099601,
+          "text": "UNGU"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 436,
+            "y3": 428,
+            "x3": 436,
+            "y4": 428,
+            "x1": 376,
+            "y1": 406,
+            "x4": 376,
+            "y2": 406
+          },
+          "is_key": 0,
+          "row_id": 2099601,
+          "text": "19,500"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 180,
+            "y3": 446,
+            "x3": 180,
+            "y4": 446,
+            "x1": 138,
+            "y1": 424,
+            "x4": 138,
+            "y2": 424
+          },
+          "is_key": 1,
+          "row_id": 2099602,
+          "text": "DISC"
+        },
+        {
+          "quad": {
+            "x2": 226,
+            "y3": 448,
+            "x3": 226,
+            "y4": 448,
+            "x1": 184,
+            "y1": 426,
+            "x4": 184,
+            "y2": 426
+          },
+          "is_key": 1,
+          "row_id": 2099602,
+          "text": "ITEM"
+        },
+        {
+          "quad": {
+            "x2": 436,
+            "y3": 451,
+            "x3": 435,
+            "y4": 447,
+            "x1": 356,
+            "y1": 424,
+            "x4": 355,
+            "y2": 428
+          },
+          "is_key": 1,
+          "row_id": 2099602,
+          "text": "-40.000%"
+        },
+        {
+          "quad": {
+            "x2": 198,
+            "y3": 468,
+            "x3": 198,
+            "y4": 468,
+            "x1": 136,
+            "y1": 446,
+            "x4": 136,
+            "y2": 446
+          },
+          "is_key": 1,
+          "row_id": 2099603,
+          "text": "AMOUNT"
+        },
+        {
+          "quad": {
+            "x2": 438,
+            "y3": 472,
+            "x3": 438,
+            "y4": 472,
+            "x1": 374,
+            "y1": 450,
+            "x4": 374,
+            "y2": 450
+          },
+          "is_key": 0,
+          "row_id": 2099603,
+          "text": "-7,800"
+        }
+      ],
+      "category": "menu.discountprice",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 160,
+            "y3": 488,
+            "x3": 160,
+            "y4": 488,
+            "x1": 136,
+            "y1": 468,
+            "x4": 136,
+            "y2": 468
+          },
+          "is_key": 0,
+          "row_id": 2099604,
+          "text": "1X"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 296,
+            "y3": 492,
+            "x3": 296,
+            "y4": 492,
+            "x1": 272,
+            "y1": 470,
+            "x4": 272,
+            "y2": 470
+          },
+          "is_key": 0,
+          "row_id": 2099604,
+          "text": "@0"
+        }
+      ],
+      "category": "menu.unitprice",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 176,
+            "y3": 512,
+            "x3": 176,
+            "y4": 512,
+            "x1": 132,
+            "y1": 488,
+            "x4": 132,
+            "y2": 488
+          },
+          "is_key": 0,
+          "row_id": 2099605,
+          "text": "MIKA"
+        },
+        {
+          "quad": {
+            "x2": 232,
+            "y3": 514,
+            "x3": 232,
+            "y4": 514,
+            "x1": 180,
+            "y1": 490,
+            "x4": 180,
+            "y2": 490
+          },
+          "is_key": 0,
+          "row_id": 2099605,
+          "text": "KECIL"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 438,
+            "y3": 516,
+            "x3": 438,
+            "y4": 516,
+            "x1": 426,
+            "y1": 496,
+            "x4": 426,
+            "y2": 496
+          },
+          "is_key": 0,
+          "row_id": 2099605,
+          "text": "0"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 334,
+            "y3": 538,
+            "x3": 334,
+            "y4": 538,
+            "x1": 234,
+            "y1": 514,
+            "x4": 234,
+            "y2": 514
+          },
+          "is_key": 0,
+          "row_id": 2099606,
+          "text": "4.00xITEMs"
+        }
+      ],
+      "category": "total.menuqty_cnt",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 210,
+            "y3": 560,
+            "x3": 210,
+            "y4": 560,
+            "x1": 128,
+            "y1": 536,
+            "x4": 128,
+            "y2": 536
+          },
+          "is_key": 1,
+          "row_id": 2099607,
+          "text": "SUBTOTAL"
+        },
+        {
+          "quad": {
+            "x2": 440,
+            "y3": 564,
+            "x3": 440,
+            "y4": 564,
+            "x1": 378,
+            "y1": 540,
+            "x4": 378,
+            "y2": 540
+          },
+          "is_key": 0,
+          "row_id": 2099607,
+          "text": "11,700"
+        }
+      ],
+      "category": "sub_total.subtotal_price",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 226,
+            "y3": 582,
+            "x3": 226,
+            "y4": 582,
+            "x1": 130,
+            "y1": 558,
+            "x4": 130,
+            "y2": 558
+          },
+          "is_key": 1,
+          "row_id": 2099608,
+          "text": "TOTAL"
+        },
+        {
+          "quad": {
+            "x2": 442,
+            "y3": 588,
+            "x3": 442,
+            "y4": 588,
+            "x1": 378,
+            "y1": 564,
+            "x4": 378,
+            "y2": 564
+          },
+          "is_key": 0,
+          "row_id": 2099608,
+          "text": "11,700"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 206,
+            "y3": 606,
+            "x3": 206,
+            "y4": 606,
+            "x1": 126,
+            "y1": 582,
+            "x4": 126,
+            "y2": 582
+          },
+          "is_key": 1,
+          "row_id": 2099609,
+          "text": "CASH"
+        },
+        {
+          "quad": {
+            "x2": 442,
+            "y3": 614,
+            "x3": 442,
+            "y4": 614,
+            "x1": 376,
+            "y1": 588,
+            "x4": 376,
+            "y2": 588
+          },
+          "is_key": 0,
+          "row_id": 2099609,
+          "text": "20,000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 6,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 244,
+            "y3": 632,
+            "x3": 243,
+            "y4": 629,
+            "x1": 124,
+            "y1": 604,
+            "x4": 123,
+            "y2": 607
+          },
+          "is_key": 1,
+          "row_id": 2099610,
+          "text": "CHANGE"
+        },
+        {
+          "quad": {
+            "x2": 442,
+            "y3": 638,
+            "x3": 442,
+            "y4": 638,
+            "x1": 388,
+            "y1": 614,
+            "x4": 388,
+            "y2": 614
+          },
+          "is_key": 0,
+          "row_id": 2099610,
+          "text": "8,300"
+        }
+      ],
+      "category": "total.changeprice",
+      "group_id": 6,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

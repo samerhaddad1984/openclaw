@@ -1,0 +1,298 @@
+{
+  "gt_parse": {
+    "menu": {
+      "nm": "BUBBLE GUM",
+      "cnt": "1",
+      "price": "18,182"
+    },
+    "sub_total": {
+      "subtotal_price": "18,182",
+      "tax_price": "1,818"
+    },
+    "total": {
+      "total_price": "20.000",
+      "cashprice": "20.000",
+      "menuqty_cnt": "1"
+    }
+  },
+  "meta": {
+    "version": "2.0.0",
+    "split": "valid",
+    "image_id": 23,
+    "image_size": {
+      "width": 576,
+      "height": 864
+    }
+  },
+  "valid_line": [
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 86,
+            "y3": 346,
+            "x3": 86,
+            "y4": 346,
+            "x1": 74,
+            "y1": 322,
+            "x4": 74,
+            "y2": 322
+          },
+          "is_key": 0,
+          "row_id": 2148823,
+          "text": "1"
+        }
+      ],
+      "category": "menu.cnt",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 153,
+            "y3": 352,
+            "x3": 151,
+            "y4": 348,
+            "x1": 90,
+            "y1": 321,
+            "x4": 88,
+            "y2": 325
+          },
+          "is_key": 0,
+          "row_id": 2148823,
+          "text": "BUBBLE"
+        },
+        {
+          "quad": {
+            "x2": 192,
+            "y3": 352,
+            "x3": 192,
+            "y4": 352,
+            "x1": 156,
+            "y1": 328,
+            "x4": 156,
+            "y2": 328
+          },
+          "is_key": 0,
+          "row_id": 2148823,
+          "text": "GUM"
+        }
+      ],
+      "category": "menu.nm",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 438,
+            "y3": 370,
+            "x3": 438,
+            "y4": 370,
+            "x1": 374,
+            "y1": 342,
+            "x4": 374,
+            "y2": 342
+          },
+          "is_key": 0,
+          "row_id": 2148823,
+          "text": "18,182"
+        }
+      ],
+      "category": "menu.price",
+      "group_id": 3,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 169,
+            "y3": 402,
+            "x3": 167,
+            "y4": 397,
+            "x1": 86,
+            "y1": 371,
+            "x4": 84,
+            "y2": 376
+          },
+          "is_key": 1,
+          "row_id": 2148824,
+          "text": "Subtotal"
+        },
+        {
+          "quad": {
+            "x2": 437,
+            "y3": 423,
+            "x3": 435,
+            "y4": 419,
+            "x1": 370,
+            "y1": 391,
+            "x4": 368,
+            "y2": 395
+          },
+          "is_key": 0,
+          "row_id": 2148825,
+          "text": "18,182"
+        }
+      ],
+      "category": "sub_total.subtotal_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 139,
+            "y3": 425,
+            "x3": 137,
+            "y4": 421,
+            "x1": 84,
+            "y1": 395,
+            "x4": 82,
+            "y2": 399
+          },
+          "is_key": 1,
+          "row_id": 2148825,
+          "text": "PAJAK"
+        },
+        {
+          "quad": {
+            "x2": 176,
+            "y3": 426,
+            "x3": 176,
+            "y4": 426,
+            "x1": 142,
+            "y1": 402,
+            "x4": 142,
+            "y2": 402
+          },
+          "is_key": 1,
+          "row_id": 2148825,
+          "text": "10%"
+        },
+        {
+          "quad": {
+            "x2": 435,
+            "y3": 449,
+            "x3": 433,
+            "y4": 445,
+            "x1": 378,
+            "y1": 418,
+            "x4": 376,
+            "y2": 422
+          },
+          "is_key": 0,
+          "row_id": 2148826,
+          "text": "1,818"
+        }
+      ],
+      "category": "sub_total.tax_price",
+      "group_id": 4,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 137,
+            "y3": 450,
+            "x3": 135,
+            "y4": 447,
+            "x1": 84,
+            "y1": 421,
+            "x4": 82,
+            "y2": 424
+          },
+          "is_key": 1,
+          "row_id": 2148826,
+          "text": "Total"
+        },
+        {
+          "quad": {
+            "x2": 433,
+            "y3": 474,
+            "x3": 431,
+            "y4": 470,
+            "x1": 366,
+            "y1": 443,
+            "x4": 364,
+            "y2": 447
+          },
+          "is_key": 0,
+          "row_id": 2148827,
+          "text": "20.000"
+        }
+      ],
+      "category": "total.total_price",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 80,
+            "y3": 446,
+            "x3": 80,
+            "y4": 446,
+            "x1": 68,
+            "y1": 424,
+            "x4": 68,
+            "y2": 424
+          },
+          "is_key": 0,
+          "row_id": 2148826,
+          "text": "1"
+        }
+      ],
+      "category": "total.menuqty_cnt",
+      "group_id": 5,
+      "sub_group_id": 0
+    },
+    {
+      "words": [
+        {
+          "quad": {
+            "x2": 126,
+            "y3": 496,
+            "x3": 126,
+            "y4": 496,
+            "x1": 82,
+            "y1": 472,
+            "x4": 82,
+            "y2": 472
+          },
+          "is_key": 1,
+          "row_id": 2148828,
+          "text": "CASH"
+        },
+        {
+          "quad": {
+            "x2": 426,
+            "y3": 516,
+            "x3": 426,
+            "y4": 516,
+            "x1": 362,
+            "y1": 492,
+            "x4": 362,
+            "y2": 492
+          },
+          "is_key": 0,
+          "row_id": 2148829,
+          "text": "20.000"
+        }
+      ],
+      "category": "total.cashprice",
+      "group_id": 5,
+      "sub_group_id": 0
+    }
+  ],
+  "roi": {},
+  "repeating_symbol": [],
+  "dontcare": []
+}

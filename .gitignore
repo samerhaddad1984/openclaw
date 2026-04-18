@@ -192,3 +192,4 @@ gmail_token.json
 # Chaos testing framework — results and generated artifacts
 chaos/results/
 chaos/fixtures/prompts/cache/
+chaos/fixtures/real_receipts/*/images/
