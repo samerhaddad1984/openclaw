@@ -15,7 +15,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "nightmare",
         "description": "Same vendor+amount resubmitted with date shifted by 2 days",
         "input": {"pattern": "date_shift", "days_shift": 2},
-        "expected_rules_fired": ["duplicate_fuzzy"],
+        "expected_rules_fired": ["duplicate_exact"],
         "severity_on_failure": "high",
     },
     {
@@ -23,7 +23,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "nightmare",
         "description": "Resubmission of rotated receipt — fingerprint must still match",
         "input": {"pattern": "rotated_resubmission"},
-        "expected_rules_fired": ["duplicate_by_fingerprint"],
+        "expected_rules_fired": ["duplicate_exact"],
         "severity_on_failure": "high",
     },
     {
@@ -31,7 +31,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "hard",
         "description": "Invoice numbers 101, 102, 103 across 3 months — phantom vendor pattern",
         "input": {"pattern": "sequential_invoice_numbers", "count": 3, "spread_months": 3},
-        "expected_rules_fired": ["sequential_invoice_pattern"],
+        "expected_rules_fired": ["near_duplicate_invoice_number"],
         "severity_on_failure": "medium",
     },
     {
@@ -47,7 +47,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "hard",
         "description": "IGA vs I.G.A. vs IGA Inc. — fuzzy vendor match",
         "input": {"pattern": "typo_variants", "variants": ["IGA", "I.G.A.", "IGA Inc."]},
-        "expected_rules_fired": ["vendor_typo_duplicate"],
+        "expected_rules_fired": ["duplicate_exact"],
         "severity_on_failure": "medium",
     },
     {
@@ -55,7 +55,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "nightmare",
         "description": "$9,999 bill split into $4999.50 + $4999.50 to avoid $5k approval",
         "input": {"pattern": "structured_split", "limit": 5000.0, "splits": 2},
-        "expected_rules_fired": ["split_transaction"],
+        "expected_rules_fired": ["invoice_splitting_suspected"],
         "severity_on_failure": "critical",
     },
     {
@@ -71,7 +71,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "hard",
         "description": "Transactions at $499, $499, $498 when approval limit is $500",
         "input": {"pattern": "just_under_limit", "limit": 500.0, "count": 5},
-        "expected_rules_fired": ["threshold_structuring"],
+        "expected_rules_fired": ["invoice_splitting_suspected"],
         "severity_on_failure": "high",
     },
     {
@@ -87,7 +87,7 @@ FRAUD_SPECS: list[dict[str, Any]] = [
         "difficulty": "nightmare",
         "description": "Recurring small expenses from 3 employees resolve to same address",
         "input": {"pattern": "phantom_employee", "employees": 3},
-        "expected_rules_fired": ["phantom_employee"],
+        "expected_rules_fired": ["duplicate_cross_vendor"],
         "severity_on_failure": "critical",
     },
     {

@@ -63,10 +63,11 @@ RUNNER_FACTORIES = {
     "receipts":  lambda ctx: ReceiptRunner(
         image_generator=ctx["image_generator"],
         chaos_db_path=ctx["chaos_db_path"],
+        real_ocr=ctx.get("real_ocr", False),
     ),
     "audit":     lambda ctx: AuditRunner(chaos_db_path=ctx["chaos_db_path"]),
     "fraud":     lambda ctx: FraudRunner(chaos_db_path=ctx["chaos_db_path"]),
-    "financial": lambda ctx: FinancialRunner(),
+    "financial": lambda ctx: FinancialRunner(chaos_db_path=ctx["chaos_db_path"]),
     "recon":     lambda ctx: ReconRunner(chaos_db_path=ctx["chaos_db_path"]),
     "workflow":  lambda ctx: WorkflowRunner(chaos_db_path=ctx["chaos_db_path"]),
     "tax":       lambda ctx: TaxRunner(),
@@ -128,6 +129,9 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Skip image generation — use placeholder PNGs")
     p.add_argument("--use-cached", action="store_true",
                    help="Only use cached images; do not call Imagen")
+    p.add_argument("--real-ocr", action="store_true",
+                   help="Run receipt scenarios through the real OCR pipeline "
+                        "(costs money per call). Default is a deterministic mock.")
     p.add_argument("--generate-only", action="store_true",
                    help="Generate images but don't run scenarios")
     p.add_argument("--continuous", action="store_true",
@@ -226,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = {
         "image_generator": image_generator,
         "chaos_db_path":   config.CHAOS_TEST_DB_PATH,
+        "real_ocr":        bool(args.real_ocr),
     }
     runners = {track: factory(ctx) for track, factory in RUNNER_FACTORIES.items()}
 
@@ -371,7 +376,9 @@ def _run_reproduce(args) -> int:
         model=config.IMAGEN_MODEL,
         no_ai=args.no_ai or args.use_cached,
     )
-    ctx = {"image_generator": image_generator, "chaos_db_path": config.CHAOS_TEST_DB_PATH}
+    ctx = {"image_generator": image_generator,
+           "chaos_db_path": config.CHAOS_TEST_DB_PATH,
+           "real_ocr": bool(args.real_ocr)}
     runner = RUNNER_FACTORIES[sc["category"]](ctx)
     record = runner.run(sc).to_dict()
     print(json.dumps(record, indent=2))
