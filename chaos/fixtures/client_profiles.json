@@ -1,0 +1,90 @@
+[
+  {
+    "client_code": "CHAOS_RESTO_QC",
+    "archetype":   "quebec_restaurant",
+    "province":    "QC",
+    "fiscal_year_end": "12-31",
+    "has_payroll": true,
+    "has_inventory": true,
+    "tax_codes_common": ["T", "M", "Z"],
+    "expected_monthly_tx": 450,
+    "typical_vendors": ["Sysco Quebec", "Provigo Distribution", "SAQ Selection", "Hydro-Quebec"]
+  },
+  {
+    "client_code": "CHAOS_CONST_QC",
+    "archetype":   "quebec_construction",
+    "province":    "QC",
+    "fiscal_year_end": "03-31",
+    "has_payroll": true,
+    "has_inventory": false,
+    "tax_codes_common": ["T"],
+    "expected_monthly_tx": 180,
+    "typical_vendors": ["Rona", "Home Depot", "BMR", "Petro-Canada"]
+  },
+  {
+    "client_code": "CHAOS_SAAS_QC",
+    "archetype":   "quebec_saas",
+    "province":    "QC",
+    "fiscal_year_end": "12-31",
+    "has_payroll": true,
+    "has_inventory": false,
+    "tax_codes_common": ["T", "Z"],
+    "expected_monthly_tx": 95,
+    "typical_vendors": ["AWS", "Google Cloud", "GitHub", "Stripe Payments", "Slack Technologies"]
+  },
+  {
+    "client_code": "CHAOS_RETAIL_QC",
+    "archetype":   "quebec_retail",
+    "province":    "QC",
+    "fiscal_year_end": "01-31",
+    "has_payroll": true,
+    "has_inventory": true,
+    "tax_codes_common": ["T", "Z"],
+    "expected_monthly_tx": 310,
+    "typical_vendors": ["Metro Plus", "Videotron", "Hydro-Quebec", "Bell Canada"]
+  },
+  {
+    "client_code": "CHAOS_PRO_QC",
+    "archetype":   "quebec_professional_services",
+    "province":    "QC",
+    "fiscal_year_end": "12-31",
+    "has_payroll": true,
+    "has_inventory": false,
+    "tax_codes_common": ["T"],
+    "expected_monthly_tx": 70,
+    "typical_vendors": ["Staples", "Bell Canada", "Zoom", "Adobe Canada"]
+  },
+  {
+    "client_code": "CHAOS_XPROV",
+    "archetype":   "cross_provincial_business",
+    "province":    "QC",
+    "fiscal_year_end": "12-31",
+    "has_payroll": false,
+    "has_inventory": false,
+    "tax_codes_common": ["T", "HST"],
+    "expected_monthly_tx": 40,
+    "typical_vendors": ["Amazon.ca", "Purolator", "Uber Eats"]
+  },
+  {
+    "client_code": "CHAOS_TRUCKING",
+    "archetype":   "trucking_cross_border",
+    "province":    "QC",
+    "fiscal_year_end": "12-31",
+    "has_payroll": true,
+    "has_inventory": false,
+    "tax_codes_common": ["T", "HST", "Z"],
+    "expected_monthly_tx": 220,
+    "typical_vendors": ["Petro-Canada", "Shell", "Esso", "Ultramar"]
+  },
+  {
+    "client_code": "CHAOS_NONPROFIT",
+    "archetype":   "registered_charity",
+    "province":    "QC",
+    "fiscal_year_end": "03-31",
+    "has_payroll": true,
+    "has_inventory": false,
+    "tax_codes_common": ["E", "T"],
+    "expected_monthly_tx": 55,
+    "typical_vendors": ["Postes Canada", "Hydro-Quebec", "Staples"]
+  }
+]
