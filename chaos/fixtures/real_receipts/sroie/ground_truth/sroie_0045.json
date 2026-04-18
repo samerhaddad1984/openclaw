@@ -1,0 +1,16 @@
+{
+  "company": "UNIHAKKA INTERNATIONAL SDN BHD",
+  "date": "18 MAR 2018 18:25",
+  "total": "NETT TOTAL: $8.60",
+  "line_count": 3,
+  "line_descriptions": [
+    "SR I00100000031-3 VEGE",
+    "SR I00100000064-ADD VEGETABLE",
+    "SR I00100000114-ADD CHICKEN"
+  ],
+  "line_totals": [
+    "$4.40",
+    "$0.50",
+    "$3.70"
+  ]
+}

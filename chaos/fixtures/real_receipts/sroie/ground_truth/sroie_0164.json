@@ -1,0 +1,16 @@
+{
+  "company": "TK DIVISION KITCHEN SDN BHD",
+  "date": "DATE : 17/1/2018",
+  "total": "RM 29.70",
+  "line_count": 3,
+  "line_descriptions": [
+    "CHICKEN KATSU BENTO",
+    "OMU CURRY FRIED RICE SET",
+    "KATSU DON (FISH)SET"
+  ],
+  "line_totals": [
+    "12.90",
+    "6.90",
+    "9.90"
+  ]
+}

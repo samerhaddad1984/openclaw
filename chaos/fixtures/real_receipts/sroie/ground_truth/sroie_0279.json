@@ -1,0 +1,16 @@
+{
+  "company": "YONG CEN ENTERPRISE",
+  "date": "RECEIPT # CS00633950 DATE: 25/04/2017",
+  "total": "94.00",
+  "line_count": 3,
+  "line_descriptions": [
+    "ZRL:IKAN BILIS KOPEK A++ 10G",
+    "SR:TEPUNG JAGUNG CAP BINTANG 20X4",
+    "ZRL:VITAMAS CARTON"
+  ],
+  "line_totals": [
+    "25.00",
+    "25.00",
+    "42.50"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "company": "AEON CO. (M) BHD (126926-H)",
+  "date": "11/05/2018 17:19",
+  "total": "476.80",
+  "line_count": 8,
+  "line_descriptions": [
+    "1000Z TP GIKEN",
+    "AEON CARD DISC",
+    "TEFAL COMFORT M",
+    "ITEM PROMO @149.00",
+    "AEON CARD DISC",
+    "A161S545 TEFAL",
+    "ITEM PROMO @259.00",
+    "AEON CARD DISC"
+  ],
+  "line_totals": [
+    "93.90SR",
+    "-4.69",
+    "169.00SR",
+    "-20.00",
+    "-7.45",
+    "558.00SR",
+    "-299.00",
+    "-12.95"
+  ]
+}

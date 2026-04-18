@@ -1,0 +1,23 @@
+{
+  "company": "YAM FRESH",
+  "date": "DATE: 2018-03-18",
+  "total": "RM29.30",
+  "line_count": 9,
+  "line_descriptions": [
+    "R05 OYSTER MEE",
+    ":TAKE AWAY",
+    "A07 BLACKSUGAR ICE",
+    ":FRESH MILK",
+    ":PEARL",
+    ":HERB,J",
+    ":TAKE AWAY",
+    "S02 PUDDING SOYBEAN",
+    ":TAKE AWAY"
+  ],
+  "line_totals": [
+    "RM9.90",
+    "RM7.50",
+    "RM3.00",
+    "RM8.90"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "company": "LITTLE CRAVINGS SDN BHD (562007-D)",
+  "date": "18-03-2018 11 : 23",
+  "total": "RM53.60",
+  "line_count": 8,
+  "line_descriptions": [
+    "KUIH KETAYAP",
+    "ONDEH ONDEH",
+    "YELLOW LAKSA",
+    "YELLOW LAKSA",
+    "YELLOW LAKSA",
+    "AIR SEJUK",
+    "CENDOL",
+    "CHEE CHEONG FUN (SOS)"
+  ],
+  "line_totals": [
+    "RM2.70",
+    "RM2.95",
+    "RM11.60",
+    "RM11.60",
+    "RM11.60",
+    "RM0.65",
+    "RM5.30",
+    "RM7.20"
+  ]
+}

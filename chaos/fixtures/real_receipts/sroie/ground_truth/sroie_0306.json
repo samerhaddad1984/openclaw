@@ -1,0 +1,39 @@
+{
+  "company": "RESTORAN SIAM VILLAGE",
+  "date": "CREATE TIME : 27/04/2018",
+  "total": "275.90",
+  "line_count": 18,
+  "line_descriptions": [
+    "BC001 CLAYPOT F/TOFU",
+    "C004 STIR RED CURRY",
+    "DR001C THAI ICE TEA",
+    "DR002C THAI ICE GREEN",
+    "SD002 THAI STYLE",
+    "/ACACIA LEAF",
+    "SQ003L STEAMED SQUIDS",
+    "I",
+    "T002S SPICY THAI TOM",
+    "AFOOD (S)",
+    "V001 FRIED KANGKUNG",
+    "V002 S/FRIED KAILAN",
+    "D FISH",
+    "W003 THAI STYLE",
+    "PRAWN",
+    "@RM15.90",
+    "W006 WHITE RICE (PER",
+    "FILL)"
+  ],
+  "line_totals": [
+    "18.90",
+    "37.80",
+    "13.80",
+    "13.80",
+    "16.00",
+    "32.00",
+    "50.00",
+    "16.90",
+    "18.90",
+    "31.80",
+    "26.00"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "company": "RELAIS TOTAL OULMES",
+  "date": "LE 30/03/2018 A 12:36 V201855892CAISSIER 1, C",
+  "total": "TOTAL FACTURE : 56.00 DH",
+  "line_count": 3,
+  "line_descriptions": [
+    "CAFE CREME",
+    "CAFE EXPRESSO",
+    "CHOCOLAT CHAUD"
+  ],
+  "line_totals": [
+    "24.00",
+    "20.00",
+    "12.00"
+  ]
+}

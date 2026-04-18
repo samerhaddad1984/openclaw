@@ -270,20 +270,48 @@ class RealReceiptLoader:
 
     def _index_sroie(self) -> list[RealReceipt]:
         out: list[RealReceipt] = []
-        # SROIE layout: <image>.jpg + <image>.txt with lines like "company: X", "date: Y", "total: Z"
-        for img in sorted(self.base_path.rglob("*.jpg")):
-            gt = img.with_suffix(".txt")
-            if not gt.exists():
+        # SROIE layout (our mirror of arvindrajan92/sroie_document_understanding):
+        #   images/<name>.jpg + ground_truth/<name>.json
+        #   json has: company, date, total, line_count, line_descriptions, line_totals.
+        # Older "flat" SROIE mirrors: <name>.jpg + <name>.txt or <name>.json in
+        # the same directory — we still support that layout for safety.
+        images_dir = self.base_path / "images"
+        gt_dir = self.base_path / "ground_truth"
+
+        if images_dir.is_dir() and gt_dir.is_dir():
+            candidates = [(img, gt_dir / f"{img.stem}.json")
+                          for img in sorted(images_dir.glob("*.jpg"))]
+        else:
+            candidates = []
+            for img in sorted(self.base_path.rglob("*.jpg")):
                 gt = img.with_suffix(".json")
+                if not gt.exists():
+                    gt = img.with_suffix(".txt")
+                if gt.exists():
+                    candidates.append((img, gt))
+
+        for img, gt in candidates:
             if not gt.exists():
                 continue
             vendor = date = total = None
+            line_count = 0
+            line_items: list[dict[str, Any]] = []
             try:
                 if gt.suffix == ".json":
                     data = json.loads(gt.read_text())
                     vendor = data.get("company")
                     date = data.get("date")
                     total = data.get("total")
+                    line_count = int(data.get("line_count") or 0)
+                    descs = data.get("line_descriptions") or []
+                    totals = data.get("line_totals") or []
+                    for i, d in enumerate(descs):
+                        amt = totals[i] if i < len(totals) else None
+                        amt_d = _parse_sroie_amount(amt) if amt else None
+                        line_items.append({
+                            "description": str(d),
+                            "amount": str(amt_d) if amt_d is not None else None,
+                        })
                 else:
                     for line in gt.read_text(errors="ignore").splitlines():
                         if ":" not in line:
@@ -309,12 +337,15 @@ class RealReceiptLoader:
                 subtotal=None,
                 gst=None,
                 qst=None,
-                currency="MYR",  # SROIE is mostly Malaysian
-                line_count=0,
-                line_items=[],
+                currency="MYR",  # SROIE is mostly Malaysian retail, English labels
+                line_count=line_count or len(line_items),
+                line_items=line_items,
                 source_dataset="sroie",
                 difficulty_estimate=difficulty,
-                skip_fields=["gst", "qst", "subtotal", "tax_code"],
+                # SROIE has English text but no subtotal/GST/QST — we score
+                # vendor/date/total/line_count. Currency is MYR but our engine
+                # defaults to CAD; skip currency to avoid scoring noise.
+                skip_fields=["gst", "qst", "subtotal", "tax_code", "currency"],
                 raw_gt={"company": vendor, "date": date, "total": total},
             ))
         return out

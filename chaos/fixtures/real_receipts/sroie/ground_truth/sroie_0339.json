@@ -1,0 +1,16 @@
+{
+  "company": "BERRY'S CAKE HOUSE",
+  "date": "18/04/2018 5:18:08 P",
+  "total": "11.25",
+  "line_count": 3,
+  "line_descriptions": [
+    "00014960 RAISIN ALMOND BREAD",
+    "00002493 CHEESE ROLL (4)",
+    "00002479 BUTTER ROLL (4)"
+  ],
+  "line_totals": [
+    "4.55",
+    "3.90",
+    "2.80"
+  ]
+}

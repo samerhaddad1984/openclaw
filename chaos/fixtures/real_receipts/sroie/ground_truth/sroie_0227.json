@@ -1,0 +1,28 @@
+{
+  "company": "LEE WAH FLORIST SDN BHD",
+  "date": "DATE: 02/02/2018",
+  "total": "374.20",
+  "line_count": 9,
+  "line_descriptions": [
+    "PEACOCK YELLOW",
+    "STATICE FULL IMP",
+    "LILY CONCORDO 2H",
+    "SNOW WHITE LEAF",
+    "FLORIDA BEAUTY",
+    "PALM LEAF L",
+    "PALM LEAF M",
+    "ROSE INDIA SUPERIOR",
+    "SUCCULENT L"
+  ],
+  "line_totals": [
+    "25.44",
+    "144.16",
+    "61.48",
+    "12.72",
+    "3.71",
+    "38.16",
+    "14.31",
+    "23.22",
+    "50.88"
+  ]
+}

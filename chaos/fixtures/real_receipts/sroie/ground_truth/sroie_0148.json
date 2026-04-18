@@ -1,0 +1,18 @@
+{
+  "company": "RESTORAN WAN SHENG",
+  "date": "DATE: 16-03-2018",
+  "total": "9.60",
+  "line_count": 4,
+  "line_descriptions": [
+    "KOPI (B)",
+    "TEH (B)",
+    "CHAM (B)",
+    "TAKE AWAY"
+  ],
+  "line_totals": [
+    "2.20",
+    "2.20",
+    "4.40",
+    "0.80"
+  ]
+}

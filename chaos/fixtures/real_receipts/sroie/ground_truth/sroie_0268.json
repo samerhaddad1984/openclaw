@@ -1,0 +1,20 @@
+{
+  "company": "GOLDEN ARCHES RESTAURANTS SDN BHD",
+  "date": "ORD #64 -REG #2- 25/12/2016 13:51:47",
+  "total": "29.30",
+  "line_count": 7,
+  "line_descriptions": [
+    "2 L FILETOFISH",
+    "2 L COKE",
+    "NO ICE",
+    "2 L FRIES",
+    "1 6NUGGETS",
+    "1 BARBECUE SAUCE",
+    "1 SAMLL CONE"
+  ],
+  "line_totals": [
+    "21.18",
+    "7.10",
+    "1.00"
+  ]
+}

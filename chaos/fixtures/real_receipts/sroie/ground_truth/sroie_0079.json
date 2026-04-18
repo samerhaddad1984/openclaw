@@ -1,0 +1,35 @@
+{
+  "company": "THAI DELICIOUS RESTAURANT",
+  "date": "02/02/2017 7:31:08 PM",
+  "total": "92.80",
+  "line_count": 17,
+  "line_descriptions": [
+    "06S BRAISED",
+    "PORK LEG SMALL",
+    "32 PHRANAKON",
+    "SALTED EGG",
+    "SQUID",
+    "51 GARLIC FRIED",
+    "KAILAN",
+    "84 THAI STYLE",
+    "KERABUTOFU",
+    "130 PLAINRICE",
+    "113 COCONUT",
+    "THAI",
+    "116 DISTILLED",
+    "WATER",
+    "106B COLD",
+    "PANDAN GINGER",
+    "TEA"
+  ],
+  "line_totals": [
+    "20.00",
+    "28.00",
+    "13.00",
+    "15.00",
+    "7.20",
+    "6.50",
+    "0.60",
+    "2.50"
+  ]
+}

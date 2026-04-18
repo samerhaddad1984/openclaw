@@ -1,0 +1,14 @@
+{
+  "company": "RAPID RAIL SDN BHD",
+  "date": "DATE : 18/06/2018 08:18:00",
+  "total": "RM 30.00",
+  "line_count": 2,
+  "line_descriptions": [
+    "TNG RELOAD RM 30",
+    "RELOAD FEE"
+  ],
+  "line_totals": [
+    "RM 29.50",
+    "RM 0.50"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "company": "LEMON TREE RESTAURANT JTJFOODS SDN BHD",
+  "date": "INVOICE DATE: 6/1/2018 6:42:02 PM",
+  "total": "10.30",
+  "line_count": 2,
+  "line_descriptions": [
+    "X 205 - MEE MAMAK @9.80",
+    "X X1 - SKY JUICE @0.50"
+  ],
+  "line_totals": [
+    "9.80 SR",
+    "0.50 SR"
+  ]
+}

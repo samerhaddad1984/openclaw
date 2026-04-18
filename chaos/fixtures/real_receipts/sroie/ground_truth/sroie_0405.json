@@ -1,0 +1,23 @@
+{
+  "company": "COSWAY (M) SDN BHD (50118-A)",
+  "date": "INV NO/DATE:K074-001096(06/12/2016)",
+  "total": "AMT PAID INCL GST : RM111.90",
+  "line_count": 7,
+  "line_descriptions": [
+    "(B3F1)PM BATHROOM CLEANER",
+    "PM BATHROOM CLEANER",
+    "(A3F1)PMFLR CLEANER",
+    "PM CON FLOOR CLEANER-PINE",
+    "(A2F1)BG MASK 74169/157/147",
+    "BG HYDRATING SPA MASK",
+    "BG VISIBLY SOFT MILK MASK"
+  ],
+  "line_totals": [
+    "53.40SR",
+    "32.70SR",
+    "0.00SR",
+    "25.80SR",
+    "0.00SR",
+    "0.00SR"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "company": "PASAR MINI JIN SENG",
+  "date": "15/04/18",
+  "total": "44.90",
+  "line_count": 9,
+  "line_descriptions": [
+    "SEAFOOD",
+    "KENKO BEBOLA IKAN 200G",
+    "SILKEN TOFU 300G",
+    "VEGETABLES",
+    "VEGETABLES",
+    "VEGETABLES",
+    "VEGETABLES",
+    "MAS GOOD MELAKA NOODLES",
+    "VEGETABLES"
+  ],
+  "line_totals": [
+    "23.40 ZRL",
+    "1.10",
+    "1.80 ZRL",
+    "5.50 ZRL",
+    "1.30 ZRL",
+    "2.20 ZRL",
+    "4.00 ZRL",
+    "2.40",
+    "3.20"
+  ]
+}

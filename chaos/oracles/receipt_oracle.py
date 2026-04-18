@@ -1,10 +1,66 @@
 """Score a receipt extraction against ground truth."""
 from __future__ import annotations
 
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ._base import ValidationResult, amount_close, string_eq_norm
+
+
+_DATE_TOKEN_RE = re.compile(r"(\d{1,4})[/\-.](\d{1,2})[/\-.](\d{1,4})")
+
+
+def _to_ymd(raw: Any) -> tuple[int, int, int] | None:
+    """Best-effort parse of common receipt date shapes into (year, month, day).
+
+    Handles the formats we see from DocAI + SROIE ground truth:
+      - "2018-12-25"           (ISO, DocAI default)
+      - "25/12/2018 8:13:39 PM" (SROIE train set)
+      - "12-01-19 21:13 SH01"   (SROIE noisy tail)
+      - "2018/12/25"
+    Two-digit years are assumed 2000+.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    m = _DATE_TOKEN_RE.search(s)
+    if not m:
+        return None
+    a, b, c = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    # Decide YMD vs DMY vs MDY by looking at which component is four digits.
+    if a > 31:  # YYYY-MM-DD
+        year, month, day = a, b, c
+    elif c > 31:  # DD/MM/YYYY or MM/DD/YYYY
+        year = c
+        if a > 12:  # first token > 12 → must be day
+            month, day = b, a
+        elif b > 12:  # second token > 12 → must be day
+            month, day = a, b
+        else:
+            # Ambiguous (both ≤ 12). SROIE uses DD/MM/YYYY, so prefer that.
+            month, day = b, a
+    else:  # two-digit year at end
+        year = 2000 + c if c < 100 else c
+        if a > 12:
+            month, day = b, a
+        elif b > 12:
+            month, day = a, b
+        else:
+            month, day = b, a
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    return year, month, day
+
+
+def _dates_equivalent(actual: Any, expected: Any) -> bool:
+    a = _to_ymd(actual)
+    e = _to_ymd(expected)
+    if a is None or e is None:
+        return string_eq_norm(actual, expected)
+    return a == e
 
 
 # Field weights sum to 100
@@ -94,6 +150,8 @@ class ReceiptOracle:
             ok = False
             if field in ("total", "subtotal", "gst", "qst"):
                 ok = _amount_close_scaled(actual, expected, tolerance=0.05)
+            elif field == "document_date":
+                ok = _dates_equivalent(actual, expected)
             elif field == "line_count":
                 try:
                     ok = abs(int(actual) - int(expected)) <= max(1, int(expected) // 10)
@@ -102,8 +160,14 @@ class ReceiptOracle:
             elif field == "vendor":
                 # Logos survive partial damage → accept if actual is a
                 # non-trivial prefix of expected (or vice versa).
-                a = str(actual or "").strip().lower()
-                e = str(expected or "").strip().lower()
+                # Normalise by stripping punctuation/whitespace so the OCR
+                # isn't penalised for "BOOK TA K" vs "BOOK TA .K" — the
+                # characters read are the same, just tokenised differently.
+                def _norm(s: str) -> str:
+                    s = s.strip().lower()
+                    return re.sub(r"[^a-z0-9]+", "", s)
+                a = _norm(str(actual or ""))
+                e = _norm(str(expected or ""))
                 ok = bool(a) and bool(e) and (
                     a in e or e in a or len(a) >= max(4, len(e) // 2) and e.startswith(a)
                 )

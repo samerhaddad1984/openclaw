@@ -149,6 +149,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dataset-difficulty", default="all",
                    choices=["all", "easy", "normal", "hard", "nightmare"],
                    help="Filter real dataset by auto-classified difficulty.")
+    p.add_argument("--skip-fields", default=None,
+                   help="Comma-separated fields to skip in oracle scoring "
+                        "(e.g. 'total,subtotal,tax' for locale-mismatch datasets).")
     return p
 
 
@@ -187,11 +190,21 @@ def main(argv: list[str] | None = None) -> int:
         return _run_reproduce(args)
 
     # Resolve scenario list — real dataset OR generated
+    extra_skip_fields = (
+        [f.strip() for f in args.skip_fields.split(",") if f.strip()]
+        if args.skip_fields else []
+    )
     if args.dataset:
         from chaos.generators.real_receipt_loader import RealReceiptLoader
         loader = RealReceiptLoader(args.dataset)
         sampled = loader.sample(n=count, difficulty=args.dataset_difficulty)
         scenarios = [r.to_scenario() for r in sampled]
+        if extra_skip_fields:
+            for sc in scenarios:
+                existing = list(sc.get("input_spec", {}).get("skip_fields", []) or [])
+                sc.setdefault("input_spec", {})["skip_fields"] = sorted(
+                    set(existing) | set(extra_skip_fields)
+                )
         log.info("Loaded %d real receipts from %s (difficulty=%s)",
                  len(scenarios), args.dataset, args.dataset_difficulty)
     elif args.difficulty:

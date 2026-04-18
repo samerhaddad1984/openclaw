@@ -1,0 +1,30 @@
+{
+  "company": "MOONLIGHT CAKE HOUSE SDN BHD",
+  "date": ": 09/06/2018 18:47:29",
+  "total": "RM15.40",
+  "line_count": 10,
+  "line_descriptions": [
+    "T-BUTTER SUGAR BUN *#",
+    "DISCOUNT",
+    "T-COOKIE CREAM BUN *#",
+    "DISCOUNT",
+    "T-GREEN TEA MOCHI *#",
+    "DISCOUNT",
+    "T-PASTRY CHICKEN FLOSS *#",
+    "DISCOUNT",
+    "T-SAHA BREAD *#",
+    "DISCOUNT"
+  ],
+  "line_totals": [
+    "RM2.25",
+    "RM-0.45",
+    "RM3.20",
+    "RM-0.16",
+    "RM3.30",
+    "RM-0.16",
+    "RM3.20",
+    "RM-0.16",
+    "RM4.60",
+    "RM-0.23"
+  ]
+}

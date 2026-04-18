@@ -1,0 +1,22 @@
+{
+  "company": "DOMINO'S PIZZA TAMAN UNIVERSITI",
+  "date": "DATE : 28/04/18",
+  "total": "39.60",
+  "line_count": 6,
+  "line_descriptions": [
+    "PLSB-R",
+    "RCD",
+    "PEP",
+    "PEP",
+    "T/B",
+    "9\"HT"
+  ],
+  "line_totals": [
+    "0.20",
+    "14.50",
+    "3.50",
+    "3.50",
+    "7.50",
+    "27.80"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "company": "SAM SAM TRADING CO",
+  "date": "29-12-2017",
+  "total": "RM 14.10",
+  "line_count": 3,
+  "line_descriptions": [
+    "TAX AMT (S) 6%",
+    "TAX AMT (Z)",
+    "TAX AMT (E) 6%"
+  ],
+  "line_totals": [
+    "RM 13.30",
+    "RM 0.00",
+    "RM 0.00"
+  ]
+}

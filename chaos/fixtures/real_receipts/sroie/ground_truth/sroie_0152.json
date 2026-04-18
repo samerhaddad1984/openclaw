@@ -1,0 +1,20 @@
+{
+  "company": "GERBANG ALAF RESTAURANTS SDN BHD",
+  "date": "ORD #18 -REG #19- 21/03/2018",
+  "total": "25.40",
+  "line_count": 7,
+  "line_descriptions": [
+    "1 M MCCHICKEN",
+    "1 M COKE",
+    "1 M FRIES",
+    "1 MCCHICKEN",
+    "1 9NUGGETS",
+    "1 SWEET AND SOUR SAUCE",
+    "1 BARBECUE SAUCE"
+  ],
+  "line_totals": [
+    "9.50",
+    "5.00",
+    "10.90"
+  ]
+}

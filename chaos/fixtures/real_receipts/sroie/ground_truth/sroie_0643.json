@@ -1,0 +1,20 @@
+{
+  "company": "ONE ONE THREE SEAFOOD RESTAURANT SDN BHD",
+  "date": "14-06-2018 20:41:44",
+  "total": "59.00",
+  "line_count": 5,
+  "line_descriptions": [
+    "TILAPIA",
+    "VEGE ITEM",
+    "WHITE RICE",
+    "BEVERAGE",
+    "HERBAL TEA ITEM"
+  ],
+  "line_totals": [
+    "28.00 SR",
+    "16.00 SR",
+    "7.00 SR",
+    "5.00 SR",
+    "3.00 SR"
+  ]
+}

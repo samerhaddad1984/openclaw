@@ -37,17 +37,65 @@ print(f"saved {count} receipts")
 PY
 ```
 
-## SROIE (not included)
+## SROIE (included — English Malaysian retail, 652 receipts)
 
-ICDAR-2019 SROIE requires registration at https://rrc.cvc.uab.es/?ch=13.
-Alternative mirrors exist on Kaggle (`urbikn/sroie-datasetv2`) and Hugging Face
-(`mychen76/invoices-and-receipts_ocr_v1`). Drop `.jpg` + `.txt` pairs into
-`chaos/fixtures/real_receipts/sroie/` and the loader will pick them up.
+- Source: `arvindrajan92/sroie_document_understanding` on Hugging Face
+  (SROIE-2019 mirror with per-word labels: `company`, `date`, `total`,
+  `line_description`, `line_total`).
+- Useful as a locale-compatible proxy for Quebec receipts — English labels,
+  Decimal-point amounts, variable date formats (`25/12/2018 8:13:39 PM`).
+
+### Refetch the images
+
+```bash
+pip install --break-system-packages pyarrow huggingface_hub
+mkdir -p chaos/fixtures/real_receipts/sroie/images chaos/fixtures/real_receipts/sroie/ground_truth
+
+python3 - <<'PY'
+from huggingface_hub import hf_hub_download
+from pathlib import Path
+from collections import defaultdict
+import pyarrow.parquet as pq
+import json
+
+p = hf_hub_download(
+    repo_id="arvindrajan92/sroie_document_understanding",
+    repo_type="dataset",
+    filename="data/train-00000-of-00001-66201d4afd6b73ca.parquet",
+)
+OUT = Path("chaos/fixtures/real_receipts/sroie")
+for r in pq.read_table(p).to_pylist():
+    img_bytes = (r.get("image") or {}).get("bytes")
+    if not img_bytes:
+        continue
+    groups = defaultdict(list)
+    for w in (r.get("ocr") or []):
+        t = (w.get("text") or "").strip()
+        if t:
+            groups[w.get("label") or ""].append(t)
+    i = r.get("id") or 0
+    name = f"sroie_{i:04d}"
+    (OUT / "images" / f"{name}.jpg").write_bytes(img_bytes)
+    (OUT / "ground_truth" / f"{name}.json").write_text(json.dumps({
+        "company":           " ".join(groups.get("company", [])).strip() or None,
+        "date":              (groups.get("date") or [None])[0],
+        "total":             (groups.get("total") or [None])[0],
+        "line_count":        len(groups.get("line_description", [])),
+        "line_descriptions": groups.get("line_description", []),
+        "line_totals":       groups.get("line_total", []),
+    }, indent=2))
+PY
+```
 
 ## Running
 
 ```bash
 python3 chaos/run_chaos.py --dataset cord --count 50 --real-ocr
+python3 chaos/run_chaos.py --dataset sroie --count 50 --real-ocr
 python3 chaos/reports/real_dataset_report.py \
   chaos/results/runs/<run_id> /tmp/chaos_report.md
 ```
+
+Use `--skip-fields total,subtotal,tax` with CORD if you want to compare
+vendor/date/line_count only (the oracle's locale-scaled tolerance already
+handles IDR `.` thousands, so the flag is optional).

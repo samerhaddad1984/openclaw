@@ -1,0 +1,20 @@
+{
+  "company": "GOLDEN ARCHES RESTAURANTS SDN BHD",
+  "date": "ORD #95 -REG #19- 24/07/2016 14:21:51",
+  "total": "28.20",
+  "line_count": 6,
+  "line_descriptions": [
+    "2 VM MCCHICKEN",
+    "2 M COKE",
+    "2 M FRIES",
+    "1 MCCHICKEN",
+    "2 SUNDAECHOC",
+    "1 CHOCTOP"
+  ],
+  "line_totals": [
+    "15.90",
+    "4.00",
+    "6.40",
+    "1.90"
+  ]
+}

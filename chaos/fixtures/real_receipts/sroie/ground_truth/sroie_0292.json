@@ -1,0 +1,30 @@
+{
+  "company": "99 SPEED MART S/B (519537-X)",
+  "date": "01-11-17",
+  "total": "52.10",
+  "line_count": 10,
+  "line_descriptions": [
+    "0515 SNEK KU TAM TAM CRAB F",
+    "0649 TIC TAC CANDY MINT (WH",
+    "5178 MENTOS SOUR MIX CHEWY",
+    "2651 MUNCHYS CRACKER SANDWI",
+    "0249 JULIES PEANUT BUTTER S",
+    "820 PIPIT BLEACH 2*1KG TP",
+    "480 TOP SUPER WHITE (RED) 2",
+    "9170 CA3210 CAMEL SHORTHAND",
+    "9413 CS 1002 A5 H/COVER NOT",
+    "8445 7CC UHU GLUE"
+  ],
+  "line_totals": [
+    "RM3.65 S",
+    "RM2.10 S",
+    "RM2.45 S",
+    "RM8.38 S",
+    "RM7.55 S",
+    "RM4.20 S",
+    "RM12.65 S",
+    "RM1.90 S",
+    "RM4.80 S",
+    "RM4.40 S"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "company": "THE ROTI MAN BAKERY",
+  "date": "04-05-2018 16:07",
+  "total": "RM20.40",
+  "line_count": 3,
+  "line_descriptions": [
+    "BACON",
+    "WALNUT RAISIN",
+    "DARK RYE BUN"
+  ],
+  "line_totals": [
+    "RM4.90",
+    "RM8.60",
+    "RM6.90"
+  ]
+}

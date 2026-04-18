@@ -1,0 +1,18 @@
+{
+  "company": "SWEET FOREST CAFE",
+  "date": ": 14-02-2018",
+  "total": "30.30",
+  "line_count": 4,
+  "line_descriptions": [
+    "SMOKED DUCK SPAGHETTI",
+    "HOT GREEN TEA",
+    "COFFEE(H)",
+    "RENDANG CHICKEN RICE"
+  ],
+  "line_totals": [
+    "12.50",
+    "3.00",
+    "4.90",
+    "9.90"
+  ]
+}

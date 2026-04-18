@@ -1,0 +1,26 @@
+{
+  "company": "GARDENIA BAKERIES (KL) SDN BHD (139386 X)",
+  "date": "DATE: 12/10/2017",
+  "total": "59.54",
+  "line_count": 8,
+  "line_descriptions": [
+    "O.C. WHITE",
+    "WHOLEMEAL",
+    "O.C JUMBO",
+    "CR-CORN",
+    "CR-B'SCOTCH",
+    "SQ-CHOCMLT",
+    "BUN-SBILIS",
+    "SC-CLASSIC"
+  ],
+  "line_totals": [
+    "12.78",
+    "2.78",
+    "11.88",
+    "14.40",
+    "-0.72",
+    "-7.56",
+    "16.80",
+    "7.36"
+  ]
+}

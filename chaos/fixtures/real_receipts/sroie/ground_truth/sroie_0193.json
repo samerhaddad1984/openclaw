@@ -1,0 +1,22 @@
+{
+  "company": "SUPER SEVEN CASH & CARRY SDN BHD",
+  "date": "12-02-2018",
+  "total": "RM367.10",
+  "line_count": 6,
+  "line_descriptions": [
+    "BORY FLTTLET 300UP(3)6KG @63.00",
+    "BERAS BIRI-BIRI 10KG 5% ISTIMEWA",
+    "BAWANG BESAR INDIA/CINA GUNI @8.50",
+    "BAHAS CILI 1KG @19.50",
+    "BABAS KARI DAGING 1KG @17.20",
+    "CILI BOH 3KG KCK @7.90"
+  ],
+  "line_totals": [
+    "252.00 ZR",
+    "53.50 ZR",
+    "17.00 ZR",
+    "19.50 ZR",
+    "17.20 ZR",
+    "7.90 SR"
+  ]
+}

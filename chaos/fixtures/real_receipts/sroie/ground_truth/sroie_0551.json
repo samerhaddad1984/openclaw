@@ -1,0 +1,40 @@
+{
+  "company": "AEON CO. (M) BHD",
+  "date": "10/06/2018",
+  "total": "127.35",
+  "line_count": 15,
+  "line_descriptions": [
+    "CHEK-HUP 2IN1",
+    "ITEM PROMO @12.99",
+    "MS SWM ENZO RT",
+    "VALENCIA ORANGE",
+    "US RED GLOBE",
+    "CN PEAR",
+    "CHN FUJI AP 4S",
+    "AUS SEEKA KIWI",
+    "ITEM PROMO @9.00",
+    "CHILE ANGELENO",
+    "CUT FRUITS 1.99",
+    "CHERRY SUNGOLD",
+    "TURKEY CHERRY 2",
+    "ITEM PROMO @11.90",
+    "SUSHI SET-PTC"
+  ],
+  "line_totals": [
+    "15.56SR",
+    "-2.57",
+    "10.28SR",
+    "18.50SR",
+    "10.00SR",
+    "10.50SR",
+    "14.00SR",
+    "10.90SR",
+    "-1.90",
+    "7.90SR",
+    "2.50SR",
+    "4.80SR",
+    "18.90SR",
+    "-7.00",
+    "15.00SR"
+  ]
+}

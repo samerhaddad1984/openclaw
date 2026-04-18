@@ -1,0 +1,30 @@
+{
+  "company": "99 SPEED MART S/B (519537-X)",
+  "date": "10-05-17",
+  "total": "72.75",
+  "line_count": 10,
+  "line_descriptions": [
+    "2174 A&W SARSAPARILLA 1.5L",
+    "2502 COKE ZERO 1.25L STOP",
+    "261 HELANG MINYAK MASAK 5KG",
+    "325 CINTAN MI PERISA ASLI 5",
+    "311 MAMEE EXPRESS MI CAWAN",
+    "5425 MAGGI HOT CUP MEE TOM",
+    "066 MILO FUZE 3IN1 ORIGINAL",
+    "1821 JULIES SUGAR CRACKERS",
+    "6059 SBB TWISTIES COOKIES 1",
+    "371 BIN BIN RICE CRACKER 15"
+  ],
+  "line_totals": [
+    "RM2.85 S",
+    "RM2.50 S",
+    "RM24.40 Z",
+    "RM3.65 S",
+    "RM1.29",
+    "RM3.50 S",
+    "RM13.65 S",
+    "RM6.70 S",
+    "RM2.30 S",
+    "RM11.90 S"
+  ]
+}

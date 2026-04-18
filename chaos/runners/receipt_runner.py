@@ -92,6 +92,28 @@ CREATE TABLE IF NOT EXISTS documents (
 """
 
 
+def _lookup_line_count(db_path: Path, document_id: str | None) -> int:
+    """Read the live line-item count produced by process_line_items.
+
+    Production's ocr_engine.process_file stores line items in the
+    invoice_lines table as a side effect (not the return value), so we
+    query that table after-the-fact to surface the real count in chaos
+    output. Missing table / missing doc = 0, which is what we'd report
+    to a CPA anyway.
+    """
+    if not document_id:
+        return 0
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cur = conn.execute(
+                "SELECT COUNT(*) FROM invoice_lines WHERE document_id = ?",
+                (document_id,),
+            )
+            return int(cur.fetchone()[0] or 0)
+    except sqlite3.OperationalError:
+        return 0
+
+
 def _ensure_chaos_documents_table(db_path: Path) -> None:
     """Create a documents table with the full production schema so the
     OCR pipeline's upsert_document can run against a fresh chaos DB.
@@ -288,6 +310,7 @@ class ReceiptRunner:
         rnd = random.Random(self.seed + (abs(hash(scenario.get("id", ""))) % 10_000_000))
 
         real_dataset_path = spec.get("image_path") if spec.get("kind") == "real_receipt" else None
+        extraction_method: str | None = None
 
         if real_dataset_path:
             # Real dataset scenario: run the live OCR pipeline on the
@@ -317,8 +340,11 @@ class ReceiptRunner:
                         "qst":           processed.get("qst"),
                         "currency":      processed.get("currency"),
                         "tax_code":      processed.get("tax_code"),
-                        "line_count":    processed.get("line_count") or len(processed.get("line_items") or []),
+                        "line_count":    _lookup_line_count(
+                            self.chaos_db_path, processed.get("document_id")
+                        ) or processed.get("line_count") or len(processed.get("line_items") or []),
                     }
+                    extraction_method = processed.get("extraction_method")
                     calls = ["ocr_engine.process_file"]
             except Exception as e:
                 extracted = {"ok": False, "error": f"{type(e).__name__}: {e}"}
@@ -348,8 +374,11 @@ class ReceiptRunner:
                         "qst":           processed.get("qst"),
                         "currency":      processed.get("currency"),
                         "tax_code":      processed.get("tax_code"),
-                        "line_count":    processed.get("line_count") or len(processed.get("line_items") or []),
+                        "line_count":    _lookup_line_count(
+                            self.chaos_db_path, processed.get("document_id")
+                        ) or processed.get("line_count") or len(processed.get("line_items") or []),
                     }
+                    extraction_method = processed.get("extraction_method")
                     calls = ["ocr_engine.process_file"]
             except Exception as e:
                 extracted = {"ok": False, "error": f"{type(e).__name__}: {e}"}
@@ -367,6 +396,7 @@ class ReceiptRunner:
                          "source_dataset": spec.get("source_dataset"),
                          "image_path": real_dataset_path,
                          "functions_called": calls,
+                         "extraction_method": extraction_method,
                          "mode": "real_dataset" if real_dataset_path else (
                              "real_ocr" if self.real_ocr else "mock")}
         result.oracle_result = oracle_result.to_dict()

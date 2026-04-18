@@ -1,0 +1,20 @@
+{
+  "company": "ONE ONE THREE SEAFOOD RESTAURANT SDN BHD",
+  "date": ": 28-05-2018 23:28:57",
+  "total": "112.35",
+  "line_count": 5,
+  "line_descriptions": [
+    "GROUPER",
+    "VEGE ITEM",
+    "OMELLETE ITEM",
+    "WHITE RICE",
+    "BEVERAGE"
+  ],
+  "line_totals": [
+    "70.00 SR",
+    "15.00 SR",
+    "8.00 SR",
+    "8.00 SR",
+    "5.00 SR"
+  ]
+}

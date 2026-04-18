@@ -1,0 +1,22 @@
+{
+  "company": "GREEN LANE PHARMACY SDN BHD",
+  "date": ": 12/13/2016 9:52:15 AM",
+  "total": "180.10",
+  "line_count": 6,
+  "line_descriptions": [
+    "1)9557892102639 IBUPROFEN 400MG 10",
+    "2)0253K AMOXICAP 500MG CAPSU",
+    "3)9557892201011 NOFLUX TAB 90MG 10",
+    "4)9556492002837K FEBRICOL -RX 10",
+    "5)9316254866387 VITAMORE EPO 1000MG",
+    "6)9555197602366 NOVA ROSELLE &F VIT"
+  ],
+  "line_totals": [
+    "9.00 Z",
+    "12.00 Z",
+    "19.98 *",
+    "5.40 Z",
+    "25.70 *",
+    "108.00 *"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "company": "AEON CO. (M) BHD. (126926-H)",
+  "date": "28/02/2018 20:11",
+  "total": "88.95",
+  "line_count": 15,
+  "line_descriptions": [
+    "V-CHOR FRA",
+    "CE 13312 LONG H",
+    "GL HARUMI WASHI",
+    "BL HARUMI WASHI",
+    "BL HARUMI WASHI",
+    "LIDI BROOM W/P",
+    "E-71/MP WATER D",
+    "UNICORN 24MMX",
+    "DISC 10% @8.01",
+    "SW CE3914B NYL",
+    "18MMX1 WHITE D",
+    "DISC 10% @2.25",
+    "CABLE BOX",
+    "DISC 41% @11.16",
+    "PLASTICS BAG"
+  ],
+  "line_totals": [
+    "16.90SR",
+    "10.45SR",
+    "7.90SR",
+    "7.90SR",
+    "7.90SR",
+    "4.10SR",
+    "4.90SR",
+    "8.90SR",
+    "-0.89",
+    "7.30SR",
+    "2.50SR",
+    "-0.25",
+    "18.90SR",
+    "-7.74",
+    "0.20SR"
+  ]
+}

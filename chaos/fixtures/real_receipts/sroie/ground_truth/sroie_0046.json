@@ -1,0 +1,16 @@
+{
+  "company": "UNIHAKKA INTERNATIONAL SDN BHD",
+  "date": "27 MAR 2018 18:46",
+  "total": "NETT TOTAL:$6.90",
+  "line_count": 3,
+  "line_descriptions": [
+    "SR I00100000056-FRIED NOODLE(S)",
+    "SR I00100000006-PORK",
+    "SR I00100000015-VEGETABLE"
+  ],
+  "line_totals": [
+    "$2.00",
+    "$2.70",
+    "$2.20"
+  ]
+}

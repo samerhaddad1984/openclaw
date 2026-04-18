@@ -1,0 +1,30 @@
+{
+  "company": "MOONLIGHT CAKE HOUSE SDN BHD 862725-U",
+  "date": ": 04/06/2018",
+  "total": "RM21.85",
+  "line_count": 10,
+  "line_descriptions": [
+    "BUTTER SLICE CHEESE *#",
+    "DISCOUNT",
+    "EUROPE BUN *#",
+    "DISCOUNT",
+    "GREEN TEA MOCHI *#",
+    "DISCOUNT",
+    "TOAST (B) - COFFEE CREAM CH",
+    "DISCOUNT",
+    "WALNUT MULTIGRAIN *#",
+    "DISCOUNT"
+  ],
+  "line_totals": [
+    "RM4.15",
+    "RM-0.20",
+    "RM3.70",
+    "RM-0.18",
+    "RM3.30",
+    "RM-0.16",
+    "RM7.85",
+    "RM-0.39",
+    "RM3.95",
+    "RM-0.19"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "company": "PERNIAGAAN ZHENG HUI",
+  "date": "DATE: 09/03/2018",
+  "total": "332.30",
+  "line_count": 11,
+  "line_descriptions": [
+    "SR: 14\" TRU-CUT CUTTING DISC (1 PC)",
+    "SR: KOBELCO G-12#(2.6MM) WELDING",
+    "SR: CS 3\" (750) PAINT BRUSH",
+    "SR: CS 2\" (750) PAINT BRUSH",
+    "SR: CS 1-1/2\" (750) PAINT BRUSH",
+    "SR:2\" LAMBWOOL YANDA ROLLER REFIL - 20 PCS",
+    "SR: DIAMOND COTTON GLOVE 8104",
+    "SR: 10# WELDING GLASS (BLACK) 1PCS",
+    "SR: WELDING GLASS (CLEAR) 1 PC",
+    "SR: AEC BROOM NO.5110# C/W IRON HANDLE",
+    "SR: S/STEEL DUST PANL C/W HANDLE 23 X 28 X"
+  ],
+  "line_totals": [
+    "170.00",
+    "35.00",
+    "15.00",
+    "11.00",
+    "3.50",
+    "25.00",
+    "6.00",
+    "5.00",
+    "3.00",
+    "16.00",
+    "24.00"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "company": "YONG SOON FATT S/B (81497-P)",
+  "date": "6/2/2017 12:42 PM",
+  "total": "758.70",
+  "line_count": 13,
+  "line_descriptions": [
+    "KCL SOH HOON 5KG",
+    "BAWANG PUTIH",
+    "A1 BIHUN ISTIMEWA 3KG",
+    "ABC TEPUNG UBI KAYU 1KG",
+    "LIMA GAJAH TEPUNG BERAS 500",
+    "ALISHAN YOUNG CORN 425GM",
+    "NEW SUN BUTTON MUSHROOM 425",
+    "RAMBUTAN BERAS SST 5% 10KG",
+    "DAIRY CHAMP EVAP 390GM",
+    "LIFE SOS CILI 340GM",
+    "MAGGI SOS TOMATO 325GM",
+    "LIFE SOS CILI 500GM",
+    "MAGGI SOS TOMATO 475GM"
+  ],
+  "line_totals": [
+    "31.50 SR",
+    "37.50 ZRL",
+    "50.00 ZRL",
+    "27.00 ZRL",
+    "26.80 ZRL",
+    "52.00 SR",
+    "58.00 SR",
+    "156.00 ZRL",
+    "113.90 SR",
+    "63.60 SR",
+    "62.20 SR",
+    "41.20 SR",
+    "39.00 SR"
+  ]
+}

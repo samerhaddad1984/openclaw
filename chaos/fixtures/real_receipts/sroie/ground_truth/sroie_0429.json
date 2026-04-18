@@ -1,0 +1,32 @@
+{
+  "company": "99 SPEED MART S/B (519537-X)",
+  "date": "11-05-16",
+  "total": "177.20",
+  "line_count": 11,
+  "line_descriptions": [
+    "967 ANCHOR SERBUK CUCI 4KG",
+    "886 DOVE CREAM BAR SOAP 100",
+    "5551 FERNLEAF FULL CRM MILK",
+    "2267 COLGATE GREAT REGULAR",
+    "265 LEE KUM KEE SOS TIRAM C",
+    "193 CHEONG CHAN SOS KARAMEL",
+    "2394 MISTER POTATO CHIPS BB",
+    "8019 MARIGOLD HL MILK 1L",
+    "706 BINTANG TEPUNG JAGUNG 4",
+    "2216 NUTELLA FERRERO HAZELN",
+    "9547 NUTRIPLUS CHEESE CHICK"
+  ],
+  "line_totals": [
+    "RM18.80 S",
+    "RM26.50 S",
+    "RM40.95 S",
+    "RM15.98 S",
+    "RM22.80 S",
+    "RM5.09 S",
+    "RM7.90 S",
+    "RM12.70 S",
+    "RM1.35 S",
+    "RM14.65 S",
+    "RM10.50 S"
+  ]
+}

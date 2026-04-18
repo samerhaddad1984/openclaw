@@ -1,0 +1,18 @@
+{
+  "company": "NADEJE PLATINUM SDN BHD",
+  "date": "DATE: 2016/05/01 14:11:20",
+  "total": "GRAND TOTAL RM51.30",
+  "line_count": 4,
+  "line_descriptions": [
+    "DOUBLECOCO SLICE",
+    "MOTHER'S SLICES",
+    "TIRAMISU SLICE",
+    "CHEESE SLICE"
+  ],
+  "line_totals": [
+    "RM12.60",
+    "RM13.50",
+    "RM12.60",
+    "RM12.60"
+  ]
+}

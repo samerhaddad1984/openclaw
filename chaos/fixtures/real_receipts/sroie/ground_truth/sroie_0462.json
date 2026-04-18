@@ -1,0 +1,16 @@
+{
+  "company": "UNIHAKKA INTERNATIONAL SDN BHD",
+  "date": "24 MAY 2018 18:29",
+  "total": "NETT TOTAL: $8.40",
+  "line_count": 3,
+  "line_descriptions": [
+    "SR I00100000025- 1 MEAT + 2 VEGE",
+    "SR I00100000170- IMPORTED VEGGIES",
+    "SR I00100000149- ADD VEGETABLE (X)"
+  ],
+  "line_totals": [
+    "$6.00",
+    "$1.60",
+    "$0.80"
+  ]
+}

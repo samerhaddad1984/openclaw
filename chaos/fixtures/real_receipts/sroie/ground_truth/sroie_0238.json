@@ -1,0 +1,24 @@
+{
+  "company": "POPULAR BOOK CO. (M) SDN BHD",
+  "date": "27/02/18 21:22",
+  "total": "40.99",
+  "line_count": 7,
+  "line_descriptions": [
+    "DOCUMENT HOL A4 1466A-TRA",
+    "MEMBER DISCOUNT",
+    "PB PVC A4 L-FLD PBA4L25",
+    "MEMBER DISCOUNT",
+    "CANON CAL AS120V GREY",
+    "MEMBER DISCOUNT",
+    "NASI'APR16/SEASHORE"
+  ],
+  "line_totals": [
+    "2.30 T",
+    "-0.24",
+    "7.80 T",
+    "-0.78",
+    "29.90 T",
+    "-2.99",
+    "5.00 Z"
+  ]
+}

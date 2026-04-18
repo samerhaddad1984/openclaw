@@ -1,0 +1,28 @@
+{
+  "company": "GERBANG ALAF RESTAURANTS SDN BHD",
+  "date": "ORD #94 -REG #19- 21/05/2018 11:59:48",
+  "total": "70.30",
+  "line_count": 12,
+  "line_descriptions": [
+    "1 NASI MCD AGSPI &TELUR SET",
+    "1 NASI MCD AGSPI &TELUR",
+    "XTRA SAMBAL",
+    "1 M ICELEMONTEA",
+    "1 L NASI LEMAK BURGER",
+    "1 L FRIES",
+    "1 L 100PLUS",
+    "2 NASI MCD AGSPI SET",
+    "2 M ICELEMONTEA",
+    "1 AYAMGRGSPICY(TA)",
+    "1 4NUGGETS",
+    "1 FRENCH CHEESE SAUCE"
+  ],
+  "line_totals": [
+    "14.95",
+    "1.00",
+    "18.55",
+    "25.90",
+    "9.90",
+    "0.00"
+  ]
+}

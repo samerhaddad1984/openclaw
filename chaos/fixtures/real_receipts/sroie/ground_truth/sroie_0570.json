@@ -1,0 +1,18 @@
+{
+  "company": "RESTORAN DE COFFEE O",
+  "date": "03/04/2018",
+  "total": "11.60",
+  "line_count": 4,
+  "line_descriptions": [
+    "SR: COFFEE O (T.AWAY)",
+    "SR: TEA (T.AWAY)",
+    "SR: COFFEE (T.AWAY)",
+    "SR: SOYA BEAN (T AWAY)"
+  ],
+  "line_totals": [
+    "2.30",
+    "2.40",
+    "4.80",
+    "2.10"
+  ]
+}

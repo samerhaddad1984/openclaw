@@ -1,0 +1,19 @@
+{
+  "company": "BANH MI CAFE",
+  "date": ": 29-10-2017 18:31:45",
+  "total": "23.25",
+  "line_count": 6,
+  "line_descriptions": [
+    "205 SUONG NON RAM CHUA",
+    "205 SWEET &SOUR PORK RIBS",
+    "217 TAU HU DON THIT CHI",
+    "217 STUFF MEAT TAU FU",
+    "605 TRA DA",
+    "605 VIETNAMESE ICED TEA"
+  ],
+  "line_totals": [
+    "9.90",
+    "9.90",
+    "1.50"
+  ]
+}

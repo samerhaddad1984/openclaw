@@ -1,0 +1,16 @@
+{
+  "company": "FY EAGLE ENTERPRISE",
+  "date": "RECEIPT #: CS00040529 DATE: 24/05/2018",
+  "total": "52.00",
+  "line_count": 3,
+  "line_descriptions": [
+    "SR:8PCS AA ENERGIZER(BP.ME)WF",
+    "SR:8PCS AAA ENERGIZER(BP.SC)WF",
+    "SR:EVEREADY SHD AA 4PC 1215BP4(YO.PM)-WF"
+  ],
+  "line_totals": [
+    "22.00",
+    "22.00",
+    "8.00"
+  ]
+}
