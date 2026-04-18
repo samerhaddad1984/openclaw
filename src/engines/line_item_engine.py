@@ -1257,6 +1257,13 @@ Return JSON only:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
+        # Production migrates the invoice_lines schema via review_dashboard,
+        # but this entry point also runs against fresh/test DBs where the
+        # table hasn't been created. Without this guard, the DELETE below
+        # raises "no such table: invoice_lines", the whole call is swallowed
+        # by ocr_engine's non-fatal try/except, and DocAI-derived lines are
+        # silently lost.
+        _ensure_invoice_lines_table(conn)
         # Clear old lines
         conn.execute('DELETE FROM invoice_lines WHERE document_id = ?', (document_id,))
 

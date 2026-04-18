@@ -103,22 +103,44 @@ class ParsedReceipt:
 # ---------------------------------------------------------------------------
 
 _PRICE_RE = re.compile(r'-?\$?\d+[.,]\d{2}')
-_PRICE_ONLY_RE = re.compile(r'^-?\$\d+[.,]\d{2}$')
+# Accept bare-number price-only lines ("10.00") and common non-US currency
+# prefixes ("RM 60.30", "MYR 60.30", "Rs 120,00", "€2,49"). Production Quebec
+# receipts almost always prefix with `$`, but international receipts (SROIE,
+# CORD) drop the `$`, which used to cause every bare-number line to be
+# classified as an ITEM.
+_PRICE_ONLY_RE = re.compile(
+    r'^(?:\$|RM|MYR|Rp|IDR|Rs|€|£|¥|CAD|USD)?\s*-?\d+[.,]\d{2}$',
+    re.IGNORECASE,
+)
 _WEIGHT_RE = re.compile(r'(\d+[.,]\d+)\s*(?:kg|lb|g)\b', re.IGNORECASE)
 _AT_PRICE_RE = re.compile(r'@\s*\$?\s*(\d+[.,]\d{2})', re.IGNORECASE)
 _QTY_RE = re.compile(r'^(\d+)\s*[xX@]\s', re.IGNORECASE)
 
 _DISCOUNT_KW = re.compile(
     r'rabais|discount|escompte|remise|economie|savings?|off\b|ristourne|'
-    r'prix\s+membre|member\s+price|coupon',
+    r'prix\s+membre|member\s+price|coupon|'
+    # "@DISC 10.00%", "@DISC 5%" — a percentage discount modifier tacked
+    # onto the line above it. The retail receipts in SROIE use this a lot.
+    r'@?disc\b|\d+\s*%\s*(?:off|disc)',
     re.IGNORECASE,
 )
 _SUBTOTAL_KW = re.compile(
-    r'sous[- ]?total|subtotal|sub\s*total|^sous\s+\$',
+    r'sous[- ]?total|subtotal|sub\s*total|^sous\s+\$|'
+    # OCR sometimes mangles "Subtotal" as "Sub 1 al" (the 't' kerning gets
+    # read as a digit). Match "sub" followed by up to 6 non-letter chars
+    # and "al" / "tal" — covers "subtotal", "sub-total", "sub 1 al".
+    r'\bsub[^a-z]{0,6}t?al\b',
     re.IGNORECASE,
 )
 _TAX_KW = re.compile(
-    r'\bTPS\b|\bTVQ\b|\bGST\b|\bQST\b|\bHST\b|\bPST\b|\btaxe?\b',
+    r'\bTPS\b|\bTVQ\b|\bGST\b|\bQST\b|\bHST\b|\bPST\b|\btaxe?\b|'
+    # Malaysian GST-code summary rows: "SR 6% 15.00 0.90", "ZR 0% 0.00",
+    # "ZR/OS/EZ 0.00 0.00", "TAX AMT (S) 6% RM 13.30", "S 6% 60.50 3.63".
+    r'^\s*(?:SR|ZR|GR|EZ|OS|DS|ES|RS|S|Z|T)\s*[@/\s]?\s*\d{1,2}\s*%|'
+    # Allow the leading tax-code token to be followed by a slash-joined
+    # chain of other codes before the amount ("ZR/OS/EZ 0.00").
+    r'^\s*(?:SR|ZR|GR|EZ|OS|DS|ES|RS)(?:\s*/\s*[A-Z]{1,3})*\s*[\d.,-]|'
+    r'\btax\s*amt\b|\btax\s*code\b',
     re.IGNORECASE,
 )
 _TOTAL_KW = re.compile(
@@ -131,12 +153,35 @@ _SKIP_KW = re.compile(
     r'argent|monnaie|change\b|cash\b|terminal|transaction|'
     r'approbation|approved|declined|'
     r'^\*+\s*[eéÉ]conomies|^rabais\s*:|prix\s+membre\s+scene|'
-    r'^m[eéÉ]dia$',
+    r'^m[eéÉ]dia$|'
+    # Rounding adjustment lines (Malaysian/Indonesian receipts love these
+    # because local currencies round to 0.05). Never a line item. Pattern
+    # tolerates common OCR corruption ("Rour ding", "Roun ding") where the
+    # ascender on 'd' gets split by upstream OCR.
+    r'\brou[a-z]*\s*ding?\b|\badjustment\b|'
+    # Payment / service charge rows. "Payment: 50.00", "Service Charge",
+    # "S/Charge", "Govt Tax", "Rounded" on retail receipts.
+    r'\bpayment\s*:|service\s+charge|s/?charge|govt\s+tax|'
+    # Fuel pump metadata on gas receipts: "35.10 litre Pump # 02",
+    # "2.450 RM / litre". The line above (V-Power 97 RM 86.00) is the
+    # real item; these siblings count as one item too.
+    r'\bpump\s*#?|\blitre\b|\bgallon\b|'
+    # Grand-total alias on Malaysian receipts ("CAL RM 73.00") and the
+    # "No. Qtys / No. Items" summary row. Never a line item.
+    r'^\s*cal\s+(?:rm|myr|\$)|no\.\s*qtys?|no\.\s*items?|'
+    # Unit-price headers that DocAI sometimes emits as their own row
+    # ("Qty S/Price Item 50.88 SR", "Description Qty Price Amount").
+    r'^(?:qty\b|s/?price|description|item\b)',
     re.IGNORECASE,
 )
 _HEADER_KW = re.compile(
     r'caiss|store|magasin|succursale|branch|address|adresse|'
-    r'date\s*:|heure|time\s*:|receipt|recu|facture|invoice\s*#',
+    r'date\s*:|heure|time\s*:|receipt|recu|facture|invoice\s*#|'
+    # Street-address markers (SROIE receipts have Malaysian addresses as
+    # their header rows; DocAI merges the shop name above them, leaving
+    # "NO.53, JALAN SAGU 18" + a coincidental price-like token like
+    # "55,57" to trip the ITEM classifier).
+    r'\bjalan\b|\bjln\b|\btaman\b|\bno\.\s*\d',
     re.IGNORECASE,
 )
 _SECTION_HEADERS = frozenset({
@@ -211,16 +256,45 @@ class ReceiptSpatialEngine:
     # -- step 1: spatial grouping -------------------------------------------
 
     def _group_into_lines(self, words: list[OCRWord]) -> list[ReceiptLine]:
-        """Convert DocAI line segments into ReceiptLines sorted top-to-bottom.
+        """Group DocAI segments into receipt rows by Y-coordinate proximity.
 
-        Each DocAI segment becomes its own ReceiptLine.  Pairing of
-        description + price lines happens in _build_structures.
+        DocAI often splits a single visual receipt row ("SUBTOTAL 60.31") into
+        two separate text segments — the label on the left, the amount on the
+        right. Treating each segment as its own line means the bare "60.31"
+        gets classified as an ITEM instead of a SUBTOTAL. So we first merge
+        segments whose bounding boxes overlap vertically by more than
+        `line_merge_overlap` of the shorter segment's height, then sort each
+        merged group left-to-right so the joined `raw_text` reads naturally.
         """
         if not words:
             return []
 
         sorted_words = sorted(words, key=lambda w: w.bbox.mid_y)
-        return [ReceiptLine(words=[w], raw_text=w.text) for w in sorted_words]
+
+        rows: list[list[OCRWord]] = []
+        for w in sorted_words:
+            placed = False
+            wh = max(w.bbox.height, 1e-6)
+            for row in rows:
+                # Compare vertical overlap against this row's anchor word.
+                anchor = row[0]
+                ah = max(anchor.bbox.height, 1e-6)
+                y_overlap = min(w.bbox.y1, anchor.bbox.y1) - max(w.bbox.y0, anchor.bbox.y0)
+                if y_overlap / min(wh, ah) >= self.line_merge_overlap:
+                    row.append(w)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([w])
+
+        lines: list[ReceiptLine] = []
+        for row in rows:
+            ordered = sorted(row, key=lambda w: w.bbox.x0)
+            merged_text = " ".join(w.text for w in ordered).strip()
+            lines.append(ReceiptLine(words=ordered, raw_text=merged_text))
+
+        lines.sort(key=lambda l: l.mid_y)
+        return lines
 
     # -- step 2: classify lines ---------------------------------------------
 
