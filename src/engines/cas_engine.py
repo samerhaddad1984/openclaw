@@ -2278,3 +2278,391 @@ def get_assertion_coverage(
         "items_with_sufficient_coverage": sum(1 for i in items if i["sufficient_coverage"]),
         "gaps": gaps,
     }
+
+
+# ---------------------------------------------------------------------------
+# CAS 265 — Control Deficiency Severity + Management Letter (Sprint F Fix 6)
+# ---------------------------------------------------------------------------
+
+# CAS 265.6 definitions:
+#   * Deficiency — a control is missing or not operating effectively.
+#   * Significant deficiency — deficiency that merits attention of those
+#     charged with governance.
+#   * Material weakness — a deficiency, or combination of deficiencies, that
+#     could result in a material misstatement.
+
+CONTROL_SEVERITY_OBSERVATION = "observation"
+CONTROL_SEVERITY_SIGNIFICANT = "significant"
+CONTROL_SEVERITY_MATERIAL = "material_weakness"
+
+VALID_SEVERITIES = {
+    CONTROL_SEVERITY_OBSERVATION,
+    CONTROL_SEVERITY_SIGNIFICANT,
+    CONTROL_SEVERITY_MATERIAL,
+}
+
+
+def classify_control_deficiency(severity_factors: dict[str, Any]) -> str:
+    """Classify a control deficiency per CAS 265.6.
+
+    severity_factors keys:
+        likelihood_of_misstatement       low / moderate / high
+        magnitude_potential              below_materiality / at_materiality / above_materiality
+        compensating_controls_exist      bool
+        management_override_possible     bool
+        multiple_deficiencies_aggregate  bool (optional)
+    """
+    likelihood = (severity_factors.get("likelihood_of_misstatement") or "").lower()
+    magnitude = (severity_factors.get("magnitude_potential") or "").lower()
+    override_possible = bool(severity_factors.get("management_override_possible"))
+    compensating = bool(severity_factors.get("compensating_controls_exist"))
+    aggregate_material = bool(severity_factors.get("multiple_deficiencies_aggregate"))
+
+    # Material weakness if the deficiency could allow a material misstatement
+    # that compensating controls would not detect.
+    if (magnitude == "above_materiality" and not compensating) or override_possible:
+        return CONTROL_SEVERITY_MATERIAL
+    if aggregate_material:
+        return CONTROL_SEVERITY_MATERIAL
+
+    # Significant if reasonably likely to result in more-than-trivial
+    # misstatement OR if likelihood is moderate/high at materiality.
+    if magnitude == "above_materiality":
+        # Above materiality but compensating controls soften to significant.
+        return CONTROL_SEVERITY_SIGNIFICANT
+    if likelihood in ("moderate", "high") and magnitude == "at_materiality":
+        return CONTROL_SEVERITY_SIGNIFICANT
+    if likelihood == "high" and magnitude == "below_materiality" and not compensating:
+        return CONTROL_SEVERITY_SIGNIFICANT
+
+    return CONTROL_SEVERITY_OBSERVATION
+
+
+CONTROL_DEFICIENCIES_DDL = """
+CREATE TABLE IF NOT EXISTS control_deficiencies (
+    deficiency_id TEXT PRIMARY KEY,
+    engagement_id TEXT NOT NULL,
+    control_test_id TEXT,
+    title TEXT NOT NULL,
+    description TEXT,
+    likelihood_of_misstatement TEXT,
+    magnitude_potential TEXT,
+    compensating_controls_exist INTEGER DEFAULT 0,
+    management_override_possible INTEGER DEFAULT 0,
+    multiple_deficiencies_aggregate INTEGER DEFAULT 0,
+    severity TEXT NOT NULL,
+    recommendation TEXT,
+    management_response TEXT,
+    response_due_date TEXT,
+    communicated_at TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_control_deficiencies_engagement
+    ON control_deficiencies(engagement_id, severity);
+"""
+
+
+def ensure_control_deficiency_table(conn: sqlite3.Connection) -> None:
+    for stmt in CONTROL_DEFICIENCIES_DDL.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
+
+def record_control_deficiency(
+    conn: sqlite3.Connection,
+    *,
+    engagement_id: str,
+    title: str,
+    description: str,
+    likelihood_of_misstatement: str,
+    magnitude_potential: str,
+    compensating_controls_exist: bool = False,
+    management_override_possible: bool = False,
+    multiple_deficiencies_aggregate: bool = False,
+    control_test_id: str = "",
+    recommendation: str = "",
+    created_by: str = "",
+) -> tuple[str, str]:
+    """Insert a deficiency row and auto-classify its severity. Returns
+    (deficiency_id, severity).
+    """
+    ensure_control_deficiency_table(conn)
+    factors = {
+        "likelihood_of_misstatement": likelihood_of_misstatement,
+        "magnitude_potential": magnitude_potential,
+        "compensating_controls_exist": compensating_controls_exist,
+        "management_override_possible": management_override_possible,
+        "multiple_deficiencies_aggregate": multiple_deficiencies_aggregate,
+    }
+    severity = classify_control_deficiency(factors)
+    deficiency_id = f"def_{secrets.token_hex(8)}"
+    conn.execute(
+        """INSERT INTO control_deficiencies
+           (deficiency_id, engagement_id, control_test_id, title, description,
+            likelihood_of_misstatement, magnitude_potential,
+            compensating_controls_exist, management_override_possible,
+            multiple_deficiencies_aggregate, severity, recommendation, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            deficiency_id, engagement_id, control_test_id, title, description,
+            likelihood_of_misstatement, magnitude_potential,
+            1 if compensating_controls_exist else 0,
+            1 if management_override_possible else 0,
+            1 if multiple_deficiencies_aggregate else 0,
+            severity, recommendation, created_by,
+        ),
+    )
+    conn.commit()
+    return deficiency_id, severity
+
+
+def get_control_deficiencies(
+    conn: sqlite3.Connection,
+    engagement_id: str,
+) -> list[dict]:
+    ensure_control_deficiency_table(conn)
+    rows = conn.execute(
+        "SELECT * FROM control_deficiencies WHERE engagement_id=? ORDER BY severity DESC, created_at",
+        (engagement_id,),
+    ).fetchall()
+    return [dict(r) for r in rows] if rows else []
+
+
+def update_management_response(
+    conn: sqlite3.Connection,
+    deficiency_id: str,
+    response: str,
+    response_due_date: str = "",
+) -> bool:
+    ensure_control_deficiency_table(conn)
+    cur = conn.execute(
+        "UPDATE control_deficiencies SET management_response=?, response_due_date=? WHERE deficiency_id=?",
+        (response, response_due_date, deficiency_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def generate_management_letter_pdf(
+    engagement_id: str,
+    conn: sqlite3.Connection,
+    *,
+    firm_name: str = "OtoCPA CPA",
+    firm_address: str = "",
+    language: str = "en",
+    output_dir: str | Path | None = None,
+    persist: bool = True,
+) -> tuple[bytes, str, int]:
+    """Generate a CAS 265 management letter PDF summarising significant and
+    material deficiencies. Returns (pdf_bytes, file_path, count_reported).
+
+    CAS 265.9 — observation-only deficiencies are NOT required in the letter;
+    we exclude them here so the letter only communicates matters that merit
+    governance attention.
+    """
+    ensure_control_deficiency_table(conn)
+    deficiencies = get_control_deficiencies(conn, engagement_id)
+    reportable = [
+        d for d in deficiencies
+        if d["severity"] in (CONTROL_SEVERITY_SIGNIFICANT, CONTROL_SEVERITY_MATERIAL)
+    ]
+    from src.engines.audit_engine import get_engagement
+    eng = get_engagement(conn, engagement_id)
+    if not eng:
+        raise ValueError(f"Engagement not found: {engagement_id}")
+    client_code = eng.get("client_code") or ""
+    period = eng.get("period") or ""
+
+    try:
+        pdf_bytes = _render_management_letter_reportlab(
+            firm_name=firm_name,
+            firm_address=firm_address,
+            client_code=client_code,
+            period=period,
+            reportable=reportable,
+            language=language,
+        )
+    except ImportError:
+        pdf_bytes = _render_management_letter_minimal(
+            firm_name=firm_name,
+            client_code=client_code,
+            period=period,
+            reportable=reportable,
+            language=language,
+        )
+
+    file_path = ""
+    if persist:
+        base_dir = Path(output_dir) if output_dir else ROOT_DIR / "data" / "management_letters"
+        base_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        path = base_dir / f"mgmt_letter_{engagement_id}_{stamp}.pdf"
+        path.write_bytes(pdf_bytes)
+        file_path = str(path)
+        # Mark the reported deficiencies as communicated.
+        for d in reportable:
+            conn.execute(
+                "UPDATE control_deficiencies SET communicated_at=? WHERE deficiency_id=?",
+                (datetime.now(timezone.utc).isoformat(), d["deficiency_id"]),
+            )
+        conn.commit()
+    return pdf_bytes, file_path, len(reportable)
+
+
+def _render_management_letter_reportlab(
+    *, firm_name: str, firm_address: str, client_code: str, period: str,
+    reportable: list[dict], language: str,
+) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
+        topMargin=0.75 * inch, bottomMargin=0.75 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Heading2"], fontSize=13, spaceAfter=10)
+    normal = styles["BodyText"]
+    story: list = []
+    story.append(Paragraph(f"<b>{firm_name}</b>", styles["Heading1"]))
+    if firm_address:
+        story.append(Paragraph(firm_address, normal))
+    story.append(Spacer(1, 0.2 * inch))
+
+    if language == "fr":
+        title = f"Lettre à la direction — {client_code} — Période {period}"
+        intro = (
+            f"Dans le cadre de notre mission d'audit des états financiers de {client_code} "
+            f"pour la période {period}, nous avons relevé les déficiences importantes "
+            f"suivantes dans le contrôle interne, conformément à la norme CAS 265."
+        )
+        if not reportable:
+            intro = (
+                f"Dans le cadre de notre mission d'audit des états financiers de {client_code} "
+                f"pour la période {period}, aucune déficience importante dans le contrôle interne "
+                f"n'a été relevée exigeant une communication formelle selon la norme CAS 265."
+            )
+    else:
+        title = f"Management Letter — {client_code} — Period {period}"
+        intro = (
+            f"In connection with our audit of the financial statements of {client_code} "
+            f"for the period {period}, we identified the following significant and material "
+            f"control deficiencies requiring communication to those charged with governance, "
+            f"in accordance with CAS 265."
+        )
+        if not reportable:
+            intro = (
+                f"In connection with our audit of the financial statements of {client_code} "
+                f"for the period {period}, no significant deficiencies or material weaknesses "
+                f"in internal control were identified that require formal communication "
+                f"under CAS 265."
+            )
+
+    story.append(Paragraph(title, h))
+    story.append(Paragraph(intro, normal))
+    story.append(Spacer(1, 0.2 * inch))
+
+    for i, d in enumerate(reportable, start=1):
+        sev_label = (
+            "Material Weakness" if d["severity"] == CONTROL_SEVERITY_MATERIAL
+            else "Significant Deficiency"
+        )
+        story.append(Paragraph(
+            f"<b>{i}. {d.get('title', '(untitled)')} — {sev_label}</b>",
+            h,
+        ))
+        if d.get("description"):
+            story.append(Paragraph(f"<b>Finding:</b> {d['description']}", normal))
+        if d.get("recommendation"):
+            story.append(Paragraph(f"<b>Recommendation:</b> {d['recommendation']}", normal))
+        if d.get("management_response"):
+            story.append(Paragraph(
+                f"<b>Management response:</b> {d['management_response']}",
+                normal,
+            ))
+        story.append(Spacer(1, 0.15 * inch))
+
+    story.append(Spacer(1, 0.3 * inch))
+    story.append(Paragraph("_________________________________________", normal))
+    story.append(Paragraph(f"{firm_name}", normal))
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_management_letter_minimal(
+    *, firm_name: str, client_code: str, period: str,
+    reportable: list[dict], language: str,
+) -> bytes:
+    lines = [firm_name, "", f"Management Letter - {client_code} - {period}", ""]
+    if not reportable:
+        lines.append("No significant deficiencies or material weaknesses identified.")
+    else:
+        for i, d in enumerate(reportable, start=1):
+            sev = (
+                "Material Weakness" if d["severity"] == CONTROL_SEVERITY_MATERIAL
+                else "Significant Deficiency"
+            )
+            lines.append(f"{i}. {d.get('title', '(untitled)')} [{sev}]")
+            if d.get("description"):
+                lines.append(f"   Finding: {d['description']}")
+            if d.get("recommendation"):
+                lines.append(f"   Recommendation: {d['recommendation']}")
+            if d.get("management_response"):
+                lines.append(f"   Management response: {d['management_response']}")
+            lines.append("")
+
+    # Reuse the rep-letter minimal renderer structure.
+    page_lines = [lines[i:i + 55] for i in range(0, len(lines), 55)] or [lines]
+    objects: list[bytes] = []
+
+    def _add(obj: bytes) -> int:
+        objects.append(obj)
+        return len(objects)
+
+    page_ids = list(range(3, 3 + len(page_lines)))
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
+    _add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    _add(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_lines)} >>".encode())
+    font_obj_id = 3 + 2 * len(page_lines)
+    for idx in range(len(page_lines)):
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R "
+            f"/Resources << /Font << /F1 {font_obj_id} 0 R >> >> "
+            f"/MediaBox [0 0 612 792] "
+            f"/Contents {3 + len(page_lines) + idx} 0 R >>"
+        ).encode()
+        _add(page_obj)
+    for chunk in page_lines:
+        stream_lines = ["BT", "/F1 10 Tf", "50 752 Td"]
+        for ln in chunk:
+            safe = ln.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            stream_lines.append(f"({safe}) Tj")
+            stream_lines.append("0 -13 Td")
+        stream_lines.append("ET")
+        stream = "\n".join(stream_lines).encode("latin-1", errors="replace")
+        _add(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+    _add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = [0]
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for off in offsets[1:]:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_pos}\n%%EOF\n"
+    ).encode()
+    return bytes(out)

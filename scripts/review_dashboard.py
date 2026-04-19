@@ -8292,12 +8292,18 @@ def render_control_tests(
         for e in engagements
     )
 
+    ml_btn = ""
+    if engagement_id:
+        ml_btn = (
+            f' <a href="/audit/management_letter/pdf?engagement_id={urlquote(engagement_id)}" '
+            f'class="btn-secondary button-link" style="margin-left:8px;">Management letter (CAS 265)</a>'
+        )
     select_form = (
         f'<div class="card">'
         f'<form method="GET" action="/audit/controls" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
         f'<div><label style="font-size:13px;font-weight:600;">{esc(t("eng_title", lang))}</label><br>'
         f'<select name="engagement_id" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{eng_opts}</select></div>'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_filter", lang))}</button>{ml_btn}</div>'
         f'</form></div>'
     )
 
@@ -17399,6 +17405,34 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         user=user, lang=lang), status=400)
                     return
                 fname = f"rep_letter_{pdf_eng_id}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
+                return
+
+            if path == "/audit/management_letter/pdf":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                ml_eng_id = qs.get("engagement_id", [""])[0].strip()
+                if not ml_eng_id:
+                    self._send_html(page_layout("Management letter", '<div class="card"><p class="error">engagement_id required</p></div>', user=user, lang=lang), status=400)
+                    return
+                try:
+                    with open_db() as conn:
+                        pdf_bytes, _path, _count = _cas.generate_management_letter_pdf(
+                            ml_eng_id, conn, language=lang,
+                        )
+                except ValueError as err:
+                    self._send_html(page_layout(
+                        "Management letter unavailable",
+                        f'<div class="card"><p class="error">{esc(str(err))}</p></div>',
+                        user=user, lang=lang), status=400)
+                    return
+                fname = f"management_letter_{ml_eng_id}.pdf"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
                 self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
