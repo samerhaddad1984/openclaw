@@ -12258,6 +12258,74 @@ def _provision_firm_from_stripe(session: Any, base_url: str = "") -> dict[str, A
     }
 
 
+def _ensure_stripe_events_table(conn: sqlite3.Connection) -> None:
+    """Idempotent schema bootstrap for the webhook dedup table."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS stripe_events_processed ("
+        "  event_id     TEXT PRIMARY KEY,"
+        "  event_type   TEXT,"
+        "  processed_at TEXT NOT NULL DEFAULT (datetime('now'))"
+        ")"
+    )
+
+
+def _stripe_event_id(event: Any) -> str:
+    """Return the Stripe event ID from either a Stripe SDK object or a dict."""
+    if event is None:
+        return ""
+    # Stripe SDK objects expose .id; dict payloads use 'id'.
+    try:
+        eid = getattr(event, "id", None) or event.get("id")  # type: ignore[union-attr]
+    except Exception:
+        eid = None
+    return str(eid).strip() if eid else ""
+
+
+def _stripe_event_type(event: Any) -> str:
+    if event is None:
+        return ""
+    try:
+        et = getattr(event, "type", None) or event.get("type")  # type: ignore[union-attr]
+    except Exception:
+        et = None
+    return str(et).strip() if et else ""
+
+
+def _stripe_event_already_processed(event_id: str) -> bool:
+    """True if we've already processed this Stripe event.id."""
+    if not event_id:
+        return False
+    try:
+        with open_db() as conn:
+            _ensure_stripe_events_table(conn)
+            row = conn.execute(
+                "SELECT 1 FROM stripe_events_processed WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+        return row is not None
+    except Exception:
+        logging.exception("stripe idempotency lookup failed")
+        return False
+
+
+def _stripe_event_mark_processed(event_id: str, event_type: str = "") -> None:
+    """Record that we've processed this event. Swallows INSERT-conflict
+    errors so a racing second delivery still ends cleanly."""
+    if not event_id:
+        return
+    try:
+        with open_db() as conn:
+            _ensure_stripe_events_table(conn)
+            conn.execute(
+                "INSERT OR IGNORE INTO stripe_events_processed "
+                "(event_id, event_type) VALUES (?, ?)",
+                (event_id, event_type or ""),
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("stripe idempotency insert failed")
+
+
 def _handle_stripe_event(event: Any) -> None:
     etype = _sv(event, "type", "") or ""
     data = _sv(_sv(event, "data") or {}, "object") or {}
@@ -17920,6 +17988,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     logging.exception("stripe webhook signature verification failed")
                     self._send_json({"error": "invalid_signature"}, status=400)
                     return
+                # BUG #6 FIX — Stripe retries delivery until it sees 2xx, so
+                # without idempotency we would run _handle_stripe_event (which
+                # creates a firm + user) multiple times for a single event.
+                # Record event.id in stripe_events_processed and short-circuit
+                # on duplicate delivery.
+                event_id = _stripe_event_id(event)
+                event_type = _stripe_event_type(event)
+                if event_id and _stripe_event_already_processed(event_id):
+                    self._send_json({"received": True, "idempotent": True})
+                    return
                 try:
                     _handle_stripe_event(event)
                 except Exception:
@@ -17927,6 +18005,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     # 200 so Stripe does not retry-storm us; the event is
                     # recorded via the logger for follow-up.
                     logging.exception("stripe webhook processing error")
+                else:
+                    if event_id:
+                        _stripe_event_mark_processed(event_id, event_type)
                 self._send_json({"received": True})
                 return
 
