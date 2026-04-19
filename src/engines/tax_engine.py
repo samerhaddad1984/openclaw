@@ -776,6 +776,215 @@ def generate_filing_summary(
 
 
 # ---------------------------------------------------------------------------
+# Sprint H F2 — Mid-period method switch + rate change
+# ---------------------------------------------------------------------------
+
+def _next_iso(date_str: str) -> str:
+    """Return the calendar day after a YYYY-MM-DD string."""
+    from datetime import date as _date, timedelta as _td
+    d = _date.fromisoformat(date_str)
+    return (d + _td(days=1)).isoformat()
+
+
+def _prev_iso(date_str: str) -> str:
+    from datetime import date as _date, timedelta as _td
+    d = _date.fromisoformat(date_str)
+    return (d - _td(days=1)).isoformat()
+
+
+def compute_gst_for_subperiod(
+    client_code: str,
+    period_start: str,
+    period_end: str,
+    method: str = "regular",
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Compute GST/QST for a slice of time under one method.
+
+    method = 'regular' uses the standard ITC subtraction.
+    method = 'quick' applies the QM remittance rate to gross taxable sales
+             (subset of typical Canadian Quick Method handling).
+    """
+    summary = generate_filing_summary(client_code, period_start, period_end,
+                                       db_path=db_path)
+    if method == "quick":
+        # Quick Method: remittance = gross sales × QM rate; ITCs forfeited
+        # except for capital purchases. We use the 'services' rate by default;
+        # callers can switch by composing the call upstream.
+        gross_sales = (
+            Decimal(str(summary.get("taxable_sales") or 0))
+            + Decimal(str(summary.get("gst_collected") or 0))
+            + Decimal(str(summary.get("qst_collected") or 0))
+        )
+        qm_rate = QUICK_METHOD_RATES.get("services", Decimal("0.036"))
+        net_remit = _round(gross_sales * qm_rate)
+        return {
+            "method": "quick",
+            "period_start": period_start,
+            "period_end": period_end,
+            "gross_sales": _round(gross_sales),
+            "qm_rate": qm_rate,
+            "gst_collected": summary.get("gst_collected", _ZERO_D := Decimal("0")),
+            "qst_collected": summary.get("qst_collected", Decimal("0")),
+            "itc_claimed": Decimal("0"),
+            "net_remittance": net_remit,
+            "documents_total": summary.get("documents_total", 0),
+        }
+    return {
+        "method": "regular",
+        "period_start": period_start,
+        "period_end": period_end,
+        "gst_collected": summary.get("gst_collected", Decimal("0")),
+        "qst_collected": summary.get("qst_collected", Decimal("0")),
+        "itc_claimed": (
+            Decimal(str(summary.get("itc_available", 0)))
+            + Decimal(str(summary.get("itr_available", 0)))
+        ),
+        "net_remittance": (
+            Decimal(str(summary.get("net_gst_payable", 0)))
+            + Decimal(str(summary.get("net_qst_payable", 0)))
+        ),
+        "documents_total": summary.get("documents_total", 0),
+    }
+
+
+def compute_gst_with_mid_period_switch(
+    client_code: str,
+    period_start: str,
+    period_end: str,
+    switch_date: str,
+    old_method: str = "quick",
+    new_method: str = "regular",
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Split a GST/QST period at switch_date and combine both halves.
+
+    The day before switch_date is the last day of the old-method sub-period;
+    switch_date itself is the first day of the new-method sub-period.
+    """
+    if not (period_start <= switch_date <= period_end):
+        raise ValueError(
+            f"switch_date {switch_date} must fall within "
+            f"[{period_start}, {period_end}]",
+        )
+    if old_method == new_method:
+        raise ValueError("old_method and new_method must differ")
+
+    pre_end = _prev_iso(switch_date)
+    post_start = switch_date
+
+    pre = compute_gst_for_subperiod(client_code, period_start, pre_end,
+                                      method=old_method, db_path=db_path)
+    post = compute_gst_for_subperiod(client_code, post_start, period_end,
+                                       method=new_method, db_path=db_path)
+
+    combined_gst = (
+        Decimal(str(pre.get("gst_collected") or 0))
+        + Decimal(str(post.get("gst_collected") or 0))
+    )
+    combined_qst = (
+        Decimal(str(pre.get("qst_collected") or 0))
+        + Decimal(str(post.get("qst_collected") or 0))
+    )
+    combined_itc = (
+        Decimal(str(pre.get("itc_claimed") or 0))
+        + Decimal(str(post.get("itc_claimed") or 0))
+    )
+    combined_net = (
+        Decimal(str(pre.get("net_remittance") or 0))
+        + Decimal(str(post.get("net_remittance") or 0))
+    )
+
+    return {
+        "client_code": client_code,
+        "period_start": period_start,
+        "period_end": period_end,
+        "switch_date": switch_date,
+        "old_method": old_method,
+        "new_method": new_method,
+        "pre_switch": pre,
+        "post_switch": post,
+        "combined": {
+            "gst_collected": _round(combined_gst),
+            "qst_collected": _round(combined_qst),
+            "itc_claimed": _round(combined_itc),
+            "net_remittance": _round(combined_net),
+        },
+        "method_change_notice": (
+            f"Method changed from {old_method} to {new_method} on {switch_date}"
+        ),
+    }
+
+
+def compute_gst_with_rate_change(
+    client_code: str,
+    period_start: str,
+    period_end: str,
+    rate_change_date: str,
+    old_gst_rate: float | Decimal | str,
+    new_gst_rate: float | Decimal | str,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Apply different GST rates to revenue before / after rate_change_date.
+
+    QST is held at the current ``QST_RATE``. Adjust the engine constant if
+    Quebec ever changes the QST rate alongside.
+    """
+    if not (period_start <= rate_change_date <= period_end):
+        raise ValueError(
+            f"rate_change_date {rate_change_date} must fall within "
+            f"[{period_start}, {period_end}]",
+        )
+    pre_end = _prev_iso(rate_change_date)
+    old_rate = Decimal(str(old_gst_rate))
+    new_rate = Decimal(str(new_gst_rate))
+
+    # We piggy-back on compute_revenue_side_taxes, then re-apply the rate.
+    pre_rev = compute_revenue_side_taxes(client_code, period_start, pre_end,
+                                           db_path=db_path)
+    post_rev = compute_revenue_side_taxes(client_code, rate_change_date,
+                                            period_end, db_path=db_path)
+
+    pre_taxable = Decimal(str(pre_rev.get("taxable_sales") or 0))
+    post_taxable = Decimal(str(post_rev.get("taxable_sales") or 0))
+
+    pre_gst = _round(pre_taxable * old_rate)
+    post_gst = _round(post_taxable * new_rate)
+
+    pre_qst = _round(pre_taxable * QST_RATE)
+    post_qst = _round(post_taxable * QST_RATE)
+
+    return {
+        "client_code": client_code,
+        "period_start": period_start,
+        "period_end": period_end,
+        "rate_change_date": rate_change_date,
+        "old_gst_rate": old_rate,
+        "new_gst_rate": new_rate,
+        "pre_change": {
+            "taxable_sales": _round(pre_taxable),
+            "gst_collected": pre_gst,
+            "qst_collected": pre_qst,
+            "applied_rate": old_rate,
+        },
+        "post_change": {
+            "taxable_sales": _round(post_taxable),
+            "gst_collected": post_gst,
+            "qst_collected": post_qst,
+            "applied_rate": new_rate,
+        },
+        "combined": {
+            "gst_collected": _round(pre_gst + post_gst),
+            "qst_collected": _round(pre_qst + post_qst),
+            "taxable_sales": _round(pre_taxable + post_taxable),
+        },
+        "rate_change_notice": (
+            f"GST rate changed from {old_rate} to {new_rate} on {rate_change_date}"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Revenue-side GST/QST integration
 # ---------------------------------------------------------------------------
 
