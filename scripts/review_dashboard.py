@@ -15452,8 +15452,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
                 try:
+                    # BUG #10 FIX — table is dashboard_users, not users.
+                    # The old query silently failed in the except-pass
+                    # block and left users_count at 0.
                     users_count = conn.execute(
-                        "SELECT COUNT(*) AS c FROM users"
+                        "SELECT COUNT(*) AS c FROM dashboard_users"
                     ).fetchone().get("c", 0)
                 except Exception:
                     pass
@@ -18618,8 +18621,72 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         "UPDATE bank_transactions SET matched_document_id=?, reconciled=1 WHERE id=?",
                         (document_id, tx_id),
                     )
+                    # Mirror the link on documents.matched_bank_transaction so
+                    # the document row can find its bank tx without a join.
+                    try:
+                        conn.execute(
+                            "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
+                            (tx_id, document_id),
+                        )
+                    except sqlite3.OperationalError:
+                        pass
                     conn.commit()
                 self._flash_redirect("/bank/feeds", flash="Transaction matched.")
+                return
+
+            # BUG #8 FIX — /bank/unmatch: reverse a prior match.
+            # Clears bank_transactions.matched_document_id + reconciled, and
+            # clears documents.matched_bank_transaction so the doc can be
+            # rematched. Accepts either tx_id (preferred) or document_id.
+            if path == "/bank/unmatch":
+                tx_id = form.get("tx_id", "").strip()
+                document_id = form.get("document_id", "").strip()
+                if not tx_id and not document_id:
+                    self._flash_redirect(
+                        "/bank/feeds",
+                        error="Missing tx_id or document_id.",
+                    )
+                    return
+                with open_db() as conn:
+                    # If only document_id was given, look up the matching tx.
+                    if not tx_id and document_id:
+                        row = conn.execute(
+                            "SELECT id FROM bank_transactions WHERE matched_document_id=?",
+                            (document_id,),
+                        ).fetchone()
+                        if row:
+                            tx_id = row[0] if not hasattr(row, "keys") else row["id"]
+                    # Firm scope check: the document being unmatched (if any)
+                    # must belong to the actor's firm.
+                    if document_id and not _require_document_in_firm(document_id, ctx):
+                        self._send_json({"error": "forbidden"}, status=403)
+                        return
+                    # If the caller only gave tx_id, look up the doc so we
+                    # can null the document-side link too.
+                    if tx_id and not document_id:
+                        row2 = conn.execute(
+                            "SELECT matched_document_id FROM bank_transactions WHERE id=?",
+                            (tx_id,),
+                        ).fetchone()
+                        if row2:
+                            document_id = row2[0] if not hasattr(row2, "keys") else row2["matched_document_id"]
+                    if tx_id:
+                        conn.execute(
+                            "UPDATE bank_transactions SET matched_document_id=NULL, "
+                            "reconciled=0 WHERE id=?",
+                            (tx_id,),
+                        )
+                    if document_id:
+                        try:
+                            conn.execute(
+                                "UPDATE documents SET matched_bank_transaction=NULL "
+                                "WHERE document_id=?",
+                                (document_id,),
+                            )
+                        except sqlite3.OperationalError:
+                            pass
+                    conn.commit()
+                self._flash_redirect("/bank/feeds", flash="Transaction unmatched.")
                 return
 
             # --- Set language ---
@@ -18926,6 +18993,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 new_desc = normalize_text(payload.get("description", ""))
                 new_gl   = normalize_text(payload.get("gl_account", ""))
                 new_tax  = normalize_text(payload.get("tax_code", ""))
+                # BUG #7 FIX — accept line-level gst_amount / qst_amount so
+                # tax corrections actually persist. Parse permissively:
+                # blank / None means "leave the existing value in place".
+                def _opt_num(v):
+                    if v is None or v == "":
+                        return None
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return None
+                new_gst = _opt_num(payload.get("gst_amount"))
+                new_qst = _opt_num(payload.get("qst_amount"))
                 # Validate tax_code against the canonical registry so a typo
                 # can't poison downstream tax calculations.
                 try:
@@ -18945,8 +19024,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 try:
                     with open_db() as _lconn:
                         _row = _lconn.execute(
-                            "SELECT line_id, document_id, gl_account, tax_code, description "
-                            "FROM invoice_lines WHERE line_id = ?",
+                            "SELECT line_id, document_id, gl_account, tax_code, description, "
+                            "gst_amount, qst_amount FROM invoice_lines WHERE line_id = ?",
                             (line_id,),
                         ).fetchone()
                         if not _row:
@@ -18955,14 +19034,22 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         owning_doc = _row["document_id"]
                         old_gl = _row["gl_account"]
                         old_tax = _row["tax_code"]
+                        old_gst = _row["gst_amount"]
+                        old_qst = _row["qst_amount"]
                         if not _require_document_in_firm(owning_doc, ctx):
                             self._send_json({"ok": False, "error": "forbidden"}, status=403)
                             return
                         _check_period_not_locked_for_doc(owning_doc, lang)
+                        # Blank input means "keep the existing value"; an
+                        # explicit 0 will clear the tax line.
+                        effective_gst = new_gst if new_gst is not None else old_gst
+                        effective_qst = new_qst if new_qst is not None else old_qst
                         _lconn.execute(
                             "UPDATE invoice_lines SET gl_account = ?, tax_code = ?, "
-                            "description = ? WHERE line_id = ?",
-                            (new_gl, new_tax, new_desc, line_id),
+                            "description = ?, gst_amount = ?, qst_amount = ? "
+                            "WHERE line_id = ?",
+                            (new_gl, new_tax, new_desc,
+                             effective_gst, effective_qst, line_id),
                         )
                         _lconn.commit()
                     # Sprint A: line-item GL / tax_code corrections feed the
@@ -19001,6 +19088,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "gl_account": new_gl,
                     "tax_code": new_tax,
                     "description": new_desc,
+                    "gst_amount": effective_gst,
+                    "qst_amount": effective_qst,
                 })
                 return
 

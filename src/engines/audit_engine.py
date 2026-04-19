@@ -1440,6 +1440,10 @@ def generate_financial_statements(
     bs["balance_ok"] = abs(bs["total_assets"] - bs_total_liab_equity) <= _to_decimal("0.01")
     bs["balance_difference"] = _round(bs["total_assets"] - bs_total_liab_equity)
 
+    # Keep the detailed list (with cra_t2_line / co17_line per row) for
+    # callers that need it — notably the tax pre-fill engines.
+    is_["revenue_detail"] = is_["revenue"]
+    is_["expenses_detail"] = is_["expenses"]
     is_["revenue"] = revenue_flat
     is_["expenses"] = expenses_flat
 

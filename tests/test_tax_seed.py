@@ -188,7 +188,10 @@ def test_financial_statements_include_cra_co17(mem_db):
     """)
     mem_db.commit()
     stmts = generate_financial_statements(mem_db, "TEST", "2024-01")
-    expenses = stmts["income_statement"]["expenses"]
+    # Sprint C — `expenses` is now the flat dict the HTML renderer wants.
+    # The original list of dicts (with cra_t2_line / co17_line etc.) is
+    # available as `expenses_detail` for tax-pre-fill consumers.
+    expenses = stmts["income_statement"]["expenses_detail"]
     assert len(expenses) >= 1
     expense = expenses[0]
     assert "financial_statement_section" in expense

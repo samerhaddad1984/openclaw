@@ -714,9 +714,13 @@ def post_one_ready_job(
         _resolve_client_qbo_config(payload, db_path, base_config)
     )
     if per_client_config is None:
+        # BUG #9 FIX — Missing-connection is a setup gap, not a posting
+        # failure. Record it as 'skipped_no_connection' so the dashboard
+        # can show a 'Connect QBO' prompt for this client rather than a
+        # red 'post_failed' badge that obscures the real issue.
         update_posting_job_after_attempt(
             posting_id=posting_id,
-            posting_status="post_failed",
+            posting_status="skipped_no_connection",
             external_id=None,
             error_text=connection_err or "No QBO connection for this client",
             payload=payload,

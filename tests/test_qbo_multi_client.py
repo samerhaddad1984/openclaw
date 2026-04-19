@@ -385,14 +385,17 @@ class TestAdapterPerClient:
         assert result["status"] == "skipped_no_connection"
         assert "No QBO connection" in (result.get("error") or "")
 
-        # Job is marked post_failed with an informative error_text.
+        # Sprint C BUG #9 — the job is now marked 'skipped_no_connection'
+        # rather than 'post_failed'. Missing-connection is a setup gap, not
+        # a posting failure, so the dashboard can show a "Connect QBO"
+        # prompt instead of a red failure badge.
         conn = sqlite3.connect(str(db))
         row = conn.execute(
             "SELECT posting_status, error_text FROM posting_jobs "
             "WHERE posting_id='P-NO-CONN'"
         ).fetchone()
         conn.close()
-        assert row[0] == "post_failed"
+        assert row[0] == "skipped_no_connection"
         assert "No QBO connection" in (row[1] or "")
 
     def test_qbo_post_uses_correct_realm_for_client(self, adapter, qbo_oauth):
