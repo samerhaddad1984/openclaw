@@ -1527,6 +1527,24 @@ def validate_role(role: str | None) -> str:
     return normalized
 
 
+def can_assign_role(actor_role: str | None, target_role: str | None) -> tuple[bool, str]:
+    """Guard for /users/add and role-edit paths.
+
+    Only owners may create or promote to owner or firm_admin. Anyone with
+    manage_users (owner or firm_admin) may assign the manager / employee
+    roles. Returns (allowed, reason). The reason is empty when allowed.
+    """
+    actor = (actor_role or "").strip().lower()
+    target = (target_role or "").strip().lower()
+    if actor == "owner":
+        return True, ""
+    if target == "owner":
+        return False, "firm_admin cannot create owner accounts"
+    if target == "firm_admin":
+        return False, "firm_admin cannot create firm_admin accounts"
+    return True, ""
+
+
 # ---------------------------------------------------------------------------
 # Public upload rate limiting (per client_code, per IP)
 # ---------------------------------------------------------------------------
@@ -19346,9 +19364,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     role = validate_role(form.get("role", "employee"))
                 except ValueError as e:
                     raise ValueError(str(e))
-                # firm_admins cannot promote users to owner
-                if ctx.get("role") != "owner" and role == "owner":
-                    raise ValueError("firm_admin cannot create owner accounts")
+                # BUG #4 FIX — owner-only guard on the firm_admin / owner
+                # roles. A compromised firm_admin could otherwise onboard
+                # an accomplice and bypass the audit trail of who did what.
+                _allowed, _reason = can_assign_role(ctx.get("role"), role)
+                if not _allowed:
+                    raise ValueError(_reason)
                 display_name = normalize_text(form.get("display_name", "")) or username
                 if not username or not password:
                     raise ValueError("Username and password are required")
