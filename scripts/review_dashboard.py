@@ -888,14 +888,19 @@ def bootstrap_schema() -> None:
         # was created without one of them would crash every document
         # read. Idempotent for DBs that already have them.
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
-        # TEXT columns
-        for col in ("assigned_to", "manual_hold_reason", "manual_hold_by", "manual_hold_at",
-                    "matched_bank_transaction", "raw_ocr_text", "fraud_flags",
-                    "substance_flags"):
+        # TEXT columns used by ``get_document`` / queue / reads. Every
+        # SELECTed column below must exist or the read crashes.
+        for col in ("file_name", "file_path", "doc_type", "gl_account",
+                    "tax_code", "category", "review_status", "raw_result",
+                    "client_note", "submitted_by",
+                    "assigned_to", "manual_hold_reason", "manual_hold_by",
+                    "manual_hold_at", "matched_bank_transaction",
+                    "raw_ocr_text", "fraud_flags", "substance_flags"):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
-        # INTEGER/REAL columns with sane defaults — used by COALESCE in reads.
+        # INTEGER/REAL columns with sane defaults.
         for col, ddl in (
+            ("confidence",              "REAL"),
             ("hallucination_suspected", "INTEGER DEFAULT 0"),
             ("correction_count",        "INTEGER DEFAULT 0"),
             ("has_line_items",          "INTEGER DEFAULT 0"),
