@@ -5650,15 +5650,8 @@ def render_t2(
     fiscal_year: str = "",
 ) -> str:
     """Render T2 pre-fill page with tabbed schedules."""
-    preview = _preview_banner(
-        "T2 Corporate Tax Pre-fill",
-        "Schedules 1 / 8 / 50 / 100 / 125 compute from the GL, but /t2/pdf "
-        "and /t2/excel currently return plain text / CSV, and the filing "
-        "is not persisted to filing_history. Treat schedules as a draft "
-        "worksheet, not a submission-ready return.",
-    )
     if not client_code or not fiscal_year:
-        body = preview + f"""
+        body = f"""
         <div class="card">
         <h2>{esc(t("t2_title", lang))}</h2>
         <form method="GET" action="/t2" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
@@ -5722,7 +5715,7 @@ def render_t2(
 
     disclaimer = data["disclaimer"].get(lang, data["disclaimer"]["en"])
 
-    body = preview + f"""
+    body = f"""
     <div class="card">
     <h2>{esc(t("t2_title", lang))}: {esc(client_code)} — {esc(fiscal_year)}</h2>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -9798,7 +9791,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_dnav("/aging", "aging_nav_link"))
         groups.append(_dnav("/ar", "ar_nav_link"))
         groups.append(_dnav("/cashflow", "cashflow_nav_link"))
-        groups.append(_dlink("/t2", esc(t("t2_nav_link", lang)) + _preview_chip))
+        groups.append(_dnav("/t2", "t2_nav_link"))
 
         groups.append(_group_label("\U0001f465 Clients"))
         groups.append(_dnav("/clients", "clients_nav"))
@@ -17977,26 +17970,27 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 fc = qs.get("client_code", [""])[0].strip()
                 fy = qs.get("fiscal_year", [""])[0].strip()
                 fiscal_year_end = f"{fy}-12-31"
-                with open_db() as conn:
-                    data = _t2.generate_t2_prefill(fc, fiscal_year_end, conn)
-                import io as _io_m3
-                buf = _io_m3.StringIO()
-                buf.write(f"T2 Pre-fill Report — {fc} — FY {fy}\n")
-                buf.write(f"{data['disclaimer']['en']}\n\n")
-                for sched_key in ("schedule_1", "schedule_100", "schedule_125"):
-                    sched = data[sched_key]
-                    buf.write(f"\n{sched.get('title', sched_key)}\n")
-                    buf.write("-" * 60 + "\n")
-                    for ln in sched.get("lines", []):
-                        buf.write(f"  Line {ln['line']:6s}  {ln['description']:40s}  ${ln['amount']:>12,.2f}\n")
-                content = buf.getvalue().encode("utf-8")
-                fname = f"t2_prefill_{fc}_{fy}.txt"
+                try:
+                    with open_db() as conn:
+                        pdf_bytes, file_path_saved, filing_id = _t2.generate_t2_pdf(
+                            fc, fiscal_year_end, conn,
+                            generated_by=str(user.get("email") or user.get("username") or ""),
+                        )
+                except ValueError as err:
+                    self._send_html(page_layout(
+                        "T2 unavailable",
+                        f'<div class="card"><p class="error">{esc(str(err))}</p>'
+                        f'<p><a href="/t2">Back</a></p></div>',
+                        user=user, lang=lang,
+                    ), status=400)
+                    return
+                fname = f"t2_prefill_{fc}_{fy}.pdf"
                 self.send_response(200)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Type", "application/pdf")
                 self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
-                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Content-Length", str(len(pdf_bytes)))
                 self.end_headers()
-                self.wfile.write(content)
+                self.wfile.write(pdf_bytes)
                 return
 
             if path == "/t2/excel":

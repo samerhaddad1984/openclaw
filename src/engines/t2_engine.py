@@ -517,3 +517,358 @@ def generate_t2_prefill(client_code: str, fiscal_year_end: str,
         },
         "generated_at": _utc_now(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Filing history persistence + PDF generation (Sprint F Fix 3)
+# ---------------------------------------------------------------------------
+
+FILING_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS filing_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firm_code TEXT NOT NULL DEFAULT '',
+    client_code TEXT NOT NULL,
+    filing_type TEXT NOT NULL,
+    tax_year INTEGER,
+    period_start TEXT,
+    period_end TEXT,
+    file_path TEXT,
+    generated_by TEXT,
+    generated_at TEXT DEFAULT (datetime('now')),
+    filed_at TEXT,
+    status TEXT DEFAULT 'draft',
+    cra_confirmation TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_filing_history_client
+    ON filing_history(client_code, filing_type, tax_year);
+"""
+
+
+def ensure_filing_history_table(conn: sqlite3.Connection) -> None:
+    """Create filing_history table (idempotent)."""
+    for stmt in FILING_HISTORY_DDL.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
+
+def record_filing(
+    conn: sqlite3.Connection,
+    *,
+    firm_code: str,
+    client_code: str,
+    filing_type: str,
+    tax_year: int | None = None,
+    period_start: str = "",
+    period_end: str = "",
+    file_path: str = "",
+    generated_by: str = "",
+    status: str = "generated",
+) -> int:
+    """Insert a row into filing_history. Returns the new row id."""
+    ensure_filing_history_table(conn)
+    cur = conn.execute(
+        """INSERT INTO filing_history
+           (firm_code, client_code, filing_type, tax_year,
+            period_start, period_end, file_path, generated_by, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (firm_code, client_code, filing_type, tax_year, period_start,
+         period_end, file_path, generated_by, status),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def mark_filing_submitted(
+    conn: sqlite3.Connection,
+    filing_id: int,
+    cra_confirmation: str = "",
+) -> None:
+    """Transition a filing from 'generated' -> 'filed'."""
+    conn.execute(
+        """UPDATE filing_history
+           SET status='filed', filed_at=datetime('now'), cra_confirmation=?
+           WHERE id=?""",
+        (cra_confirmation, filing_id),
+    )
+    conn.commit()
+
+
+def get_filings(
+    conn: sqlite3.Connection,
+    client_code: str,
+    filing_type: str = "",
+) -> list[dict]:
+    """Return filings for a client, newest first."""
+    ensure_filing_history_table(conn)
+    if filing_type:
+        rows = conn.execute(
+            """SELECT * FROM filing_history
+               WHERE LOWER(client_code)=LOWER(?) AND filing_type=?
+               ORDER BY generated_at DESC""",
+            (client_code, filing_type),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT * FROM filing_history
+               WHERE LOWER(client_code)=LOWER(?)
+               ORDER BY generated_at DESC""",
+            (client_code,),
+        ).fetchall()
+    conn.row_factory = sqlite3.Row
+    return [dict(r) for r in rows] if rows else []
+
+
+def generate_t2_pdf(
+    client_code: str,
+    fiscal_year_end: str,
+    conn: sqlite3.Connection,
+    *,
+    generated_by: str = "",
+    output_dir: str | Path | None = None,
+    persist: bool = True,
+) -> tuple[bytes, str, int | None]:
+    """Generate a T2 PDF and (optionally) persist it to filing_history.
+
+    Returns (pdf_bytes, file_path, filing_history_id).
+    """
+    data = generate_t2_prefill(client_code, fiscal_year_end, conn)
+    # Guard: refuse to produce a nil return as a "real" filing. Every schedule
+    # always emits at least one zero line, so we require at least one non-zero
+    # amount somewhere before persisting. CPAs who want a setup preview can
+    # call generate_t2_prefill() directly.
+    has_data = False
+    for sched_key in ("schedule_1", "schedule_8", "schedule_100", "schedule_125"):
+        sched = data.get(sched_key) or {}
+        for ln in sched.get("lines", []) or []:
+            amt = ln.get("amount", 0)
+            try:
+                if abs(float(amt)) > 0.01:
+                    has_data = True
+                    break
+            except (TypeError, ValueError):
+                continue
+        if has_data:
+            break
+    if not has_data:
+        raise ValueError(
+            "T2 PDF cannot be generated: no non-zero GL postings for "
+            f"{client_code} / {fiscal_year_end}. Verify bookkeeping data exists.",
+        )
+
+    try:
+        pdf_bytes = _render_t2_reportlab(data)
+    except ImportError:
+        pdf_bytes = _render_t2_minimal(data)
+
+    tax_year = int(fiscal_year_end[:4]) if fiscal_year_end[:4].isdigit() else None
+    file_path = ""
+    filing_id: int | None = None
+    if persist:
+        base_dir = Path(output_dir) if output_dir else ROOT_DIR / "data" / "filings"
+        target = base_dir / client_code
+        target.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        path = target / f"T2_{tax_year}_{stamp}.pdf"
+        path.write_bytes(pdf_bytes)
+        file_path = str(path)
+        filing_id = record_filing(
+            conn,
+            firm_code="",
+            client_code=client_code,
+            filing_type="T2",
+            tax_year=tax_year,
+            period_end=fiscal_year_end,
+            file_path=file_path,
+            generated_by=generated_by,
+            status="generated",
+        )
+    return pdf_bytes, file_path, filing_id
+
+
+def _render_t2_reportlab(data: dict) -> bytes:
+    """Render the T2 PDF using reportlab (preferred path)."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+        PageBreak,
+    )
+    from reportlab.lib import colors
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h_style = ParagraphStyle("h", parent=styles["Heading1"], fontSize=16, spaceAfter=12)
+    sub_style = ParagraphStyle("sub", parent=styles["Heading2"], fontSize=12, spaceAfter=6)
+    normal = styles["BodyText"]
+
+    client = data.get("client_code", "")
+    fye = data.get("fiscal_year_end", "")
+    tax_year = fye[:4] if fye else ""
+
+    story: list = []
+    story.append(Paragraph("T2 Corporation Income Tax Return", h_style))
+    story.append(Paragraph(f"Client: <b>{client}</b>", normal))
+    story.append(Paragraph(f"Fiscal year end: <b>{fye}</b>", normal))
+    story.append(Paragraph(f"Tax year: <b>{tax_year}</b>", normal))
+    story.append(Paragraph(f"Generated: {data.get('generated_at', '')}", normal))
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph(
+        "<b>Pre-fill disclaimer:</b> " + data.get("disclaimer", {}).get("en", ""),
+        normal,
+    ))
+    story.append(PageBreak())
+
+    def _schedule_table(sched_data: dict, title: str) -> list:
+        out = [Paragraph(title, sub_style)]
+        lines = sched_data.get("lines") or []
+        if not lines:
+            out.append(Paragraph("<i>No data.</i>", normal))
+            return out
+        rows = [["Line", "Description", "Amount"]]
+        for ln in lines:
+            amt = ln.get("amount", 0)
+            if isinstance(amt, Decimal):
+                amt_str = f"${amt:,.2f}"
+            else:
+                try:
+                    amt_str = f"${float(amt):,.2f}"
+                except (TypeError, ValueError):
+                    amt_str = str(amt)
+            rows.append([
+                str(ln.get("line", "")),
+                str(ln.get("description", ""))[:60],
+                amt_str,
+            ])
+        tbl = Table(rows, colWidths=[0.7 * inch, 4.5 * inch, 1.3 * inch])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2d5c")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f7f9")]),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        out.append(tbl)
+        out.append(Spacer(1, 0.25 * inch))
+        return out
+
+    for sched_key, title in (
+        ("schedule_1", "Schedule 1 — Net Income for Tax Purposes"),
+        ("schedule_8", "Schedule 8 — Capital Cost Allowance (CCA)"),
+        ("schedule_50", "Schedule 50 — Shareholder Information"),
+        ("schedule_100", "Schedule 100 — Balance Sheet"),
+        ("schedule_125", "Schedule 125 — Income Statement"),
+    ):
+        if data.get(sched_key):
+            story.extend(_schedule_table(data[sched_key], title))
+
+    co17 = data.get("co17") or {}
+    if co17.get("lines"):
+        story.append(PageBreak())
+        story.extend(_schedule_table(co17, "CO-17 — Quebec Corporation Return"))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_t2_minimal(data: dict) -> bytes:
+    """Fallback renderer: valid single-page PDF even if reportlab is absent.
+    Uses a hand-rolled PDF writer; same structural shape as the real renderer.
+    """
+    content = _t2_plain_text(data)
+    # Minimal PDF 1.4 with one text page using Courier.
+    # Each line becomes a showText call; pages auto-break every ~55 lines.
+    lines = content.split("\n")
+    page_lines = [lines[i:i + 55] for i in range(0, len(lines), 55)]
+    objects: list[bytes] = []
+
+    def _add(obj: bytes) -> int:
+        objects.append(obj)
+        return len(objects)
+
+    # Header objects are added in proper order to keep refs right.
+    page_ids = list(range(3, 3 + len(page_lines)))
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
+    _add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    _add(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_lines)} >>".encode())
+    content_offsets: list[int] = []
+    for idx, chunk in enumerate(page_lines, start=3):
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 "
+            f"{3 + 2 * len(page_lines)} 0 R >> >> "
+            f"/MediaBox [0 0 612 792] /Contents {idx + len(page_lines)} 0 R >>"
+        ).encode()
+        _add(page_obj)
+    for chunk in page_lines:
+        stream_lines = ["BT", "/F1 9 Tf", "50 752 Td"]
+        for ln in chunk:
+            safe = ln.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            stream_lines.append(f"({safe}) Tj")
+            stream_lines.append("0 -12 Td")
+        stream_lines.append("ET")
+        stream = "\n".join(stream_lines).encode("latin-1", errors="replace")
+        _add(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+    _add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = [0]
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for off in offsets[1:]:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_pos}\n%%EOF\n"
+    ).encode()
+    return bytes(out)
+
+
+def _t2_plain_text(data: dict) -> str:
+    lines = []
+    client = data.get("client_code", "")
+    fye = data.get("fiscal_year_end", "")
+    lines.append(f"T2 Corporation Income Tax Return -- {client} -- FYE {fye}")
+    lines.append(data.get("disclaimer", {}).get("en", ""))
+    lines.append("")
+    for sched_key, title in (
+        ("schedule_1", "Schedule 1 - Net Income for Tax Purposes"),
+        ("schedule_8", "Schedule 8 - Capital Cost Allowance"),
+        ("schedule_50", "Schedule 50 - Shareholder Information"),
+        ("schedule_100", "Schedule 100 - Balance Sheet"),
+        ("schedule_125", "Schedule 125 - Income Statement"),
+    ):
+        sched = data.get(sched_key) or {}
+        if not sched.get("lines"):
+            continue
+        lines.append("")
+        lines.append(title)
+        lines.append("-" * len(title))
+        for ln in sched.get("lines", []):
+            amt = ln.get("amount", 0)
+            try:
+                amt_f = float(amt)
+                amt_str = f"${amt_f:>12,.2f}"
+            except (TypeError, ValueError):
+                amt_str = str(amt)
+            lines.append(
+                f"  Line {str(ln.get('line',''))[:6]:6s} {str(ln.get('description',''))[:45]:45s} {amt_str}"
+            )
+    return "\n".join(lines)
