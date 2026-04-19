@@ -3577,8 +3577,19 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
             extracted_amount = max(amounts_found)
 
     if extracted_amount is not None:
-        result["amount"] = extracted_amount
-        confidence += 0.15
+        # Adversarial-OCR guardrail: cap absurd amounts. A legit
+        # invoice above $100M would be a confident-wrong finding
+        # (CAD GDP-scale and typical OCR misreads like "999,999,999,999.99"
+        # live here). We drop the amount and penalize confidence so
+        # the document lands in NeedsReview rather than posting.
+        if extracted_amount >= 100_000_000:  # $100M cap
+            result["amount"] = None
+            result["amount_flagged_absurd"] = True
+            result["flagged_raw_amount"] = extracted_amount
+            confidence = max(0.0, confidence - 0.3)
+        else:
+            result["amount"] = extracted_amount
+            confidence += 0.15
 
     # Extract date
     _MONTH_MAP = {
