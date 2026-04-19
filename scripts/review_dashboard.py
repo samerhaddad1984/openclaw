@@ -893,16 +893,23 @@ def bootstrap_schema() -> None:
         # Sliding-scale match telemetry: remember which tier each bank
         # transaction match fell into so the reconciliation UI can badge
         # high-value matches and show their score breakdown.
-        bt_cols = {row["name"] for row in conn.execute(
-            "PRAGMA table_info(bank_transactions)"
-        ).fetchall()}
-        if "match_confidence_tier" not in bt_cols:
-            conn.execute(
-                "ALTER TABLE bank_transactions ADD COLUMN match_confidence_tier TEXT DEFAULT 'auto'"
-            )
-        if "match_score_json" not in bt_cols:
-            conn.execute("ALTER TABLE bank_transactions ADD COLUMN match_score_json TEXT")
-        conn.commit()
+        # Only run when bank_transactions already exists — some tests boot
+        # from a DB that doesn't include optional tables, and this
+        # migration is strictly additive.
+        bt_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='bank_transactions'"
+        ).fetchone()
+        if bt_table:
+            bt_cols = {row["name"] for row in conn.execute(
+                "PRAGMA table_info(bank_transactions)"
+            ).fetchall()}
+            if "match_confidence_tier" not in bt_cols:
+                conn.execute(
+                    "ALTER TABLE bank_transactions ADD COLUMN match_confidence_tier TEXT DEFAULT 'auto'"
+                )
+            if "match_score_json" not in bt_cols:
+                conn.execute("ALTER TABLE bank_transactions ADD COLUMN match_score_json TEXT")
+            conn.commit()
 
         # Rate limit /forgot requests (prevents enumeration + spam)
         conn.execute("""
@@ -16686,6 +16693,35 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     ctx, user, pc_client, pc_period, flash, flash_error, lang=lang))
                 return
 
+            # Final-prep Caveat B: accrual preview for a client + period end.
+            # Owner/manager only. Returns JSON the UI can render in a table.
+            if path == "/period_close/accruals":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                pa_client = qs.get("client_code", [""])[0].strip()
+                pa_date = qs.get("period_end", [""])[0].strip()
+                if not pa_client or not pa_date:
+                    self._send_json(
+                        {"error": "missing client_code or period_end"}, status=400,
+                    )
+                    return
+                if not _require_client_in_firm(pa_client, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                try:
+                    from src.engines.accrual_engine import generate_period_accruals  # noqa: PLC0415
+                    out = generate_period_accruals(
+                        pa_client, pa_date,
+                        firm_code=(ctx.get("firm_code") if ctx else "") or "",
+                        persist=False,
+                    )
+                    self._send_json({"ok": True, **out})
+                except Exception as _exc:
+                    logging.exception("accrual preview failed")
+                    self._send_json({"ok": False, "error": str(_exc)}, status=500)
+                return
+
             if path == "/period_close/pdf":
                 if not _can_do(ctx, "view_all_clients"):
                     self._send_html(page_layout(
@@ -20988,6 +21024,87 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             # ------------------------------------------------------------------
+            # Final-prep Caveat B: period-close accrual endpoints.
+            # generate: builds draft JEs for the period (persist=True).
+            # reverse:  builds reversing JEs for the next period start.
+            # approve:  posts one draft accrual via the GL engine.
+            # skip:     marks a draft accrual as 'skipped'.
+            if path == "/period_close/accruals/generate":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                pa_client = normalize_text(form.get("client_code", ""))
+                pa_end = normalize_text(form.get("period_end", ""))
+                if not pa_client or not pa_end:
+                    self._send_json({"error": "missing params"}, status=400)
+                    return
+                if not _require_client_in_firm(pa_client, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                try:
+                    from src.engines.accrual_engine import generate_period_accruals  # noqa: PLC0415
+                    out = generate_period_accruals(pa_client, pa_end, persist=True)
+                    self._send_json({"ok": True, **out})
+                except Exception as _exc:
+                    logging.exception("accrual generate failed")
+                    self._send_json({"ok": False, "error": str(_exc)}, status=500)
+                return
+
+            if path == "/period_close/accruals/reverse":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                pa_client = normalize_text(form.get("client_code", ""))
+                pa_start = normalize_text(form.get("period_start", ""))
+                if not pa_client or not pa_start:
+                    self._send_json({"error": "missing params"}, status=400)
+                    return
+                if not _require_client_in_firm(pa_client, ctx):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                try:
+                    from src.engines.accrual_engine import generate_period_reversals  # noqa: PLC0415
+                    out = generate_period_reversals(pa_client, pa_start)
+                    self._send_json({"ok": True, **out})
+                except Exception as _exc:
+                    logging.exception("accrual reverse failed")
+                    self._send_json({"ok": False, "error": str(_exc)}, status=500)
+                return
+
+            if path == "/period_close/accruals/approve":
+                if not _can_do(ctx, "manage_journal_entries"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                entry_id = normalize_text(form.get("entry_id", ""))
+                if not entry_id:
+                    self._send_json({"error": "missing entry_id"}, status=400)
+                    return
+                try:
+                    from src.engines.accrual_engine import approve_accruals  # noqa: PLC0415
+                    out = approve_accruals([entry_id])
+                    self._send_json({"ok": True, **out})
+                except Exception as _exc:
+                    logging.exception("accrual approve failed")
+                    self._send_json({"ok": False, "error": str(_exc)}, status=500)
+                return
+
+            if path == "/period_close/accruals/skip":
+                if not _can_do(ctx, "manage_journal_entries"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                entry_id = normalize_text(form.get("entry_id", ""))
+                if not entry_id:
+                    self._send_json({"error": "missing entry_id"}, status=400)
+                    return
+                try:
+                    from src.engines.accrual_engine import skip_accrual  # noqa: PLC0415
+                    out = skip_accrual(entry_id)
+                    self._send_json({"ok": True, **out})
+                except Exception as _exc:
+                    logging.exception("accrual skip failed")
+                    self._send_json({"ok": False, "error": str(_exc)}, status=500)
+                return
+
             # FIX 7: Manual journal entries POST (manager/owner)
             # ------------------------------------------------------------------
             if path == "/journal_entries":
