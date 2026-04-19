@@ -20701,6 +20701,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         self._flash_redirect("/journal_entries", error="All fields are required.")
                         return
 
+                    # Balance + sanity guard: debit_account and credit_account must be
+                    # distinct and amount must be a positive number. A single-line JE
+                    # is structurally balanced (same amount on both sides), but the
+                    # renderer also lets a reviewer accidentally pick the same account
+                    # for both legs — that would no-op the entry while looking posted.
+                    try:
+                        _mje_amount_f = float(mje_amount)
+                    except (TypeError, ValueError):
+                        self._flash_redirect("/journal_entries", error="Amount must be numeric.")
+                        return
+                    if _mje_amount_f <= 0.005:  # effectively zero with 2-decimal tolerance
+                        self._flash_redirect(
+                            "/journal_entries",
+                            error="Journal entry amount must be greater than zero.",
+                        )
+                        return
+                    if debit_account.strip() == credit_account.strip():
+                        self._flash_redirect(
+                            "/journal_entries",
+                            error="Debit and credit accounts must differ.",
+                        )
+                        return
+
                     # Conflict detection: check for automated postings in same account/period
                     conflicts = []
                     with open_db() as _mje_conn:
@@ -20773,27 +20796,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if action == "post":
                     entry_id = form.get("entry_id", "").strip()
                     if entry_id:
-                        with open_db() as _mje_conn:
-                            _mje_conn.execute(
-                                "UPDATE manual_journal_entries SET status = 'posted', updated_at = datetime('now') "
-                                "WHERE entry_id = ? AND status = 'draft'",
-                                (entry_id,),
-                            )
-                            _mje_conn.commit()
-                        self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} posted.")
+                        try:
+                            from src.engines.gl_engine import post_journal_entry  # noqa: PLC0415
+                            post_journal_entry(entry_id)
+                            self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} posted to GL.")
+                        except ValueError as _ve:
+                            self._flash_redirect("/journal_entries", error=str(_ve))
+                        except Exception as _exc:
+                            logging.exception("JE post failed")
+                            self._flash_redirect("/journal_entries", error=f"Post failed: {_exc}")
                     return
 
                 if action == "reverse":
                     entry_id = form.get("entry_id", "").strip()
                     if entry_id:
-                        with open_db() as _mje_conn:
-                            _mje_conn.execute(
-                                "UPDATE manual_journal_entries SET status = 'reversed', updated_at = datetime('now') "
-                                "WHERE entry_id = ? AND status IN ('draft', 'posted')",
-                                (entry_id,),
-                            )
-                            _mje_conn.commit()
-                        self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} reversed.")
+                        try:
+                            from src.engines.gl_engine import reverse_journal_entry  # noqa: PLC0415
+                            reverse_journal_entry(entry_id)
+                            self._flash_redirect("/journal_entries", flash=f"Entry {entry_id} reversed.")
+                        except ValueError as _ve:
+                            self._flash_redirect("/journal_entries", error=str(_ve))
+                        except Exception as _exc:
+                            logging.exception("JE reverse failed")
+                            self._flash_redirect("/journal_entries", error=f"Reverse failed: {_exc}")
                     return
 
                 self._flash_redirect("/journal_entries")
