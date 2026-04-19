@@ -2732,6 +2732,14 @@ def render_learning_suggestions(document_id: str, row: dict, username: str,
         return f'<div class="card"><h3>{esc(title)}</h3><p class="muted">{esc(t("no_suggestions", lang))}</p></div>'
 
     current = {k: normalize_text(row[k]) for k in ["vendor","client_code","doc_type","gl_account","tax_code","category","review_status"]}
+    # Optimistic-concurrency: emit the row's current version into every
+    # suggestion form so /apply_suggestion can 409 if the doc was edited
+    # since the panel rendered.
+    _doc_ver = row.get("version") if isinstance(row, dict) else None
+    try:
+        _doc_ver = int(_doc_ver) if _doc_ver is not None else 1
+    except (TypeError, ValueError):
+        _doc_ver = 1
     rows_html: list[str] = []
     for field, options in suggestions.items():
         for opt in options:
@@ -2743,6 +2751,7 @@ def render_learning_suggestions(document_id: str, row: dict, username: str,
                     <input type="hidden" name="document_id" value="{esc(document_id)}">
                     <input type="hidden" name="field" value="{esc(field)}">
                     <input type="hidden" name="value" value="{esc(opt['value'])}">
+                    <input type="hidden" name="expected_version" value="{_doc_ver}">
                     <button class="btn-primary" type="submit">{esc(t("btn_apply", lang))}</button>
                 </form></td></tr>""")
 
@@ -20782,9 +20791,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 before_row = get_document(document_id)
                 if before_row is None:
                     raise ValueError(t("err_doc_not_found", lang))
-                update_document_fields(document_id, {form.get("field",""): form.get("value","")})
+                _sug_field = form.get("field", "")
+                _sug_value = form.get("value", "")
+                # Optimistic-concurrency: require expected_version so a
+                # suggestion applied against a stale read is refused. If
+                # the doc was edited between the suggestion panel loading
+                # and this click, we return 409 with
+                # current_version + a "reload and re-apply" message.
+                _body = dict(form)
+                _asres = update_document_fields_versioned(
+                    document_id, {_sug_field: _sug_value} if _sug_field else {},
+                    body=_body, require_version=True,
+                )
+                if _asres.status != 200:
+                    # 400 (missing version) and 409 (stale) both surface
+                    # to the caller — use _send_json so an interactive
+                    # client sees the structured error.
+                    payload = _asres.to_json()
+                    if _asres.status == 409:
+                        payload["message"] = (
+                            "Document was modified since the suggestion was "
+                            "generated. Reload and re-apply the suggestion."
+                        )
+                    self._send_json(payload, status=_asres.status)
+                    return
                 record_learning_corrections(
-                    document_id, before_row, {form.get("field",""): form.get("value","")},
+                    document_id, before_row, {_sug_field: _sug_value},
                     reviewer=(user.get("username") if user else "") or DEFAULT_REVIEWER,
                     firm_code=(ctx.get("firm_code") if ctx else "") or "",
                 )
