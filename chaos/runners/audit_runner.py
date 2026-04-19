@@ -187,7 +187,7 @@ def _seed_population(
         # Also add the original as targeted so the rule sees a 2+ cluster
         targeted.append(orig["document_id"])
 
-    elif subtype == "cross_vendor_duplicate":
+    elif subtype in ("cross_vendor_duplicate", "duplicate_amount_diff_vendor"):
         # Use vendor names that are NOT in `_VENDORS`, so they have no
         # baseline history. Otherwise `_rule_vendor_amount_anomaly` fires
         # as a true-positive-for-that-vendor but is noise for this
@@ -379,6 +379,36 @@ def _seed_population(
                    "document_date": (base_date - timedelta(days=days)).isoformat(),
                    "raw": {"bank_account": acct, "vendor": v, "amount": 1500.0}}
             targeted.append(_insert_doc(conn, doc))
+
+    elif subtype in ("tax_reg_contradiction", "tax_registration_contradiction"):
+        # fraud_engine rule 11 needs vendor_memory rows flagged as
+        # unregistered (or E/Z tax_code history) PLUS a current invoice
+        # charging tax. We seed both here.
+        v = "Tax-Unregistered Supplier Inc"
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS vendor_memory (
+                vendor TEXT,
+                client_code TEXT,
+                tax_code TEXT,
+                raw_result TEXT,
+                updated_at TEXT
+            )""",
+        )
+        # Seed 3 vendor_memory rows showing this vendor was previously exempt.
+        for i in range(3):
+            conn.execute(
+                """INSERT INTO vendor_memory (vendor, client_code, tax_code, raw_result, updated_at)
+                   VALUES (?, ?, 'E', ?, datetime('now'))""",
+                (v, client, '{"tax_registered": false}'),
+            )
+        # Current invoice suddenly charges GST+QST with tax_code=T.
+        d_now = base_date
+        while d_now.weekday() >= 5:
+            d_now -= timedelta(days=1)
+        doc = {"client_code": client, "vendor": v, "amount": 600.0,
+               "document_date": d_now.isoformat(),
+               "raw": {"tax_code": "T", "gst_amount": 30.0, "qst_amount": 59.85, "vendor": v}}
+        targeted.append(_insert_doc(conn, doc))
 
     conn.commit()
     return targeted

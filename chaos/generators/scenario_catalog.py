@@ -23,23 +23,41 @@ from typing import Any, Iterable
 
 from . import (
     audit_scenarios,
+    concurrency_scenarios,
     financial_scenarios,
     fraud_scenarios,
+    invoice_scenarios,
+    je_stress_scenarios,
     receipt_scenarios,
     recon_scenarios,
+    recon_stress_scenarios,
     tax_scenarios,
+    tax_stress_scenarios,
+    workflow_breaking_scenarios,
     workflow_scenarios,
 )
 
 
+def _combine(*gens):
+    def _g(rnd):
+        out = []
+        for g in gens:
+            out.extend(g(rnd))
+        return out
+    return _g
+
+
 TRACK_GENERATORS = {
-    "receipts":  receipt_scenarios.generate,
-    "audit":     audit_scenarios.generate,
-    "financial": financial_scenarios.generate,
-    "recon":     recon_scenarios.generate,
-    "workflow":  workflow_scenarios.generate,
-    "fraud":     fraud_scenarios.generate,
-    "tax":       tax_scenarios.generate,
+    "receipts":     receipt_scenarios.generate,
+    "audit":        audit_scenarios.generate,
+    "financial":    financial_scenarios.generate,
+    "recon":        _combine(recon_scenarios.generate, recon_stress_scenarios.generate),
+    "workflow":     _combine(workflow_scenarios.generate, workflow_breaking_scenarios.generate),
+    "fraud":        fraud_scenarios.generate,
+    "tax":          _combine(tax_scenarios.generate, tax_stress_scenarios.generate),
+    "invoice":      invoice_scenarios.generate,
+    "je":           je_stress_scenarios.generate,
+    "concurrency":  concurrency_scenarios.generate,
 }
 
 

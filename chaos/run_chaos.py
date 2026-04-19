@@ -48,8 +48,11 @@ from chaos.reports.html_report import write_html_report  # noqa: E402
 from chaos.reports.markdown_report import write_markdown_report  # noqa: E402
 from chaos.runners import (  # noqa: E402
     AuditRunner,
+    ConcurrencyRunner,
     FinancialRunner,
     FraudRunner,
+    InvoiceRunner,
+    JERunner,
     ReceiptRunner,
     ReconRunner,
     TaxRunner,
@@ -71,6 +74,9 @@ RUNNER_FACTORIES = {
     "recon":     lambda ctx: ReconRunner(chaos_db_path=ctx["chaos_db_path"]),
     "workflow":  lambda ctx: WorkflowRunner(chaos_db_path=ctx["chaos_db_path"]),
     "tax":       lambda ctx: TaxRunner(),
+    "invoice":   lambda ctx: InvoiceRunner(chaos_db_path=ctx["chaos_db_path"]),
+    "je":        lambda ctx: JERunner(chaos_db_path=ctx["chaos_db_path"]),
+    "concurrency": lambda ctx: ConcurrencyRunner(chaos_db_path=ctx["chaos_db_path"]),
 }
 
 
