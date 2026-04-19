@@ -22000,13 +22000,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     pct = float(pct_raw)
                 except ValueError as e:
                     raise ValueError("allocation_percentage must be numeric") from e
+                from src.db.version_handlers import versioned_child_mutation
                 with open_db() as conn:
-                    _partnership.add_partner(
-                        conn, partnership_id=pid, partner_name=pn,
-                        partner_type=pt, partner_sin_or_bn=sin,
-                        allocation_percentage=pct, effective_date=eff,
-                        end_date=end,
+                    _cres = versioned_child_mutation(
+                        conn, parent_table="partnerships", parent_pk_value=pid,
+                        body=dict(form),
+                        child_operation=lambda c: _partnership.add_partner(
+                            c, partnership_id=pid, partner_name=pn,
+                            partner_type=pt, partner_sin_or_bn=sin,
+                            allocation_percentage=pct, effective_date=eff,
+                            end_date=end,
+                        ),
                     )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/partnerships/{pid}",
                                       flash=f"Partner {pn} added.")
                 return
@@ -22016,8 +22024,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 pid = int(path.split("/")[2])
                 partner_id = int(normalize_text(form.get("partner_id", "0")) or 0)
+                from src.db.version_handlers import versioned_child_mutation
                 with open_db() as conn:
-                    _partnership.remove_partner(conn, partner_id)
+                    _cres = versioned_child_mutation(
+                        conn, parent_table="partnerships", parent_pk_value=pid,
+                        body=dict(form),
+                        child_operation=lambda c: _partnership.remove_partner(c, partner_id),
+                    )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/partnerships/{pid}",
                                       flash="Partner removed.")
                 return
@@ -22033,10 +22049,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     inc = float(inc_raw)
                 except ValueError as e:
                     raise ValueError("fiscal_year and partnership_income must be numeric") from e
-                with open_db() as conn:
-                    allocation = _partnership.compute_partnership_allocation(
-                        conn, pid, fy, inc,
+                from src.db.version_handlers import versioned_child_mutation
+                _alloc_holder: dict[str, Any] = {}
+                def _alloc_op(c):
+                    _alloc_holder["alloc"] = _partnership.compute_partnership_allocation(
+                        c, pid, fy, inc,
                     )
+                with open_db() as conn:
+                    _cres = versioned_child_mutation(
+                        conn, parent_table="partnerships", parent_pk_value=pid,
+                        body=dict(form), child_operation=_alloc_op,
+                    )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
+                allocation = _alloc_holder.get("alloc") or {"allocations": []}
                 msg_parts = []
                 for a in allocation.get("allocations", [])[:8]:
                     msg_parts.append(
@@ -22064,11 +22091,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         qa = float(qa_raw)
                     except ValueError as e:
                         raise ValueError("qualifying_amount must be numeric") from e
+                from src.db.version_handlers import versioned_child_mutation
                 with open_db() as conn:
-                    _sred.add_expenditure(
-                        conn, claim_id=cid, category=cat, amount=amt,
-                        qualifying_amount=qa, description=desc,
+                    _cres = versioned_child_mutation(
+                        conn, parent_table="sred_claims", parent_pk_value=cid,
+                        body=dict(form),
+                        child_operation=lambda c: _sred.add_expenditure(
+                            c, claim_id=cid, category=cat, amount=amt,
+                            qualifying_amount=qa, description=desc,
+                        ),
                     )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/sred/{cid}",
                                       flash=f"Added {cat} ${amt:.2f}.")
                 return
@@ -22078,8 +22113,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError(t("err_mgr_owner_required", lang))
                 cid = int(path.split("/")[2])
                 exp_id = int(normalize_text(form.get("expenditure_id", "0")) or 0)
+                from src.db.version_handlers import versioned_child_mutation
                 with open_db() as conn:
-                    _sred.remove_expenditure(conn, exp_id)
+                    _cres = versioned_child_mutation(
+                        conn, parent_table="sred_claims", parent_pk_value=cid,
+                        body=dict(form),
+                        child_operation=lambda c: _sred.remove_expenditure(c, exp_id),
+                    )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/sred/{cid}", flash="Removed.")
                 return
 
@@ -22090,14 +22133,20 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 adv = normalize_text(form.get("technological_advancement", ""))
                 obs = normalize_text(form.get("technological_obstacles", ""))
                 work = normalize_text(form.get("work_performed", ""))
-                with open_db() as conn:
-                    _sred.ensure_sred_tables(conn)
-                    conn.execute(
-                        "UPDATE sred_claims SET technological_advancement=?, "
-                        "technological_obstacles=?, work_performed=? WHERE id=?",
-                        (adv, obs, work, cid),
-                    )
-                    conn.commit()
+                # Narrative edits the parent claim directly → route through
+                # the claim-level versioned helper (not the child helper).
+                # This gives us a clean 409 on stale reads and keeps the
+                # parent-version bump consistent with the child routes.
+                _nres = update_sred_claim_fields_versioned(
+                    cid,
+                    {"technological_advancement": adv,
+                     "technological_obstacles": obs,
+                     "work_performed": work},
+                    body=dict(form),
+                )
+                if _nres.status == 409:
+                    self._send_json(_nres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/sred/{cid}", flash="Narrative saved.")
                 return
 

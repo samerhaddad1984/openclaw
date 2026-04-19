@@ -108,6 +108,111 @@ def _read_current_version(
             return None
 
 
+def versioned_child_mutation(
+    conn: sqlite3.Connection,
+    *,
+    parent_table: str,
+    parent_pk_value: Any,
+    body: dict[str, Any] | None,
+    child_operation: "callable",  # type: ignore[valid-type]
+    require_version: bool = False,
+) -> VersionedUpdateResult:
+    """Guard a child-table mutation (INSERT/DELETE) with a parent-row
+    version check.
+
+    Semantics:
+      1. Read parent_table.version for parent_pk_value.
+      2. If the caller supplied ``expected_version`` / ``version`` in
+         ``body`` and it doesn't match the current parent version, return
+         ``VersionedUpdateResult(status=409, current_version=N)``.
+      3. If ``require_version=True`` and no version was supplied, return
+         status=400 without touching anything.
+      4. Invoke ``child_operation(conn)`` — the actual INSERT/DELETE.
+      5. Bump the parent row's version by 1 and commit.
+
+    This prevents cross-table races such as "two reviewers hit
+    /partnerships/42/partners/add at the same time, each ended up
+    allocating 100% of the profit to their own partner because the
+    parent partnership row was never locked."
+    """
+    from .optimistic import VERSIONED_TABLES, add_version_column_if_missing
+    if parent_table not in VERSIONED_TABLES:
+        raise ValueError(f"parent_table {parent_table!r} not in VERSIONED_TABLES")
+    parent_pk_column = VERSIONED_TABLES[parent_table]
+
+    try:
+        add_version_column_if_missing(conn, parent_table)
+    except sqlite3.OperationalError:
+        pass
+
+    expected_version = extract_version(body)
+    if expected_version is None:
+        if require_version:
+            return VersionedUpdateResult(status=400, error="version_required")
+        # Legacy path: take a write lock up-front so the parent bump +
+        # child op land atomically relative to other writers. BEGIN
+        # IMMEDIATE serializes concurrent legacy writers as well.
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError:
+            pass
+        child_operation(conn)
+        try:
+            conn.execute(
+                f'UPDATE "{parent_table}" '
+                f'SET version = COALESCE(version, 1) + 1 '
+                f'WHERE "{parent_pk_column}" = ?',
+                (parent_pk_value,),
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        new_version = _read_current_version(
+            conn, parent_table, parent_pk_column, parent_pk_value,
+        )
+        return VersionedUpdateResult(status=200, new_version=new_version)
+
+    # Versioned path: take an IMMEDIATE write-lock BEFORE the version
+    # check, bump the parent first (if version matches), then run the
+    # child op. Doing the bump first makes the lost-update check an
+    # atomic compare-and-swap — two concurrent writers with the same
+    # stale read can't both pass; the second sees rowcount=0 and 409s
+    # *before* touching any child rows.
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+    except sqlite3.OperationalError:
+        # Already in a transaction — continue; the caller's enclosing
+        # ``with open_db() as conn`` scope is still authoritative.
+        pass
+    try:
+        cur = conn.execute(
+            f'UPDATE "{parent_table}" '
+            f'SET version = version + 1 '
+            f'WHERE "{parent_pk_column}" = ? AND version = ?',
+            (parent_pk_value, int(expected_version)),
+        )
+        if cur.rowcount == 0:
+            current = _read_current_version(
+                conn, parent_table, parent_pk_column, parent_pk_value,
+            )
+            try:
+                conn.rollback()
+            except sqlite3.OperationalError:
+                pass
+            return VersionedUpdateResult(status=409, current_version=current)
+        child_operation(conn)
+        conn.commit()
+    except sqlite3.OperationalError:
+        try:
+            conn.rollback()
+        except sqlite3.OperationalError:
+            pass
+        raise
+    return VersionedUpdateResult(
+        status=200, new_version=int(expected_version) + 1,
+    )
+
+
 def versioned_update_from_request(
     conn: sqlite3.Connection,
     *,
