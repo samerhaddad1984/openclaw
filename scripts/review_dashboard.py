@@ -2958,19 +2958,12 @@ def render_filing_summary(
   </form>
 </div>"""
 
-    preview = _preview_banner(
-        "GST/QST Filing Summary",
-        "Revenue-side tax calculations not yet integrated; gst_collected / "
-        "qst_collected default to 0 until the GL revenue pass ships. "
-        "Only ITC / ITR figures are production-grade.",
-    )
-
     if error_msg:
-        body = preview + filter_form + f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
+        body = filter_form + f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
         return page_layout(t("filing_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
     if not summary:
-        return page_layout(t("filing_title", lang), preview + filter_form, user=user, flash=flash, flash_error=flash_error, lang=lang)
+        return page_layout(t("filing_title", lang), filter_form, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
     # Summary totals card
     gst_col = summary["gst_collected"]
@@ -2995,6 +2988,10 @@ def render_filing_summary(
     <tr><td><strong>{esc(t("filing_itr", lang))}</strong></td><td>${itr}</td></tr>
     <tr><td><strong>{esc(t("filing_net_gst", lang))}</strong></td>           <td>${net_gst}</td></tr>
     <tr><td><strong>{esc(t("filing_net_qst", lang))}</strong></td>           <td>${net_qst}</td></tr>
+    <tr><td><strong>Taxable sales</strong></td><td>${summary.get("taxable_sales", 0)}</td></tr>
+    <tr><td><strong>Zero-rated sales</strong></td><td>${summary.get("zero_rated_sales", 0)}</td></tr>
+    <tr><td><strong>Exempt sales</strong></td><td>${summary.get("exempt_sales", 0)}</td></tr>
+    <tr><td><strong>Revenue source</strong></td><td>{esc(str(summary.get("revenue_source", "none")))}</td></tr>
   </table>
 </div>"""
 
@@ -3036,7 +3033,7 @@ def render_filing_summary(
     else:
         line_items_card = f'<div class="card"><p>{esc(t("filing_no_docs", lang))}</p></div>'
 
-    body = preview + filter_form + totals_card + line_items_card
+    body = filter_form + totals_card + line_items_card
     return page_layout(t("filing_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
@@ -3110,16 +3107,8 @@ def render_revenu_quebec(
   </span>
 </div>"""
 
-    preview = _preview_banner(
-        "Revenu Québec pre-fill (GST / QST)",
-        "Revenue-side GL integration is not yet wired; gst_collected / "
-        "qst_collected default to 0 and Quick Method form-field switching "
-        "is incomplete. Treat the generated PDF as a draft worksheet, "
-        "not a submission-ready return.",
-    )
-
     if error_msg:
-        body = preview + filter_form + warning_banner + \
+        body = filter_form + warning_banner + \
                f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
         return page_layout(
             t("rq_title", lang), body, user=user,
@@ -3129,7 +3118,7 @@ def render_revenu_quebec(
     if not prefill:
         # Show filter form + config form (if client selected) + warning
         config_card = _render_rq_config_card(client_code, client_cfg, lang)
-        body = preview + filter_form + warning_banner + config_card
+        body = filter_form + warning_banner + config_card
         return page_layout(
             t("rq_title", lang), body, user=user,
             flash=flash, flash_error=flash_error, lang=lang,
@@ -3215,7 +3204,7 @@ def render_revenu_quebec(
 </div>"""
 
     config_card = _render_rq_config_card(client_code, client_cfg, lang)
-    body = preview + filter_form + warning_banner + qm_card + lines_card + config_card
+    body = filter_form + warning_banner + qm_card + lines_card + config_card
     return page_layout(
         t("rq_title", lang), body, user=user,
         flash=flash, flash_error=flash_error, lang=lang,

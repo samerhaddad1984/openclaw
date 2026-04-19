@@ -742,6 +742,15 @@ def generate_filing_summary(
             "total_recoverable": itc_itr["total_recoverable"],
         })
 
+    # Revenue-side integration: pull GST/QST collected from AR invoices + any
+    # documents posted to revenue GL accounts (4xxx). Without this the return
+    # would be materially wrong (Sprint D critical issue #2).
+    revenue_totals = compute_revenue_side_taxes(
+        client_code, period_start, period_end, db_path=db_path,
+    )
+    gst_collected = Decimal(str(revenue_totals["gst_collected"]))
+    qst_collected = Decimal(str(revenue_totals["qst_collected"]))
+
     net_gst_payable = _round(gst_collected - itc_available)
     net_qst_payable = _round(qst_collected - itr_available)
 
@@ -755,10 +764,187 @@ def generate_filing_summary(
         "itr_available": _round(itr_available),
         "net_gst_payable": net_gst_payable,
         "net_qst_payable": net_qst_payable,
+        "taxable_sales": _round(Decimal(str(revenue_totals["taxable_sales"]))),
+        "zero_rated_sales": _round(Decimal(str(revenue_totals["zero_rated_sales"]))),
+        "exempt_sales": _round(Decimal(str(revenue_totals["exempt_sales"]))),
+        "revenue_source": revenue_totals["source"],
         "documents_posted": documents_posted,
         "documents_pending": documents_pending,
         "documents_total": len(rows),
         "line_items": line_items,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Revenue-side GST/QST integration
+# ---------------------------------------------------------------------------
+
+def compute_revenue_side_taxes(
+    client_code: str,
+    period_start: str,
+    period_end: str,
+    db_path: Path = DB_PATH,
+) -> dict[str, Any]:
+    """Compute GST/QST collected from revenue-side transactions.
+
+    Two sources are queried:
+      1. ``ar_invoices`` — primary, rich source with explicit gst_amount /
+         qst_amount columns. Non-draft invoices (``status`` != 'draft') count.
+      2. ``documents`` with ``gl_account`` in the 4xxx range — fallback for
+         firms that post revenue via document ingest rather than AR.
+
+        For documents, the tax_code registry is used (T = taxable, Z = zero-
+        rated, E = exempt) and stored amounts are treated as **tax-exclusive**
+        by default because that is the convention in the OtoCPA ledger. If a
+        revenue document happens to be recorded tax-inclusive the column
+        ``tax_total`` is used when present to avoid double-counting.
+
+    Returns a dict with:
+        gst_collected, qst_collected,
+        taxable_sales, zero_rated_sales, exempt_sales, total_revenue,
+        source (either 'ar_invoices', 'documents', 'both', or 'none').
+    """
+    _ZERO = Decimal("0")
+    totals = {
+        "gst_collected": _ZERO,
+        "qst_collected": _ZERO,
+        "taxable_sales": _ZERO,
+        "zero_rated_sales": _ZERO,
+        "exempt_sales": _ZERO,
+    }
+    sources_used: set[str] = set()
+
+    if not db_path.exists():
+        return {**{k: _ZERO for k in totals}, "total_revenue": _ZERO, "source": "none"}
+
+    try:
+        conn = _open_db_readonly(db_path)
+    except Exception:
+        return {**{k: _ZERO for k in totals}, "total_revenue": _ZERO, "source": "none"}
+
+    try:
+        # 1. AR invoices — explicit gst/qst columns.
+        try:
+            ar_rows = conn.execute(
+                """
+                SELECT amount_ht, gst_amount, qst_amount, total_amount, status, description
+                FROM ar_invoices
+                WHERE LOWER(COALESCE(client_code, '')) = LOWER(?)
+                  AND COALESCE(invoice_date, '') >= ?
+                  AND COALESCE(invoice_date, '') <= ?
+                  AND LOWER(COALESCE(status, '')) NOT IN ('draft', 'void', 'cancelled')
+                """,
+                (str(client_code).strip(), str(period_start), str(period_end)),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            ar_rows = []
+
+        for row in ar_rows:
+            base = Decimal(str(row["amount_ht"] or 0))
+            gst = Decimal(str(row["gst_amount"] or 0))
+            qst = Decimal(str(row["qst_amount"] or 0))
+            totals["gst_collected"] += gst
+            totals["qst_collected"] += qst
+            if gst > 0 or qst > 0:
+                totals["taxable_sales"] += base
+            else:
+                # Heuristic: description mentions export/zero-rated, otherwise
+                # treat as exempt. We intentionally don't guess; AR has no
+                # explicit tax_code column today.
+                desc = str(row["description"] or "").lower()
+                if any(k in desc for k in ("zero", "export", "zero-rated", "détax")):
+                    totals["zero_rated_sales"] += base
+                else:
+                    totals["exempt_sales"] += base
+        if ar_rows:
+            sources_used.add("ar_invoices")
+
+        # 2. Documents posted to revenue GL accounts (4xxx) — catches revenue
+        #    that was booked via the document ingest pipeline rather than the
+        #    AR module.
+        try:
+            doc_rows = conn.execute(
+                """
+                SELECT d.amount, d.tax_code, d.gl_account, d.subtotal, d.tax_total,
+                       d.gst_amount, d.qst_amount, d.entry_kind
+                FROM documents d
+                LEFT JOIN posting_jobs pj
+                    ON pj.document_id = d.document_id
+                    AND pj.rowid = (
+                        SELECT pj2.rowid FROM posting_jobs pj2
+                        WHERE pj2.document_id = d.document_id
+                        ORDER BY COALESCE(pj2.updated_at, pj2.created_at) DESC,
+                                 pj2.rowid DESC LIMIT 1
+                    )
+                WHERE LOWER(COALESCE(d.client_code, '')) = LOWER(?)
+                  AND COALESCE(d.document_date, '') >= ?
+                  AND COALESCE(d.document_date, '') <= ?
+                  AND LOWER(COALESCE(d.review_status, '')) != 'ignored'
+                  AND COALESCE(d.gl_account, '') LIKE '4%'
+                """,
+                (str(client_code).strip(), str(period_start), str(period_end)),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            doc_rows = []
+
+        for row in doc_rows:
+            tax_code = str(row["tax_code"] or "T").strip().upper() or "T"
+            # Prefer explicit columns; fall back to tax_code-based derivation.
+            gst = Decimal(str(row["gst_amount"] or 0))
+            qst = Decimal(str(row["qst_amount"] or 0))
+            subtotal = Decimal(str(row["subtotal"] or 0))
+            tax_total = Decimal(str(row["tax_total"] or 0))
+            amount = Decimal(str(row["amount"] or 0))
+
+            if gst == 0 and qst == 0 and tax_code in ("T", "GST_QST", "M"):
+                # Derive from the amount. Convention: revenue documents with
+                # a non-zero ``tax_total`` are tax-inclusive; otherwise treat
+                # the stored amount as the tax-exclusive base.
+                if tax_total > 0:
+                    base = amount - tax_total
+                elif subtotal > 0 and subtotal < amount:
+                    base = subtotal
+                else:
+                    # Tax-exclusive convention.
+                    base = amount
+                gst = _round(base * GST_RATE)
+                qst = _round(base * QST_RATE)
+                totals["gst_collected"] += gst
+                totals["qst_collected"] += qst
+                totals["taxable_sales"] += base
+            elif tax_code == "Z":
+                totals["zero_rated_sales"] += (subtotal or amount)
+            elif tax_code == "E":
+                totals["exempt_sales"] += (subtotal or amount)
+            elif gst > 0 or qst > 0:
+                totals["gst_collected"] += gst
+                totals["qst_collected"] += qst
+                totals["taxable_sales"] += (subtotal or (amount - gst - qst))
+            else:
+                # Unknown tax code on revenue GL — count as exempt by default
+                # rather than assuming taxable (safer for filing).
+                totals["exempt_sales"] += (subtotal or amount)
+        if doc_rows:
+            sources_used.add("documents")
+    finally:
+        conn.close()
+
+    total_revenue = totals["taxable_sales"] + totals["zero_rated_sales"] + totals["exempt_sales"]
+    if not sources_used:
+        source = "none"
+    elif len(sources_used) == 2:
+        source = "both"
+    else:
+        source = next(iter(sources_used))
+
+    return {
+        "gst_collected": _round(totals["gst_collected"]),
+        "qst_collected": _round(totals["qst_collected"]),
+        "taxable_sales": _round(totals["taxable_sales"]),
+        "zero_rated_sales": _round(totals["zero_rated_sales"]),
+        "exempt_sales": _round(totals["exempt_sales"]),
+        "total_revenue": _round(total_revenue),
+        "source": source,
     }
 
 
