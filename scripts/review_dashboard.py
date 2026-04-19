@@ -16213,6 +16213,204 @@ def render_recon_adjustments(
                         flash=flash, flash_error=flash_error, lang=lang)
 
 
+def render_partnership_detail(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    partnership_id: int,
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        p = _partnership.get_partnership(conn, partnership_id)
+        if not p:
+            return page_layout(
+                "Partnership",
+                '<div class="card"><p class="error">Partnership not found.</p>'
+                '<p><a href="/partnerships">Back</a></p></div>',
+                user=user, lang=lang,
+            )
+        partners = _partnership.list_partners(conn, partnership_id)
+
+    partner_rows = ""
+    for pa in partners:
+        partner_rows += (
+            f"<tr><td>{esc(pa.get('partner_name', ''))}</td>"
+            f"<td>{esc(pa.get('partner_type', ''))}</td>"
+            f"<td>{float(pa.get('allocation_percentage', 0) or 0):.2f}%</td>"
+            f"<td>{esc(pa.get('effective_date', ''))}</td>"
+            f"<td>{esc(pa.get('end_date') or '—')}</td>"
+            f"<td><form method='POST' action='/partnerships/{partnership_id}/partners/delete' style='display:inline;'>"
+            f"<input type='hidden' name='partner_id' value='{pa.get('id')}'>"
+            f"<button type='submit' class='btn-secondary' style='padding:2px 8px;font-size:11px;' "
+            f"onclick=\"return confirm('Remove partner?');\">Remove</button></form></td></tr>"
+        )
+    if not partner_rows:
+        partner_rows = "<tr><td colspan='6' class='muted'>No partners yet.</td></tr>"
+
+    add_partner_form = (
+        f'<form method="POST" action="/partnerships/{partnership_id}/partners/add" '
+        'style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+        '<div><label style="font-size:12px;font-weight:600;">Name</label><br>'
+        '<input type="text" name="partner_name" required '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Type</label><br>'
+        '<select name="partner_type" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;">'
+        '<option value="individual">Individual</option>'
+        '<option value="corporation">Corporation</option></select></div>'
+        '<div><label style="font-size:12px;font-weight:600;">SIN/BN</label><br>'
+        '<input type="text" name="partner_sin_or_bn" '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;width:120px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Allocation %</label><br>'
+        '<input type="number" name="allocation_percentage" step="0.01" min="0" max="100" required '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;width:80px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Effective</label><br>'
+        '<input type="date" name="effective_date" required '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">End (opt.)</label><br>'
+        '<input type="date" name="end_date" '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:6px 14px;">Add partner</button></div>'
+        '</form>'
+    )
+
+    allocate_form = (
+        f'<div class="card"><h3 style="margin-top:0;">Run allocation</h3>'
+        f'<form method="POST" action="/partnerships/{partnership_id}/allocate" '
+        'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        '<div><label style="font-size:13px;font-weight:600;">Fiscal year</label><br>'
+        '<input type="number" name="fiscal_year" min="2000" max="2100" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:100px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Total partnership income</label><br>'
+        '<input type="number" name="partnership_income" step="0.01" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Allocate</button></div>'
+        f'<div><a href="/partnerships/{partnership_id}/t5013_pdf" class="btn-secondary button-link">T5013 PDF</a></div>'
+        '</form></div>'
+    )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">{esc(p.get("partnership_name", ""))}</h2>'
+        f'<a href="/partnerships" class="btn-secondary button-link">Back</a></div>'
+        f'<div class="card"><p><strong>Client:</strong> {esc(p.get("client_code", ""))} '
+        f'&nbsp; <strong>Type:</strong> {esc(p.get("partnership_type", ""))} '
+        f'&nbsp; <strong>Year end:</strong> {esc(p.get("tax_year_end", "") or "—")}</p></div>'
+        f'<div class="card"><h3 style="margin-top:0;">Partners</h3>'
+        f'<table><thead><tr><th>Name</th><th>Type</th><th>%</th>'
+        f'<th>Effective</th><th>End</th><th>Action</th></tr></thead>'
+        f'<tbody>{partner_rows}</tbody></table><hr style="margin:16px 0;">'
+        f'{add_partner_form}</div>'
+        f'{allocate_form}'
+    )
+    return page_layout(f"Partnership #{partnership_id}", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_sred_detail(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    claim_id: int,
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        try:
+            claim = _sred.get_claim(conn, claim_id)
+        except ValueError:
+            return page_layout(
+                "SR&ED",
+                '<div class="card"><p class="error">Claim not found.</p>'
+                '<p><a href="/sred">Back</a></p></div>',
+                user=user, lang=lang,
+            )
+        expenditures = _sred.get_expenditures(conn, claim_id)
+        summary = _sred.generate_t661_summary(conn, claim_id)
+
+    exp_rows = ""
+    for e in expenditures:
+        exp_rows += (
+            f"<tr><td>{esc(e.get('category', ''))}</td>"
+            f"<td style='text-align:right;'>${float(e.get('amount') or 0):,.2f}</td>"
+            f"<td style='text-align:right;'>${float(e.get('qualifying_amount') or e.get('amount') or 0):,.2f}</td>"
+            f"<td>{esc((e.get('description') or '')[:60])}</td>"
+            f"<td><form method='POST' action='/sred/{claim_id}/expenditures/delete' style='display:inline;'>"
+            f"<input type='hidden' name='expenditure_id' value='{e.get('id')}'>"
+            f"<button type='submit' class='btn-secondary' style='padding:2px 8px;font-size:11px;' "
+            f"onclick=\"return confirm('Remove?');\">Remove</button></form></td></tr>"
+        )
+    if not exp_rows:
+        exp_rows = "<tr><td colspan='5' class='muted'>No expenditures yet.</td></tr>"
+
+    add_exp_form = (
+        f'<form method="POST" action="/sred/{claim_id}/expenditures/add" '
+        'style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+        '<div><label style="font-size:12px;font-weight:600;">Category</label><br>'
+        '<select name="category" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;">'
+        '<option value="salaries">Salaries</option>'
+        '<option value="contractors">Contractors</option>'
+        '<option value="materials">Materials</option>'
+        '<option value="overhead">Overhead</option></select></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Amount</label><br>'
+        '<input type="number" name="amount" step="0.01" required '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Qualifying (opt)</label><br>'
+        '<input type="number" name="qualifying_amount" step="0.01" '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
+        '<div><label style="font-size:12px;font-weight:600;">Description</label><br>'
+        '<input type="text" name="description" '
+        'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;width:240px;"></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:6px 14px;">Add</button></div>'
+        '</form>'
+    )
+
+    itc_card = (
+        '<div class="card"><h3 style="margin-top:0;">ITC summary</h3>'
+        f'<p><strong>T661 line 350 (qualifying):</strong> ${summary.get("line_350_total_qualifying", 0):,.2f}</p>'
+        f'<p><strong>T661 line 400 (proxy 55%):</strong> ${summary.get("line_400_proxy_uplift", 0):,.2f}</p>'
+        f'<p><strong>T661 line 500 (ITC earned):</strong> ${summary.get("line_500_itc_earned", 0):,.2f}</p>'
+        f'<p><strong>T661 line 530 (refundable):</strong> ${summary.get("line_530_refundable_itc", 0):,.2f}</p>'
+        f'<p><strong>T661 line 540 (non-refundable):</strong> ${summary.get("line_540_non_refundable_itc", 0):,.2f}</p>'
+        f'<p style="margin-top:12px;"><a href="/sred/{claim_id}/t661_pdf" class="btn-primary button-link">Download T661 PDF</a></p>'
+        '</div>'
+    )
+
+    aow_card = (
+        '<div class="card"><h3 style="margin-top:0;">A / O / W narrative</h3>'
+        f'<form method="POST" action="/sred/{claim_id}/narrative">'
+        '<p><label style="font-weight:600;">Advancement (technological)</label><br>'
+        f'<textarea name="technological_advancement" rows="3" style="width:100%;padding:6px;">'
+        f'{esc(claim.get("technological_advancement") or "")}</textarea></p>'
+        '<p><label style="font-weight:600;">Obstacles</label><br>'
+        f'<textarea name="technological_obstacles" rows="3" style="width:100%;padding:6px;">'
+        f'{esc(claim.get("technological_obstacles") or "")}</textarea></p>'
+        '<p><label style="font-weight:600;">Work performed</label><br>'
+        f'<textarea name="work_performed" rows="3" style="width:100%;padding:6px;">'
+        f'{esc(claim.get("work_performed") or "")}</textarea></p>'
+        '<button type="submit" class="btn-primary" style="padding:6px 14px;">Save narrative</button>'
+        '</form></div>'
+    )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">SR&amp;ED Claim — {esc(claim.get("project_name", ""))}</h2>'
+        f'<a href="/sred?client_code={urlquote(claim.get("client_code", ""))}" class="btn-secondary button-link">Back</a></div>'
+        f'<div class="card"><p><strong>Client:</strong> {esc(claim.get("client_code", ""))} '
+        f'&nbsp; <strong>Year:</strong> {esc(str(claim.get("tax_year", "")))} '
+        f'&nbsp; <strong>Method:</strong> {esc(claim.get("claim_type", ""))}</p></div>'
+        f'{aow_card}'
+        f'<div class="card"><h3 style="margin-top:0;">Expenditures</h3>'
+        f'<table><thead><tr><th>Category</th><th style="text-align:right;">Amount</th>'
+        f'<th style="text-align:right;">Qualifying</th><th>Description</th><th></th></tr></thead>'
+        f'<tbody>{exp_rows}</tbody></table><hr style="margin:16px 0;">'
+        f'{add_exp_form}</div>'
+        f'{itc_card}'
+    )
+    return page_layout(f"SR&ED #{claim_id}", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
 # ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
@@ -17665,6 +17863,93 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 pn_client = qs.get("client_code", [""])[0].strip()
                 self._send_html(render_partnerships(ctx, user, pn_client,
                                                      flash, flash_error, lang=lang))
+                return
+
+            if path.startswith("/partnerships/") and path.count("/") == 2:
+                # /partnerships/<id>
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                try:
+                    pid = int(path.rsplit("/", 1)[1])
+                except ValueError:
+                    self._send_html(page_layout("Invalid", "", user=user, lang=lang), status=400)
+                    return
+                self._send_html(render_partnership_detail(
+                    ctx, user, pid, flash, flash_error, lang=lang,
+                ))
+                return
+
+            if path.startswith("/partnerships/") and path.endswith("/t5013_pdf"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                try:
+                    pid = int(path.split("/")[2])
+                except (ValueError, IndexError):
+                    self._send_html(page_layout("Invalid", "", user=user, lang=lang), status=400)
+                    return
+                fy = int(qs.get("fiscal_year", ["2025"])[0])
+                income = float(qs.get("partnership_income", ["0"])[0] or 0)
+                try:
+                    with open_db() as conn:
+                        pdf_bytes = _partnership.generate_t5013_pdf(
+                            conn, pid, fy, income,
+                        )
+                except Exception as exc:
+                    self._send_html(page_layout(
+                        "T5013 error",
+                        f'<div class="card"><p class="error">{esc(str(exc))}</p></div>',
+                        user=user, lang=lang), status=400)
+                    return
+                fname = f"t5013_partnership_{pid}_{fy}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
+                return
+
+            if path.startswith("/sred/") and path.endswith("/t661_pdf"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                try:
+                    cid = int(path.split("/")[2])
+                except (ValueError, IndexError):
+                    self._send_html(page_layout("Invalid", "", user=user, lang=lang), status=400)
+                    return
+                try:
+                    with open_db() as conn:
+                        pdf_bytes = _sred.generate_t661_pdf(conn, cid)
+                except Exception as exc:
+                    self._send_html(page_layout(
+                        "T661 error",
+                        f'<div class="card"><p class="error">{esc(str(exc))}</p></div>',
+                        user=user, lang=lang), status=400)
+                    return
+                fname = f"t661_claim_{cid}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
+                return
+
+            if path.startswith("/sred/") and path.count("/") == 2:
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                try:
+                    cid = int(path.rsplit("/", 1)[1])
+                except ValueError:
+                    self._send_html(page_layout("Invalid", "", user=user, lang=lang), status=400)
+                    return
+                self._send_html(render_sred_detail(
+                    ctx, user, cid, flash, flash_error, lang=lang,
+                ))
                 return
 
             if path == "/sred":
@@ -21259,6 +21544,123 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     + (f"&paper_id={urlquote(samp_paper)}" if samp_paper else "")
                 )
                 self._flash_redirect(f"/audit/sample{redirect_qs}", flash=t("flash_samp_marked", lang))
+                return
+
+            if path.startswith("/partnerships/") and path.endswith("/partners/add"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                pid = int(path.split("/")[2])
+                pn = normalize_text(form.get("partner_name", ""))
+                pt = normalize_text(form.get("partner_type", "individual"))
+                sin = normalize_text(form.get("partner_sin_or_bn", ""))
+                pct_raw = normalize_text(form.get("allocation_percentage", ""))
+                eff = normalize_text(form.get("effective_date", ""))
+                end = normalize_text(form.get("end_date", "")) or ""
+                if not pn or not eff:
+                    raise ValueError("partner_name and effective_date required")
+                try:
+                    pct = float(pct_raw)
+                except ValueError as e:
+                    raise ValueError("allocation_percentage must be numeric") from e
+                with open_db() as conn:
+                    _partnership.add_partner(
+                        conn, partnership_id=pid, partner_name=pn,
+                        partner_type=pt, partner_sin_or_bn=sin,
+                        allocation_percentage=pct, effective_date=eff,
+                        end_date=end,
+                    )
+                self._flash_redirect(f"/partnerships/{pid}",
+                                      flash=f"Partner {pn} added.")
+                return
+
+            if path.startswith("/partnerships/") and path.endswith("/partners/delete"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                pid = int(path.split("/")[2])
+                partner_id = int(normalize_text(form.get("partner_id", "0")) or 0)
+                with open_db() as conn:
+                    _partnership.remove_partner(conn, partner_id)
+                self._flash_redirect(f"/partnerships/{pid}",
+                                      flash="Partner removed.")
+                return
+
+            if path.startswith("/partnerships/") and path.endswith("/allocate"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                pid = int(path.split("/")[2])
+                fy_raw = normalize_text(form.get("fiscal_year", ""))
+                inc_raw = normalize_text(form.get("partnership_income", ""))
+                try:
+                    fy = int(fy_raw)
+                    inc = float(inc_raw)
+                except ValueError as e:
+                    raise ValueError("fiscal_year and partnership_income must be numeric") from e
+                with open_db() as conn:
+                    allocation = _partnership.compute_partnership_allocation(
+                        conn, pid, fy, inc,
+                    )
+                msg_parts = []
+                for a in allocation.get("allocations", [])[:8]:
+                    msg_parts.append(
+                        f"{a['partner_name']}: ${a['allocated_income']:,.2f}"
+                    )
+                flash_msg = "Allocated " + "; ".join(msg_parts) if msg_parts else "No partners."
+                self._flash_redirect(f"/partnerships/{pid}", flash=flash_msg)
+                return
+
+            if path.startswith("/sred/") and path.endswith("/expenditures/add"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                cid = int(path.split("/")[2])
+                cat = normalize_text(form.get("category", ""))
+                amt_raw = normalize_text(form.get("amount", ""))
+                qa_raw = normalize_text(form.get("qualifying_amount", ""))
+                desc = normalize_text(form.get("description", ""))
+                try:
+                    amt = float(amt_raw)
+                except ValueError as e:
+                    raise ValueError("amount must be numeric") from e
+                qa: float | None = None
+                if qa_raw:
+                    try:
+                        qa = float(qa_raw)
+                    except ValueError as e:
+                        raise ValueError("qualifying_amount must be numeric") from e
+                with open_db() as conn:
+                    _sred.add_expenditure(
+                        conn, claim_id=cid, category=cat, amount=amt,
+                        qualifying_amount=qa, description=desc,
+                    )
+                self._flash_redirect(f"/sred/{cid}",
+                                      flash=f"Added {cat} ${amt:.2f}.")
+                return
+
+            if path.startswith("/sred/") and path.endswith("/expenditures/delete"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                cid = int(path.split("/")[2])
+                exp_id = int(normalize_text(form.get("expenditure_id", "0")) or 0)
+                with open_db() as conn:
+                    _sred.remove_expenditure(conn, exp_id)
+                self._flash_redirect(f"/sred/{cid}", flash="Removed.")
+                return
+
+            if path.startswith("/sred/") and path.endswith("/narrative"):
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                cid = int(path.split("/")[2])
+                adv = normalize_text(form.get("technological_advancement", ""))
+                obs = normalize_text(form.get("technological_obstacles", ""))
+                work = normalize_text(form.get("work_performed", ""))
+                with open_db() as conn:
+                    _sred.ensure_sred_tables(conn)
+                    conn.execute(
+                        "UPDATE sred_claims SET technological_advancement=?, "
+                        "technological_obstacles=?, work_performed=? WHERE id=?",
+                        (adv, obs, work, cid),
+                    )
+                    conn.commit()
+                self._flash_redirect(f"/sred/{cid}", flash="Narrative saved.")
                 return
 
             if path == "/partnerships/new":

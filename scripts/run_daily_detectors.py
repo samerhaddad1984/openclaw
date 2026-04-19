@@ -172,6 +172,88 @@ def run(client_only: str = "", weekly: bool = False, dry_run: bool = False) -> d
         conn.close()
 
 
+def _has_high_findings(summary: dict) -> tuple[int, dict[str, int]]:
+    """Count HIGH/MEDIUM findings across the run."""
+    totals = summary.get("totals", {})
+    return (
+        int(totals.get("circular_approval", 0))
+        + int(totals.get("phantom_employee", 0))
+        + int(totals.get("round_dollar", 0))
+        + int(totals.get("benford", 0))
+        + int(totals.get("vendor_typo", 0))
+    ), dict(totals)
+
+
+def _build_email_body(summary: dict, high_count: int, breakdown: dict) -> str:
+    lines = [
+        f"OtoCPA daily detector run — {summary.get('completed_at', '')}",
+        "",
+        f"HIGH-severity findings persisted: {high_count}",
+        "",
+        "Breakdown by detector:",
+    ]
+    for k, v in breakdown.items():
+        lines.append(f"  {k}: {v}")
+    lines.append("")
+    lines.append("By client:")
+    for client, cs in (summary.get("by_client") or {}).items():
+        lines.append(f"  {client}: {cs}")
+    lines.append("")
+    lines.append("Drill down at /audit/anomalies?client_code=<client>.")
+    return "\n".join(lines)
+
+
+def _send_notification_email(summary: dict, high_count: int, breakdown: dict) -> bool:
+    """Send notification email to firm admins.
+
+    Tries several transports in order and logs gracefully when none are
+    configured:
+      1. Gmail via src/integrations/email_client (if the firm has OAuth'd).
+      2. Plain SMTP via OTOCPA_SMTP_HOST / USER / PASS env vars.
+      3. Log-only (always safe).
+    """
+    body = _build_email_body(summary, high_count, breakdown)
+    subject = f"OtoCPA: {high_count} new HIGH-severity anomaly finding(s)"
+
+    # Attempt Gmail first.
+    try:
+        import importlib
+        mod = importlib.import_module("src.integrations.email_client")
+        if hasattr(mod, "send_email_to_firm_admins"):
+            mod.send_email_to_firm_admins(subject=subject, body=body)
+            log.info("Notification email sent via email_client.")
+            return True
+    except Exception as e:
+        log.info("email_client transport unavailable: %s", e)
+
+    # Fall back to SMTP.
+    import os
+    host = os.environ.get("OTOCPA_SMTP_HOST")
+    user = os.environ.get("OTOCPA_SMTP_USER")
+    pwd = os.environ.get("OTOCPA_SMTP_PASS")
+    to_addr = os.environ.get("OTOCPA_ADMIN_EMAIL")
+    if host and user and pwd and to_addr:
+        try:
+            import smtplib
+            from email.message import EmailMessage
+            msg = EmailMessage()
+            msg["Subject"] = subject
+            msg["From"] = user
+            msg["To"] = to_addr
+            msg.set_content(body)
+            with smtplib.SMTP_SSL(host, 465) as s:
+                s.login(user, pwd)
+                s.send_message(msg)
+            log.info("Notification email sent via SMTP to %s.", to_addr)
+            return True
+        except Exception as e:
+            log.warning("SMTP notification failed: %s", e)
+
+    # Log-only final fallback.
+    log.info("NOTIFICATION (log-only, no transport configured):\n%s", body)
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--weekly", action="store_true",
@@ -180,11 +262,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="restrict to a single client_code")
     ap.add_argument("--dry-run", action="store_true",
                     help="don't persist; log only")
+    ap.add_argument("--no-email", action="store_true",
+                    help="skip email notification even when findings exist")
     args = ap.parse_args(argv)
     summary = run(client_only=args.client, weekly=args.weekly,
                    dry_run=args.dry_run)
     import json as _json
     print(_json.dumps(summary, default=str, indent=2))
+
+    # Email notification when HIGH findings persisted (dry-run skips).
+    if not args.dry_run and not args.no_email:
+        high, breakdown = _has_high_findings(summary)
+        if high > 0:
+            _send_notification_email(summary, high, breakdown)
+
     return 0 if "error" not in summary else 1
 
 

@@ -271,3 +271,135 @@ def list_partnerships(
     sql += " ORDER BY id DESC"
     rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_partnership(conn: sqlite3.Connection, partnership_id: int) -> dict[str, Any] | None:
+    ensure_partnership_tables(conn)
+    row = conn.execute(
+        "SELECT * FROM partnerships WHERE id=?", (partnership_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_partners(conn: sqlite3.Connection, partnership_id: int) -> list[dict[str, Any]]:
+    ensure_partnership_tables(conn)
+    rows = conn.execute(
+        "SELECT * FROM partners WHERE partnership_id=? ORDER BY id",
+        (partnership_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def remove_partner(conn: sqlite3.Connection, partner_id: int) -> bool:
+    ensure_partnership_tables(conn)
+    cur = conn.execute("DELETE FROM partners WHERE id=?", (partner_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# T5013 PDF rendering
+# ---------------------------------------------------------------------------
+
+def generate_t5013_pdf(
+    conn: sqlite3.Connection,
+    partnership_id: int,
+    fiscal_year: int,
+    partnership_income: float | Decimal | str,
+) -> bytes:
+    """Render one T5013 statement covering all partners in the partnership."""
+    allocation = compute_partnership_allocation(
+        conn, partnership_id, fiscal_year, partnership_income,
+    )
+    p = get_partnership(conn, partnership_id) or {}
+
+    try:
+        return _render_t5013_reportlab(p, allocation)
+    except ImportError:
+        return _render_t5013_minimal(p, allocation)
+
+
+def _render_t5013_reportlab(partnership: dict, allocation: dict) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak,
+    )
+    from reportlab.lib import colors
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h_style = ParagraphStyle("h", parent=styles["Heading1"], fontSize=14,
+                              spaceAfter=10)
+    sub = ParagraphStyle("sub", parent=styles["Heading2"], fontSize=11,
+                         spaceAfter=6)
+    story = []
+    story.append(Paragraph("T5013 — Statement of Partnership Income", h_style))
+    story.append(Paragraph(
+        f"Partnership: <b>{partnership.get('partnership_name', '')}</b> "
+        f"({partnership.get('partnership_type', 'general')})",
+        styles["BodyText"],
+    ))
+    story.append(Paragraph(
+        f"Tax year: <b>{allocation['fiscal_year']}</b> &mdash; "
+        f"Total partnership income: <b>${allocation['total_partnership_income']:,.2f}</b>",
+        styles["BodyText"],
+    ))
+    story.append(Spacer(1, 0.2 * inch))
+
+    for alloc in allocation.get("allocations", []):
+        story.append(Paragraph(
+            f"Partner: {alloc['partner_name']} ({alloc['partner_type']})",
+            sub,
+        ))
+        rows = [
+            ["Box", "Description", "Value"],
+            ["001", "Country of residence", "CA"],
+            ["002", "Partner code",
+             alloc["t5013_slip"]["box_002_partner_code"]],
+            ["003", "Partner SIN / BN",
+             str(alloc.get("partner_sin_or_bn") or "")],
+            ["104", "Share of net income", f"${alloc['allocated_income']:,.2f}"],
+            ["105", "Allocation %", f"{alloc['allocation_percentage']:.2f}%"],
+            ["106", "Days active", str(alloc["days_active"])],
+        ]
+        tbl = Table(rows, colWidths=[0.6 * inch, 3.8 * inch, 2.4 * inch])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2d5c")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.25 * inch))
+
+    if allocation.get("warning"):
+        story.append(Paragraph(
+            f"<b>Warning:</b> {allocation['warning']}", styles["BodyText"],
+        ))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_t5013_minimal(partnership: dict, allocation: dict) -> bytes:
+    """Minimal PDF fallback when reportlab is unavailable."""
+    lines = [
+        "T5013 Statement of Partnership Income",
+        f"Partnership: {partnership.get('partnership_name', '')}",
+        f"Tax year: {allocation.get('fiscal_year', '')}",
+        f"Total income: ${allocation.get('total_partnership_income', 0):,.2f}",
+        "",
+    ]
+    for a in allocation.get("allocations", []):
+        lines.append(f"{a['partner_name']}: ${a['allocated_income']:,.2f}")
+    body = "\n".join(lines).encode("latin-1", errors="replace")
+    return b"%PDF-1.4\n" + body + b"\n%%EOF\n"

@@ -279,6 +279,158 @@ def calculate_quebec_rd_credit(
     }
 
 
+def list_claims(
+    conn: sqlite3.Connection,
+    *, firm_code: str = "", client_code: str = "",
+) -> list[dict[str, Any]]:
+    ensure_sred_tables(conn)
+    where = []
+    params: list[Any] = []
+    if firm_code:
+        where.append("LOWER(firm_code)=LOWER(?)")
+        params.append(firm_code)
+    if client_code:
+        where.append("LOWER(client_code)=LOWER(?)")
+        params.append(client_code)
+    sql = "SELECT * FROM sred_claims"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY tax_year DESC, id DESC"
+    rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def remove_expenditure(conn: sqlite3.Connection, expenditure_id: int) -> bool:
+    ensure_sred_tables(conn)
+    cur = conn.execute(
+        "DELETE FROM sred_expenditures WHERE id=?", (expenditure_id,),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def generate_t661_pdf(
+    conn: sqlite3.Connection,
+    claim_id: int,
+    *,
+    corp_type: str = "ccpc_small",
+    taxable_income: float = 0,
+    taxable_capital: float = 0,
+) -> bytes:
+    """Render the T661 form as a PDF."""
+    summary = generate_t661_summary(
+        conn, claim_id, corp_type=corp_type,
+        taxable_income=taxable_income, taxable_capital=taxable_capital,
+    )
+    expenditures = get_expenditures(conn, claim_id)
+    try:
+        return _render_t661_reportlab(summary, expenditures)
+    except ImportError:
+        return _render_t661_minimal(summary, expenditures)
+
+
+def _render_t661_reportlab(summary: dict, expenditures: list[dict]) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    )
+    from reportlab.lib import colors
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Heading1"], fontSize=14, spaceAfter=10)
+    sub = ParagraphStyle("sub", parent=styles["Heading2"], fontSize=11, spaceAfter=6)
+    story = []
+    story.append(Paragraph("T661 — SR&amp;ED Expenditures Claim", h))
+    story.append(Paragraph(
+        f"Client: <b>{summary.get('client_code', '')}</b>  "
+        f"Tax year: <b>{summary.get('tax_year', '')}</b>", styles["BodyText"],
+    ))
+    story.append(Paragraph(
+        f"Project: <b>{summary.get('project_name', '')}</b>  "
+        f"Method: <b>{summary.get('claim_type', '')}</b>", styles["BodyText"],
+    ))
+    story.append(Spacer(1, 0.15 * inch))
+
+    # A/O/W narrative
+    for label, key in (("Advancement", "advancement"),
+                        ("Obstacles", "obstacles"),
+                        ("Work performed", "work_performed")):
+        if summary.get(key):
+            story.append(Paragraph(f"<b>{label}:</b>", sub))
+            story.append(Paragraph(str(summary[key]), styles["BodyText"]))
+    story.append(Spacer(1, 0.15 * inch))
+
+    # Expenditures table
+    if expenditures:
+        rows = [["Category", "Amount", "Qualifying", "Description"]]
+        for e in expenditures:
+            rows.append([
+                e.get("category", ""),
+                f"${float(e.get('amount') or 0):,.2f}",
+                f"${float(e.get('qualifying_amount') or e.get('amount') or 0):,.2f}",
+                (e.get("description") or "")[:50],
+            ])
+        tbl = Table(rows, colWidths=[1.1 * inch, 1.3 * inch, 1.5 * inch, 3.0 * inch])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2d5c")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (2, -1), "RIGHT"),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.2 * inch))
+
+    # ITC summary
+    itc_rows = [
+        ["T661 line", "Label", "Amount"],
+        ["350", "Total qualifying expenditures",
+         f"${summary.get('line_350_total_qualifying', 0):,.2f}"],
+        ["400", "Proxy uplift (55%)",
+         f"${summary.get('line_400_proxy_uplift', 0):,.2f}"],
+        ["500", "ITC earned",
+         f"${summary.get('line_500_itc_earned', 0):,.2f}"],
+        ["530", "Refundable ITC",
+         f"${summary.get('line_530_refundable_itc', 0):,.2f}"],
+        ["540", "Non-refundable ITC",
+         f"${summary.get('line_540_non_refundable_itc', 0):,.2f}"],
+    ]
+    tbl2 = Table(itc_rows, colWidths=[0.9 * inch, 3.6 * inch, 2.0 * inch])
+    tbl2.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2d5c")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+    ]))
+    story.append(tbl2)
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_t661_minimal(summary: dict, expenditures: list[dict]) -> bytes:
+    lines = [
+        "T661 SR&ED Expenditures Claim",
+        f"Client: {summary.get('client_code', '')}",
+        f"Tax year: {summary.get('tax_year', '')}",
+        f"Project: {summary.get('project_name', '')}",
+        f"ITC earned: ${summary.get('line_500_itc_earned', 0):,.2f}",
+    ]
+    body = "\n".join(lines).encode("latin-1", errors="replace")
+    return b"%PDF-1.4\n" + body + b"\n%%EOF\n"
+
+
 def generate_t661_summary(
     conn: sqlite3.Connection,
     claim_id: int,
