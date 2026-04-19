@@ -6,7 +6,9 @@ known-bad codes to safe defaults.
 """
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+import sqlite3
+from pathlib import Path
+from typing import Any, List, Dict, Optional, Tuple
 
 VALID_GL_ACCOUNTS = {
     '5400', '5410', '5420', '5430', '5440', '5450',
@@ -112,3 +114,210 @@ def validate_document_extraction(result: Dict) -> Tuple[Dict, List[str]]:
         result['tax_code'] = 'T'
 
     return result, errors
+
+
+# ---------------------------------------------------------------------------
+# Extraction-level sanity rules (Canadian-receipts pass)
+# ---------------------------------------------------------------------------
+
+# Combined federal + provincial tax in Canada tops out at 14.975% (GST 5% +
+# QST 9.975%). 20% gives a margin for rounding / small-base receipts but
+# still catches the pathological cases (e.g. a $500 "tax" on a $50 receipt).
+MAX_TAX_FRACTION = 0.20
+
+# Vendor confidence floor; below this we refuse to publish the vendor name
+# and send the document to manual review.
+VENDOR_CONFIDENCE_FLOOR = 0.70
+
+# Outlier threshold on subtotal vs. vendor history (×p50). 10× is generous
+# but catches the decimal-shift class of bugs (595 → 59,500).
+VENDOR_SUBTOTAL_OUTLIER_MULT = 10.0
+
+
+def validate_tax_sanity(total: Any, tax_total: Any) -> Optional[Dict[str, str]]:
+    """Flag implausibly large tax amounts.
+
+    Returns a sanity flag dict or None when the tax line is plausible.
+    """
+    try:
+        t = float(total) if total is not None else None
+        tx = float(tax_total) if tax_total is not None else None
+    except (TypeError, ValueError):
+        return None
+    if t is None or tx is None or t <= 0:
+        return None
+    if tx > t * MAX_TAX_FRACTION:
+        return {
+            "flag": "implausible_tax",
+            "severity": "HIGH",
+            "detail": f"tax_total={tx} exceeds {MAX_TAX_FRACTION*100:.0f}% of total={t}",
+        }
+    return None
+
+
+def lookup_vendor_amount_stats(
+    vendor: Optional[str],
+    db_path: Path,
+) -> Optional[Tuple[float, float, int]]:
+    """Return (p50, p95, sample_count) for a vendor or None if unknown.
+
+    Reads from the vendor_amount_history table, which is maintained by
+    rebuild_vendor_amount_history. Table is created lazily so callers
+    don't need to worry about migrations.
+    """
+    if not vendor:
+        return None
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS vendor_amount_history ("
+                "  vendor_name TEXT PRIMARY KEY,"
+                "  amount_p50 REAL,"
+                "  amount_p95 REAL,"
+                "  sample_count INTEGER"
+                ")"
+            )
+            row = conn.execute(
+                "SELECT amount_p50, amount_p95, sample_count "
+                "FROM vendor_amount_history WHERE vendor_name = ?",
+                (vendor,),
+            ).fetchone()
+            if row is None:
+                return None
+            return (row[0] or 0.0, row[1] or 0.0, row[2] or 0)
+        finally:
+            conn.close()
+    except Exception:
+        return None
+
+
+def validate_subtotal_outlier(
+    vendor: Optional[str],
+    subtotal: Any,
+    db_path: Path,
+) -> Optional[Dict[str, Any]]:
+    """Flag subtotals that are wildly larger than what we've seen for this vendor."""
+    try:
+        s = float(subtotal) if subtotal is not None else None
+    except (TypeError, ValueError):
+        return None
+    if s is None or s <= 0:
+        return None
+    stats = lookup_vendor_amount_stats(vendor, db_path)
+    if not stats:
+        return None
+    p50, _p95, n = stats
+    # Require at least 3 prior samples before trusting the history — one or
+    # two outliers in history shouldn't drive the bar.
+    if n < 3 or p50 <= 0:
+        return None
+    if s > p50 * VENDOR_SUBTOTAL_OUTLIER_MULT:
+        return {
+            "flag": "subtotal_outlier",
+            "severity": "HIGH",
+            "detail": f"subtotal={s} > {VENDOR_SUBTOTAL_OUTLIER_MULT}× vendor p50 ({p50})",
+        }
+    return None
+
+
+def apply_extraction_sanity(
+    *,
+    vendor: Optional[str],
+    confidence: float,
+    amount: Optional[float],
+    subtotal: Optional[float],
+    tax_total: Optional[float],
+    gst_amount: Optional[float] = None,
+    qst_amount: Optional[float] = None,
+    review_status: str = "Ready",
+    existing_flags: Optional[List[str]] = None,
+    raw: Optional[Dict[str, Any]] = None,
+    db_path: Optional[Path] = None,
+) -> Tuple[Optional[str], str, List[str], List[Dict[str, Any]]]:
+    """Run sanity rules and return (vendor, review_status, flags, raw_sanity).
+
+    - Drops vendor to None when confidence is too low (BONUS).
+    - Flags implausible tax (BUG 4).
+    - Flags subtotal outliers vs vendor history (BUG 5).
+    - Returns all findings as both a list of flag keys (for extraction_flags)
+      and the raw dicts (persisted inside raw_result under sanity_flags).
+    """
+    flags: List[str] = list(existing_flags or [])
+    raw_findings: List[Dict[str, Any]] = []
+
+    # BONUS: vendor confidence threshold.
+    if vendor and confidence < VENDOR_CONFIDENCE_FLOOR:
+        flags.append("vendor_low_confidence")
+        raw_findings.append({
+            "flag": "vendor_low_confidence",
+            "severity": "MED",
+            "detail": f"confidence={confidence:.2f} < {VENDOR_CONFIDENCE_FLOOR}",
+            "original_vendor": vendor,
+        })
+        vendor = None
+        review_status = "NeedsReview"
+
+    # BUG 4: implausible tax.
+    tx = validate_tax_sanity(amount if amount is not None else subtotal, tax_total)
+    if tx:
+        flags.append("implausible_tax")
+        raw_findings.append(tx)
+        review_status = "NeedsReview"
+
+    # BUG 5: subtotal outlier vs vendor history.
+    if db_path is not None:
+        out = validate_subtotal_outlier(vendor, subtotal, db_path)
+        if out:
+            flags.append("subtotal_outlier")
+            raw_findings.append(out)
+            review_status = "NeedsReview"
+
+    return vendor, review_status, flags, raw_findings
+
+
+def rebuild_vendor_amount_history(db_path: Path) -> int:
+    """Recompute p50/p95/sample_count per vendor from the documents table.
+
+    Safe to call periodically; idempotent. Returns the number of vendor rows
+    written.
+    """
+    conn = sqlite3.connect(str(db_path), timeout=30)
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS vendor_amount_history ("
+            "  vendor_name TEXT PRIMARY KEY,"
+            "  amount_p50 REAL,"
+            "  amount_p95 REAL,"
+            "  sample_count INTEGER"
+            ")"
+        )
+        rows = conn.execute(
+            "SELECT vendor, subtotal FROM documents "
+            "WHERE vendor IS NOT NULL AND vendor != '' "
+            "AND subtotal IS NOT NULL AND subtotal > 0"
+        ).fetchall()
+        from collections import defaultdict
+        buckets: Dict[str, List[float]] = defaultdict(list)
+        for v, s in rows:
+            try:
+                buckets[v].append(float(s))
+            except (TypeError, ValueError):
+                pass
+        count = 0
+        conn.execute("DELETE FROM vendor_amount_history")
+        for v, vs in buckets.items():
+            vs.sort()
+            n = len(vs)
+            p50 = vs[n // 2]
+            p95 = vs[min(int(n * 0.95), n - 1)]
+            conn.execute(
+                "INSERT INTO vendor_amount_history (vendor_name, amount_p50, amount_p95, sample_count) "
+                "VALUES (?,?,?,?)",
+                (v, p50, p95, n),
+            )
+            count += 1
+        conn.commit()
+        return count
+    finally:
+        conn.close()

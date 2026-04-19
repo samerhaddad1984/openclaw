@@ -271,6 +271,79 @@ def _new_doc_id() -> str:
     return "doc_" + secrets.token_hex(6)
 
 
+# Vendor placeholders the vision/DocAI models occasionally echo back literally
+# (e.g. "<UNKNOWN>", "UNKNOWN VENDOR", "N/A"). Treat these as "no vendor"
+# rather than storing the placeholder string.
+_VENDOR_PLACEHOLDER_RE = re.compile(
+    r"^\s*(?:<?\s*(?:unknown|unavailable|n/?a|none|null|vendor\s*name|"
+    r"placeholder|string)\s*>?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _is_vendor_placeholder(value: Any) -> bool:
+    """Return True when a vendor value is a model-emitted placeholder."""
+    if value is None:
+        return True
+    s = str(value).strip()
+    if not s:
+        return True
+    if s.startswith("<") and s.endswith(">"):
+        return True
+    if _VENDOR_PLACEHOLDER_RE.match(s):
+        return True
+    # Obvious "unknown" substrings in an all-uppercase output.
+    if "UNKNOWN" in s.upper() and len(s) < 25:
+        return True
+    return False
+
+
+def _parse_money(raw: Any) -> float | None:
+    """Parse a money string handling both English (1,234.56) and Quebec (1 234,56) formats.
+
+    Returns None when the input is empty or unparseable. Used for fields
+    coming back from Google Document AI so we stop silently stripping
+    "," out of Quebec-formatted amounts (the bug that turned "595,00"
+    into 59500).
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+    s = str(raw).strip().replace("$", "").replace("\xa0", "").strip()
+    if not s:
+        return None
+    # Drop any leading sign before deciding on separators.
+    neg = s.startswith("-")
+    if neg:
+        s = s[1:]
+    s = s.replace(" ", "")
+    if "," in s and "." in s:
+        # One of them is the decimal separator — whichever appears last wins.
+        if s.rfind(",") > s.rfind("."):
+            # Quebec: 1.234,56
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            # English: 1,234.56
+            s = s.replace(",", "")
+    elif "," in s:
+        parts = s.split(",")
+        if len(parts) == 2 and len(parts[1]) == 2:
+            # Quebec: 56,70 — comma is decimal.
+            s = s.replace(",", ".")
+        else:
+            # Thousands separator(s): 1,234 / 59,500.
+            s = s.replace(",", "")
+    try:
+        val = float(s)
+        return -val if neg else val
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Magic-byte format detection
 # ---------------------------------------------------------------------------
@@ -1251,6 +1324,13 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     ("ai_cost",                    "REAL DEFAULT 0"),
     ("raw_ai_response",            "TEXT"),
     ("logical_fingerprint",        "TEXT"),
+    # Canadian tax split — keep GST/TPS and QST/TVQ separate so we can still
+    # produce CRA/RQ returns after the combined tax_total is reconciled.
+    ("gst_amount",                 "REAL"),
+    ("qst_amount",                 "REAL"),
+    # Free-form flags emitted by the extraction-level sanity rules
+    # (implausible_tax, vendor_low_confidence, subtotal_outlier, ...).
+    ("extraction_flags",           "TEXT"),
 ]
 
 
@@ -1283,6 +1363,9 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         "ai_cost":                   0,
         "raw_ai_response":           None,
         "logical_fingerprint":       None,
+        "gst_amount":                None,
+        "qst_amount":                None,
+        "extraction_flags":          None,
         **record,
     }
     conn = sqlite3.connect(str(db_path))
@@ -1297,6 +1380,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 review_status, confidence, raw_result,
                 created_at, updated_at, submitted_by, client_note,
                 currency, subtotal, tax_total,
+                gst_amount, qst_amount, extraction_flags,
                 extraction_method, ingest_source,
                 raw_ocr_text, hallucination_suspected,
                 handwriting_low_confidence,
@@ -1309,6 +1393,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 :review_status, :confidence, :raw_result,
                 :created_at, :updated_at, :submitted_by, :client_note,
                 :currency, :subtotal, :tax_total,
+                :gst_amount, :qst_amount, :extraction_flags,
                 :extraction_method, :ingest_source,
                 :raw_ocr_text, :hallucination_suspected,
                 :handwriting_low_confidence,
@@ -1330,6 +1415,9 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 currency                    = excluded.currency,
                 subtotal                    = excluded.subtotal,
                 tax_total                   = excluded.tax_total,
+                gst_amount                  = excluded.gst_amount,
+                qst_amount                  = excluded.qst_amount,
+                extraction_flags            = excluded.extraction_flags,
                 extraction_method           = excluded.extraction_method,
                 ingest_source               = excluded.ingest_source,
                 raw_ocr_text                = excluded.raw_ocr_text,
@@ -1574,20 +1662,17 @@ def process_file(
                 if docai_result.get('vendor_name'):
                     raw['vendor_name'] = docai_result['vendor_name']
                 if docai_result.get('amount'):
-                    try:
-                        raw['total'] = float(str(docai_result['amount']).replace(',', '').replace('$', '').strip())
-                    except (ValueError, TypeError):
-                        pass
+                    parsed = _parse_money(docai_result['amount'])
+                    if parsed is not None:
+                        raw['total'] = parsed
                 if docai_result.get('subtotal'):
-                    try:
-                        raw['subtotal'] = float(str(docai_result['subtotal']).replace(',', '').replace('$', '').strip())
-                    except (ValueError, TypeError):
-                        pass
+                    parsed = _parse_money(docai_result['subtotal'])
+                    if parsed is not None:
+                        raw['subtotal'] = parsed
                 if docai_result.get('tax_total'):
-                    try:
-                        raw['tax_total'] = float(str(docai_result['tax_total']).replace(',', '').replace('$', '').strip())
-                    except (ValueError, TypeError):
-                        pass
+                    parsed = _parse_money(docai_result['tax_total'])
+                    if parsed is not None:
+                        raw['tax_total'] = parsed
                 if docai_result.get('document_date'):
                     raw['document_date'] = docai_result['document_date']
                 if docai_result.get('invoice_number'):
@@ -1735,9 +1820,20 @@ def process_file(
     confidence = float(raw.get("confidence") or 0.0)
     confidence = max(0.0, min(1.0, confidence))
 
-    vendor         = raw.get("vendor_name") or None
+    # Accumulator for sanity-rule findings, persisted to extraction_flags.
+    _extraction_flags: list[str] = []
+
+    # BUG 1 FIX: never persist "<UNKNOWN>" or similar placeholders as a
+    # vendor name — those are model-emitted sentinels, not real vendors.
+    _vendor_raw = raw.get("vendor_name")
+    if _is_vendor_placeholder(_vendor_raw):
+        vendor = None
+        if _vendor_raw not in (None, "", "null"):
+            _extraction_flags.append("vendor_placeholder_stripped")
+    else:
+        vendor = _vendor_raw
     doc_type       = raw.get("doc_type") or "unknown"
-    amount_raw     = raw.get("total") or raw.get("subtotal")
+    amount_raw     = raw.get("total") if raw.get("total") is not None else raw.get("subtotal")
     amount         = float(amount_raw) if amount_raw is not None else None
     document_date  = raw.get("document_date") or None
     currency       = raw.get("currency") or "CAD"
@@ -1779,6 +1875,24 @@ def process_file(
         raw["gst_amount"] = _gst_amount
     if _qst_amount is not None:
         raw["qst_amount"] = _qst_amount
+
+    # BUG 2 FIX: tax_total should be GST + QST when both are present. If
+    # the extractor only filled one of them, prefer whichever is present.
+    # If GST+QST disagrees with the stored tax_total by more than 2¢, flag
+    # it — usually means the receipt has a combined tax line and the
+    # per-tax parse picked up the wrong numbers.
+    if _gst_amount is not None or _qst_amount is not None:
+        _combined = (_gst_amount or 0.0) + (_qst_amount or 0.0)
+        if tax_total is None:
+            tax_total = _combined
+            raw["tax_total"] = _combined
+        elif abs(_combined - tax_total) > 0.02:
+            _extraction_flags.append("tax_split_vs_total_mismatch")
+            # Trust the per-tax numbers when both are present; otherwise
+            # keep the combined number the extractor returned.
+            if _gst_amount is not None and _qst_amount is not None:
+                tax_total = _combined
+                raw["tax_total"] = _combined
     # Propagate BN/NEQ/GST number from parse_invoice_fields if not already set
     for _pf_key in ("gst_number", "bn_root", "bn_full", "neq"):
         if not raw.get(_pf_key) and _parsed_fields.get(_pf_key):
@@ -2022,6 +2136,26 @@ def process_file(
         raw["document_type_detected"] = detected_doc_type
         raw["routing_target"] = "expense"
 
+    # BUG 4 + BONUS FIX: run extraction-level sanity rules before upsert.
+    try:
+        from src.engines.ai_validator import apply_extraction_sanity  # noqa: PLC0415
+        vendor, review_status, _extraction_flags, _sanity_raw = apply_extraction_sanity(
+            vendor=vendor,
+            confidence=confidence,
+            amount=amount,
+            subtotal=subtotal,
+            tax_total=tax_total,
+            gst_amount=_gst_amount,
+            qst_amount=_qst_amount,
+            review_status=review_status,
+            existing_flags=_extraction_flags,
+            raw=raw,
+            db_path=db_path,
+        )
+        raw.setdefault("sanity_flags", _sanity_raw)
+    except Exception:  # pragma: no cover — never fail the pipeline on sanity
+        logging.exception("apply_extraction_sanity failed")
+
     # 6. DB upsert
     record: dict[str, Any] = {
         "document_id":            doc_id,
@@ -2045,6 +2179,9 @@ def process_file(
         "currency":               currency,
         "subtotal":               subtotal,
         "tax_total":              tax_total,
+        "gst_amount":             _gst_amount,
+        "qst_amount":             _qst_amount,
+        "extraction_flags":       ",".join(_extraction_flags) if _extraction_flags else None,
         "extraction_method":      extraction_method,
         "ingest_source":          ingest_source,
         "raw_ocr_text":           raw_ocr_text,

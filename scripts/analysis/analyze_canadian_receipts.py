@@ -96,6 +96,10 @@ def _norm_vendor(s):
 def main():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
+    # Include all real uploads from the last 48h (not just those with a
+    # vendor) so that after the '<UNKNOWN>' scrub pass those receipts still
+    # get a second-opinion comparison — a NULL vendor that Claude also
+    # reads as NULL is a correct outcome, not a skipped one.
     rows = conn.execute("""
         SELECT document_id, file_name, file_path, client_code, review_status,
                vendor, amount, subtotal, tax_total, document_date, category,
@@ -103,7 +107,7 @@ def main():
         FROM documents
         WHERE created_at > datetime('now', '-48 hours')
           AND ingest_source IN ('web_upload','public_upload','portal')
-          AND vendor IS NOT NULL
+          AND (subtotal IS NOT NULL OR amount IS NOT NULL OR vendor IS NOT NULL)
         ORDER BY created_at DESC
     """).fetchall()
     print(f"{len(rows)} receipts to analyze\n")
