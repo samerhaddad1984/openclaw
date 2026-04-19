@@ -36,6 +36,7 @@ class OptimisticConcurrencyError(Exception):
 
 
 # Tables that carry a ``version`` column (populated lazily via migrations).
+# Keep this registry in sync with src/db/version_handlers.py dispatch map.
 VERSIONED_TABLES: dict[str, str] = {
     "documents":      "document_id",
     "journal_entries": "id",
@@ -43,6 +44,9 @@ VERSIONED_TABLES: dict[str, str] = {
     "engagements":    "engagement_id",
     "fixed_assets":   "asset_id",
     "working_papers": "paper_id",
+    "partnerships":   "id",
+    "partners":       "id",
+    "manual_journal_entries": "entry_id",
 }
 
 
@@ -51,13 +55,31 @@ def _quoted(s: str) -> str:
     return '"' + s.replace('"', '""') + '"'
 
 
+def _pragma_column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    """PRAGMA table_info returns different shapes depending on the
+    connection's row_factory (sqlite3.Row → positional, dict factory →
+    named). Extract column names without assuming either shape."""
+    names: set[str] = set()
+    for r in conn.execute(f"PRAGMA table_info({table})").fetchall():
+        if isinstance(r, dict):
+            name = r.get("name")
+        else:
+            try:
+                name = r[1]
+            except (IndexError, KeyError, TypeError):
+                name = None
+        if name:
+            names.add(name)
+    return names
+
+
 def add_version_column_if_missing(
     conn: sqlite3.Connection, table: str,
 ) -> bool:
     """Idempotently add a ``version INTEGER DEFAULT 1`` column. Returns
     True if a migration ran, False if the column already existed.
     """
-    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    cols = _pragma_column_names(conn, table)
     if "version" in cols:
         return False
     try:
@@ -136,6 +158,8 @@ def read_with_version(
         return None
     if isinstance(row, sqlite3.Row):
         return dict(row)
+    if isinstance(row, dict):
+        return dict(row)
     # Old row_factory = tuple → pair up with PRAGMA columns.
-    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    cols = sorted(_pragma_column_names(conn, table))
     return dict(zip(cols, row))

@@ -276,6 +276,20 @@ try:
 except Exception as _exc:  # pragma: no cover
     logging.getLogger(__name__).warning("WAL mode bootstrap failed: %s", _exc)
 
+# Bootstrap: ensure every versioned table has a ``version INTEGER DEFAULT 1``
+# column so optimistic-concurrency checks on POST handlers don't fail with
+# a schema error against old DBs. Safe to call repeatedly.
+try:
+    from src.db.optimistic import ensure_all_version_columns as _ensure_versions
+    with sqlite3.connect(str(DB_PATH)) as _boot_conn:
+        _migrated = _ensure_versions(_boot_conn)
+        if _migrated:
+            logging.getLogger(__name__).info(
+                "added version column to tables: %s", ", ".join(_migrated),
+            )
+except Exception as _exc:  # pragma: no cover
+    logging.getLogger(__name__).warning("version-column bootstrap failed: %s", _exc)
+
 
 def normalize_text(value: Any) -> str:
     if value is None:
@@ -2332,7 +2346,52 @@ def update_document_fields(document_id: str, fields: dict[str, Any]) -> None:
     params.extend([utc_now_iso(), document_id])
     with open_db() as conn:
         conn.execute(f"UPDATE documents SET {', '.join(updates)} WHERE document_id = ?", tuple(params))
+        # Bump the optimistic-concurrency version in lockstep so clients
+        # reading via the versioned path see a fresh version number.
+        try:
+            conn.execute(
+                "UPDATE documents SET version = COALESCE(version, 1) + 1 "
+                "WHERE document_id = ?", (document_id,),
+            )
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
+
+
+def update_document_fields_versioned(
+    document_id: str,
+    fields: dict[str, Any],
+    body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    """Versioned variant of update_document_fields.
+
+    Returns a ``VersionedUpdateResult`` so callers can send 200/409 based
+    on whether the caller's ``version`` in the request body matches the
+    current row version. Wraps the same ``allowed`` filter /
+    normalisation as the legacy path.
+    """
+    from src.db.version_handlers import versioned_update_from_request
+    allowed = {"vendor","client_code","doc_type","amount","document_date","gl_account",
+               "tax_code","category","review_status","manual_hold_reason","manual_hold_by","manual_hold_at"}
+    normed: dict[str, Any] = {}
+    for k, v in (fields or {}).items():
+        if k not in allowed:
+            continue
+        normed[k] = normalize_amount_input(v) if k == "amount" else normalize_optional_text(v)
+    if not normed:
+        # Nothing to write — mirror legacy no-op but still read current
+        # version so the caller can echo it back.
+        from src.db.version_handlers import VersionedUpdateResult, _read_current_version
+        with open_db() as conn:
+            cur = _read_current_version(conn, "documents", "document_id", document_id)
+        return VersionedUpdateResult(status=200, new_version=cur)
+    normed["updated_at"] = utc_now_iso()
+    with open_db() as conn:
+        return versioned_update_from_request(
+            conn, table="documents", pk_value=document_id,
+            fields=normed, body=body, require_version=require_version,
+        )
 
 
 def set_document_status(document_id: str, review_status: str) -> None:
@@ -20074,7 +20133,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if before_row is None:
                     raise ValueError(t("err_doc_not_found", lang))
                 submitted = {k: form.get(k, "") for k in ["vendor","client_code","doc_type","amount","document_date","gl_account","tax_code","category","review_status"]}
-                update_document_fields(document_id, submitted)
+                # Optimistic-concurrency: if the client submitted a
+                # ``version`` field from the previous read, we reject the
+                # write with 409 when it's stale. No-version requests
+                # fall through to legacy behaviour but still bump the
+                # version counter so next readers see freshness.
+                _ver_result = update_document_fields_versioned(
+                    document_id, submitted, body=dict(form),
+                )
+                if _ver_result.status == 409:
+                    self._send_json(_ver_result.to_json(), status=409)
+                    return
                 record_learning_corrections(
                     document_id, before_row, submitted,
                     reviewer=(user.get("username") if user else "") or DEFAULT_REVIEWER,
