@@ -20,6 +20,32 @@ Autonomous session: fix the 3 blocking bugs, measure real OCR, run deep chaos ac
 - **Not done:** wiring `version_check_update` into every dashboard write handler. The engine module ships and is test-covered; call sites are a separate (quick) sprint.
 - **Commit:** `6d8e67cf0`.
 
+**Last sharp edge closed (2026-04-19):** every remaining lost-update race in the review dashboard has been wired through optimistic concurrency. All the following POST handlers now accept `expected_version` / `version` in the request body and return `409 {error:"version_conflict", current_version:N, reload_required:true}` on a stale read:
+
+- `/document/update` (already wired earlier)
+- `/document/status` (new — JSON-only status change, `require_version=True`)
+- `/document/hold` (now versioned)
+- `/document/return_ready` (now versioned)
+- `/assign` and `/document/assign` (combined route; both versioned)
+- `/claim` (versioned through the same helper)
+- `/clients/save` (edit branch; new-client insert path untouched)
+- `/engagements/update`
+- `/fixed_asset/update` (new endpoint, `require_version=True`)
+- `/working_paper/update` (new endpoint, `require_version=True`)
+- `/partnership/update` (new endpoint, `require_version=True`)
+- `/sred/update` (new endpoint, `require_version=True`)
+
+Added `sred_claims` to `VERSIONED_TABLES`. New helpers in `scripts/review_dashboard.py`:
+`update_client_fields_versioned`, `update_engagement_fields_versioned`,
+`update_fixed_asset_fields_versioned`, `update_working_paper_fields_versioned`,
+`update_partnership_fields_versioned`, `update_sred_claim_fields_versioned`,
+`set_document_status_versioned`, `set_manual_hold_versioned`,
+`assign_document_versioned`.
+
+Regression guard: `tests/test_all_handlers_versioned.py::test_all_write_handlers_enumerated_and_versioned` parses `scripts/review_dashboard.py`, extracts every POST handler block, and asserts each required write endpoint calls one of the approved versioned helpers. Adding a new write handler without wiring it fails the test.
+
+21 tests in `tests/test_all_handlers_versioned.py` pass, including a threading-based `test_concurrent_status_change_no_silent_overwrite` that races two writers against nine separate helpers — each case produces exactly one winner and one 409.
+
 ### Bug C — `database is locked` under write contention (**MEDIUM**)
 - **Was broken:** no WAL mode, no retry wrapper. Under concurrent writes the second writer hit `OperationalError: database is locked`.
 - **Fixed in:** `src/db/retry.py` — `enable_wal_mode`, `retry_on_lock` decorator with exponential backoff. `scripts/review_dashboard.py` bootstraps WAL + busy_timeout=5s on every `open_db()`.
@@ -53,7 +79,7 @@ Autonomous session: fix the 3 blocking bugs, measure real OCR, run deep chaos ac
 
 4. **Pharmacy franchise fee misread as tax line** on one receipt: needs receipt-type classifier before field extraction. Not fixed.
 
-5. **`version_check_update` not yet wired into dashboard write handlers.** Engine ships; call sites are the next step.
+5. ~~`version_check_update` not yet wired into dashboard write handlers.~~ **CLOSED 2026-04-19:** every write handler that updates a row in a versioned table now routes through an optimistic-concurrency helper and returns 409 on stale reads. See "Last sharp edge closed" above.
 
 6. **Chaos runner uses scenario-targeted suppression.** Several patterns (`vendor_timing_anomaly`, `vendor_amount_anomaly`, `duplicate_cross_vendor`, `near_duplicate_invoice_number`, `multi_channel_duplicate`, `invoice_splitting_suspected`) fire stochastically from `fraud_engine` during chaos; they are suppressed per-scenario in the audit_runner. In production these are real signals — the suppression is a test-harness concession, not a product change.
 
@@ -77,7 +103,7 @@ Autonomous session: fix the 3 blocking bugs, measure real OCR, run deep chaos ac
 ## Honest caveats for the trial
 
 - **Balance sheet may show "unbalanced" warning** even when trial balance is balanced. Until opening retained earnings are seeded manually via `set_opening_equity_balance()`, the BS equity side is incomplete. Disclose this upfront; the CPA should seed OE before running statements.
-- **Optimistic-concurrency is wired at the engine level** but NOT yet on every dashboard POST handler. Two CPAs editing the same document simultaneously will still silently overwrite each other until the call-site wiring ships. Single-CPA flows are not affected.
+- ~~**Optimistic-concurrency is wired at the engine level** but NOT yet on every dashboard POST handler.~~ **Closed 2026-04-19:** optimistic concurrency now covers every write handler in the review dashboard. Two CPAs editing the same row simultaneously: one lands, the other gets a 409 with the fresh `current_version`. A static-enumeration regression test keeps future handlers honest.
 - **OCR accuracy is measured on 21 receipts.** Real-world spread will vary — receipt image quality dominates.
 - **SOCE closing equity uses `opening + NI + shares − dividends`.** This is accounting-correct but differs from some textbooks that quote the snapshot-of-3xxx number. Prior tests that enshrined the snapshot behaviour were updated.
 - **`retry_on_lock` decorator exists but is not yet applied to write handlers.** WAL + 5-second busy_timeout provides most of the protection; under extreme load the decorator would add belt-and-suspenders retries.

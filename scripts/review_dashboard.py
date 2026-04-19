@@ -2394,11 +2394,195 @@ def update_document_fields_versioned(
         )
 
 
+def _versioned_table_update(
+    table: str,
+    pk_value: Any,
+    fields: dict[str, Any],
+    body: dict[str, Any] | None,
+    *,
+    allowed: set[str],
+    require_version: bool = False,
+):
+    """Generic thin wrapper around ``versioned_update_from_request`` for
+    non-document versioned tables. Filters ``fields`` against the
+    ``allowed`` allowlist, no normalization (callers pre-normalize for
+    their own semantics), stamps ``updated_at`` when the column exists."""
+    from src.db.version_handlers import (
+        VersionedUpdateResult, _read_current_version,
+        versioned_update_from_request,
+    )
+    from src.db.optimistic import VERSIONED_TABLES
+    normed = {k: v for k, v in (fields or {}).items() if k in allowed}
+    if table not in VERSIONED_TABLES:
+        raise ValueError(f"table {table!r} not in VERSIONED_TABLES")
+    pk_column = VERSIONED_TABLES[table]
+    with open_db() as conn:
+        # Filter to columns that actually exist (older DBs may lack some
+        # of the optional fields listed in ``allowed``). Also stamp
+        # updated_at when the column exists.
+        try:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        except (sqlite3.OperationalError, KeyError, TypeError):
+            cols = set()
+        if cols:
+            normed = {k: v for k, v in normed.items() if k in cols}
+            if "updated_at" in cols and "updated_at" not in normed:
+                normed["updated_at"] = utc_now_iso()
+        if not normed:
+            cur = _read_current_version(conn, table, pk_column, pk_value)
+            return VersionedUpdateResult(status=200, new_version=cur)
+        return versioned_update_from_request(
+            conn, table=table, pk_value=pk_value,
+            fields=normed, body=body, require_version=require_version,
+        )
+
+
+def update_client_fields_versioned(
+    client_code: str, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "clients", client_code, fields, body,
+        allowed={"client_name", "contact_email", "language", "active",
+                 "whatsapp_number", "firm_code"},
+        require_version=require_version,
+    )
+
+
+def update_engagement_fields_versioned(
+    engagement_id: str, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "engagements", engagement_id, fields, body,
+        allowed={"status", "partner", "manager", "staff",
+                 "planned_hours", "actual_hours", "budget", "fee"},
+        require_version=require_version,
+    )
+
+
+def update_fixed_asset_fields_versioned(
+    asset_id: str, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "fixed_assets", asset_id, fields, body,
+        allowed={"asset_name", "description", "cca_class", "cost", "status",
+                 "disposal_date", "disposal_proceeds", "disposal_reason"},
+        require_version=require_version,
+    )
+
+
+def update_working_paper_fields_versioned(
+    paper_id: str, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "working_papers", paper_id, fields, body,
+        allowed={"account_name", "balance_per_books", "balance_confirmed",
+                 "difference", "tested_by", "reviewed_by", "status", "notes"},
+        require_version=require_version,
+    )
+
+
+def update_partnership_fields_versioned(
+    partnership_id: Any, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "partnerships", partnership_id, fields, body,
+        allowed={"partnership_name", "partnership_type", "tax_year_end",
+                 "status", "gifi_data"},
+        require_version=require_version,
+    )
+
+
+def update_sred_claim_fields_versioned(
+    claim_id: Any, fields: dict[str, Any], body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    return _versioned_table_update(
+        "sred_claims", claim_id, fields, body,
+        allowed={"project_name", "claim_type", "technological_advancement",
+                 "technological_obstacles", "work_performed", "status"},
+        require_version=require_version,
+    )
+
+
 def set_document_status(document_id: str, review_status: str) -> None:
     with open_db() as conn:
         conn.execute("UPDATE documents SET review_status = ?, updated_at = ? WHERE document_id = ?",
                      (review_status, utc_now_iso(), document_id))
         conn.commit()
+
+
+def set_document_status_versioned(
+    document_id: str, review_status: str, body: dict[str, Any] | None,
+    *, require_version: bool = False,
+):
+    """Versioned variant of ``set_document_status``. Returns a
+    ``VersionedUpdateResult`` so the caller can emit 200 or 409."""
+    from src.db.version_handlers import versioned_update_from_request
+    with open_db() as conn:
+        return versioned_update_from_request(
+            conn, table="documents", pk_value=document_id,
+            fields={"review_status": review_status, "updated_at": utc_now_iso()},
+            body=body, require_version=require_version,
+        )
+
+
+def set_manual_hold_versioned(
+    document_id: str, hold_reason: str, username: str,
+    body: dict[str, Any] | None, *, require_version: bool = False,
+):
+    """Versioned variant of ``set_manual_hold``."""
+    from src.db.version_handlers import versioned_update_from_request
+    now = utc_now_iso()
+    with open_db() as conn:
+        return versioned_update_from_request(
+            conn, table="documents", pk_value=document_id,
+            fields={
+                "review_status": "NeedsReview",
+                "manual_hold_reason": normalize_optional_text(hold_reason),
+                "manual_hold_by": normalize_optional_text(username),
+                "manual_hold_at": now,
+                "updated_at": now,
+            },
+            body=body, require_version=require_version,
+        )
+
+
+def assign_document_versioned(
+    document_id: str, assigned_to: str, assigned_by: str, note: str = "",
+    body: dict[str, Any] | None = None, *, require_version: bool = False,
+):
+    """Versioned variant of ``assign_document``. The version check runs
+    against documents.version; the assignments-table upsert is not
+    versioned (there's only one row per document and the ON CONFLICT
+    upsert is already idempotent), but we still refuse to touch
+    assignments when the documents-row version is stale — this ensures
+    two concurrent reassigns with the same stale read can't both land."""
+    from src.db.version_handlers import versioned_update_from_request
+    clean = normalize_optional_text(assigned_to)
+    now = utc_now_iso()
+    with open_db() as conn:
+        result = versioned_update_from_request(
+            conn, table="documents", pk_value=document_id,
+            fields={"assigned_to": clean, "updated_at": now},
+            body=body, require_version=require_version,
+        )
+        if result.status != 200:
+            return result
+        conn.execute(
+            """INSERT INTO document_assignments (document_id, assigned_to, assigned_by, assigned_at, updated_at, note)
+               VALUES (?,?,?,?,?,?)
+               ON CONFLICT(document_id) DO UPDATE SET
+                   assigned_to=excluded.assigned_to, assigned_by=excluded.assigned_by,
+                   assigned_at=excluded.assigned_at, updated_at=excluded.updated_at, note=excluded.note""",
+            (document_id, clean, normalize_optional_text(assigned_by), now, now, normalize_optional_text(note)),
+        )
+        conn.commit()
+    return result
 
 
 def set_manual_hold(document_id: str, hold_reason: str, username: str) -> None:
@@ -20305,6 +20489,24 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_doc_updated", lang))
                 return
 
+            if path == "/document/status":
+                # JSON-only: {"document_id": "...", "review_status": "...",
+                # "expected_version": N}. Returns 200 with new version or
+                # 409 with current_version on stale read.
+                if not _require_document_in_firm(document_id, ctx):
+                    _forbid(self); return
+                _check_period_not_locked_for_doc(document_id, lang)
+                new_status = normalize_text(form.get("review_status", ""))
+                if not new_status:
+                    self._send_json({"ok": False, "error": "review_status required"}, status=400)
+                    return
+                _body = dict(form)
+                _sres = set_document_status_versioned(
+                    document_id, new_status, body=_body, require_version=True,
+                )
+                self._send_json(_sres.to_json(), status=_sres.status)
+                return
+
             if path == "/document/hold":
                 if not _require_document_in_firm(document_id, ctx):
                     _forbid(self); return
@@ -20312,7 +20514,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 hold_reason = form.get("hold_reason", "")
                 if not normalize_text(hold_reason):
                     raise ValueError(t("err_hold_required", lang))
-                set_manual_hold(document_id, hold_reason, ctx["username"])
+                # Optimistic-concurrency: if the form carried a version
+                # (expected_version / version / __version), 409 on stale.
+                _body = dict(form)
+                _hres = set_manual_hold_versioned(
+                    document_id, hold_reason, ctx["username"], body=_body,
+                )
+                if _hres.status == 409:
+                    self._send_json(_hres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_on_hold", lang))
                 return
 
@@ -20320,8 +20530,25 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if not _require_document_in_firm(document_id, ctx):
                     _forbid(self); return
                 _check_period_not_locked_for_doc(document_id, lang)
-                clear_manual_hold(document_id)
-                set_document_status(document_id, "Ready")
+                _body = dict(form)
+                # Clear hold + set Ready — versioned. Clears happen only on
+                # success; 409 on stale.
+                from src.db.version_handlers import versioned_update_from_request
+                with open_db() as _rrconn:
+                    _rrres = versioned_update_from_request(
+                        _rrconn, table="documents", pk_value=document_id,
+                        fields={
+                            "manual_hold_reason": None,
+                            "manual_hold_by": None,
+                            "manual_hold_at": None,
+                            "review_status": "Ready",
+                            "updated_at": utc_now_iso(),
+                        },
+                        body=_body,
+                    )
+                if _rrres.status == 409:
+                    self._send_json(_rrres.to_json(), status=409)
+                    return
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_return_ready", lang))
                 return
 
@@ -20440,10 +20667,17 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 })
                 return
 
-            if path == "/assign":
+            if path in ("/assign", "/document/assign"):
                 if not _require_document_in_firm(document_id, ctx):
                     _forbid(self); return
-                assign_document(document_id, form.get("assigned_to", ""), ctx["username"])
+                _body = dict(form)
+                _ares = assign_document_versioned(
+                    document_id, form.get("assigned_to", ""), ctx["username"],
+                    body=_body,
+                )
+                if _ares.status == 409:
+                    self._send_json(_ares.to_json(), status=409)
+                    return
                 dest = "/" if redirect_to == "home" else f"/document?id={urlquote(document_id)}"
                 self._flash_redirect(dest, flash=t("flash_assignment_updated", lang))
                 return
@@ -20451,7 +20685,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path == "/claim":
                 if not _require_document_in_firm(document_id, ctx):
                     _forbid(self); return
-                assign_document(document_id, ctx["username"], ctx["username"], note="claimed from dashboard")
+                _body = dict(form)
+                _cres = assign_document_versioned(
+                    document_id, ctx["username"], ctx["username"],
+                    note="claimed from dashboard", body=_body,
+                )
+                if _cres.status == 409:
+                    self._send_json(_cres.to_json(), status=409)
+                    return
                 dest = "/" if redirect_to == "home" else f"/document?id={urlquote(document_id)}"
                 self._flash_redirect(dest, flash=t("flash_item_claimed", lang))
                 return
@@ -21902,8 +22143,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         upd_kwargs["fee"] = float(fee_str)
                     except ValueError:
                         pass
+                # Optimistic-concurrency: route the field update through
+                # the versioned helper. If the form carried a version, 409
+                # on stale. Going-concern detection runs only on success.
+                _eres = update_engagement_fields_versioned(
+                    eng_id, upd_kwargs, body=dict(form),
+                )
+                if _eres.status == 409:
+                    self._send_json(_eres.to_json(), status=409)
+                    return
                 with open_db() as conn:
-                    _audit.update_engagement(conn, eng_id, **upd_kwargs)
                     # BLOCK 2: Auto-run going concern detection on engagement update
                     try:
                         eng_row = _audit.get_engagement(conn, eng_id)
@@ -21925,6 +22174,116 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 self._flash_redirect(f"/engagements/detail?id={urlquote(eng_id)}", flash=t("flash_eng_updated", lang))
+                return
+
+            # --- Versioned generic /update endpoints: JSON-only, 409 on stale ---
+            if path == "/fixed_asset/update":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
+                asset_id = normalize_text(form.get("asset_id", ""))
+                if not asset_id:
+                    self._send_json({"ok": False, "error": "asset_id required"}, status=400)
+                    return
+                fa_fields: dict[str, Any] = {}
+                for k in ("asset_name", "description", "status",
+                          "disposal_date", "disposal_reason"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        fa_fields[k] = normalize_text(v)
+                for k in ("cca_class",):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        try:
+                            fa_fields[k] = int(v)
+                        except (TypeError, ValueError):
+                            pass
+                for k in ("cost", "disposal_proceeds"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        try:
+                            fa_fields[k] = float(normalize_amount_input(v) or 0)
+                        except (TypeError, ValueError):
+                            pass
+                _fres = update_fixed_asset_fields_versioned(
+                    asset_id, fa_fields, body=dict(form), require_version=True,
+                )
+                self._send_json(_fres.to_json(), status=_fres.status)
+                return
+
+            if path == "/working_paper/update":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
+                paper_id = normalize_text(form.get("paper_id", ""))
+                if not paper_id:
+                    self._send_json({"ok": False, "error": "paper_id required"}, status=400)
+                    return
+                wp_fields: dict[str, Any] = {}
+                for k in ("account_name", "tested_by", "reviewed_by", "status", "notes"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        wp_fields[k] = normalize_text(v)
+                for k in ("balance_per_books", "balance_confirmed", "difference"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        try:
+                            wp_fields[k] = float(normalize_amount_input(v) or 0)
+                        except (TypeError, ValueError):
+                            pass
+                _wpres = update_working_paper_fields_versioned(
+                    paper_id, wp_fields, body=dict(form), require_version=True,
+                )
+                self._send_json(_wpres.to_json(), status=_wpres.status)
+                return
+
+            if path == "/partnership/update":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
+                p_id = form.get("id") or form.get("partnership_id")
+                if not p_id:
+                    self._send_json({"ok": False, "error": "id required"}, status=400)
+                    return
+                try:
+                    p_id = int(p_id)
+                except (TypeError, ValueError):
+                    pass
+                p_fields: dict[str, Any] = {}
+                for k in ("partnership_name", "partnership_type",
+                          "tax_year_end", "status"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        p_fields[k] = normalize_text(v)
+                _pres = update_partnership_fields_versioned(
+                    p_id, p_fields, body=dict(form), require_version=True,
+                )
+                self._send_json(_pres.to_json(), status=_pres.status)
+                return
+
+            if path == "/sred/update":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
+                s_id = form.get("id") or form.get("claim_id")
+                if not s_id:
+                    self._send_json({"ok": False, "error": "id required"}, status=400)
+                    return
+                try:
+                    s_id = int(s_id)
+                except (TypeError, ValueError):
+                    pass
+                s_fields: dict[str, Any] = {}
+                for k in ("project_name", "claim_type",
+                          "technological_advancement", "technological_obstacles",
+                          "work_performed", "status"):
+                    v = form.get(k)
+                    if v is not None and v != "":
+                        s_fields[k] = normalize_text(v)
+                _sres = update_sred_claim_fields_versioned(
+                    s_id, s_fields, body=dict(form), require_version=True,
+                )
+                self._send_json(_sres.to_json(), status=_sres.status)
                 return
 
             if path == "/engagements/issue":
@@ -22775,17 +23134,27 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (client_code,),
                     ).fetchone()
                     if existing:
-                        # Edit: preserve firm_code + portal_token (INSERT OR
-                        # REPLACE would wipe portal_token and rotation count).
+                        # Edit path: preserve firm_code + portal_token, and
+                        # run the update through the optimistic-concurrency
+                        # helper so concurrent edits 409 instead of silently
+                        # overwriting. The form is free to omit `version`;
+                        # in that case the update still lands but still bumps
+                        # version for the next versioned reader.
                         if existing.get("firm_code"):
                             client_firm = existing["firm_code"]
-                        conn.execute('''
-                            UPDATE clients
-                               SET client_name=?, contact_email=?, language=?,
-                                   active=?, whatsapp_number=?, firm_code=?
-                             WHERE client_code=?
-                        ''', (client_name, contact_email, language, active,
-                              whatsapp_number, client_firm, client_code))
+                        _cres = update_client_fields_versioned(
+                            client_code,
+                            {"client_name": client_name,
+                             "contact_email": contact_email,
+                             "language": language,
+                             "active": active,
+                             "whatsapp_number": whatsapp_number,
+                             "firm_code": client_firm},
+                            body=dict(form),
+                        )
+                        if _cres.status == 409:
+                            self._send_json(_cres.to_json(), status=409)
+                            return
                     else:
                         # New client: mint a portal_token up-front so the QR
                         # flow works immediately; don't wait for bootstrap.

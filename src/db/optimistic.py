@@ -47,6 +47,7 @@ VERSIONED_TABLES: dict[str, str] = {
     "partnerships":   "id",
     "partners":       "id",
     "manual_journal_entries": "entry_id",
+    "sred_claims":    "id",
 }
 
 
