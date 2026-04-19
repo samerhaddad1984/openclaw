@@ -329,46 +329,122 @@ def urlquote(value: Any) -> str:
 def _match_transaction_to_document(conn, client_code, amount, date, merchant_name):
     """Find best candidate document for a bank transaction.
 
-    Amount within $0.02, date within 7 days, not already matched/ignored.
-    When multiple candidates, prefer one whose vendor shares a 3+ letter word
-    with the merchant name; otherwise fall back to the first candidate.
+    Uses the sliding-scale match policy from src/engines/bank_match_tolerance.
+    Returns a dict:
+      {
+        "document_id":      str or None,
+        "confidence_tier":  "auto" | "review_required" | "manual_only" | None,
+        "auto_apply":       bool,       # False for high-amount or ambiguous
+        "breakdown":        dict,       # amount_diff / date_diff / vendor_sim
+        "reason":           str,        # why we chose / didn't auto-apply
+        "candidate_count":  int,
+      }
+
+    Legacy callers that just want the matched document_id can still read
+    result["document_id"]. The old return type (str | None) is preserved
+    via the `_match_transaction_to_document_id` wrapper below.
     """
     from datetime import datetime, timedelta
-    import re
+    from src.engines.bank_match_tolerance import (  # noqa: PLC0415
+        policy_for_amount,
+        score_candidate,
+    )
 
     try:
         txn_date = datetime.strptime(date, '%Y-%m-%d').date()
     except Exception:
-        return None
+        return {
+            "document_id": None, "confidence_tier": None, "auto_apply": False,
+            "breakdown": None, "reason": "invalid_tx_date", "candidate_count": 0,
+        }
 
-    date_from = (txn_date - timedelta(days=7)).isoformat()
-    date_to = (txn_date + timedelta(days=7)).isoformat()
+    policy = policy_for_amount(amount)
+    date_from = (txn_date - timedelta(days=policy.date_window_days)).isoformat()
+    date_to = (txn_date + timedelta(days=policy.date_window_days)).isoformat()
 
     candidates = conn.execute('''
         SELECT document_id, vendor, amount, document_date
         FROM documents
         WHERE client_code = ?
-        AND ABS(amount - ?) < 0.02
+        AND ABS(COALESCE(amount, 0) - ?) <= ?
         AND document_date BETWEEN ? AND ?
         AND matched_bank_transaction IS NULL
-        AND review_status != 'Ignored'
-    ''', (client_code, abs(amount), date_from, date_to)).fetchall()
+        AND COALESCE(review_status,'') != 'Ignored'
+    ''', (client_code, abs(amount), policy.amount_tol, date_from, date_to)).fetchall()
 
     if not candidates:
-        return None
+        return {
+            "document_id": None, "confidence_tier": None,
+            "auto_apply": False, "breakdown": None,
+            "reason": "no_candidates", "candidate_count": 0,
+        }
 
-    if len(candidates) == 1:
-        return candidates[0][0]
+    # Score each candidate so the UI can show breakdown on high-value matches.
+    tx_day = txn_date.toordinal()
+    scored: list[tuple[Any, Any]] = []
+    for c in candidates:
+        doc_id = c[0] if not hasattr(c, "keys") else c["document_id"]
+        vendor = c[1] if not hasattr(c, "keys") else c["vendor"]
+        doc_amount = c[2] if not hasattr(c, "keys") else c["amount"]
+        doc_date = c[3] if not hasattr(c, "keys") else c["document_date"]
+        try:
+            d_day = datetime.strptime(doc_date, "%Y-%m-%d").date().toordinal()
+        except Exception:
+            d_day = tx_day
+        score = score_candidate(
+            tx_amount=amount,
+            tx_date_days=tx_day,
+            tx_merchant=merchant_name,
+            doc_amount=doc_amount or 0.0,
+            doc_date_days=d_day,
+            doc_vendor=vendor,
+            policy=policy,
+        )
+        scored.append((doc_id, score))
 
-    merchant_lower = (merchant_name or '').lower()
-    merchant_words = set(re.findall(r'[a-z]{3,}', merchant_lower))
-    for doc_id, vendor, _doc_amount, _doc_date in candidates:
-        vendor_lower = (vendor or '').lower()
-        vendor_words = set(re.findall(r'[a-z]{3,}', vendor_lower))
-        if merchant_words & vendor_words:
-            return doc_id
+    # Keep only candidates whose vendor similarity clears the tier's floor.
+    passing = [(d, s) for d, s in scored if s.vendor_ok]
+    # If vendor threshold is 0 (small-amount tier) every candidate passes.
 
-    return candidates[0][0]
+    if len(passing) == 0:
+        # No candidate met the vendor-similarity bar for this amount.
+        return {
+            "document_id": None, "confidence_tier": policy.confidence_tier,
+            "auto_apply": False,
+            "breakdown": scored[0][1].as_dict() if scored else None,
+            "reason": "vendor_name_too_different_for_amount",
+            "candidate_count": len(candidates),
+        }
+
+    # Ambiguous multiple matches — never auto-pick; flag for manual review.
+    if len(passing) > 1:
+        best_doc, best_score = max(passing, key=lambda t: t[1].vendor_similarity)
+        return {
+            "document_id": best_doc, "confidence_tier": "review_required",
+            "auto_apply": False, "breakdown": best_score.as_dict(),
+            "reason": "multiple_candidates_require_cpa_selection",
+            "candidate_count": len(passing),
+        }
+
+    doc_id, score = passing[0]
+    tier = policy.confidence_tier
+    reason = "single_candidate_match"
+    return {
+        "document_id": doc_id, "confidence_tier": tier,
+        "auto_apply": policy.auto_apply, "breakdown": score.as_dict(),
+        "reason": reason, "candidate_count": 1,
+    }
+
+
+def _match_transaction_to_document_id(conn, client_code, amount, date, merchant_name):
+    """Backwards-compatible shim used by callers that only need the doc_id
+    and want the old 'auto-apply-if-match-found' behaviour. The richer
+    policy-aware dict is available from _match_transaction_to_document.
+    """
+    res = _match_transaction_to_document(conn, client_code, amount, date, merchant_name)
+    if res.get("auto_apply"):
+        return res.get("document_id")
+    return None
 
 
 def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, int]:
@@ -399,21 +475,32 @@ def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, in
             account_id = getattr(tx, "account_id", "") or ""
             pending = 1 if getattr(tx, "pending", False) else 0
 
-            match_doc_id = _match_transaction_to_document(
+            match_result = _match_transaction_to_document(
                 conn, client_code, tx_amount, tx_date_str, merchant or description,
             )
+            match_doc_id = match_result.get("document_id")
+            match_tier = match_result.get("confidence_tier") or "auto"
+            auto_apply = bool(match_result.get("auto_apply"))
+            try:
+                match_score_json = json.dumps(match_result.get("breakdown") or {})
+            except Exception:
+                match_score_json = None
 
             if existing:
                 tx_row_id = existing["id"]
                 if match_doc_id and not existing["matched_document_id"]:
                     conn.execute(
-                        "UPDATE bank_transactions SET matched_document_id=?, reconciled=1 WHERE id=?",
-                        (match_doc_id, tx_row_id),
+                        "UPDATE bank_transactions SET matched_document_id=?, "
+                        "reconciled=?, match_confidence_tier=?, match_score_json=? "
+                        "WHERE id=?",
+                        (match_doc_id, 1 if auto_apply else 0, match_tier,
+                         match_score_json, tx_row_id),
                     )
-                    conn.execute(
-                        "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
-                        (tx_row_id, match_doc_id),
-                    )
+                    if auto_apply:
+                        conn.execute(
+                            "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
+                            (tx_row_id, match_doc_id),
+                        )
                     matched += 1
                 continue
 
@@ -421,14 +508,15 @@ def _save_and_match_bank_txs(client_code: str, plaid_txs: list) -> tuple[int, in
             conn.execute(
                 "INSERT INTO bank_transactions (id, client_code, plaid_transaction_id,"
                 " account_id, date, amount, description, merchant_name, category, pending,"
-                " matched_document_id, reconciled)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " matched_document_id, reconciled, match_confidence_tier, match_score_json)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (row_id, client_code, plaid_tx_id, account_id, tx_date_str, tx_amount,
                  description, merchant, category, pending, match_doc_id,
-                 1 if match_doc_id else 0),
+                 1 if (match_doc_id and auto_apply) else 0,
+                 match_tier, match_score_json),
             )
             inserted += 1
-            if match_doc_id:
+            if match_doc_id and auto_apply:
                 conn.execute(
                     "UPDATE documents SET matched_bank_transaction=? WHERE document_id=?",
                     (row_id, match_doc_id),
@@ -801,6 +889,20 @@ def bootstrap_schema() -> None:
                 " WHERE firm_code IS NULL OR firm_code=''"
             )
             conn.commit()
+
+        # Sliding-scale match telemetry: remember which tier each bank
+        # transaction match fell into so the reconciliation UI can badge
+        # high-value matches and show their score breakdown.
+        bt_cols = {row["name"] for row in conn.execute(
+            "PRAGMA table_info(bank_transactions)"
+        ).fetchall()}
+        if "match_confidence_tier" not in bt_cols:
+            conn.execute(
+                "ALTER TABLE bank_transactions ADD COLUMN match_confidence_tier TEXT DEFAULT 'auto'"
+            )
+        if "match_score_json" not in bt_cols:
+            conn.execute("ALTER TABLE bank_transactions ADD COLUMN match_score_json TEXT")
+        conn.commit()
 
         # Rate limit /forgot requests (prevents enumeration + spam)
         conn.execute("""
