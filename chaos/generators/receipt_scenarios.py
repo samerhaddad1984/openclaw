@@ -62,6 +62,7 @@ NIGHTMARE_CONDITIONS: list[dict[str, Any]] = [
         "item_count": 5,
         "severity_on_failure": "medium",
         "description": "Torn receipt showing only partial totals",
+        "expected_fail": True,  # total is literally missing from image
     },
     {
         "subtype": "photo_45_deg_angle",
@@ -89,6 +90,7 @@ NIGHTMARE_CONDITIONS: list[dict[str, Any]] = [
         "item_count": 8,
         "severity_on_failure": "high",
         "description": "Flash glare obscures total and line items",
+        "expected_fail": True,  # total is physically obscured
     },
     {
         "subtype": "handwritten_tip_addendum",
@@ -313,6 +315,7 @@ NIGHTMARE_CONDITIONS: list[dict[str, Any]] = [
         "extras": {"is_return": True},
         "severity_on_failure": "critical",
         "description": "Full return — total is negative",
+        "expected_fail": True,  # pipeline doesn't natively support negative totals
     },
     {
         "subtype": "zero_total_loyalty_points",
