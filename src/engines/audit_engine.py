@@ -1786,7 +1786,82 @@ def generate_financial_statements(
     bs["total_current_liabilities"] = _round(total_current_liab)
     bs["total_long_term_liabilities"] = _round(total_long_term_liab)
     bs["total_liabilities"]         = _round(total_current_liab + total_long_term_liab)
-    bs["total_equity"]              = bs["equity_detail"]["total"]
+
+    # Compute SOCE-style closing equity so the balance sheet identity
+    # Assets = Liabilities + Equity holds during an open period.
+    # Posted equity accounts alone don't include current-period NI (that
+    # only flows to RE at period close). Standard presentation:
+    #   closing equity = opening equity + NI + share issuance - dividends
+    # We mirror generate_soce()'s logic here and include the current period
+    # NI as a synthetic equity line for display.
+    try:
+        start_d, end_d = _period_boundaries(period)
+        manual_opening = _load_opening_balances(conn, client_code, period)
+        if manual_opening:
+            opening_equity_map = dict(manual_opening)
+            opening_source = "manual"
+        else:
+            prior_close = _prior_period_closing_equity(conn, client_code, period)
+            if prior_close:
+                opening_equity_map = dict(prior_close)
+                opening_source = "prior_period_close"
+            else:
+                opening_equity_map = _equity_balance_at(
+                    conn, client_code, _prev_day_iso(start_d),
+                )
+                opening_source = "ledger_activity"
+        total_opening = sum(
+            (v["amount"] for v in opening_equity_map.values()), _ZERO,
+        )
+    except Exception:
+        opening_equity_map = {}
+        opening_source = "unknown"
+        total_opening = _ZERO
+        start_d, end_d = None, None
+
+    posted_equity = bs["equity_detail"]["total"]
+    net_inc_d = _to_decimal(is_["net_income"] or 0)
+
+    # If no equity accounts are posted yet (fresh ledger before period
+    # close entries), the BS closing equity is opening + NI. Otherwise
+    # the posted equity already reflects prior-period NI roll-forward, so
+    # we only add the *current* period NI to avoid double-counting.
+    if posted_equity == _ZERO and total_opening != _ZERO:
+        total_closing_equity = _round(total_opening + net_inc_d)
+    elif posted_equity == _ZERO:
+        total_closing_equity = _round(net_inc_d)
+    else:
+        total_closing_equity = _round(posted_equity + net_inc_d)
+
+    # Append synthetic equity line items for display so the equity section
+    # shows opening RE, posted equity, and current-period NI separately.
+    synthetic_equity_items: list[dict[str, Any]] = []
+    if total_opening != _ZERO and opening_source != "ledger_activity":
+        synthetic_equity_items.append({
+            "account_code": "3900",
+            "account_name": "Opening Retained Earnings",
+            "amount": _round(total_opening),
+            "financial_statement_section": "equity",
+            "cra_t2_line": None, "co17_line": None,
+            "_synthetic": True, "_source": opening_source,
+        })
+    if net_inc_d != _ZERO:
+        synthetic_equity_items.append({
+            "account_code": "3999",
+            "account_name": "Current Period Net Income",
+            "amount": is_["net_income"],
+            "financial_statement_section": "equity",
+            "cra_t2_line": None, "co17_line": None,
+            "_synthetic": True, "_source": "income_statement",
+        })
+
+    for item in synthetic_equity_items:
+        bs["equity_detail"]["items"].append(item)
+        key = f"{item['account_code']} — {item['account_name']}"
+        equity_flat[key] = item["amount"]
+
+    bs["equity"] = equity_flat
+    bs["total_equity"] = total_closing_equity
 
     # Accounting identity check: Assets = Liabilities + Equity.
     bs_total_liab_equity = bs["total_liabilities"] + bs["total_equity"]
@@ -1809,51 +1884,19 @@ def generate_financial_statements(
     )
     tb_balanced = abs(tb_debit_total - tb_credit_total) <= _to_decimal("0.01")
 
-    # Sprint F Fix 5: Statement of Changes in Equity must travel with the
-    # balance sheet + income statement. Computing it here would recurse
-    # (generate_soce calls generate_financial_statements), so we inline a
-    # minimal version that uses the BS equity_detail we already have.
-    try:
-        start_d, end_d = _period_boundaries(period)
-        # Priority: manual opening_balances table → prior period close →
-        # cumulative ledger activity. Matches generate_soce() behaviour.
-        manual_opening = _load_opening_balances(conn, client_code, period)
-        if manual_opening:
-            opening_equity_map = dict(manual_opening)
-            opening_source = "manual"
-        else:
-            prior_close = _prior_period_closing_equity(conn, client_code, period)
-            if prior_close:
-                opening_equity_map = dict(prior_close)
-                opening_source = "prior_period_close"
-            else:
-                opening_equity_map = _equity_balance_at(
-                    conn, client_code, _prev_day_iso(start_d),
-                )
-                opening_source = "ledger_activity"
-        total_opening = sum(
-            (v["amount"] for v in opening_equity_map.values()), _ZERO,
-        )
-        # Closing = opening + NI + share - div.
-        net_inc_d = _to_decimal(is_["net_income"] or 0)
-        total_closing_soce = _round(total_opening + net_inc_d)
-        soce_inline = {
-            "period_start": start_d,
-            "period_end": end_d,
-            "total_opening_equity": _round(total_opening),
-            "net_income": is_["net_income"],
-            "total_closing_equity": total_closing_soce,
-            "total_change_in_equity": _round(total_closing_soce - total_opening),
-            "opening_balances": opening_equity_map,
-            "opening_source": opening_source,
-        }
-    except Exception:
-        soce_inline = {
-            "total_opening_equity": _ZERO,
-            "net_income": is_["net_income"],
-            "total_closing_equity": bs["total_equity"],
-            "total_change_in_equity": bs["total_equity"],
-        }
+    # SOCE summary traveling with the financial statements bundle. Uses
+    # the same opening/NI figures we just computed for the BS so the two
+    # statements are mutually consistent.
+    soce_inline = {
+        "period_start": start_d,
+        "period_end": end_d,
+        "total_opening_equity": _round(total_opening),
+        "net_income": is_["net_income"],
+        "total_closing_equity": total_closing_equity,
+        "total_change_in_equity": _round(total_closing_equity - total_opening),
+        "opening_balances": opening_equity_map,
+        "opening_source": opening_source,
+    }
 
     return {
         "client_code": client_code,

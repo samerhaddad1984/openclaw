@@ -163,10 +163,15 @@ def test_balance_sheet_equity_matches_soce_closing_within_cent(tmp_path):
     soce_closing = Decimal(
         str(stmts["statement_of_changes_in_equity"]["total_closing_equity"]),
     )
-    # SOCE includes NI that hasn't been posted to 3200 yet; BS reflects
-    # pre-close equity. Delta should equal NI.
-    ni = Decimal(str(stmts["income_statement"]["net_income"]))
-    assert abs(soce_closing - (bs_equity + ni)) <= Decimal("0.01")
+    # Post-BS-fix: BS total_equity now includes current-period NI as a
+    # synthetic reconciling line, so BS equity equals SOCE closing directly.
+    # (The BS identity itself only closes when opening equity has a
+    # matching opening asset; this fixture seeds the equity side only,
+    # so we don't assert A = L + E here — see test_balance_sheet_balances.py
+    # for the identity checks on fully-seeded fixtures.)
+    assert abs(bs_equity - soce_closing) <= Decimal("0.01"), (
+        f"BS equity {bs_equity} must match SOCE closing {soce_closing}"
+    )
     conn.close()
 
 
