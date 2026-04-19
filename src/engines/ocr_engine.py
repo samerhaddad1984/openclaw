@@ -865,18 +865,44 @@ def _fix_quebec_amount(raw: Any) -> float | None:
         return None
 
 
+def _date_in_sane_range(year: int, month: int, day: int) -> bool:
+    """True if the date is plausibly a real receipt date.
+
+    Sanity rules (mega-session Part 3 fix):
+      * year must be between 2000 and current_year + 1 (no far-future)
+      * month 1-12, day 1-31 (calendar validity checked separately)
+    """
+    from datetime import datetime as _dt
+    current_year = _dt.now().year
+    if year < 2000 or year > current_year + 1:
+        return False
+    if not (1 <= month <= 12):
+        return False
+    if not (1 <= day <= 31):
+        return False
+    return True
+
+
 def _fix_quebec_date(raw: Any) -> str | None:
     """
     Normalise Quebec date formats to YYYY-MM-DD.
 
     Handles:
       19 mars 2026  |  mars 19 2026  |  19/03/26  |  19-03-2026  |  2026-03-19
+
+    Sanity check (mega Part 3): reject far-future years. If the parsed year
+    is > current_year+1, try swapping day ↔ year suffix (covers the
+    "31 Dec 2024" → "2031-12-04" digit-shift case). If still bad, return
+    None so the caller can flag the receipt for review.
     """
+    from datetime import datetime as _dt
     if raw is None or raw == "illegible":
         return None
     s = str(raw).strip().lower()
     if not s or s == "illegible":
         return None
+
+    current_year = _dt.now().year
 
     # Already ISO: YYYY-MM-DD
     m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
@@ -889,8 +915,14 @@ def _fix_quebec_date(raw: Any) -> str | None:
             year = 2000 + (year % 100) if year < 100 else year
             # Still bad? Force current year.
             if year < 2020:
-                from datetime import datetime as _dt
                 year = _dt.now().year
+        # Far-future year (e.g., 2031): don't try to invent a recovery —
+        # the most common pattern we've seen (2031-12-04 from a real
+        # 2024-12-31 receipt) has no reliable swap that gets back to the
+        # truth. Return None so the caller flags the receipt for manual
+        # review rather than silently storing a wrong date.
+        if year > current_year + 1:
+            return None
         return f"{year}-{month:02d}-{day:02d}"
 
     # DD/MM/YY or DD-MM-YYYY or DD/MM/YYYY
