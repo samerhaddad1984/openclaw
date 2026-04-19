@@ -1443,6 +1443,54 @@ def generate_trial_balance(
 
     ap_credit_totals = {"1010": ap_paid_total, "2000": ap_unpaid_credit}
 
+    # --- Opening-balances synthesis: equity / asset / liability seeds --
+    # opening_balances entries (e.g., $25k retained earnings) must flow
+    # into the trial balance so the balance sheet reflects the prior-
+    # period close. Without this the BS equity = 0 even when SOCE shows
+    # $25k opening equity.
+    try:
+        ob_rows = conn.execute(
+            "SELECT account_code, account_name, amount "
+            "FROM opening_balances WHERE LOWER(client_code)=LOWER(?) AND period=?",
+            (client_code, period),
+        ).fetchall()
+        for r in ob_rows or []:
+            code = r["account_code"]
+            amt = _to_decimal(r["amount"] or 0)
+            if amt == 0:
+                continue
+            coa = conn.execute(
+                "SELECT account_name, normal_balance FROM chart_of_accounts WHERE account_code=?",
+                (code,),
+            ).fetchone()
+            if coa:
+                name = coa["account_name"]
+                normal = coa["normal_balance"]
+            else:
+                name = r["account_name"] or code
+                acct_type = _infer_account_type(code)
+                normal = "credit" if acct_type in ("liability", "equity", "revenue") else "debit"
+            # opening_balances amount is always stored as a positive magnitude.
+            debit = float(amt) if normal == "debit" else 0.0
+            credit = float(amt) if normal == "credit" else 0.0
+            now = _utc_now()
+            conn.execute(
+                """INSERT INTO trial_balance (client_code, period, account_code,
+                   account_name, debit_total, credit_total, net_balance, generated_at)
+                   VALUES (?,?,?,?,?,?,?,?)
+                   ON CONFLICT(client_code, period, account_code) DO UPDATE SET
+                       debit_total = excluded.debit_total + trial_balance.debit_total,
+                       credit_total = excluded.credit_total + trial_balance.credit_total,
+                       net_balance = (excluded.debit_total + trial_balance.debit_total)
+                                      - (excluded.credit_total + trial_balance.credit_total),
+                       generated_at = excluded.generated_at""",
+                (client_code, period, code, name, debit, credit,
+                 debit - credit, now),
+            )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # --- Apply AR rows + AP-credit synthesis + unpaid-AP debits ---------
     for code, amt in ap_unpaid_debit.items():
         if amt <= 0:
@@ -1627,9 +1675,20 @@ def generate_financial_statements(
     for row in tb_rows:
         code = row["account_code"]
         name = row["account_name"]
-        net = _to_decimal(row["net_balance"])
+        # trial_balance stores net_balance = debit_total - credit_total.
+        # For debit-normal accounts (asset, expense) this is naturally
+        # POSITIVE when the account has a normal balance. For credit-
+        # normal accounts (liability, equity, revenue) it is NEGATIVE.
+        # Both the balance-sheet identity (A = L + E) and the NI formula
+        # expect these categories to be reported as POSITIVE magnitudes,
+        # so we invert the sign at intake for credit-normal accounts.
+        raw_net = _to_decimal(row["net_balance"])
         coa_e = coa.get(code, {})
         acct_type = coa_e.get("account_type") or _infer_account_type(code)
+        if acct_type in ("liability", "equity", "revenue"):
+            net = -raw_net
+        else:
+            net = raw_net
         # Prefer financial_statement_section (expanded chart), fall back to
         # financial_statement_line (legacy chart)
         fs_section = (
