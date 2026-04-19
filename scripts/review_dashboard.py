@@ -122,6 +122,18 @@ import src.engines.fixed_assets_engine as _fa
 import src.engines.aging_engine as _aging
 import src.engines.cashflow_engine as _cashflow
 import src.engines.t2_engine as _t2
+# Sprint G + H + I engines (optional — only used by the corresponding routes,
+# imported lazily-style here to keep the dashboard import cheap and tolerant
+# of partial deployments).
+import src.engines.approval_graph_engine as _approval_graph  # noqa: E402
+import src.engines.phantom_employee_engine as _phantom  # noqa: E402
+import src.engines.benford_engine as _benford  # noqa: E402
+import src.engines.vendor_typo_engine as _vendor_typo  # noqa: E402
+import src.engines.bank_account_audit as _bank_audit  # noqa: E402
+import src.engines.partnership_engine as _partnership  # noqa: E402
+import src.engines.sred_engine as _sred  # noqa: E402
+import src.engines.tax_edge_cases as _tax_edge  # noqa: E402
+import src.engines.recon_edge_cases as _recon_edge  # noqa: E402
 from src.engines.license_engine import (
     get_license_status, save_license_to_config, check_limits,
     get_signing_secret, TIER_DEFAULTS,
@@ -9807,14 +9819,21 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_dnav("/audit/rep_letter", "cas_rep_nav"))
         groups.append(_dnav("/audit/controls", "cas_ctrl_nav"))
         groups.append(_dnav("/audit/related_parties", "cas_rp_nav"))
+        groups.append(_dlink("/audit/anomalies", "Anomaly detectors"))
 
         groups.append(_group_label("\U0001f4b0 Finance"))
         groups.append(_dnav("/reconciliation", "recon_nav_link"))
+        groups.append(_dlink("/reconciliation/adjustments", "Recon adjustments"))
         groups.append(_dnav("/fixed_assets", "fa_nav_link"))
         groups.append(_dnav("/aging", "aging_nav_link"))
         groups.append(_dnav("/ar", "ar_nav_link"))
         groups.append(_dnav("/cashflow", "cashflow_nav_link"))
+
+        groups.append(_group_label("\U0001f4b3 Tax"))
         groups.append(_dnav("/t2", "t2_nav_link"))
+        groups.append(_dlink("/sred", "SR&ED claims"))
+        groups.append(_dlink("/partnerships", "Partnerships (T5013)"))
+        groups.append(_dlink("/tax/planning", "Tax planning"))
 
         groups.append(_group_label("\U0001f465 Clients"))
         groups.append(_dnav("/clients", "clients_nav"))
@@ -15763,6 +15782,438 @@ def render_journal_entries(
 
 
 # ---------------------------------------------------------------------------
+# Sprint I Part 2 — UI render functions for Sprint G/H/I engines
+# ---------------------------------------------------------------------------
+
+def _sev_pill(severity: str) -> str:
+    color = {
+        "critical": "#7f1d1d",
+        "high":     "#b91c1c",
+        "medium":   "#b45309",
+        "low":      "#1f2937",
+    }.get(str(severity or "low").lower(), "#6b7280")
+    safe = esc(str(severity or "low").upper())
+    return (
+        f'<span style="background:{color};color:white;padding:2px 8px;'
+        f'border-radius:10px;font-size:11px;font-weight:600;">{safe}</span>'
+    )
+
+
+def render_audit_anomalies(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    client_code: str = "",
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    """Sprint G unified anomaly dashboard."""
+    cards: list[str] = []
+    last_run = "—"
+
+    if client_code:
+        with open_db() as conn:
+            try:
+                circ = _approval_graph.detect_circular_approvals(
+                    client_code=client_code, db_path=Path(open_db.__defaults__[0]) if open_db.__defaults__ else None,
+                )
+            except Exception:
+                circ = []
+            try:
+                phantom = _phantom.detect_phantom_employee_expenses(
+                    client_code=client_code,
+                )
+            except Exception:
+                phantom = []
+            try:
+                vt = _vendor_typo.detect_vendor_typos_refined(
+                    client_code=client_code,
+                )
+            except Exception:
+                vt = []
+            try:
+                ben = _benford.analyze_benford_compliance(
+                    client_code=client_code,
+                )
+            except Exception:
+                ben = {"status": "error"}
+            try:
+                bank_audit = _bank_audit.get_bank_audit_trail(
+                    client_code=client_code,
+                )
+            except Exception:
+                bank_audit = []
+
+        from datetime import datetime as _dt
+        last_run = _dt.now().strftime("%Y-%m-%d %H:%M")
+
+        # Circular approvals
+        circ_rows = "".join(
+            f"<tr><td>{esc(' → '.join(c.get('cycle', [])))}</td>"
+            f"<td>{c.get('approval_count', 0)}</td>"
+            f"<td style='text-align:right;'>${float(c.get('total_amount', 0)):,.2f}</td>"
+            f"<td>{_sev_pill(c.get('severity'))}</td></tr>"
+            for c in circ[:25]
+        ) or "<tr><td colspan='4' class='muted'>No findings.</td></tr>"
+        cards.append(
+            f'<div class="card"><h3 style="margin-top:0;">Circular Approvals (CAS 315)</h3>'
+            f'<p>Findings: <strong>{len(circ)}</strong></p>'
+            f'<table><thead><tr><th>Cycle</th><th>Docs</th><th style="text-align:right;">$</th><th>Severity</th></tr></thead>'
+            f'<tbody>{circ_rows}</tbody></table></div>'
+        )
+
+        # Phantom employees
+        ph_rows = "".join(
+            f"<tr><td>{esc(p.get('submitter', ''))}</td>"
+            f"<td>{p.get('submission_count', 0)}</td>"
+            f"<td style='text-align:right;'>${float(p.get('total_amount', 0) or 0):,.2f}</td>"
+            f"<td>{esc(p.get('subtype', ''))}</td>"
+            f"<td>{_sev_pill(p.get('severity'))}</td></tr>"
+            for p in phantom[:25]
+        ) or "<tr><td colspan='5' class='muted'>No findings.</td></tr>"
+        cards.append(
+            f'<div class="card"><h3 style="margin-top:0;">Phantom Employee Expenses</h3>'
+            f'<p>Findings: <strong>{len(phantom)}</strong></p>'
+            f'<table><thead><tr><th>Submitter</th><th>Docs</th><th style="text-align:right;">$</th><th>Pattern</th><th>Sev</th></tr></thead>'
+            f'<tbody>{ph_rows}</tbody></table></div>'
+        )
+
+        # Vendor typo suggestions
+        vt_rows = "".join(
+            f"<tr><td>{esc(' / '.join(v.get('vendors', [])))}</td>"
+            f"<td>{v.get('similarity', 0):.0%}</td>"
+            f"<td>{esc(v.get('reason', ''))}</td>"
+            f"<td>{_sev_pill(v.get('severity'))}</td></tr>"
+            for v in vt[:25]
+        ) or "<tr><td colspan='4' class='muted'>No suggestions.</td></tr>"
+        cards.append(
+            f'<div class="card"><h3 style="margin-top:0;">Potential Vendor Duplicates</h3>'
+            f'<p>Pairs: <strong>{len(vt)}</strong></p>'
+            f'<table><thead><tr><th>Names</th><th>Similarity</th><th>Reason</th><th>Sev</th></tr></thead>'
+            f'<tbody>{vt_rows}</tbody></table></div>'
+        )
+
+        # Benford
+        if ben.get("status") == "ok":
+            chi2 = ben.get("chi_squared", 0)
+            sig = "Yes" if ben.get("significant_deviation") else "No"
+            sev = ben.get("severity", "low")
+            dist_rows = "".join(
+                f"<tr><td>{d}</td><td>{ben['observed_distribution'].get(d, 0)}</td>"
+                f"<td>{ben['expected_counts'].get(d, 0):.0f}</td></tr>"
+                for d in range(1, 10)
+            )
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">Benford\'s Law Test</h3>'
+                f'<p>Sample size: <strong>{ben["sample_size"]}</strong> &mdash; '
+                f'Chi² = <strong>{chi2:.2f}</strong> &mdash; Significant: <strong>{sig}</strong> {_sev_pill(sev)}</p>'
+                f'<table><thead><tr><th>Digit</th><th>Observed</th><th>Expected</th></tr></thead>'
+                f'<tbody>{dist_rows}</tbody></table></div>'
+            )
+        else:
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">Benford\'s Law Test</h3>'
+                f'<p class="muted">Insufficient data ({ben.get("sample_size", 0)} amounts; '
+                f'need at least {ben.get("min_required", 30)}).</p></div>'
+            )
+
+        # Bank account audit trail
+        if bank_audit:
+            ba_rows = "".join(
+                f"<tr><td>{esc(b.get('created_at', '')[:16])}</td>"
+                f"<td>{esc(b.get('action', ''))}</td>"
+                f"<td>{esc(b.get('account_masked', ''))}</td>"
+                f"<td>{esc(b.get('changed_by', ''))}</td>"
+                f"<td>{esc(b.get('reason', ''))}</td></tr>"
+                for b in bank_audit[:25]
+            )
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">Bank Account Change Audit Trail</h3>'
+                f'<table><thead><tr><th>Date</th><th>Action</th><th>Account</th><th>By</th><th>Reason</th></tr></thead>'
+                f'<tbody>{ba_rows}</tbody></table></div>'
+            )
+
+    filter_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/audit/anomalies" style="display:flex;gap:12px;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
+        f'<input type="text" name="client_code" value="{esc(client_code)}" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Run all detectors</button></div>'
+        f'<div style="margin-left:auto;font-size:12px;color:#6b7280;">Last run: {esc(last_run)}</div>'
+        f'</form></div>\n'
+    )
+
+    body = (
+        f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<h2 style="margin:0;">Audit Anomalies (CAS 240 / 315)</h2>'
+        f'<a href="/" class="btn-secondary button-link">Back</a></div>'
+        f'{filter_form}'
+        f'{"".join(cards) if cards else "<div class=\"card muted\">Enter a client code to run detectors.</div>"}'
+    )
+    return page_layout("Audit Anomalies", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_partnerships(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    client_code: str = "",
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    with open_db() as conn:
+        partnerships = _partnership.list_partnerships(
+            conn, client_code=client_code,
+        )
+
+    rows = ""
+    for p in partnerships:
+        rows += (
+            f"<tr><td>{esc(p.get('partnership_name', ''))}</td>"
+            f"<td>{esc(p.get('client_code', ''))}</td>"
+            f"<td>{esc(p.get('partnership_type', ''))}</td>"
+            f"<td>{esc(p.get('tax_year_end', ''))}</td>"
+            f"<td><a href='/partnerships/{p['id']}'>Open</a></td></tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5' class='muted'>No partnerships yet.</td></tr>"
+
+    create_form = (
+        '<div class="card"><h3 style="margin-top:0;">New Partnership</h3>'
+        '<form method="POST" action="/partnerships/new" '
+        'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        '<div><label style="font-size:13px;font-weight:600;">Name</label><br>'
+        '<input type="text" name="partnership_name" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Client code</label><br>'
+        '<input type="text" name="client_code" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Type</label><br>'
+        '<select name="partnership_type" '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
+        '<option value="general">General</option>'
+        '<option value="limited">Limited</option>'
+        '<option value="LP">LP</option></select></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Tax year end</label><br>'
+        '<input type="text" name="tax_year_end" placeholder="2025-12-31" '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Create</button></div>'
+        '</form></div>'
+    )
+    body = (
+        '<div class="topbar" style="margin-bottom:16px;">'
+        '<h2 style="margin:0;">Partnerships (T5013)</h2>'
+        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        f'{create_form}'
+        '<div class="card"><h3 style="margin-top:0;">Existing partnerships</h3>'
+        '<table><thead><tr><th>Name</th><th>Client</th><th>Type</th>'
+        '<th>Year end</th><th>Action</th></tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>'
+    )
+    return page_layout("Partnerships", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_sred(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    client_code: str = "",
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    claims_html = ""
+    if client_code:
+        with open_db() as conn:
+            _sred.ensure_sred_tables(conn)
+            rows = conn.execute(
+                "SELECT * FROM sred_claims WHERE LOWER(client_code)=LOWER(?) "
+                "ORDER BY tax_year DESC, id DESC", (client_code,),
+            ).fetchall()
+        for r in rows:
+            r = dict(r)
+            claims_html += (
+                f"<tr><td>{esc(str(r.get('tax_year', '')))}</td>"
+                f"<td>{esc(r.get('project_name', ''))}</td>"
+                f"<td>{esc(r.get('claim_type', ''))}</td>"
+                f"<td>{esc(r.get('status', ''))}</td>"
+                f"<td><a href='/sred/{r['id']}'>Detail</a></td></tr>"
+            )
+        if not claims_html:
+            claims_html = "<tr><td colspan='5' class='muted'>No claims for this client.</td></tr>"
+
+    create_form = (
+        '<div class="card"><h3 style="margin-top:0;">New SR&amp;ED claim</h3>'
+        '<form method="POST" action="/sred/new" '
+        'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        '<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
+        '<input type="text" name="client_code" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Tax year</label><br>'
+        '<input type="number" name="tax_year" min="2000" max="2100" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:90px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Project</label><br>'
+        '<input type="text" name="project_name" required '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        '<div><label style="font-size:13px;font-weight:600;">Method</label><br>'
+        '<select name="claim_type" '
+        'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
+        '<option value="traditional">Traditional</option>'
+        '<option value="proxy">Proxy (55%)</option></select></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Create</button></div>'
+        '</form></div>'
+    )
+    body = (
+        '<div class="topbar" style="margin-bottom:16px;">'
+        '<h2 style="margin:0;">SR&amp;ED Claims (T661)</h2>'
+        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        f'{create_form}'
+        '<div class="card"><h3 style="margin-top:0;">Existing claims</h3>'
+        f'<form method="GET" action="/sred" style="margin-bottom:8px;">'
+        f'<input type="text" name="client_code" value="{esc(client_code)}" '
+        f'placeholder="Client code" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
+        f'<button type="submit" class="btn-secondary" style="padding:7px 14px;margin-left:6px;">Filter</button>'
+        f'</form>'
+        '<table><thead><tr><th>Year</th><th>Project</th><th>Method</th>'
+        '<th>Status</th><th>Action</th></tr></thead>'
+        f'<tbody>{claims_html or "<tr><td colspan=5 class=muted>Enter a client code above.</td></tr>"}</tbody></table></div>'
+    )
+    return page_layout("SR&ED", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_tax_planning(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    client_code: str = "",
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    cards: list[str] = []
+    if client_code:
+        with open_db() as conn:
+            ncl_balance = float(_tax_edge.get_ncl_balance(conn, client_code))
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">Non-Capital Loss Carryforward</h3>'
+                f'<p>Available NCL balance: <strong>${ncl_balance:,.2f}</strong></p>'
+                f'<p class="muted">20-year carryforward window per ITA s.111.</p></div>'
+            )
+
+            partnerships = _partnership.list_partnerships(
+                conn, client_code=client_code,
+            )
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">Partnerships</h3>'
+                f'<p>Active: <strong>{len(partnerships)}</strong></p>'
+                f'<a href="/partnerships?client_code={urlquote(client_code)}">Manage →</a></div>'
+            )
+
+            _sred.ensure_sred_tables(conn)
+            sred_count = conn.execute(
+                "SELECT COUNT(*) FROM sred_claims WHERE LOWER(client_code)=LOWER(?)",
+                (client_code,),
+            ).fetchone()[0]
+            cards.append(
+                f'<div class="card"><h3 style="margin-top:0;">SR&amp;ED Claims</h3>'
+                f'<p>Open claims: <strong>{sred_count}</strong></p>'
+                f'<a href="/sred?client_code={urlquote(client_code)}">Manage →</a></div>'
+            )
+
+            cards.append(
+                '<div class="card"><h3 style="margin-top:0;">Residential GST/HST Rebate</h3>'
+                '<form method="POST" action="/tax/rebate" '
+                'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+                f'<input type="hidden" name="client_code" value="{esc(client_code)}">'
+                '<div><label style="font-size:13px;font-weight:600;">Purchase price</label><br>'
+                '<input type="number" name="purchase_price" required step="0.01" '
+                'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+                '<div><label style="font-size:13px;font-weight:600;">Province</label><br>'
+                '<select name="province" '
+                'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
+                '<option value="QC">QC</option><option value="ON">ON</option>'
+                '<option value="AB">AB</option></select></div>'
+                '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Estimate</button></div>'
+                '</form></div>'
+            )
+
+    filter_form = (
+        f'<div class="card">'
+        f'<form method="GET" action="/tax/planning" style="display:flex;gap:12px;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
+        f'<input type="text" name="client_code" value="{esc(client_code)}" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Load</button></div>'
+        f'</form></div>\n'
+    )
+    body = (
+        '<div class="topbar" style="margin-bottom:16px;">'
+        '<h2 style="margin:0;">Tax Planning Dashboard</h2>'
+        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        f'{filter_form}'
+        f'{"".join(cards) if cards else "<div class=\"card muted\">Enter a client code to load planning.</div>"}'
+    )
+    return page_layout("Tax Planning", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+def render_recon_adjustments(
+    ctx: dict[str, Any],
+    user: dict[str, Any],
+    client_code: str = "",
+    adjustment_type: str = "",
+    flash: str = "",
+    flash_error: str = "",
+    lang: str = "fr",
+) -> str:
+    rows_html = ""
+    if client_code:
+        with open_db() as conn:
+            adjustments = _recon_edge.list_recon_adjustments(
+                conn, client_code=client_code,
+                adjustment_type=adjustment_type or "",
+            )
+        for a in adjustments:
+            rows_html += (
+                f"<tr><td>{esc(str(a.get('created_at', ''))[:16])}</td>"
+                f"<td>{esc(a.get('adjustment_type', ''))}</td>"
+                f"<td>{esc(a.get('bank_tx_id', ''))}</td>"
+                f"<td style='text-align:right;'>${float(a.get('amount', 0) or 0):,.2f}</td>"
+                f"<td style='text-align:right;'>${float(a.get('fee_amount', 0) or 0):,.2f}</td>"
+                f"<td>{esc(a.get('reason', ''))}</td></tr>"
+            )
+    if not rows_html:
+        rows_html = "<tr><td colspan='6' class='muted'>No adjustments.</td></tr>"
+
+    type_opts = "".join(
+        f'<option value="{v}" {"selected" if adjustment_type == v else ""}>{esc(v or "All")}</option>'
+        for v in ("", "nsf_return", "stop_payment", "bank_error_correction")
+    )
+    body = (
+        '<div class="topbar" style="margin-bottom:16px;">'
+        '<h2 style="margin:0;">Reconciliation Adjustments</h2>'
+        '<a href="/reconciliation" class="btn-secondary button-link">Back</a></div>'
+        '<div class="card"><form method="GET" action="/reconciliation/adjustments" '
+        'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+        f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
+        f'<input type="text" name="client_code" value="{esc(client_code)}" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Type</label><br>'
+        f'<select name="adjustment_type" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{type_opts}</select></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Filter</button></div>'
+        f'</form></div>'
+        '<div class="card"><table><thead><tr><th>Date</th><th>Type</th>'
+        '<th>Bank Tx</th><th style="text-align:right;">Amount</th>'
+        '<th style="text-align:right;">Fee</th><th>Reason</th></tr></thead>'
+        f'<tbody>{rows_html}</tbody></table></div>'
+    )
+    return page_layout("Recon Adjustments", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
+# ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
 
@@ -17195,6 +17646,54 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 ev_client = qs.get("client_code", [""])[0].strip()
                 ev_period = qs.get("period", [""])[0].strip()
                 self._send_html(render_audit_evidence(ctx, user, ev_client, ev_period, flash, flash_error, lang=lang))
+                return
+
+            # Sprint I — UI pages for Sprint G/H/I engines.
+            if path == "/audit/anomalies":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                an_client = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_audit_anomalies(ctx, user, an_client,
+                                                        flash, flash_error, lang=lang))
+                return
+
+            if path == "/partnerships":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                pn_client = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_partnerships(ctx, user, pn_client,
+                                                     flash, flash_error, lang=lang))
+                return
+
+            if path == "/sred":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                sred_client = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_sred(ctx, user, sred_client,
+                                              flash, flash_error, lang=lang))
+                return
+
+            if path == "/tax/planning":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                tp_client = qs.get("client_code", [""])[0].strip()
+                self._send_html(render_tax_planning(ctx, user, tp_client,
+                                                      flash, flash_error, lang=lang))
+                return
+
+            if path == "/reconciliation/adjustments":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout("Forbidden", "", user=user, lang=lang), status=403)
+                    return
+                ra_client = qs.get("client_code", [""])[0].strip()
+                ra_type = qs.get("adjustment_type", [""])[0].strip()
+                self._send_html(render_recon_adjustments(
+                    ctx, user, ra_client, ra_type, flash, flash_error, lang=lang,
+                ))
                 return
 
             if path == "/audit/sample":
@@ -20760,6 +21259,73 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     + (f"&paper_id={urlquote(samp_paper)}" if samp_paper else "")
                 )
                 self._flash_redirect(f"/audit/sample{redirect_qs}", flash=t("flash_samp_marked", lang))
+                return
+
+            if path == "/partnerships/new":
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                pn_name = normalize_text(form.get("partnership_name", ""))
+                pn_client = normalize_text(form.get("client_code", ""))
+                pn_type = normalize_text(form.get("partnership_type", "general"))
+                pn_year_end = normalize_text(form.get("tax_year_end", ""))
+                if not pn_name or not pn_client:
+                    raise ValueError("partnership_name and client_code are required")
+                with open_db() as conn:
+                    _partnership.create_partnership(
+                        conn, client_code=pn_client,
+                        partnership_name=pn_name,
+                        partnership_type=pn_type,
+                        tax_year_end=pn_year_end,
+                    )
+                self._flash_redirect("/partnerships",
+                                      flash=f"Partnership {pn_name} created.")
+                return
+
+            if path == "/sred/new":
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                sr_client = normalize_text(form.get("client_code", ""))
+                sr_year = normalize_text(form.get("tax_year", ""))
+                sr_project = normalize_text(form.get("project_name", ""))
+                sr_type = normalize_text(form.get("claim_type", "traditional"))
+                if not sr_client or not sr_year or not sr_project:
+                    raise ValueError("client_code, tax_year and project_name are required")
+                try:
+                    sr_year_int = int(sr_year)
+                except ValueError as e:
+                    raise ValueError("tax_year must be an integer") from e
+                with open_db() as conn:
+                    _sred.create_claim(
+                        conn, client_code=sr_client,
+                        tax_year=sr_year_int,
+                        project_name=sr_project,
+                        claim_type=sr_type,
+                    )
+                self._flash_redirect(f"/sred?client_code={urlquote(sr_client)}",
+                                      flash=f"Claim {sr_project} created.")
+                return
+
+            if path == "/tax/rebate":
+                if not _can_do(ctx, "view_all_clients"):
+                    raise ValueError(t("err_mgr_owner_required", lang))
+                price_str = normalize_text(form.get("purchase_price", ""))
+                province = normalize_text(form.get("province", "QC"))
+                client_code_redir = normalize_text(form.get("client_code", ""))
+                try:
+                    price_f = float(price_str)
+                except ValueError as e:
+                    raise ValueError("purchase_price must be numeric") from e
+                rebate = _tax_edge.calculate_residential_rebate(
+                    price_f, province=province,
+                )
+                msg = (
+                    f"Rebate estimate: federal ${rebate.get('federal_rebate', 0):,.2f} + "
+                    f"provincial ${rebate.get('provincial_rebate', 0):,.2f}"
+                )
+                self._flash_redirect(
+                    f"/tax/planning?client_code={urlquote(client_code_redir)}",
+                    flash=msg,
+                )
                 return
 
             if path == "/engagements/create":
