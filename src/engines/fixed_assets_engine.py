@@ -126,6 +126,10 @@ def ensure_fixed_assets_table(conn: sqlite3.Connection) -> None:
             status           TEXT NOT NULL DEFAULT 'active',
             disposal_date    TEXT,
             disposal_proceeds REAL,
+            recapture_amount  REAL DEFAULT 0,
+            terminal_loss_amount REAL DEFAULT 0,
+            capital_gain_amount  REAL DEFAULT 0,
+            disposal_reason   TEXT,
             created_at       TEXT
         )
     """)
@@ -133,6 +137,17 @@ def ensure_fixed_assets_table(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_fixed_assets_client
             ON fixed_assets(client_code)
     """)
+    # Idempotent ALTER for already-created tables (Sprint H Fix 1).
+    for col, ddl in (
+        ("recapture_amount", "REAL DEFAULT 0"),
+        ("terminal_loss_amount", "REAL DEFAULT 0"),
+        ("capital_gain_amount", "REAL DEFAULT 0"),
+        ("disposal_reason", "TEXT"),
+    ):
+        try:
+            conn.execute(f"ALTER TABLE fixed_assets ADD COLUMN {col} {ddl}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
 
 
@@ -406,6 +421,152 @@ def generate_schedule_8(
         },
         "generated_at": _utc_now(),
     }
+
+
+CAPITAL_GAINS_INCLUSION_RATE = Decimal("0.50")
+
+
+def process_asset_disposal(
+    asset_id: str,
+    disposal_date: str,
+    proceeds_of_disposition: float | Decimal | str,
+    conn: sqlite3.Connection,
+    *,
+    disposal_reason: str = "sale",
+    create_je: bool = False,
+) -> dict[str, Any]:
+    """Sprint H F1 — full-fidelity asset disposal per CRA T2 Schedule 8 rules.
+
+    Returns the same dict as ``dispose_asset`` plus:
+        is_last_in_class      bool — drives terminal-loss eligibility
+        taxable_capital_gain  half of any capital gain (50 % inclusion rate)
+        ucc_adjustment        when the class still has assets, the lesser-of
+                              proceeds-or-cost amount that reduces class UCC
+        new_class_ucc         resulting UCC after the adjustment
+        disposal_reason       echoed for audit trail
+        recapture_taxable     bool — flag for the income-statement adder
+        terminal_loss_deductible  bool — flag for the IS deduction
+        adjusting_je          dict skeleton if create_je=True
+
+    Negative proceeds are rejected; zero proceeds are valid (write-off).
+    """
+    proceeds_d = _to_decimal(proceeds_of_disposition)
+    if proceeds_d < 0:
+        raise ValueError("proceeds_of_disposition cannot be negative")
+
+    base = dispose_asset(asset_id, disposal_date, proceeds_d, conn)
+
+    cap_gain = Decimal(str(base.get("capital_gain") or 0))
+    taxable_cap_gain = _round(cap_gain * CAPITAL_GAINS_INCLUSION_RATE)
+
+    # Determine last-in-class. dispose_asset already wrote status='disposed'
+    # so any remaining sibling counts the class as non-empty.
+    row = conn.execute(
+        "SELECT client_code, cca_class FROM fixed_assets WHERE asset_id=?",
+        (asset_id,),
+    ).fetchone()
+    if row is None:
+        is_last = True
+    else:
+        # Re-check, but excluding self because we already flipped status.
+        client_code = row["client_code"] if not isinstance(row, dict) else row["client_code"]
+        cls_key = int(row["cca_class"] if not isinstance(row, dict) else row["cca_class"])
+        sibling = conn.execute(
+            "SELECT COUNT(*) AS n FROM fixed_assets "
+            "WHERE client_code=? AND cca_class=? AND status='active'",
+            (client_code, cls_key),
+        ).fetchone()
+        n = (dict(sibling) if not isinstance(sibling, dict) else sibling).get("n", 0)
+        is_last = n == 0
+
+    cost_d = Decimal(str(base.get("original_cost") or 0))
+    ucc_d = Decimal(str(base.get("ucc_at_disposal") or 0))
+    effective_proceeds = min(proceeds_d, cost_d)
+
+    ucc_adjustment = _ZERO
+    new_class_ucc = ucc_d
+    if base.get("recapture", 0) == 0 and base.get("terminal_loss", 0) == 0:
+        # Class still has other active assets and proceeds <= UCC.
+        # Reduce class UCC by lesser_of(proceeds, cost).
+        ucc_adjustment = -effective_proceeds
+        new_class_ucc = _round(ucc_d - effective_proceeds)
+
+    # Persist the new computed columns.
+    conn.execute(
+        """UPDATE fixed_assets
+           SET recapture_amount=?, terminal_loss_amount=?,
+               capital_gain_amount=?, disposal_reason=?
+           WHERE asset_id=?""",
+        (
+            float(base.get("recapture", 0)),
+            float(base.get("terminal_loss", 0)),
+            float(cap_gain),
+            disposal_reason,
+            asset_id,
+        ),
+    )
+    conn.commit()
+
+    adjusting_je = None
+    if create_je:
+        adjusting_je = _build_disposal_je(asset_id, base, cap_gain, taxable_cap_gain,
+                                            disposal_date, disposal_reason)
+
+    return {
+        **base,
+        "is_last_in_class": is_last,
+        "taxable_capital_gain": float(taxable_cap_gain),
+        "ucc_adjustment": float(ucc_adjustment),
+        "new_class_ucc": float(new_class_ucc),
+        "disposal_reason": disposal_reason,
+        "recapture_taxable": bool(base.get("recapture", 0) > 0),
+        "terminal_loss_deductible": bool(base.get("terminal_loss", 0) > 0),
+        "adjusting_je": adjusting_je,
+    }
+
+
+def _build_disposal_je(asset_id, base, cap_gain, taxable_cap_gain,
+                        disposal_date, reason):
+    """Skeleton journal entry for the disposal — caller is responsible for
+    posting it through gl_engine.
+    """
+    proceeds = base.get("proceeds", 0)
+    ucc = base.get("ucc_at_disposal", 0)
+    lines = []
+    # Cash received
+    lines.append({"account": "1010", "debit": proceeds, "credit": 0,
+                  "memo": f"Disposal proceeds {asset_id}"})
+    # Remove asset cost (credit class register)
+    lines.append({"account": "1500", "debit": 0,
+                  "credit": base.get("original_cost", 0),
+                  "memo": f"Asset disposed {asset_id}"})
+    # Accumulated CCA contra (debit)
+    lines.append({"account": "1599", "debit": base.get("original_cost", 0) - ucc,
+                  "credit": 0, "memo": "Accumulated CCA reversed"})
+    # Recapture or terminal loss
+    if base.get("recapture", 0) > 0:
+        lines.append({"account": "4900", "debit": 0,
+                      "credit": base["recapture"],
+                      "memo": "CCA recapture (taxable)"})
+    if base.get("terminal_loss", 0) > 0:
+        lines.append({"account": "5900", "debit": base["terminal_loss"],
+                      "credit": 0, "memo": "Terminal loss (deductible)"})
+    if cap_gain > 0:
+        lines.append({"account": "4910", "debit": 0,
+                      "credit": float(taxable_cap_gain),
+                      "memo": "Taxable capital gain (50%)"})
+    return {
+        "date": disposal_date,
+        "reason": reason,
+        "lines": lines,
+        "balanced": _decimal_je_balanced(lines),
+    }
+
+
+def _decimal_je_balanced(lines):
+    d = sum(Decimal(str(l.get("debit") or 0)) for l in lines)
+    c = sum(Decimal(str(l.get("credit") or 0)) for l in lines)
+    return abs(d - c) < Decimal("0.02")
 
 
 def dispose_asset(
