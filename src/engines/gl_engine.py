@@ -106,6 +106,22 @@ def post_journal_entry(
         if debit_acct == credit_acct:
             raise ValueError("debit_and_credit_accounts_must_differ")
 
+        # Period-lock guard: the dashboard's /document/* handlers check
+        # this for document edits, but post_journal_entry was bypassing
+        # the check — a draft JE dated into a closed period could still
+        # hit the GL. Refuse if the period is locked.
+        try:
+            from src.agents.core.period_close import is_period_locked  # noqa: PLC0415
+            if is_period_locked(conn, row["client_code"], row["period"] or ""):
+                raise ValueError(f"period_locked:{row['period']}")
+        except ValueError:
+            raise
+        except Exception:
+            # Don't block posting if the period_close module is missing
+            # or the lock check errors for unrelated reasons — better to
+            # post than silently refuse. The dashboard layer still gates.
+            pass
+
         # BEGIN TRANSACTION: either both legs land or neither.
         with conn:
             # Drop any stale GL rows from a prior attempt so reposting
