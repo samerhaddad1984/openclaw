@@ -425,13 +425,35 @@ class TestMaterialityMutation:
                 (row["assessment_id"],),
             )
 
-    # 16. Save a second materiality assessment with different basis — blocked
+    # 16. Save a second materiality assessment with different basis — must
+    # require an explicit reassessment reason (CAS 320.12). Silent double
+    # inserts were the original attack vector; Sprint E Fix 6 replaced the
+    # hard block with a justified-reassessment gate so CPAs can update
+    # materiality when facts change, but still can't do it silently.
     def test_16_materiality_basis_switch(self, conn, engagement, materiality):
-        """Only one materiality assessment allowed per engagement — second INSERT blocked."""
+        """Sprint E Fix 6: a second materiality assessment without a
+        reassessment_reason is rejected with a loud ValueError."""
         mat2 = calculate_materiality("total_assets", 20_000_000)
-        with pytest.raises(sqlite3.IntegrityError, match="[Oo]ne.*materiality"):
+        with pytest.raises(ValueError, match="reassessment_reason_required"):
             save_materiality(conn, engagement["engagement_id"], mat2,
                              username="Attacker", notes="Switched basis")
+        # With an explicit reason the reassessment succeeds and the prior
+        # row is chained via supersedes_assessment_id.
+        prior_id = conn.execute(
+            "SELECT assessment_id FROM materiality_assessments "
+            "WHERE engagement_id = ? ORDER BY calculated_at ASC LIMIT 1",
+            (engagement["engagement_id"],),
+        ).fetchone()[0]
+        new_id = save_materiality(
+            conn, engagement["engagement_id"], mat2,
+            username="Attacker", notes="Switched basis",
+            reassessment_reason="Red-team test — change of basis mid-audit",
+        )
+        sup = conn.execute(
+            "SELECT supersedes_assessment_id FROM materiality_assessments "
+            "WHERE assessment_id = ?", (new_id,),
+        ).fetchone()
+        assert sup[0] == prior_id
 
     # 17. Materiality with zero basis_amount
     def test_17_zero_basis_materiality(self, conn, engagement):
@@ -788,9 +810,12 @@ class TestAssertionMatrixOpinionDraft:
         )
         _sign_paper(conn, wp["paper_id"])
 
-        # Attack 1: widen materiality — blocked by UNIQUE constraint
+        # Attack 1: widen materiality post-signoff. Sprint E Fix 6 allows
+        # reassessment only with an explicit reason; the attack payload has
+        # no reason, so the attempt still blocks — now via ValueError from
+        # the reassessment gate instead of the old UNIQUE-trigger.
         mat2 = calculate_materiality("total_assets", 50_000_000)
-        with pytest.raises(sqlite3.IntegrityError, match="[Oo]ne.*materiality"):
+        with pytest.raises(ValueError, match="reassessment_reason_required"):
             save_materiality(conn, engagement["engagement_id"], mat2,
                              username="Attacker", notes="Widened post-signoff")
 

@@ -16,6 +16,7 @@ Meets Ordre des CPA du Québec documentation standards.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import secrets
 import sqlite3
@@ -835,6 +836,10 @@ def generate_lead_sheet_pdf(
     except ImportError:
         return _lead_sheet_minimal(papers, client_code, period, engagement_type,
                                    prepared_by, reviewed_by_firm, firm_name, lang, t)
+    except Exception:
+        logging.exception("PyMuPDF lead-sheet PDF failed; using minimal fallback")
+        return _lead_sheet_minimal(papers, client_code, period, engagement_type,
+                                   prepared_by, reviewed_by_firm, firm_name, lang, t)
 
 
 def _lead_sheet_pymupdf(papers, client_code, period, engagement_type,
@@ -1482,6 +1487,13 @@ def generate_financial_statements_pdf(
         return _fs_pdf_pymupdf(stmts, firm_name, lang, t)
     except ImportError:
         return _fs_pdf_minimal(stmts, firm_name, lang, t)
+    except Exception:
+        # Sprint E Fix 9: PDF font / layout failures degrade to the minimal
+        # PDF rather than 500-erroring the /financial_statements/pdf route.
+        # The most common trigger is a PyMuPDF install that lacks the base-14
+        # 'hebo' shortcut, which the fallback never uses.
+        logging.exception("PyMuPDF financial-statements PDF failed; using minimal fallback")
+        return _fs_pdf_minimal(stmts, firm_name, lang, t)
 
 
 def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
@@ -1760,6 +1772,9 @@ def generate_analytical_report_pdf(
         import fitz  # noqa: F401
         return _analytical_pdf_pymupdf(results, firm_name, lang, t)
     except ImportError:
+        return _analytical_pdf_minimal(results, firm_name, lang, t)
+    except Exception:
+        logging.exception("PyMuPDF analytical PDF failed; using minimal fallback")
         return _analytical_pdf_minimal(results, firm_name, lang, t)
 
 
@@ -2044,6 +2059,9 @@ def generate_engagement_pdf(
         import fitz  # noqa: F401
         return _engagement_pdf_pymupdf(eng, papers, progress, firm_name, lang, t)
     except ImportError:
+        return _engagement_pdf_minimal(eng, papers, progress, firm_name, lang, t)
+    except Exception:
+        logging.exception("PyMuPDF engagement PDF failed; using minimal fallback")
         return _engagement_pdf_minimal(eng, papers, progress, firm_name, lang, t)
 
 

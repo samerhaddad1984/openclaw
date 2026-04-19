@@ -40,7 +40,11 @@ def _to_decimal(v: Any) -> Decimal:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    # Microsecond precision so rapid-fire save_materiality / save_* calls
+    # inside a single request produce distinguishable timestamps. The
+    # reassessment flow relies on ORDER BY calculated_at DESC returning
+    # the newest row.
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -186,16 +190,41 @@ def ensure_cas_tables(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
+    # Sprint E Fix 6 — reassessment columns on materiality_assessments.
+    # CAS 320 requires reassessment when the auditor becomes aware of info
+    # that would have changed the initial determination. Instead of a
+    # single-row-per-engagement schema we keep a row-per-assessment with a
+    # `supersedes_assessment_id` link and a `reassessment_reason` audit
+    # trail; get_materiality already reads ORDER BY calculated_at DESC.
+    # PRAGMA result columns are indexed by integer under a default
+    # sqlite3.Row factory but also expose column names. Use the 'name'
+    # key when available so callers that set a row_factory still work.
+    existing_cols: set[str] = set()
+    for row in conn.execute("PRAGMA table_info(materiality_assessments)").fetchall():
+        try:
+            name = row["name"]
+        except (TypeError, IndexError, KeyError):
+            name = row[1]
+        existing_cols.add(name)
+    for col, typedef in [
+        ("reassessment_reason",      "TEXT"),
+        ("supersedes_assessment_id", "TEXT"),
+    ]:
+        if col not in existing_cols:
+            conn.execute(
+                f"ALTER TABLE materiality_assessments ADD COLUMN {col} {typedef}"
+            )
+    conn.commit()
+
+    # The old "one per engagement" trigger blocked reassessment. Drop it —
+    # the INSERT path in save_materiality now chains a new row via
+    # supersedes_assessment_id whenever a prior assessment already exists.
+    # The locked-immutable and cascade-lock triggers below still prevent
+    # editing an assessment once the related working papers are signed.
+    conn.execute("DROP TRIGGER IF EXISTS trg_materiality_one_per_engagement")
+
     # --- Immutability triggers (FIX 1-4) ---
     conn.executescript("""
-        -- FIX 2: Only one materiality assessment per engagement
-        CREATE TRIGGER IF NOT EXISTS trg_materiality_one_per_engagement
-        BEFORE INSERT ON materiality_assessments
-        WHEN (SELECT COUNT(*) FROM materiality_assessments
-              WHERE engagement_id = NEW.engagement_id) > 0
-        BEGIN
-            SELECT RAISE(ABORT, 'Only one materiality assessment allowed per engagement');
-        END;
 
         -- FIX 2: Materiality locked after working papers signed
         CREATE TRIGGER IF NOT EXISTS trg_materiality_locked_immutable
@@ -293,14 +322,42 @@ def save_materiality(
     materiality_dict: dict[str, Any],
     username: str,
     notes: str = "",
+    reassessment_reason: str = "",
 ) -> str:
-    """Persist a materiality assessment. Returns the assessment_id."""
+    """Persist a materiality assessment. Returns the assessment_id.
+
+    Sprint E Fix 6 — if a prior assessment already exists for this
+    engagement, require a non-empty `reassessment_reason` and chain the
+    new row via `supersedes_assessment_id`. get_materiality returns the
+    most recent row, so the fresh assessment is what callers see.
+    """
     ensure_cas_tables(conn)
-    # Look up engagement for client_code and period
     from src.engines.audit_engine import get_engagement
     eng = get_engagement(conn, engagement_id)
     if not eng:
         raise ValueError(f"Engagement not found: {engagement_id}")
+
+    prior = conn.execute(
+        "SELECT assessment_id, materiality_locked FROM materiality_assessments "
+        "WHERE engagement_id = ? ORDER BY calculated_at DESC LIMIT 1",
+        (engagement_id,),
+    ).fetchone()
+    supersedes_id = None
+    if prior is not None:
+        prior_id = prior[0] if not hasattr(prior, "keys") else prior["assessment_id"]
+        prior_locked = prior[1] if not hasattr(prior, "keys") else prior["materiality_locked"]
+        # Reassessment requires the CPA to state why. Loudly in the error
+        # so the UI can prompt rather than surface a cryptic constraint.
+        if not (reassessment_reason or "").strip():
+            raise ValueError(
+                "materiality_reassessment_reason_required: a prior assessment "
+                "exists; provide reassessment_reason explaining why you're "
+                "reassessing (CAS 320.12)."
+            )
+        # Once working papers are signed the prior row is locked, but
+        # stacking a new assessment on top is still allowed — the locked
+        # row stays untouched and the fresh one becomes the current view.
+        supersedes_id = prior_id
 
     assessment_id = f"mat_{secrets.token_hex(8)}"
     now = _utc_now()
@@ -310,8 +367,9 @@ def save_materiality(
            (assessment_id, engagement_id, client_code, period,
             basis, basis_amount, planning_materiality,
             performance_materiality, clearly_trivial,
-            calculated_at, calculated_by, notes)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            calculated_at, calculated_by, notes,
+            reassessment_reason, supersedes_assessment_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             assessment_id,
             engagement_id,
@@ -325,6 +383,8 @@ def save_materiality(
             now,
             username,
             notes,
+            (reassessment_reason or None),
+            supersedes_id,
         ),
     )
     conn.commit()
@@ -340,7 +400,7 @@ def get_materiality(
     row = conn.execute(
         """SELECT * FROM materiality_assessments
            WHERE engagement_id = ?
-           ORDER BY calculated_at DESC LIMIT 1""",
+           ORDER BY calculated_at DESC, rowid DESC LIMIT 1""",
         (engagement_id,),
     ).fetchone()
     return dict(row) if row else None
