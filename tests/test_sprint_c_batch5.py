@@ -61,15 +61,23 @@ def test_qbo_no_connection_marks_skipped_not_failed():
 # ---------------------------------------------------------------------------
 
 def test_line_item_save_persists_gst_qst():
-    """Spot-check the SQL wiring stays correct even if the handler moves.
+    """Spot-check the wiring stays correct even if the handler moves.
 
-    Reads the handler source and asserts gst_amount / qst_amount appear in
-    the UPDATE and JSON response — a lightweight guard against
-    regressions that silently drop the tax fields.
+    Reads the handler source and asserts gl_account / tax_code /
+    gst_amount / qst_amount are still written on a line-item save. The
+    /document/line_item/save handler was rewritten to route through
+    ``versioned_update_from_request`` (optimistic concurrency), so the
+    check is against the field dict passed to that helper, not a raw
+    SQL literal.
     """
     src = Path("/opt/otocpa/scripts/review_dashboard.py").read_text()
-    assert 'UPDATE invoice_lines SET gl_account = ?, tax_code = ?, ' in src
-    assert 'gst_amount = ?, qst_amount = ?' in src
+    # Handler must still route through the versioned helper on the
+    # invoice_lines table and must still carry all four tax/GL fields.
+    assert 'table="invoice_lines"' in src
+    assert '"gl_account": new_gl' in src
+    assert '"tax_code": new_tax' in src
+    assert '"gst_amount": effective_gst' in src
+    assert '"qst_amount": effective_qst' in src
     # And the JSON response includes the effective values.
     assert '"gst_amount": effective_gst' in src
     assert '"qst_amount": effective_qst' in src
