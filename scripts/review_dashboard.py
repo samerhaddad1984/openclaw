@@ -257,7 +257,24 @@ def _dict_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
 def open_db() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = _dict_factory
+    # Sprint-mega Bug C: busy_timeout is the primary backstop for write
+    # contention. Combined with WAL mode (enabled at bootstrap below) this
+    # makes 'database is locked' errors effectively impossible under normal
+    # dashboard load. retry_on_lock() is a secondary belt-and-suspenders.
+    try:
+        conn.execute("PRAGMA busy_timeout = 5000")
+    except Exception:  # pragma: no cover
+        pass
     return conn
+
+
+# Bootstrap: enable WAL mode once per process start so all `open_db()`
+# connections share the WAL. Safe to call repeatedly.
+try:
+    from src.db.retry import enable_wal_mode as _enable_wal_mode
+    _enable_wal_mode(DB_PATH)
+except Exception as _exc:  # pragma: no cover
+    logging.getLogger(__name__).warning("WAL mode bootstrap failed: %s", _exc)
 
 
 def normalize_text(value: Any) -> str:
