@@ -1304,7 +1304,13 @@ def generate_trial_balance(
     client_code: str,
     period: str,
 ) -> list[dict[str, Any]]:
-    """Aggregate posted documents by GL account into a trial balance."""
+    """Aggregate posted documents by GL account into a trial balance.
+
+    Sprint I+ CPA-sim fix: extends coverage beyond AP documents by also
+    pulling AR invoices (revenue side) and bank-side transactions. Without
+    this, clients with AR in ``ar_invoices`` but no ingested revenue
+    documents end up with an expense-only trial balance.
+    """
     ensure_audit_tables(conn)
     seed_chart_of_accounts(conn)
     seed_chart_of_accounts_quebec(conn)
@@ -1329,6 +1335,61 @@ def generate_trial_balance(
         ).fetchall()
     except Exception:
         return []
+
+    # --- AR-side aggregation (revenue 4100 + AR 1200 + tax liability 2300/2310)
+    #    Revenue = amount_ht, GST payable = gst_amount, QST payable = qst_amount.
+    #    Cash/AR = total_amount (debit, because receivable grows).
+    ar_totals = {"4100": _ZERO, "1200": _ZERO, "2300": _ZERO, "2310": _ZERO}
+    try:
+        ar_rows = conn.execute(
+            """SELECT COALESCE(SUM(amount_ht), 0) AS base,
+                      COALESCE(SUM(gst_amount), 0) AS gst,
+                      COALESCE(SUM(qst_amount), 0) AS qst,
+                      COALESCE(SUM(total_amount), 0) AS tot
+               FROM ar_invoices
+               WHERE LOWER(COALESCE(client_code,'')) = LOWER(?)
+                 AND COALESCE(invoice_date,'') LIKE ?
+                 AND LOWER(COALESCE(status,'')) NOT IN ('draft','void','cancelled')""",
+            (client_code, f"{period}%"),
+        ).fetchone()
+        if ar_rows:
+            ar_totals["4100"] = _to_decimal(ar_rows["base"] or 0)
+            ar_totals["2300"] = _to_decimal(ar_rows["gst"] or 0)
+            ar_totals["2310"] = _to_decimal(ar_rows["qst"] or 0)
+            ar_totals["1200"] = _to_decimal(ar_rows["tot"] or 0)
+    except sqlite3.OperationalError:
+        pass  # ar_invoices absent — skip the AR roll-up.
+    for code, amt in ar_totals.items():
+        if amt <= 0:
+            continue
+        coa = conn.execute(
+            "SELECT account_name, normal_balance FROM chart_of_accounts WHERE account_code=?",
+            (code,),
+        ).fetchone()
+        if coa:
+            name = coa["account_name"]
+            normal = coa["normal_balance"]
+        else:
+            acct_type = _infer_account_type(code)
+            normal = "credit" if acct_type in ("liability", "equity", "revenue") else "debit"
+            name = code
+        debit = float(amt) if normal == "debit" else 0.0
+        credit = float(amt) if normal == "credit" else 0.0
+        now = _utc_now()
+        conn.execute(
+            """INSERT INTO trial_balance (client_code, period, account_code,
+               account_name, debit_total, credit_total, net_balance, generated_at)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(client_code, period, account_code) DO UPDATE SET
+                   debit_total = excluded.debit_total + trial_balance.debit_total,
+                   credit_total = excluded.credit_total + trial_balance.credit_total,
+                   net_balance = (excluded.debit_total + trial_balance.debit_total)
+                                  - (excluded.credit_total + trial_balance.credit_total),
+                   generated_at = excluded.generated_at""",
+            (client_code, period, code, name, debit, credit,
+             debit - credit, now),
+        )
+    conn.commit()
     now = _utc_now()
     result = []
     for row in rows:
