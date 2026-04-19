@@ -1272,6 +1272,35 @@ def get_trial_balance(
     return [dict(r) for r in rows]
 
 
+def trial_balance_with_totals(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+    *,
+    tolerance: float = 0.01,
+) -> dict[str, Any]:
+    """Like get_trial_balance but also returns debit/credit totals and a
+    balanced flag, so callers can surface a warning when the TB is off.
+
+    The trial balance is rebuilt before reading so stale rows from a
+    partial prior run don't silently colour the totals.
+    """
+    generate_trial_balance(conn, client_code, period)
+    rows = get_trial_balance(conn, client_code, period)
+    debit_total = sum(float(r.get("debit_total") or 0.0) for r in rows)
+    credit_total = sum(float(r.get("credit_total") or 0.0) for r in rows)
+    diff = debit_total - credit_total
+    return {
+        "client_code": client_code,
+        "period": period,
+        "rows": rows,
+        "debit_total": round(debit_total, 2),
+        "credit_total": round(credit_total, 2),
+        "difference": round(diff, 2),
+        "balanced": abs(diff) <= tolerance,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Financial statements
 # ---------------------------------------------------------------------------
@@ -1349,11 +1378,88 @@ def generate_financial_statements(
     is_["total_revenue"] = _round(is_["total_revenue"])
     is_["total_expenses"] = _round(is_["total_expenses"])
     is_["net_income"] = _round(is_["net_income"])
+
+    # BUG #3 FIX — flat-key mirror for the HTML renderer.
+    # The PDF generator still reads the nested structure (assets.current,
+    # liabilities.long_term, equity.items), so we keep that intact and add
+    # sibling flat keys. Each flat dict maps "<code> — <name>" to amount,
+    # which is what review_dashboard.render_financial_statements_page
+    # iterates over at lines ~7200-7260.
+    def _flatten(items: list[dict[str, Any]]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for it in items:
+            code = it.get("account_code") or ""
+            name = it.get("account_name") or ""
+            key = f"{code} — {name}" if code and name else (name or code or "—")
+            out[key] = it.get("amount")
+        return out
+
+    current_assets_flat     = _flatten(bs["assets"]["current"])
+    non_current_assets_flat = _flatten(bs["assets"]["non_current"])
+    current_liab_flat       = _flatten(bs["liabilities"]["current"])
+    long_term_liab_flat     = _flatten(bs["liabilities"]["long_term"])
+    equity_flat             = _flatten(bs["equity"]["items"])
+    revenue_flat            = _flatten(is_["revenue"])
+    expenses_flat           = _flatten(is_["expenses"])
+
+    # sum() returns int 0 on empty lists — start from _ZERO so _round()
+    # (which calls Decimal.quantize) always sees a Decimal.
+    total_current_assets = sum(
+        (it.get("amount") or _ZERO for it in bs["assets"]["current"]), _ZERO,
+    )
+    total_non_current_assets = sum(
+        (it.get("amount") or _ZERO for it in bs["assets"]["non_current"]), _ZERO,
+    )
+    total_current_liab = sum(
+        (it.get("amount") or _ZERO for it in bs["liabilities"]["current"]), _ZERO,
+    )
+    total_long_term_liab = sum(
+        (it.get("amount") or _ZERO for it in bs["liabilities"]["long_term"]), _ZERO,
+    )
+
+    bs["current_assets"]            = current_assets_flat
+    bs["non_current_assets"]        = non_current_assets_flat
+    bs["current_liabilities"]       = current_liab_flat
+    bs["long_term_liabilities"]     = long_term_liab_flat
+    bs["equity_flat"]               = equity_flat
+    # The renderer reads bs["equity"] as a flat dict; preserve the nested
+    # structure under bs["equity_detail"] for the PDF path, then overwrite
+    # bs["equity"] with the flat form.
+    bs["equity_detail"] = bs["equity"]
+    bs["equity"] = equity_flat
+    bs["total_current_assets"]      = _round(total_current_assets)
+    bs["total_non_current_assets"]  = _round(total_non_current_assets)
+    bs["total_assets"]              = _round(total_current_assets + total_non_current_assets)
+    bs["total_current_liabilities"] = _round(total_current_liab)
+    bs["total_long_term_liabilities"] = _round(total_long_term_liab)
+    bs["total_liabilities"]         = _round(total_current_liab + total_long_term_liab)
+    bs["total_equity"]              = bs["equity_detail"]["total"]
+
+    # Accounting identity check: Assets = Liabilities + Equity.
+    bs_total_liab_equity = bs["total_liabilities"] + bs["total_equity"]
+    bs["balance_ok"] = abs(bs["total_assets"] - bs_total_liab_equity) <= _to_decimal("0.01")
+    bs["balance_difference"] = _round(bs["total_assets"] - bs_total_liab_equity)
+
+    is_["revenue"] = revenue_flat
+    is_["expenses"] = expenses_flat
+
+    # BUG #5 FIX — trial balance equality check (debit sum == credit sum).
+    tb_debit_total = sum(
+        (_to_decimal(r.get("debit_total") or 0) for r in tb_rows), _ZERO,
+    )
+    tb_credit_total = sum(
+        (_to_decimal(r.get("credit_total") or 0) for r in tb_rows), _ZERO,
+    )
+    tb_balanced = abs(tb_debit_total - tb_credit_total) <= _to_decimal("0.01")
+
     return {
         "client_code": client_code,
         "period": period,
         "balance_sheet": bs,
         "income_statement": is_,
+        "trial_balance_debit_total":  _round(tb_debit_total),
+        "trial_balance_credit_total": _round(tb_credit_total),
+        "trial_balance_balanced":     tb_balanced,
         "generated_at": _utc_now(),
     }
 

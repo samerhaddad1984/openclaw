@@ -7189,7 +7189,33 @@ def render_financial_statements_page(
         inc = stmts.get("income_statement", {})
         pdf_url = f"/financial_statements/pdf?client_code={urlquote(client_code)}&period={urlquote(period)}"
 
+        # Sprint C: surface trial-balance and balance-sheet integrity issues
+        # instead of silently rendering unbalanced statements.
+        warn_banner = ""
+        if stmts.get("trial_balance_balanced") is False:
+            warn_banner += (
+                f'<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;'
+                f'padding:10px 14px;border-radius:8px;margin-bottom:12px;">'
+                f'<strong>⚠ Trial balance is unbalanced.</strong> '
+                f'Debits ${stmts.get("trial_balance_debit_total"):,.2f} '
+                f'≠ credits ${stmts.get("trial_balance_credit_total"):,.2f}. '
+                f'Review GL postings for this period before relying on these statements.'
+                f'</div>'
+            )
+        if bs.get("balance_ok") is False:
+            warn_banner += (
+                f'<div style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;'
+                f'padding:10px 14px;border-radius:8px;margin-bottom:12px;">'
+                f'<strong>⚠ Balance sheet does not tie.</strong> '
+                f'Assets ${bs.get("total_assets"):,.2f} ≠ '
+                f'Liabilities + Equity ${(bs.get("total_liabilities", 0) + bs.get("total_equity", 0)):,.2f} '
+                f'(difference ${bs.get("balance_difference"):,.2f}).'
+                f'</div>'
+            )
+
         stmts_html = (
+            warn_banner
+            +
             f'<div class="topbar" style="margin-bottom:8px;">'
             f'<h3 style="margin:0;">{esc(t("fs_balance_sheet", lang))}</h3>'
             f'<a href="{pdf_url}" class="btn-secondary button-link" style="font-size:13px;">{esc(t("fs_export_pdf", lang))}</a>'
