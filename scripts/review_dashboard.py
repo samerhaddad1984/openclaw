@@ -326,6 +326,30 @@ def urlquote(value: Any) -> str:
     return urllib.parse.quote("" if value is None else str(value), safe="")
 
 
+def _preview_banner(feature_name: str, note: str = "",
+                     expected_ready_date: str = "2026-05-15") -> str:
+    """Yellow "not CPA-ready" banner inserted at the top of incomplete
+    feature pages. Inventoried in Sprint D and shipped in Sprint E Phase 1
+    so a CPA using the dashboard cannot mistake a planning view for a
+    submission-ready document.
+    """
+    safe_feature = esc(feature_name)
+    safe_note = esc(note) if note else ""
+    safe_date = esc(expected_ready_date)
+    note_html = f"<br>{safe_note}" if safe_note else ""
+    return (
+        '<div role="alert" style="background:#FFF3CD;border:1px solid #FFC107;'
+        'padding:12px 16px;margin:10px 0 18px;border-radius:6px;color:#856404;'
+        'font-size:13px;line-height:1.5;">'
+        '<strong>&#9888;&#65039; PREVIEW &mdash; do not submit to clients or regulators</strong>'
+        f'<br><strong>{safe_feature}</strong> is in development. '
+        f'Expected production-ready: {safe_date}.{note_html}'
+        '<br><small>Numbers shown here must not be used for official '
+        'filings or professional work product.</small>'
+        '</div>'
+    )
+
+
 def _match_transaction_to_document(conn, client_code, amount, date, merchant_name):
     """Find best candidate document for a bank transaction.
 
@@ -2934,12 +2958,19 @@ def render_filing_summary(
   </form>
 </div>"""
 
+    preview = _preview_banner(
+        "GST/QST Filing Summary",
+        "Revenue-side tax calculations not yet integrated; gst_collected / "
+        "qst_collected default to 0 until the GL revenue pass ships. "
+        "Only ITC / ITR figures are production-grade.",
+    )
+
     if error_msg:
-        body = filter_form + f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
+        body = preview + filter_form + f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
         return page_layout(t("filing_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
     if not summary:
-        return page_layout(t("filing_title", lang), filter_form, user=user, flash=flash, flash_error=flash_error, lang=lang)
+        return page_layout(t("filing_title", lang), preview + filter_form, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
     # Summary totals card
     gst_col = summary["gst_collected"]
@@ -3005,7 +3036,7 @@ def render_filing_summary(
     else:
         line_items_card = f'<div class="card"><p>{esc(t("filing_no_docs", lang))}</p></div>'
 
-    body = filter_form + totals_card + line_items_card
+    body = preview + filter_form + totals_card + line_items_card
     return page_layout(t("filing_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
@@ -3079,8 +3110,16 @@ def render_revenu_quebec(
   </span>
 </div>"""
 
+    preview = _preview_banner(
+        "Revenu Québec pre-fill (GST / QST)",
+        "Revenue-side GL integration is not yet wired; gst_collected / "
+        "qst_collected default to 0 and Quick Method form-field switching "
+        "is incomplete. Treat the generated PDF as a draft worksheet, "
+        "not a submission-ready return.",
+    )
+
     if error_msg:
-        body = filter_form + warning_banner + \
+        body = preview + filter_form + warning_banner + \
                f'<div class="card"><p class="error">{esc(error_msg)}</p></div>'
         return page_layout(
             t("rq_title", lang), body, user=user,
@@ -3090,7 +3129,7 @@ def render_revenu_quebec(
     if not prefill:
         # Show filter form + config form (if client selected) + warning
         config_card = _render_rq_config_card(client_code, client_cfg, lang)
-        body = filter_form + warning_banner + config_card
+        body = preview + filter_form + warning_banner + config_card
         return page_layout(
             t("rq_title", lang), body, user=user,
             flash=flash, flash_error=flash_error, lang=lang,
@@ -3176,7 +3215,7 @@ def render_revenu_quebec(
 </div>"""
 
     config_card = _render_rq_config_card(client_code, client_cfg, lang)
-    body = filter_form + warning_banner + qm_card + lines_card + config_card
+    body = preview + filter_form + warning_banner + qm_card + lines_card + config_card
     return page_layout(
         t("rq_title", lang), body, user=user,
         flash=flash, flash_error=flash_error, lang=lang,
@@ -5622,8 +5661,15 @@ def render_t2(
     fiscal_year: str = "",
 ) -> str:
     """Render T2 pre-fill page with tabbed schedules."""
+    preview = _preview_banner(
+        "T2 Corporate Tax Pre-fill",
+        "Schedules 1 / 8 / 50 / 100 / 125 compute from the GL, but /t2/pdf "
+        "and /t2/excel currently return plain text / CSV, and the filing "
+        "is not persisted to filing_history. Treat schedules as a draft "
+        "worksheet, not a submission-ready return.",
+    )
     if not client_code or not fiscal_year:
-        body = f"""
+        body = preview + f"""
         <div class="card">
         <h2>{esc(t("t2_title", lang))}</h2>
         <form method="GET" action="/t2" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
@@ -5687,7 +5733,7 @@ def render_t2(
 
     disclaimer = data["disclaimer"].get(lang, data["disclaimer"]["en"])
 
-    body = f"""
+    body = preview + f"""
     <div class="card">
     <h2>{esc(t("t2_title", lang))}: {esc(client_code)} — {esc(fiscal_year)}</h2>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -7263,8 +7309,16 @@ def render_audit_sample(
         else:
             sample_html += f'<div class="card"><p class="muted">{esc(t("samp_no_docs", lang))}</p></div>\n'
 
+    preview = _preview_banner(
+        "Audit sampling (CAS 530)",
+        "Currently non-statistical: sample size is user-supplied and "
+        "selection is pseudo-random. No MUS, no projection of observed "
+        "errors to the population. Do NOT rely on these samples for "
+        "formal audit conclusions.",
+    )
     body = (
-        f'<div class="topbar" style="margin-bottom:16px;">'
+        preview
+        + f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(t("samp_title", lang))}</h2>'
         f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
         f'</div>\n'
@@ -8029,8 +8083,16 @@ def render_rep_letter(
                 f'{esc(t("cas_rep_generate", lang))}</button></form></div>'
             )
 
+    preview = _preview_banner(
+        "Management representation letter (CAS 580)",
+        "Current output is plain-text only with a typed-name signature. "
+        "No PDF, no per-representation checklist, no auditor countersignature, "
+        "and period_end_date is not validated against the engagement period. "
+        "Not yet CAS 580-compliant as an audit-file artifact.",
+    )
     body = (
-        f'<div class="topbar" style="margin-bottom:16px;">'
+        preview
+        + f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(t("cas_rep_title", lang))}</h2>'
         f'<a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a></div>'
         f'{select_form}{content}'
@@ -9546,16 +9608,25 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             groups.append(_group_label(f"\U0001f4cb {esc(home_label)}", first=True))
         groups.append(_dlink("/", esc(home_label)))
 
+        # Small amber PREVIEW chip we drop next to nav entries that ship
+        # behind a banner. Inline style so it works regardless of which
+        # stylesheet loads.
+        _preview_chip = (
+            '<span style="background:#FFF3CD;color:#856404;'
+            'border:1px solid #F0C36D;border-radius:999px;'
+            'padding:0 6px;font-size:10px;font-weight:700;'
+            'letter-spacing:0.5px;margin-left:6px;">PREVIEW</span>'
+        )
         groups.append(_group_label("\U0001f4c1 Audit"))
         groups.append(_dnav("/working_papers", "wp_nav_link"))
         groups.append(_dnav("/audit/evidence", "ev_title"))
-        groups.append(_dnav("/audit/sample", "samp_title"))
+        groups.append(_dlink("/audit/sample", esc(t("samp_title", lang)) + _preview_chip))
         groups.append(_dnav("/financial_statements", "fs_title"))
         groups.append(_dnav("/audit/analytical", "anal_title"))
         groups.append(_dnav("/engagements", "eng_title"))
         groups.append(_dnav("/audit/materiality", "cas_materiality_nav"))
         groups.append(_dnav("/audit/risk", "cas_risk_nav"))
-        groups.append(_dnav("/audit/rep_letter", "cas_rep_nav"))
+        groups.append(_dlink("/audit/rep_letter", esc(t("cas_rep_nav", lang)) + _preview_chip))
         groups.append(_dnav("/audit/controls", "cas_ctrl_nav"))
         groups.append(_dnav("/audit/related_parties", "cas_rp_nav"))
 
@@ -9565,7 +9636,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_dnav("/aging", "aging_nav_link"))
         groups.append(_dnav("/ar", "ar_nav_link"))
         groups.append(_dnav("/cashflow", "cashflow_nav_link"))
-        groups.append(_dnav("/t2", "t2_nav_link"))
+        groups.append(_dlink("/t2", esc(t("t2_nav_link", lang)) + _preview_chip))
 
         groups.append(_group_label("\U0001f465 Clients"))
         groups.append(_dnav("/clients", "clients_nav"))
