@@ -1121,15 +1121,12 @@ def check_and_update_evidence_for_period(
 # Statistical sampling
 # ---------------------------------------------------------------------------
 
-def get_sample(
+def _load_population(
     conn: sqlite3.Connection,
     client_code: str,
     period: str,
     account_code: str,
-    sample_size: int,
-    paper_id: str,
 ) -> list[dict[str, Any]]:
-    """Reproducible random sample; same paper_id always yields same set."""
     try:
         rows = conn.execute(
             """SELECT d.*,
@@ -1152,9 +1149,36 @@ def get_sample(
         ).fetchall()
     except Exception:
         return []
-    all_docs = [dict(r) for r in rows]
-    rng = random.Random(paper_id)
-    sampled = rng.sample(all_docs, min(sample_size, len(all_docs)))
+    return [dict(r) for r in rows]
+
+
+def get_sample(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+    account_code: str,
+    sample_size: int,
+    paper_id: str,
+    method: str = "random",
+) -> list[dict[str, Any]]:
+    """Reproducible statistical sample; same paper_id always yields same set.
+
+    method = 'random'  -> simple random sample (attribute / walk-through)
+    method = 'mus'     -> monetary unit sampling (balance substantive testing)
+    """
+    from src.engines.sampling_engine import SamplingEngine
+
+    all_docs = _load_population(conn, client_code, period, account_code)
+    if not all_docs:
+        return []
+
+    engine = SamplingEngine(seed=paper_id or "_default_")
+    if method == "mus":
+        population_total = sum(abs(float(d.get("amount") or 0)) for d in all_docs)
+        sampled = engine.select_mus_sample(all_docs, min(sample_size, len(all_docs)), population_total)
+    else:
+        sampled = engine.select_random_sample(all_docs, min(sample_size, len(all_docs)))
+
     items_map: dict[str, dict[str, Any]] = {}
     for item in get_working_paper_items(conn, paper_id):
         did = item.get("document_id", "")
@@ -1163,6 +1187,96 @@ def get_sample(
     for doc in sampled:
         doc["wp_item"] = items_map.get(doc["document_id"])
     return sampled
+
+
+def calculate_sample_plan(
+    method: str,
+    population_size: int,
+    population_dollars: float,
+    tolerable_misstatement: float,
+    expected_misstatement: float = 0.0,
+    expected_deviation_rate: float = 0.0,
+    tolerable_rate: float = 0.05,
+    confidence: float = 0.95,
+) -> dict[str, Any]:
+    """Calculate recommended sample size + formula disclosure for working
+    papers. Returns {size, formula, confidence_factor, method}.
+    """
+    from src.engines.sampling_engine import (
+        CONFIDENCE_FACTORS,
+        MUS_EXPANSION_FACTOR,
+        SamplingEngine,
+    )
+
+    engine = SamplingEngine()
+    if method == "mus":
+        size = engine.calculate_sample_size_mus(
+            population_dollars=population_dollars,
+            tolerable_misstatement=tolerable_misstatement,
+            expected_misstatement=expected_misstatement,
+            confidence=confidence,
+        )
+        cf = CONFIDENCE_FACTORS[confidence]
+        return {
+            "size": size,
+            "method": "mus",
+            "formula": "n = ceil(pop$ * CF / (tolerable - expected * expansion_factor))",
+            "confidence_factor": cf,
+            "expansion_factor": MUS_EXPANSION_FACTOR,
+            "population_dollars": population_dollars,
+            "tolerable_misstatement": tolerable_misstatement,
+            "expected_misstatement": expected_misstatement,
+        }
+    if method == "attribute":
+        size = engine.calculate_sample_size_attribute(
+            population_size=population_size,
+            tolerable_rate=tolerable_rate,
+            expected_rate=expected_deviation_rate,
+            confidence=confidence,
+        )
+        cf = CONFIDENCE_FACTORS[confidence]
+        return {
+            "size": size,
+            "method": "attribute",
+            "formula": "n = z^2 * p(1-p) / (tolerable - expected)^2 with FPC",
+            "confidence_factor": cf,
+            "tolerable_rate": tolerable_rate,
+            "expected_rate": expected_deviation_rate,
+        }
+    # Random fallback: just echo the user-supplied size.
+    return {
+        "size": population_size,
+        "method": "random",
+        "formula": "user-supplied",
+        "confidence_factor": CONFIDENCE_FACTORS.get(confidence, 3.00),
+    }
+
+
+def project_sample_result(
+    sample_errors: list[dict[str, Any]],
+    sample_total: float,
+    population_total: float,
+    population_size: int,
+    sample_size: int,
+    tolerable_misstatement: float,
+    confidence: float = 0.95,
+) -> dict[str, Any]:
+    """Project sample errors and evaluate against tolerable misstatement.
+    Returns a merged dict with projection + evaluation.
+    """
+    from src.engines.sampling_engine import SamplingEngine
+
+    engine = SamplingEngine()
+    projection = engine.project_misstatement(
+        sample_errors=sample_errors,
+        sample_total=sample_total,
+        population_total=population_total,
+        population_size=population_size,
+        sample_size=sample_size,
+        confidence=confidence,
+    )
+    evaluation = engine.evaluate_sample(projection, tolerable_misstatement)
+    return {**projection, **evaluation, "tolerable_misstatement": tolerable_misstatement}
 
 
 def get_sample_status(

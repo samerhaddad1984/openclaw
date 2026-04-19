@@ -7204,11 +7204,43 @@ def render_audit_sample(
     flash: str,
     flash_error: str,
     lang: str = "fr",
+    method: str = "random",
+    confidence: str = "0.95",
+    tolerable_misstatement: str = "",
+    expected_misstatement: str = "0",
+    tolerable_rate: str = "0.05",
+    expected_rate: str = "0",
 ) -> str:
     try:
         sample_size = int(sample_size_str) if sample_size_str else 10
     except ValueError:
         sample_size = 10
+
+    try:
+        conf = float(confidence) if confidence else 0.95
+    except ValueError:
+        conf = 0.95
+
+    def _ffloat(s: str, default: float = 0.0) -> float:
+        try:
+            return float(s) if s not in ("", None) else default
+        except ValueError:
+            return default
+
+    method = method if method in ("random", "mus", "attribute") else "random"
+
+    method_opts = "".join(
+        f'<option value="{m}"{" selected" if m == method else ""}>{label}</option>'
+        for m, label in (
+            ("random", "Random (walk-through)"),
+            ("mus", "Monetary Unit Sampling"),
+            ("attribute", "Attribute (control test)"),
+        )
+    )
+    conf_opts = "".join(
+        f'<option value="{c}"{" selected" if abs(conf - c) < 1e-9 else ""}>{int(c * 100)}%</option>'
+        for c in (0.99, 0.95, 0.90, 0.85)
+    )
 
     filter_form = (
         f'<div class="card">'
@@ -7219,18 +7251,96 @@ def render_audit_sample(
         f'<input type="month" name="period" value="{esc(period)}" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
         f'<div><label style="font-size:13px;font-weight:600;">{esc(t("samp_account", lang))}</label><br>'
         f'<input type="text" name="account_code" value="{esc(account_code)}" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
-        f'<div><label style="font-size:13px;font-weight:600;">{esc(t("samp_size", lang))}</label><br>'
-        f'<input type="number" name="sample_size" value="{sample_size}" min="1" max="100" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:80px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Method</label><br>'
+        f'<select name="method" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{method_opts}</select></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Confidence</label><br>'
+        f'<select name="confidence" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{conf_opts}</select></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Tolerable $</label><br>'
+        f'<input type="number" name="tolerable_misstatement" value="{esc(tolerable_misstatement)}" step="0.01" min="0" '
+        f'placeholder="e.g. 50000" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:120px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Expected $</label><br>'
+        f'<input type="number" name="expected_misstatement" value="{esc(expected_misstatement)}" step="0.01" min="0" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:120px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Tol. rate</label><br>'
+        f'<input type="number" name="tolerable_rate" value="{esc(tolerable_rate)}" step="0.01" min="0" max="1" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:80px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Exp. rate</label><br>'
+        f'<input type="number" name="expected_rate" value="{esc(expected_rate)}" step="0.01" min="0" max="1" '
+        f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:80px;"></div>'
+        f'<div><label style="font-size:13px;font-weight:600;">Override n</label><br>'
+        f'<input type="number" name="sample_size" value="{sample_size}" min="1" max="1000" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:80px;"></div>'
         f'{"<input type=hidden name=paper_id value=" + repr(esc(paper_id)) + ">" if paper_id else ""}'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{esc(t("btn_save", lang))}</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Calculate &amp; sample</button></div>'
         f'</form>'
         f'</div>\n'
     )
 
+    plan_html = ""
+    if client_code and period and method in ("mus", "attribute"):
+        try:
+            with open_db() as conn:
+                pop_docs = _audit._load_population(conn, client_code, period, account_code)
+            pop_size = len(pop_docs)
+            pop_dollars = sum(abs(float(d.get("amount") or 0)) for d in pop_docs)
+            tol_m = _ffloat(tolerable_misstatement)
+            exp_m = _ffloat(expected_misstatement)
+            tol_r = _ffloat(tolerable_rate, 0.05)
+            exp_r = _ffloat(expected_rate, 0.0)
+            if method == "mus" and tol_m > 0 and pop_dollars > 0:
+                plan = _audit.calculate_sample_plan(
+                    method="mus",
+                    population_size=pop_size,
+                    population_dollars=pop_dollars,
+                    tolerable_misstatement=tol_m,
+                    expected_misstatement=exp_m,
+                    confidence=conf,
+                )
+                plan_html = (
+                    f'<div class="card" style="background:#f0fdf4;border:1px solid #16a34a;">'
+                    f'<strong>CAS 530 sample plan (MUS)</strong><br>'
+                    f'Population: {pop_size:,} items / ${pop_dollars:,.2f}<br>'
+                    f'Tolerable: ${tol_m:,.2f} &mdash; Expected: ${exp_m:,.2f} &mdash; Confidence: {int(conf * 100)}%<br>'
+                    f'Confidence factor: {plan["confidence_factor"]} &mdash; Expansion factor: {plan["expansion_factor"]}<br>'
+                    f'Formula: <code>{esc(plan["formula"])}</code><br>'
+                    f'<strong>Recommended sample size: {plan["size"]}</strong>'
+                    f'</div>\n'
+                )
+                sample_size = max(sample_size, plan["size"])
+            elif method == "attribute" and tol_r > 0 and pop_size > 0 and exp_r < tol_r:
+                plan = _audit.calculate_sample_plan(
+                    method="attribute",
+                    population_size=pop_size,
+                    population_dollars=pop_dollars,
+                    tolerable_misstatement=tol_m,
+                    expected_deviation_rate=exp_r,
+                    tolerable_rate=tol_r,
+                    confidence=conf,
+                )
+                plan_html = (
+                    f'<div class="card" style="background:#f0fdf4;border:1px solid #16a34a;">'
+                    f'<strong>CAS 530 sample plan (attribute)</strong><br>'
+                    f'Population: {pop_size:,} items<br>'
+                    f'Tolerable rate: {tol_r * 100:.1f}% &mdash; Expected rate: {exp_r * 100:.1f}% &mdash; Confidence: {int(conf * 100)}%<br>'
+                    f'Formula: <code>{esc(plan["formula"])}</code><br>'
+                    f'<strong>Recommended sample size: {plan["size"]}</strong>'
+                    f'</div>\n'
+                )
+                sample_size = max(sample_size, plan["size"])
+        except Exception as exc:  # defensive: UI should not crash on bad input
+            plan_html = (
+                f'<div class="card" style="background:#fff7ed;border:1px solid #f59e0b;">'
+                f'<strong>Sample plan unavailable:</strong> {esc(str(exc))}'
+                f'</div>\n'
+            )
+
     sample_html = ""
     if client_code and period:
+        selection_method = "mus" if method == "mus" else "random"
         with open_db() as conn:
-            docs = _audit.get_sample(conn, client_code, period, account_code, sample_size, paper_id or None)
+            docs = _audit.get_sample(
+                conn, client_code, period, account_code, sample_size,
+                paper_id or None, method=selection_method,
+            )
             if paper_id:
                 progress = _audit.get_sample_status(conn, paper_id)
             else:
@@ -7309,20 +7419,83 @@ def render_audit_sample(
         else:
             sample_html += f'<div class="card"><p class="muted">{esc(t("samp_no_docs", lang))}</p></div>\n'
 
-    preview = _preview_banner(
-        "Audit sampling (CAS 530)",
-        "Currently non-statistical: sample size is user-supplied and "
-        "selection is pseudo-random. No MUS, no projection of observed "
-        "errors to the population. Do NOT rely on these samples for "
-        "formal audit conclusions.",
-    )
+    # Projection panel: computes MLE + upper error limit + conclusion from
+    # working-paper items marked as "exception". Only meaningful once some
+    # items have been tested.
+    projection_html = ""
+    if paper_id and client_code and period:
+        try:
+            with open_db() as conn:
+                items = _audit.get_working_paper_items(conn, paper_id)
+                pop_docs = _audit._load_population(conn, client_code, period, account_code)
+            exceptions = [i for i in items if (i.get("tick_mark") or "") == "exception"]
+            tested_items = [i for i in items if (i.get("tick_mark") or "") in ("tested", "exception")]
+            if tested_items:
+                sample_errors = []
+                # An exception carries an 'error_amount' in notes if the user
+                # entered one; otherwise fall back to the document amount.
+                docs_by_id = {str(d.get("document_id") or ""): d for d in pop_docs}
+                for e in exceptions:
+                    doc = docs_by_id.get(str(e.get("document_id") or ""), {})
+                    # Notes may be free text like "error:123.45"; tolerate either.
+                    err_amt = 0.0
+                    notes = str(e.get("notes") or "")
+                    for tok in notes.replace(",", " ").split():
+                        try:
+                            err_amt = float(tok)
+                            break
+                        except ValueError:
+                            continue
+                    if err_amt <= 0:
+                        err_amt = abs(float(doc.get("amount") or 0))
+                    sample_errors.append({
+                        "error_amount": err_amt,
+                        "document_id": e.get("document_id"),
+                    })
+                sample_total = sum(abs(float(docs_by_id.get(str(i.get("document_id") or ""), {}).get("amount") or 0)) for i in tested_items)
+                population_total = sum(abs(float(d.get("amount") or 0)) for d in pop_docs)
+                tol_m = _ffloat(tolerable_misstatement)
+                if population_total > 0 and sample_total > 0 and tol_m > 0:
+                    result = _audit.project_sample_result(
+                        sample_errors=sample_errors,
+                        sample_total=sample_total,
+                        population_total=population_total,
+                        population_size=len(pop_docs),
+                        sample_size=len(tested_items),
+                        tolerable_misstatement=tol_m,
+                        confidence=conf,
+                    )
+                    badge_color = {
+                        "accept": "#16a34a",
+                        "extend": "#f59e0b",
+                        "reject": "#dc2626",
+                    }.get(result["conclusion"], "#6b7280")
+                    projection_html = (
+                        f'<div class="card" style="border-left:4px solid {badge_color};">'
+                        f'<strong>CAS 530 projection</strong><br>'
+                        f'Sample: {len(tested_items):,} items / ${sample_total:,.2f} &mdash; '
+                        f'Population: {len(pop_docs):,} / ${population_total:,.2f}<br>'
+                        f'Errors observed: {result["sample_errors_count"]} '
+                        f'(total ${result["total_error_amount"]:,.2f})<br>'
+                        f'Most-likely error: <strong>${result["most_likely_error"]:,.2f}</strong><br>'
+                        f'Upper error limit (95%): <strong>${result["upper_error_limit"]:,.2f}</strong><br>'
+                        f'Tolerable misstatement: ${tol_m:,.2f}<br>'
+                        f'<strong style="color:{badge_color};">Conclusion: '
+                        f'{esc(result["conclusion"].upper())}</strong> '
+                        f'&mdash; {esc(result["message"])}'
+                        f'</div>\n'
+                    )
+        except Exception:
+            pass
+
     body = (
-        preview
-        + f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(t("samp_title", lang))}</h2>'
         f'<a href="/" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>'
         f'</div>\n'
         f'{filter_form}'
+        f'{plan_html}'
+        f'{projection_html}'
         f'{sample_html}'
     )
     return page_layout(t("samp_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
@@ -9620,7 +9793,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_group_label("\U0001f4c1 Audit"))
         groups.append(_dnav("/working_papers", "wp_nav_link"))
         groups.append(_dnav("/audit/evidence", "ev_title"))
-        groups.append(_dlink("/audit/sample", esc(t("samp_title", lang)) + _preview_chip))
+        groups.append(_dnav("/audit/sample", "samp_title"))
         groups.append(_dnav("/financial_statements", "fs_title"))
         groups.append(_dnav("/audit/analytical", "anal_title"))
         groups.append(_dnav("/engagements", "eng_title"))
@@ -17033,7 +17206,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 samp_account = qs.get("account_code", [""])[0].strip()
                 samp_size    = qs.get("sample_size", ["10"])[0].strip()
                 samp_paper   = qs.get("paper_id", [""])[0].strip()
-                self._send_html(render_audit_sample(ctx, user, samp_client, samp_period, samp_account, samp_size, samp_paper, flash, flash_error, lang=lang))
+                samp_method  = qs.get("method", ["random"])[0].strip()
+                samp_conf    = qs.get("confidence", ["0.95"])[0].strip()
+                samp_tol_m   = qs.get("tolerable_misstatement", [""])[0].strip()
+                samp_exp_m   = qs.get("expected_misstatement", ["0"])[0].strip()
+                samp_tol_r   = qs.get("tolerable_rate", ["0.05"])[0].strip()
+                samp_exp_r   = qs.get("expected_rate", ["0"])[0].strip()
+                self._send_html(render_audit_sample(
+                    ctx, user, samp_client, samp_period, samp_account,
+                    samp_size, samp_paper, flash, flash_error, lang=lang,
+                    method=samp_method, confidence=samp_conf,
+                    tolerable_misstatement=samp_tol_m,
+                    expected_misstatement=samp_exp_m,
+                    tolerable_rate=samp_tol_r,
+                    expected_rate=samp_exp_r,
+                ))
                 return
 
             if path == "/financial_statements":
