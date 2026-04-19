@@ -1037,6 +1037,387 @@ def mark_letter_signed(
     return True
 
 
+# ---------------------------------------------------------------------------
+# CAS 580 — Rep Letter PDF (Sprint F Fix 4)
+# ---------------------------------------------------------------------------
+
+# The 10 representations required by CAS 580 Appendix 2. These are the
+# statutory minimum; extra firm-specific reps can be appended by the user.
+CAS_580_STANDARD_REPRESENTATIONS: list[dict[str, str]] = [
+    {
+        "en": "We have fulfilled our responsibilities for the preparation of the financial statements in accordance with the applicable financial reporting framework, for the period ended {period_end}.",
+        "fr": "Nous avons rempli nos responsabilités à l'égard de la préparation des états financiers conformément au référentiel d'information financière applicable, pour la période close le {period_end}.",
+    },
+    {
+        "en": "We acknowledge our responsibility for the design, implementation and maintenance of internal control to prevent and detect fraud.",
+        "fr": "Nous reconnaissons notre responsabilité à l'égard de la conception, de la mise en place et du maintien du contrôle interne pour prévenir et détecter la fraude.",
+    },
+    {
+        "en": "Significant assumptions used in making accounting estimates are reasonable.",
+        "fr": "Les hypothèses importantes utilisées pour établir les estimations comptables sont raisonnables.",
+    },
+    {
+        "en": "Related party relationships and transactions have been appropriately accounted for and disclosed.",
+        "fr": "Les relations et opérations avec les parties liées ont été comptabilisées et présentées de manière appropriée.",
+    },
+    {
+        "en": "All events subsequent to the date of the financial statements requiring adjustment or disclosure have been adjusted or disclosed.",
+        "fr": "Tous les événements postérieurs à la date des états financiers nécessitant un ajustement ou une divulgation ont été ajustés ou divulgués.",
+    },
+    {
+        "en": "The effects of uncorrected misstatements are immaterial, both individually and in aggregate, to the financial statements as a whole.",
+        "fr": "Les incidences des anomalies non corrigées sont non significatives, individuellement et collectivement, pour les états financiers pris dans leur ensemble.",
+    },
+    {
+        "en": "We have disclosed all known or suspected fraud involving management, employees who have significant roles in internal control, or others where fraud could have a material effect on the financial statements.",
+        "fr": "Nous avons divulgué toute fraude connue ou soupçonnée impliquant la direction, les employés ayant un rôle important dans le contrôle interne, ou d'autres personnes lorsque la fraude pourrait avoir une incidence significative sur les états financiers.",
+    },
+    {
+        "en": "We have disclosed all known instances of non-compliance or suspected non-compliance with laws and regulations whose effects should be considered when preparing the financial statements.",
+        "fr": "Nous avons divulgué tous les cas connus de non-conformité ou les cas soupçonnés de non-conformité aux lois et règlements dont les effets devraient être pris en considération lors de la préparation des états financiers.",
+    },
+    {
+        "en": "We have disclosed all information in relation to fraud or suspected fraud communicated to us by employees, former employees, analysts, regulators or others.",
+        "fr": "Nous avons divulgué toutes les informations relatives à la fraude ou à la fraude soupçonnée qui nous ont été communiquées par des employés, d'anciens employés, des analystes, des autorités de réglementation ou d'autres personnes.",
+    },
+    {
+        "en": "We have disclosed all known actual or possible litigation and claims whose effects should be considered when preparing the financial statements.",
+        "fr": "Nous avons divulgué tous les litiges et réclamations connus, réels ou possibles, dont les effets devraient être pris en considération lors de la préparation des états financiers.",
+    },
+]
+
+
+def _rep_letter_get_engagement_period_end(conn, engagement_id: str) -> str:
+    """Derive a period_end_date from the engagement's period or raise.
+
+    Accepts either YYYY-MM (month-only) or YYYY-MM-DD. For month-only,
+    uses the last day of that month.
+    """
+    from src.engines.audit_engine import get_engagement
+    from datetime import date
+    import calendar as _cal
+
+    eng = get_engagement(conn, engagement_id)
+    if not eng:
+        raise ValueError(f"Engagement not found: {engagement_id}")
+    period = str(eng.get("period") or "").strip()
+    if not period:
+        raise ValueError(
+            "Engagement must have a period set before a rep letter can be "
+            "issued (CAS 580 requires a dated period end).",
+        )
+    if len(period) == 10 and period[4] == "-" and period[7] == "-":
+        return period
+    if len(period) == 7 and period[4] == "-":
+        y, m = int(period[:4]), int(period[5:7])
+        last = _cal.monthrange(y, m)[1]
+        return f"{period}-{last:02d}"
+    # Unknown shape — raise rather than fabricate a date.
+    raise ValueError(
+        f"Engagement period '{period}' cannot be parsed as YYYY-MM or "
+        "YYYY-MM-DD; set an explicit period_end_date first.",
+    )
+
+
+def generate_rep_letter_pdf(
+    engagement_id: str,
+    conn: sqlite3.Connection,
+    *,
+    firm_name: str = "OtoCPA CPA",
+    firm_address: str = "",
+    auditor_name: str = "",
+    management_name: str = "",
+    management_title: str = "Chief Executive Officer",
+    cfo_name: str = "",
+    cfo_title: str = "Chief Financial Officer",
+    language: str = "en",
+    extra_representations: list[str] | None = None,
+    output_dir: str | Path | None = None,
+    persist_evidence: bool = True,
+) -> tuple[bytes, str]:
+    """Generate a CAS 580 management representation letter PDF.
+
+    Validates that the engagement has a period_end_date, embeds all 10
+    standard representations, adds signature blocks for CEO and CFO, and
+    (if ``persist_evidence`` is True) stores the PDF under the engagement
+    evidence folder and records a row in ``audit_evidence``.
+
+    Returns (pdf_bytes, file_path).
+    """
+    ensure_cas_tables(conn)
+    period_end = _rep_letter_get_engagement_period_end(conn, engagement_id)
+    from src.engines.audit_engine import get_engagement
+    eng = get_engagement(conn, engagement_id)
+    client = eng.get("client_code") or ""
+    today = _utc_now()[:10]
+
+    try:
+        pdf_bytes = _render_rep_letter_reportlab(
+            firm_name=firm_name,
+            firm_address=firm_address,
+            auditor_name=auditor_name or firm_name,
+            client_code=client,
+            period_end=period_end,
+            today=today,
+            management_name=management_name,
+            management_title=management_title,
+            cfo_name=cfo_name,
+            cfo_title=cfo_title,
+            language=language,
+            extra_representations=extra_representations or [],
+        )
+    except ImportError:
+        pdf_bytes = _render_rep_letter_minimal(
+            firm_name=firm_name,
+            auditor_name=auditor_name or firm_name,
+            client_code=client,
+            period_end=period_end,
+            today=today,
+            management_name=management_name,
+            management_title=management_title,
+            cfo_name=cfo_name,
+            cfo_title=cfo_title,
+            language=language,
+            extra_representations=extra_representations or [],
+        )
+
+    file_path = ""
+    if persist_evidence:
+        base_dir = Path(output_dir) if output_dir else ROOT_DIR / "data" / "rep_letters"
+        base_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        path = base_dir / f"rep_letter_{engagement_id}_{stamp}.pdf"
+        path.write_bytes(pdf_bytes)
+        file_path = str(path)
+        try:
+            conn.execute(
+                """INSERT INTO audit_evidence
+                   (evidence_id, document_id, evidence_type, linked_document_ids,
+                    match_status, notes, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    f"rep_{engagement_id}_{stamp}",
+                    engagement_id,
+                    "representation_letter",
+                    "",
+                    "complete",
+                    f"CAS 580 rep letter; period_end={period_end}; file={file_path}",
+                    today,
+                    today,
+                ),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            # Table may not exist or a row with this id already present — skip silently.
+            pass
+
+    return pdf_bytes, file_path
+
+
+def _render_rep_letter_reportlab(
+    *,
+    firm_name: str,
+    firm_address: str,
+    auditor_name: str,
+    client_code: str,
+    period_end: str,
+    today: str,
+    management_name: str,
+    management_title: str,
+    cfo_name: str,
+    cfo_title: str,
+    language: str,
+    extra_representations: list[str],
+) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer,
+    )
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
+        topMargin=0.75 * inch, bottomMargin=0.75 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h_style = ParagraphStyle("h", parent=styles["Heading2"], fontSize=13, spaceAfter=10)
+    normal = styles["BodyText"]
+    rep_style = ParagraphStyle("rep", parent=normal, leftIndent=18, spaceAfter=8)
+
+    story: list = []
+    # Letterhead
+    story.append(Paragraph(f"<b>{firm_name}</b>", h_style))
+    if firm_address:
+        story.append(Paragraph(firm_address, normal))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Date
+    story.append(Paragraph(f"Date: {today}", normal))
+    story.append(Spacer(1, 0.1 * inch))
+
+    # Addressee
+    story.append(Paragraph(f"To: {auditor_name}", normal))
+    story.append(Spacer(1, 0.2 * inch))
+
+    if language == "fr":
+        intro = (
+            f"La présente lettre de déclaration est fournie dans le cadre de votre mission "
+            f"d'audit des états financiers de <b>{client_code}</b> pour la période close le "
+            f"<b>{period_end}</b>, dans le but d'exprimer une opinion sur la fidélité "
+            f"avec laquelle les états financiers présentent, à tous égards importants, "
+            f"la situation financière et les résultats d'exploitation de l'entité."
+        )
+        rep_title = "Déclarations de la direction (CAS 580)"
+    else:
+        intro = (
+            f"This representation letter is provided in connection with your audit of the "
+            f"financial statements of <b>{client_code}</b> for the period ended "
+            f"<b>{period_end}</b>, for the purpose of expressing an opinion as to whether "
+            f"the financial statements present fairly, in all material respects, the "
+            f"financial position and results of operations of the entity."
+        )
+        rep_title = "Management Representations (CAS 580)"
+
+    story.append(Paragraph(intro, normal))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # Representations
+    story.append(Paragraph(f"<b>{rep_title}</b>", h_style))
+    for i, rep in enumerate(CAS_580_STANDARD_REPRESENTATIONS, start=1):
+        text = rep.get(language, rep["en"]).format(period_end=period_end)
+        story.append(Paragraph(f"{i}. {text}", rep_style))
+    # Extra user reps
+    for i, extra in enumerate(extra_representations, start=len(CAS_580_STANDARD_REPRESENTATIONS) + 1):
+        story.append(Paragraph(f"{i}. {extra}", rep_style))
+
+    story.append(Spacer(1, 0.4 * inch))
+
+    # Signature blocks
+    story.append(Paragraph("_________________________________________", normal))
+    story.append(Paragraph(
+        f"{management_name or '(signature)'}, {management_title}", normal,
+    ))
+    story.append(Spacer(1, 0.3 * inch))
+    story.append(Paragraph("_________________________________________", normal))
+    story.append(Paragraph(
+        f"{cfo_name or '(signature)'}, {cfo_title}", normal,
+    ))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_rep_letter_minimal(
+    *,
+    firm_name: str,
+    auditor_name: str,
+    client_code: str,
+    period_end: str,
+    today: str,
+    management_name: str,
+    management_title: str,
+    cfo_name: str,
+    cfo_title: str,
+    language: str,
+    extra_representations: list[str],
+) -> bytes:
+    """Lightweight hand-rolled PDF fallback when reportlab is unavailable."""
+    lines = [firm_name, "", f"Date: {today}", "", f"To: {auditor_name}", ""]
+    if language == "fr":
+        lines.append(
+            f"Lettre de declaration -- {client_code} -- Periode close le {period_end}"
+        )
+    else:
+        lines.append(
+            f"Management Representation Letter -- {client_code} -- Period ended {period_end}"
+        )
+    lines.append("")
+    for i, rep in enumerate(CAS_580_STANDARD_REPRESENTATIONS, start=1):
+        text = rep.get(language, rep["en"]).format(period_end=period_end)
+        # Split long reps into ~80-char chunks for the fallback.
+        wrapped = _wrap_text(f"{i}. {text}", 90)
+        lines.extend(wrapped)
+        lines.append("")
+    for i, extra in enumerate(extra_representations, start=len(CAS_580_STANDARD_REPRESENTATIONS) + 1):
+        lines.extend(_wrap_text(f"{i}. {extra}", 90))
+        lines.append("")
+    lines += [
+        "",
+        "_________________________________________",
+        f"{management_name or '(signature)'}, {management_title}",
+        "",
+        "_________________________________________",
+        f"{cfo_name or '(signature)'}, {cfo_title}",
+    ]
+
+    page_lines = [lines[i:i + 55] for i in range(0, len(lines), 55)] or [lines]
+    objects: list[bytes] = []
+
+    def _add(obj: bytes) -> int:
+        objects.append(obj)
+        return len(objects)
+
+    page_ids = list(range(3, 3 + len(page_lines)))
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
+    _add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    _add(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_lines)} >>".encode())
+    font_obj_id = 3 + 2 * len(page_lines)
+    for idx in range(len(page_lines)):
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R "
+            f"/Resources << /Font << /F1 {font_obj_id} 0 R >> >> "
+            f"/MediaBox [0 0 612 792] "
+            f"/Contents {3 + len(page_lines) + idx} 0 R >>"
+        ).encode()
+        _add(page_obj)
+    for chunk in page_lines:
+        stream_lines = ["BT", "/F1 10 Tf", "50 752 Td"]
+        for ln in chunk:
+            safe = ln.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            stream_lines.append(f"({safe}) Tj")
+            stream_lines.append("0 -13 Td")
+        stream_lines.append("ET")
+        stream = "\n".join(stream_lines).encode("latin-1", errors="replace")
+        _add(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+    _add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = [0]
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for off in offsets[1:]:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_pos}\n%%EOF\n"
+    ).encode()
+    return bytes(out)
+
+
+def _wrap_text(s: str, width: int) -> list[str]:
+    words = s.split(" ")
+    out: list[str] = []
+    cur = ""
+    for w in words:
+        if len(cur) + len(w) + 1 > width:
+            if cur:
+                out.append(cur)
+            cur = w
+        else:
+            cur = (cur + " " + w).strip()
+    if cur:
+        out.append(cur)
+    return out
+
+
 def get_rep_letter(
     engagement_id: str,
     conn: sqlite3.Connection,

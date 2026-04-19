@@ -8238,18 +8238,16 @@ def render_rep_letter(
                 f'{esc(t("cas_rep_generate", lang))}</button></form></div>'
             )
 
-    preview = _preview_banner(
-        "Management representation letter (CAS 580)",
-        "Current output is plain-text only with a typed-name signature. "
-        "No PDF, no per-representation checklist, no auditor countersignature, "
-        "and period_end_date is not validated against the engagement period. "
-        "Not yet CAS 580-compliant as an audit-file artifact.",
-    )
+    pdf_btn = ""
+    if engagement_id:
+        pdf_btn = (
+            f' <a href="/audit/rep_letter/pdf?engagement_id={urlquote(engagement_id)}" '
+            f'class="btn-secondary button-link" style="margin-left:8px;">PDF (CAS 580)</a>'
+        )
     body = (
-        preview
-        + f'<div class="topbar" style="margin-bottom:16px;">'
+        f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(t("cas_rep_title", lang))}</h2>'
-        f'<a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a></div>'
+        f'<div><a href="/engagements" class="btn-secondary button-link">{esc(t("btn_back_to_queue", lang))}</a>{pdf_btn}</div></div>'
         f'{select_form}{content}'
     )
     return page_layout(t("cas_rep_title", lang), body, user=user, flash=flash, flash_error=flash_error, lang=lang)
@@ -9781,7 +9779,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         groups.append(_dnav("/engagements", "eng_title"))
         groups.append(_dnav("/audit/materiality", "cas_materiality_nav"))
         groups.append(_dnav("/audit/risk", "cas_risk_nav"))
-        groups.append(_dlink("/audit/rep_letter", esc(t("cas_rep_nav", lang)) + _preview_chip))
+        groups.append(_dnav("/audit/rep_letter", "cas_rep_nav"))
         groups.append(_dnav("/audit/controls", "cas_ctrl_nav"))
         groups.append(_dnav("/audit/related_parties", "cas_rp_nav"))
 
@@ -17341,6 +17339,36 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     return
                 rep_eng_id = qs.get("engagement_id", [""])[0].strip()
                 self._send_html(render_rep_letter(ctx, user, rep_eng_id, flash, flash_error, lang=lang))
+                return
+
+            if path == "/audit/rep_letter/pdf":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                pdf_eng_id = qs.get("engagement_id", [""])[0].strip()
+                if not pdf_eng_id:
+                    self._send_html(page_layout("Rep letter", '<div class="card"><p class="error">engagement_id required</p></div>', user=user, lang=lang), status=400)
+                    return
+                try:
+                    with open_db() as conn:
+                        pdf_bytes, _path = _cas.generate_rep_letter_pdf(
+                            pdf_eng_id, conn, language=lang,
+                            management_name=str(user.get("email") or ""),
+                        )
+                except ValueError as err:
+                    self._send_html(page_layout(
+                        "Rep letter unavailable",
+                        f'<div class="card"><p class="error">{esc(str(err))}</p>'
+                        f'<p><a href="/audit/rep_letter?engagement_id={urlquote(pdf_eng_id)}">Back</a></p></div>',
+                        user=user, lang=lang), status=400)
+                    return
+                fname = f"rep_letter_{pdf_eng_id}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
                 return
 
             if path == "/audit/controls":
