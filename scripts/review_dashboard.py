@@ -2205,8 +2205,20 @@ def get_qbo_posting_job(document_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def record_learning_corrections(document_id: str, before_row: dict, updated_fields: dict[str, Any]) -> None:
+def record_learning_corrections(
+    document_id: str,
+    before_row: dict,
+    updated_fields: dict[str, Any],
+    *,
+    reviewer: str = "",
+    firm_code: str = "",
+) -> None:
     tracked = {"vendor","client_code","doc_type","amount","document_date","gl_account","tax_code","category","review_status"}
+    vendor_after = None
+    if "vendor" in updated_fields:
+        vendor_after = normalize_optional_text(updated_fields["vendor"])
+    elif before_row and "vendor" in before_row.keys():
+        vendor_after = before_row["vendor"]
     for field, submitted in updated_fields.items():
         if field not in tracked:
             continue
@@ -2218,11 +2230,27 @@ def record_learning_corrections(document_id: str, before_row: dict, updated_fiel
             learning_store.record_correction(
                 document_id=document_id, field_name=field, old_value=old,
                 new_value=new if new is not None else "",
-                reviewer=DEFAULT_REVIEWER,
+                reviewer=reviewer or DEFAULT_REVIEWER,
                 correction_context={"source": "review_dashboard", "document_id": document_id},
             )
         except Exception:
             pass
+        # Sprint A: mirror the correction into the vendor/GL learning tables
+        # so future extractions can auto-canonicalise vendors and suggest GL
+        # codes. Never raise — learning must not block user edits.
+        try:
+            from src.engines.self_learning import record_correction as _sl_record  # noqa: PLC0415
+            _sl_record(
+                document_id=document_id,
+                field=field,
+                old_value=old,
+                new_value=new,
+                corrected_by=reviewer or DEFAULT_REVIEWER,
+                firm_code=firm_code,
+                vendor_hint=vendor_after,
+            )
+        except Exception:
+            logging.exception("self_learning.record_correction failed")
 
 
 # ---------------------------------------------------------------------------
@@ -12721,6 +12749,101 @@ def render_qbo_status_page(ctx: dict[str, Any], user: dict[str, Any],
                        flash_error=flash_error, lang=lang)
 
 
+def render_learning_page(ctx: dict[str, Any], user: dict[str, Any],
+                          lang: str = "fr") -> str:
+    """Owner-only self-learning metrics page.
+
+    Shows the top vendor aliases and top vendor→GL corrections the system
+    has learned from CPA edits. The numbers come straight from
+    self_learning.top_vendor_corrections / top_gl_corrections so there's no
+    duplicated counting logic.
+    """
+    from src.engines.self_learning import (
+        top_vendor_corrections,
+        top_gl_corrections,
+        learning_summary,
+    )
+    summary = learning_summary()
+    vendor_rows = top_vendor_corrections(limit=50)
+    gl_rows = top_gl_corrections(limit=50)
+
+    vendor_table = "".join(
+        f"<tr><td>{esc(r['extracted_vendor'])}</td>"
+        f"<td>→ <strong>{esc(r['canonical_vendor'])}</strong></td>"
+        f"<td class='num'>{r['correction_count']}</td>"
+        f"<td class='num'>{(r['confidence'] or 0):.2f}</td>"
+        f"<td class='muted'>{esc(r['last_seen'] or '')}</td></tr>"
+        for r in vendor_rows
+    ) or "<tr><td colspan='5' class='muted'>No vendor corrections learned yet.</td></tr>"
+
+    gl_table = "".join(
+        f"<tr><td>{esc(r['canonical_vendor'])}</td>"
+        f"<td><code>{esc(r['gl_account'])}</code></td>"
+        f"<td>{esc(r['tax_code'] or '')}</td>"
+        f"<td class='num'>{r['correction_count']}</td>"
+        f"<td class='num'>{(r['confidence'] or 0):.2f}</td>"
+        f"<td class='muted'>{esc(r['last_seen'] or '')}</td></tr>"
+        for r in gl_rows
+    ) or "<tr><td colspan='6' class='muted'>No GL corrections learned yet.</td></tr>"
+
+    recent = summary.get("recent_by_field", {}) or {}
+    recent_html = " · ".join(
+        f"<span><strong>{n}</strong> {esc(k)}</span>" for k, n in recent.items()
+    ) or "<span class='muted'>no edits in the last 7 days</span>"
+
+    body = f"""
+    <div class="card">
+      <h2>&#129504; Learning — Self-correction log</h2>
+      <div class="stats">
+        <div><span class='label'>Vendor aliases learned</span>
+             <strong>{summary['vendor_aliases']['distinct']}</strong>
+             <span class='muted'>({summary['vendor_aliases']['total_corrections']} corrections)</span></div>
+        <div><span class='label'>Vendor→GL pairs learned</span>
+             <strong>{summary['vendor_gl']['distinct']}</strong>
+             <span class='muted'>({summary['vendor_gl']['total_corrections']} corrections)</span></div>
+        <div><span class='label'>All corrections logged</span>
+             <strong>{summary['corrections_all']}</strong></div>
+        <div><span class='label'>Last 7 days</span> {recent_html}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Top 50 vendor alias corrections</h3>
+      <table>
+        <thead><tr><th>Extracted (OCR)</th><th>Canonical (CPA fix)</th>
+               <th class='num'>Count</th><th class='num'>Conf</th><th>Last seen</th></tr></thead>
+        <tbody>{vendor_table}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Top 50 vendor→GL corrections</h3>
+      <table>
+        <thead><tr><th>Canonical vendor</th><th>GL</th><th>Tax code</th>
+               <th class='num'>Count</th><th class='num'>Conf</th><th>Last seen</th></tr></thead>
+        <tbody>{gl_table}</tbody>
+      </table>
+    </div>
+
+    <style>
+      .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 12px; margin-top: 10px; }}
+      .stats > div {{ background: rgba(255,255,255,0.04); padding: 10px 12px;
+                       border-radius: 8px; }}
+      .stats .label {{ display: block; font-size: 11px; text-transform: uppercase;
+                        letter-spacing: 0.4px; opacity: 0.7; margin-bottom: 4px; }}
+      .num {{ text-align: right; font-family: monospace; }}
+      .muted {{ opacity: 0.6; font-size: 12px; }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      table th, table td {{ padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+      table th {{ text-align: left; font-size: 12px; text-transform: uppercase; opacity: 0.7; }}
+      code {{ font-family: monospace; background: rgba(255,255,255,0.05); padding: 1px 6px;
+              border-radius: 4px; }}
+    </style>
+    """
+    return page_layout("Learning", body, user=user, lang=lang)
+
+
 def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = '', flash_error: str = '',
                         lang: str = 'fr') -> str:
@@ -17411,6 +17534,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             # ------------------------------------------------------------------
+            # Learning visibility (owner) — Sprint A
+            # ------------------------------------------------------------------
+            if path == "/learning":
+                if ctx.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>Owner access required.</p>'
+                        f'<p><a href="/">Back</a></p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                self._send_html(render_learning_page(ctx, user, lang=lang))
+                return
+
+            # ------------------------------------------------------------------
             # Client management (owner/manager)
             # ------------------------------------------------------------------
             if path == "/clients":
@@ -18467,7 +18605,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     raise ValueError(t("err_doc_not_found", lang))
                 submitted = {k: form.get(k, "") for k in ["vendor","client_code","doc_type","amount","document_date","gl_account","tax_code","category","review_status"]}
                 update_document_fields(document_id, submitted)
-                record_learning_corrections(document_id, before_row, submitted)
+                record_learning_corrections(
+                    document_id, before_row, submitted,
+                    reviewer=(user.get("username") if user else "") or DEFAULT_REVIEWER,
+                    firm_code=(ctx.get("firm_code") if ctx else "") or "",
+                )
                 # Sprint 4: system message to portal on status change (stub).
                 try:
                     _old_status = normalize_text(before_row.get("review_status", "")) if before_row else ""
@@ -18678,13 +18820,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 try:
                     with open_db() as _lconn:
                         _row = _lconn.execute(
-                            "SELECT document_id FROM invoice_lines WHERE line_id = ?",
+                            "SELECT line_id, document_id, gl_account, tax_code, description "
+                            "FROM invoice_lines WHERE line_id = ?",
                             (line_id,),
                         ).fetchone()
                         if not _row:
                             self._send_json({"ok": False, "error": "line_not_found"}, status=404)
                             return
                         owning_doc = _row["document_id"]
+                        old_gl = _row["gl_account"]
+                        old_tax = _row["tax_code"]
                         if not _require_document_in_firm(owning_doc, ctx):
                             self._send_json({"ok": False, "error": "forbidden"}, status=403)
                             return
@@ -18695,6 +18840,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             (new_gl, new_tax, new_desc, line_id),
                         )
                         _lconn.commit()
+                    # Sprint A: line-item GL / tax_code corrections feed the
+                    # vendor_gl_learning table so future similar lines get a
+                    # learned suggestion.
+                    try:
+                        from src.engines.self_learning import record_correction as _sl_record  # noqa: PLC0415
+                        _firm = (ctx.get("firm_code") if ctx else "") or ""
+                        _reviewer = (user.get("username") if user else "") or DEFAULT_REVIEWER
+                        if (old_gl or "") != (new_gl or ""):
+                            _sl_record(
+                                document_id=owning_doc, field="gl_account",
+                                old_value=old_gl, new_value=new_gl,
+                                corrected_by=_reviewer, firm_code=_firm,
+                                line_description_pattern=new_desc or None,
+                            )
+                        if (old_tax or "") != (new_tax or ""):
+                            _sl_record(
+                                document_id=owning_doc, field="tax_code",
+                                old_value=old_tax, new_value=new_tax,
+                                corrected_by=_reviewer, firm_code=_firm,
+                                line_description_pattern=new_desc or None,
+                            )
+                    except Exception:
+                        logging.exception("self_learning line-item record failed")
                 except ValueError as _ve:
                     self._send_json({"ok": False, "error": str(_ve)}, status=400)
                     return
@@ -18734,7 +18902,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if before_row is None:
                     raise ValueError(t("err_doc_not_found", lang))
                 update_document_fields(document_id, {form.get("field",""): form.get("value","")})
-                record_learning_corrections(document_id, before_row, {form.get("field",""): form.get("value","")})
+                record_learning_corrections(
+                    document_id, before_row, {form.get("field",""): form.get("value","")},
+                    reviewer=(user.get("username") if user else "") or DEFAULT_REVIEWER,
+                    firm_code=(ctx.get("firm_code") if ctx else "") or "",
+                )
                 self._flash_redirect(f"/document?id={urlquote(document_id)}", flash=t("flash_suggestion_applied", lang))
                 return
 

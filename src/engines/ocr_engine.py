@@ -2156,6 +2156,32 @@ def process_file(
     except Exception:  # pragma: no cover — never fail the pipeline on sanity
         logging.exception("apply_extraction_sanity failed")
 
+    # Sprint A: apply learned vendor aliases (e.g. 'unprix' → 'Uniprix').
+    # Only applies once a correction has enough support; otherwise it's a
+    # no-op so one-off typos can't globally rename a vendor.
+    try:
+        from src.engines.self_learning import apply_vendor_learning  # noqa: PLC0415
+        _firm_for_learn = ""
+        if client_code:
+            with sqlite3.connect(str(db_path), timeout=5) as _fc_conn:
+                _fc_row = _fc_conn.execute(
+                    "SELECT firm_code FROM clients WHERE client_code=?", (client_code,),
+                ).fetchone()
+                if _fc_row and _fc_row[0]:
+                    _firm_for_learn = _fc_row[0]
+        canonical, original = apply_vendor_learning(
+            vendor, firm_code=_firm_for_learn, db_path=db_path,
+        )
+        if original is not None and canonical != original:
+            raw["vendor_learned_from"] = original
+            raw["vendor_learned"] = True
+            vendor = canonical
+            _extraction_flags = list(_extraction_flags or [])
+            if "vendor_learned" not in _extraction_flags:
+                _extraction_flags.append("vendor_learned")
+    except Exception:  # pragma: no cover
+        logging.exception("apply_vendor_learning failed")
+
     # 6. DB upsert
     record: dict[str, Any] = {
         "document_id":            doc_id,
