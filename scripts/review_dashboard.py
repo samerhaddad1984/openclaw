@@ -852,6 +852,25 @@ def bootstrap_schema() -> None:
                 note        TEXT
             )
         """)
+        # Posting jobs (QBO/Sage/Acomba). The home + queue SQL LEFT JOINs
+        # this table; a brand-new firm with no QBO activity would 500 on
+        # the dashboard home before this was added. Idempotent.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS posting_jobs (
+                posting_id      TEXT PRIMARY KEY,
+                document_id     TEXT NOT NULL,
+                target_system   TEXT NOT NULL,
+                entry_kind      TEXT NOT NULL,
+                posting_status  TEXT NOT NULL,
+                approval_state  TEXT NOT NULL,
+                reviewer        TEXT,
+                external_id     TEXT,
+                payload_json    TEXT NOT NULL DEFAULT '{}',
+                error_text      TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL
+            )
+        """)
         # Portfolio assignments
         conn.execute("""
             CREATE TABLE IF NOT EXISTS user_portfolios (
@@ -864,12 +883,29 @@ def bootstrap_schema() -> None:
         """)
         conn.commit()
 
-        # Add columns to documents if missing
+        # Add columns to documents if missing. ``get_document`` SELECTs
+        # every column below, so a pre-existing ``documents`` table that
+        # was created without one of them would crash every document
+        # read. Idempotent for DBs that already have them.
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
-        for col in ["assigned_to", "manual_hold_reason", "manual_hold_by", "manual_hold_at",
-                    "matched_bank_transaction"]:
+        # TEXT columns
+        for col in ("assigned_to", "manual_hold_reason", "manual_hold_by", "manual_hold_at",
+                    "matched_bank_transaction", "raw_ocr_text", "fraud_flags",
+                    "substance_flags"):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
+        # INTEGER/REAL columns with sane defaults — used by COALESCE in reads.
+        for col, ddl in (
+            ("hallucination_suspected", "INTEGER DEFAULT 0"),
+            ("correction_count",        "INTEGER DEFAULT 0"),
+            ("has_line_items",          "INTEGER DEFAULT 0"),
+            ("lines_reconciled",        "INTEGER DEFAULT 0"),
+            ("line_total_sum",          "REAL"),
+            ("invoice_total_gap",       "REAL"),
+            ("deposit_allocated",       "INTEGER DEFAULT 0"),
+        ):
+            if col not in existing:
+                conn.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")
         conn.commit()
 
         # Add must_reset_password / language columns to dashboard_users if missing
@@ -924,16 +960,33 @@ def bootstrap_schema() -> None:
         # created before the Stripe billing columns existed. _provision_firm_
         # from_stripe + /billing + _handle_stripe_event all need these columns.
         firm_cols = {row["name"] for row in conn.execute("PRAGMA table_info(firms)").fetchall()}
+        # Full set of columns expected by the INSERT + handlers below. A
+        # pre-existing ``firms`` table created by a test fixture or
+        # earlier migration may be missing any subset of these; we
+        # ALTER-add anything missing so the INSERT at the bottom always
+        # succeeds.
         for col, ddl in (
+            ("firm_name",              "TEXT"),
+            ("contact_email",          "TEXT"),
+            ("contact_phone",          "TEXT"),
             ("billing_email",          "TEXT"),
+            ("language",               "TEXT DEFAULT 'fr'"),
+            ("plan",                   "TEXT DEFAULT 'basic'"),
+            ("active",                 "INTEGER DEFAULT 1"),
             ("stripe_customer_id",     "TEXT"),
             ("stripe_subscription_id", "TEXT"),
             ("subscription_status",    "TEXT DEFAULT 'none'"),
             ("subscription_plan",      "TEXT"),
             ("current_period_end",     "INTEGER"),
+            ("created_at",             "TEXT"),
         ):
             if col not in firm_cols:
-                conn.execute(f"ALTER TABLE firms ADD COLUMN {col} {ddl}")
+                try:
+                    conn.execute(f"ALTER TABLE firms ADD COLUMN {col} {ddl}")
+                except sqlite3.OperationalError:
+                    # Happens if the pk_column already exists under a
+                    # different case or if the DB is read-only.
+                    pass
         conn.execute(
             "INSERT OR IGNORE INTO firms (firm_code, firm_name, language, plan) VALUES ('OWNER','OtoCPA (Owner)','fr','owner')"
         )
@@ -947,15 +1000,21 @@ def bootstrap_schema() -> None:
             conn.commit()
 
         # Bank connections firm_code (denormalized for fast firm-scoped reads).
-        bank_cols = {row["name"] for row in conn.execute("PRAGMA table_info(bank_connections)").fetchall()}
-        if "firm_code" not in bank_cols:
-            conn.execute("ALTER TABLE bank_connections ADD COLUMN firm_code TEXT")
-            conn.execute(
-                "UPDATE bank_connections SET firm_code = COALESCE("
-                "(SELECT firm_code FROM clients WHERE clients.client_code = bank_connections.client_code), 'OWNER')"
-                " WHERE firm_code IS NULL OR firm_code=''"
-            )
-            conn.commit()
+        # Guard: bank_connections is optional in minimal bootstraps (some
+        # tests/fresh installs skip it); only migrate if the table exists.
+        bc_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='bank_connections'",
+        ).fetchone()
+        if bc_exists:
+            bank_cols = {row["name"] for row in conn.execute("PRAGMA table_info(bank_connections)").fetchall()}
+            if "firm_code" not in bank_cols:
+                conn.execute("ALTER TABLE bank_connections ADD COLUMN firm_code TEXT")
+                conn.execute(
+                    "UPDATE bank_connections SET firm_code = COALESCE("
+                    "(SELECT firm_code FROM clients WHERE clients.client_code = bank_connections.client_code), 'OWNER')"
+                    " WHERE firm_code IS NULL OR firm_code=''"
+                )
+                conn.commit()
 
         # Sliding-scale match telemetry: remember which tier each bank
         # transaction match fell into so the reconciliation UI can badge
@@ -1212,14 +1271,22 @@ def bootstrap_schema() -> None:
         # AR invoices table
         _aging.ensure_ar_invoices_table(conn)
 
-        # Performance indexes for document queries
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at DESC)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(review_status)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_client ON documents(client_code)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_vendor ON documents(vendor)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_posting_jobs_document_id ON posting_jobs(document_id)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_document_assignments_document_id ON document_assignments(document_id)')
+        # Performance indexes for document queries. Each index is
+        # best-effort — a minimal bootstrap may be missing the underlying
+        # table, and a CREATE INDEX on a nonexistent table should not
+        # block startup.
+        def _try_index(sql: str) -> None:
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError:
+                pass
+        _try_index('CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at DESC)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(review_status)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_documents_client ON documents(client_code)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_documents_vendor ON documents(vendor)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_documents_updated_at ON documents(updated_at DESC)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_posting_jobs_document_id ON posting_jobs(document_id)')
+        _try_index('CREATE INDEX IF NOT EXISTS idx_document_assignments_document_id ON document_assignments(document_id)')
         conn.commit()
 
         # Backfill GL classification columns on invoice_lines (idempotent).
