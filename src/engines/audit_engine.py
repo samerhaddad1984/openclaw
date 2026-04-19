@@ -1359,7 +1359,95 @@ def generate_trial_balance(
             ar_totals["1200"] = _to_decimal(ar_rows["tot"] or 0)
     except sqlite3.OperationalError:
         pass  # ar_invoices absent — skip the AR roll-up.
-    for code, amt in ar_totals.items():
+
+    # --- AP-credit synthesis (Bug 1 fix): the existing ``rows`` query above
+    #     only includes docs with posting_status='posted', so the expense
+    #     side is a debit of ``sum(d.amount)``. The offsetting credit goes
+    #     to 1010 Cash because these are paid. We separately include UNPAID
+    #     docs as a debit-expense + credit-AP pair so the TB reflects both
+    #     accrued liabilities and cash outflows.
+    ap_paid_total = _ZERO
+    ap_unpaid_debit: dict[str, Decimal] = {}
+    ap_unpaid_credit = _ZERO
+    try:
+        ap_paid_row = conn.execute(
+            """SELECT COALESCE(SUM(d.amount), 0) AS total
+               FROM documents d
+               INNER JOIN posting_jobs pj ON pj.document_id = d.document_id
+                   AND pj.rowid = (
+                       SELECT pj2.rowid FROM posting_jobs pj2
+                       WHERE pj2.document_id = d.document_id
+                       ORDER BY COALESCE(pj2.updated_at, pj2.created_at) DESC,
+                                pj2.rowid DESC LIMIT 1
+                   )
+               WHERE LOWER(COALESCE(d.client_code,'')) = LOWER(?)
+                 AND COALESCE(d.document_date,'') LIKE ?
+                 AND LOWER(COALESCE(d.review_status,'')) != 'ignored'
+                 AND COALESCE(pj.posting_status,'') = 'posted'""",
+            (client_code, f"{period}%"),
+        ).fetchone()
+        ap_paid_total = _to_decimal(
+            ap_paid_row["total"] if ap_paid_row else 0,
+        )
+
+        # Unpaid docs: need to add BOTH sides (debit expense, credit AP).
+        unpaid_rows = conn.execute(
+            """SELECT d.gl_account, SUM(COALESCE(d.amount, 0)) AS total
+               FROM documents d
+               LEFT JOIN posting_jobs pj ON pj.document_id = d.document_id
+                   AND pj.rowid = (
+                       SELECT pj2.rowid FROM posting_jobs pj2
+                       WHERE pj2.document_id = d.document_id
+                       ORDER BY COALESCE(pj2.updated_at, pj2.created_at) DESC,
+                                pj2.rowid DESC LIMIT 1
+                   )
+               WHERE LOWER(COALESCE(d.client_code,'')) = LOWER(?)
+                 AND COALESCE(d.document_date,'') LIKE ?
+                 AND LOWER(COALESCE(d.review_status,'')) != 'ignored'
+                 AND COALESCE(pj.posting_status,'') != 'posted'
+               GROUP BY d.gl_account""",
+            (client_code, f"{period}%"),
+        ).fetchall()
+        for r in unpaid_rows or []:
+            gl = (r["gl_account"] or "").strip()
+            if not gl:
+                continue
+            amt = _to_decimal(r["total"] or 0)
+            if amt <= 0:
+                continue
+            ap_unpaid_debit[gl] = ap_unpaid_debit.get(gl, _ZERO) + amt
+            ap_unpaid_credit += amt
+    except sqlite3.OperationalError:
+        pass
+
+    ap_credit_totals = {"1010": ap_paid_total, "2000": ap_unpaid_credit}
+
+    # --- Apply AR rows + AP-credit synthesis + unpaid-AP debits ---------
+    for code, amt in ap_unpaid_debit.items():
+        if amt <= 0:
+            continue
+        coa_row = conn.execute(
+            "SELECT account_name, normal_balance FROM chart_of_accounts WHERE account_code=?",
+            (code,),
+        ).fetchone()
+        if coa_row:
+            name = coa_row["account_name"]
+        else:
+            name = code
+        now = _utc_now()
+        conn.execute(
+            """INSERT INTO trial_balance (client_code, period, account_code,
+               account_name, debit_total, credit_total, net_balance, generated_at)
+               VALUES (?,?,?,?,?,0,?,?)
+               ON CONFLICT(client_code, period, account_code) DO UPDATE SET
+                   debit_total = excluded.debit_total + trial_balance.debit_total,
+                   credit_total = trial_balance.credit_total,
+                   net_balance = (excluded.debit_total + trial_balance.debit_total)
+                                  - trial_balance.credit_total,
+                   generated_at = excluded.generated_at""",
+            (client_code, period, code, name, float(amt), float(amt), now),
+        )
+    for code, amt in {**ar_totals, **ap_credit_totals}.items():
         if amt <= 0:
             continue
         coa = conn.execute(
@@ -1373,8 +1461,13 @@ def generate_trial_balance(
             acct_type = _infer_account_type(code)
             normal = "credit" if acct_type in ("liability", "equity", "revenue") else "debit"
             name = code
-        debit = float(amt) if normal == "debit" else 0.0
-        credit = float(amt) if normal == "credit" else 0.0
+        # AP credit synthesis: 1010 Cash + 2000 AP should always be CREDITED
+        # against AP documents, regardless of their normal_balance.
+        if code in ("1010", "2000") and amt > 0:
+            debit, credit = 0.0, float(amt)
+        else:
+            debit = float(amt) if normal == "debit" else 0.0
+            credit = float(amt) if normal == "credit" else 0.0
         now = _utc_now()
         conn.execute(
             """INSERT INTO trial_balance (client_code, period, account_code,
