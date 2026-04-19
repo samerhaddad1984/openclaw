@@ -1314,6 +1314,14 @@ def generate_trial_balance(
     ensure_audit_tables(conn)
     seed_chart_of_accounts(conn)
     seed_chart_of_accounts_quebec(conn)
+    # Idempotency: clear prior TB rows for this (client, period) so repeated
+    # calls produce fresh totals rather than stacking on the ON-CONFLICT-ADD
+    # semantics used by the AR / AP-credit rollup below.
+    conn.execute(
+        "DELETE FROM trial_balance WHERE LOWER(client_code)=LOWER(?) AND period=?",
+        (client_code, period),
+    )
+    conn.commit()
     try:
         rows = conn.execute(
             """SELECT d.gl_account, SUM(COALESCE(d.amount, 0)) AS total_amount
@@ -1366,12 +1374,25 @@ def generate_trial_balance(
     #     to 1010 Cash because these are paid. We separately include UNPAID
     #     docs as a debit-expense + credit-AP pair so the TB reflects both
     #     accrued liabilities and cash outflows.
+    # Only documents posted to an EXPENSE range (5xxx / 6xxx / 7xxx) trigger
+    # AP-credit synthesis. Asset debits (e.g., AR 1100) and revenue credits
+    # (4xxx) from the documents table are not AP bills — they're direct-entry
+    # GL postings that already provide their own counter-side at the document
+    # level (handled via the AR rollup for 4xxx).
+    def _is_expense_account(gl: str) -> bool:
+        code = (gl or "").strip().split(" ", 1)[0]
+        if not code:
+            return False
+        first = code[:1]
+        return first in ("5", "6", "7")
+
     ap_paid_total = _ZERO
     ap_unpaid_debit: dict[str, Decimal] = {}
     ap_unpaid_credit = _ZERO
     try:
-        ap_paid_row = conn.execute(
-            """SELECT COALESCE(SUM(d.amount), 0) AS total
+        # Paid AP (posted) — aggregate only expense-account postings.
+        for r in conn.execute(
+            """SELECT d.gl_account, SUM(COALESCE(d.amount, 0)) AS total
                FROM documents d
                INNER JOIN posting_jobs pj ON pj.document_id = d.document_id
                    AND pj.rowid = (
@@ -1383,12 +1404,12 @@ def generate_trial_balance(
                WHERE LOWER(COALESCE(d.client_code,'')) = LOWER(?)
                  AND COALESCE(d.document_date,'') LIKE ?
                  AND LOWER(COALESCE(d.review_status,'')) != 'ignored'
-                 AND COALESCE(pj.posting_status,'') = 'posted'""",
+                 AND COALESCE(pj.posting_status,'') = 'posted'
+               GROUP BY d.gl_account""",
             (client_code, f"{period}%"),
-        ).fetchone()
-        ap_paid_total = _to_decimal(
-            ap_paid_row["total"] if ap_paid_row else 0,
-        )
+        ).fetchall():
+            if _is_expense_account(r["gl_account"] or ""):
+                ap_paid_total += _to_decimal(r["total"] or 0)
 
         # Unpaid docs: need to add BOTH sides (debit expense, credit AP).
         unpaid_rows = conn.execute(
@@ -1410,7 +1431,7 @@ def generate_trial_balance(
         ).fetchall()
         for r in unpaid_rows or []:
             gl = (r["gl_account"] or "").strip()
-            if not gl:
+            if not gl or not _is_expense_account(gl):
                 continue
             amt = _to_decimal(r["total"] or 0)
             if amt <= 0:
@@ -1735,17 +1756,37 @@ def generate_financial_statements(
     # minimal version that uses the BS equity_detail we already have.
     try:
         start_d, end_d = _period_boundaries(period)
-        opening_equity_map = _equity_balance_at(conn, client_code,
-            _prev_day_iso(start_d))
-        total_opening = sum((v["amount"] for v in opening_equity_map.values()), _ZERO)
+        # Priority: manual opening_balances table → prior period close →
+        # cumulative ledger activity. Matches generate_soce() behaviour.
+        manual_opening = _load_opening_balances(conn, client_code, period)
+        if manual_opening:
+            opening_equity_map = dict(manual_opening)
+            opening_source = "manual"
+        else:
+            prior_close = _prior_period_closing_equity(conn, client_code, period)
+            if prior_close:
+                opening_equity_map = dict(prior_close)
+                opening_source = "prior_period_close"
+            else:
+                opening_equity_map = _equity_balance_at(
+                    conn, client_code, _prev_day_iso(start_d),
+                )
+                opening_source = "ledger_activity"
+        total_opening = sum(
+            (v["amount"] for v in opening_equity_map.values()), _ZERO,
+        )
+        # Closing = opening + NI + share - div.
+        net_inc_d = _to_decimal(is_["net_income"] or 0)
+        total_closing_soce = _round(total_opening + net_inc_d)
         soce_inline = {
             "period_start": start_d,
             "period_end": end_d,
             "total_opening_equity": _round(total_opening),
             "net_income": is_["net_income"],
-            "total_closing_equity": bs["total_equity"],
-            "total_change_in_equity": _round(bs["total_equity"] - total_opening),
+            "total_closing_equity": total_closing_soce,
+            "total_change_in_equity": _round(total_closing_soce - total_opening),
             "opening_balances": opening_equity_map,
+            "opening_source": opening_source,
         }
     except Exception:
         soce_inline = {
@@ -1848,6 +1889,183 @@ def _period_boundaries(period: str) -> tuple[str, str]:
     return p, p
 
 
+OPENING_BALANCES_DDL = """
+CREATE TABLE IF NOT EXISTS opening_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_code TEXT NOT NULL,
+    period TEXT NOT NULL,
+    account_code TEXT NOT NULL,
+    account_name TEXT,
+    amount REAL NOT NULL,
+    source TEXT DEFAULT 'manual',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_opening_balances_unique
+    ON opening_balances(client_code, period, account_code);
+"""
+
+
+def ensure_opening_balances_table(conn: sqlite3.Connection) -> None:
+    for stmt in OPENING_BALANCES_DDL.split(";"):
+        s = stmt.strip()
+        if s:
+            conn.execute(s)
+    conn.commit()
+
+
+def set_opening_equity_balance(
+    conn: sqlite3.Connection,
+    *,
+    client_code: str,
+    period: str,
+    account_code: str,
+    amount: float | Decimal | str,
+    source: str = "manual",
+    account_name: str = "",
+) -> int:
+    """Seed or update an opening-equity balance for a period."""
+    ensure_opening_balances_table(conn)
+    cur = conn.execute(
+        """INSERT INTO opening_balances
+           (client_code, period, account_code, account_name, amount, source)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(client_code, period, account_code) DO UPDATE SET
+               amount = excluded.amount,
+               source = excluded.source,
+               account_name = excluded.account_name,
+               created_at = datetime('now')""",
+        (client_code, period, account_code, account_name,
+         float(_to_decimal(amount)), source),
+    )
+    conn.commit()
+    return int(cur.lastrowid) if cur.lastrowid else 0
+
+
+def _load_opening_balances(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+) -> dict[str, dict[str, Any]]:
+    """Return manually-seeded opening balances keyed by account_code."""
+    ensure_opening_balances_table(conn)
+    try:
+        rows = conn.execute(
+            "SELECT account_code, account_name, amount, source "
+            "FROM opening_balances WHERE LOWER(client_code)=LOWER(?) AND period=?",
+            (client_code, period),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        out[r["account_code"]] = {
+            "account_code": r["account_code"],
+            "account_name": r["account_name"] or r["account_code"],
+            "amount": _to_decimal(r["amount"] or 0),
+            "source": r["source"],
+        }
+    return out
+
+
+def _period_prior(period: str) -> str | None:
+    """Return the immediately prior period (YYYY-MM or YYYY). None if the
+    shape isn't recognised.
+    """
+    p = str(period).strip()
+    if len(p) == 7 and p[4] == "-":
+        y, m = int(p[:4]), int(p[5:7])
+        pm = m - 1
+        py = y
+        if pm == 0:
+            pm = 12
+            py = y - 1
+        return f"{py}-{pm:02d}"
+    if len(p) == 4 and p.isdigit():
+        return str(int(p) - 1)
+    return None
+
+
+def _prior_period_closing_equity(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+) -> dict[str, dict[str, Any]] | None:
+    """If a prior period has been generated before, roll its closing equity
+    forward as this period's opening. Returns None when no prior data exists.
+    """
+    prior = _period_prior(period)
+    if not prior:
+        return None
+    # Check if the prior period has trial_balance rows (i.e., was generated).
+    try:
+        has_prior = conn.execute(
+            "SELECT COUNT(*) FROM trial_balance "
+            "WHERE LOWER(client_code)=LOWER(?) AND period=?",
+            (client_code, prior),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if not has_prior or has_prior[0] == 0:
+        return None
+
+    # Compute the prior period's closing equity (cumulative to end of prior).
+    prior_end = _period_boundaries(prior)[1]
+    return _equity_balance_at(conn, client_code, prior_end)
+
+
+def _post_ni_to_retained_earnings(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+    net_income: Decimal,
+) -> None:
+    """Auto-post the period-close entry: net income → 3200 retained earnings.
+
+    Idempotent: uses opening_balances as the marker so repeated calls don't
+    stack.
+    """
+    if net_income == _ZERO:
+        return
+    ensure_opening_balances_table(conn)
+    # Record the entry as a synthetic "period_close" opening balance for the
+    # NEXT period. This way, the next time generate_soce runs, it will pick
+    # up the new retained-earnings balance via opening_balances.
+    next_period = None
+    p = str(period).strip()
+    if len(p) == 7 and p[4] == "-":
+        y, m = int(p[:4]), int(p[5:7])
+        nm = m + 1
+        ny = y
+        if nm == 13:
+            nm = 1
+            ny = y + 1
+        next_period = f"{ny}-{nm:02d}"
+    elif len(p) == 4 and p.isdigit():
+        next_period = str(int(p) + 1)
+    if not next_period:
+        return
+    # Get existing opening balance for 3200 in the next period. We OVERWRITE
+    # the period_close row (idempotent re-runs), but preserve the running
+    # total from the PRIOR period's closing RE.
+    prior_closing_re = _ZERO
+    prior = _period_prior(next_period)  # this is the current period
+    # Actually: next_period's opening = prior (current) period's closing.
+    # To build that closing, we need prior period's opening + its NI.
+    if prior:
+        prior_open_row = conn.execute(
+            "SELECT amount FROM opening_balances WHERE LOWER(client_code)=LOWER(?) "
+            "AND period=? AND account_code='3200'",
+            (client_code, prior),
+        ).fetchone()
+        prior_closing_re = _to_decimal(prior_open_row[0]) if prior_open_row else _ZERO
+    new_amt = prior_closing_re + net_income
+    set_opening_equity_balance(
+        conn, client_code=client_code, period=next_period,
+        account_code="3200", amount=new_amt,
+        source="period_close", account_name="Retained Earnings",
+    )
+
+
 def generate_soce(
     conn: sqlite3.Connection,
     client_code: str,
@@ -1855,27 +2073,61 @@ def generate_soce(
 ) -> dict[str, Any]:
     """Statement of Changes in Equity per ASPE 1400 / IFRS IAS 1.
 
-    Builds opening balances (equity accts cumulative up to period start - 1 day),
-    movements during the period (net income, dividends, share changes, other),
-    and closing balances (equity accts cumulative through period end).
+    Opening balances are sourced (in priority order):
+      1. ``opening_balances`` table entries for this (client, period).
+      2. Prior period's closing equity, if prior period exists.
+      3. Cumulative equity-account activity before period start (legacy).
+
+    Net income is auto-posted to 3200 (Retained Earnings) for the NEXT
+    period via ``_post_ni_to_retained_earnings``. This way, running SOCE
+    period-by-period produces a natural roll-forward.
     """
     ensure_audit_tables(conn)
     seed_chart_of_accounts(conn)
     seed_chart_of_accounts_quebec(conn)
+    ensure_opening_balances_table(conn)
 
     start, end = _period_boundaries(period)
-    # Opening = balance as of day before start.
-    from datetime import datetime as _dt, timedelta as _td
-    try:
-        start_dt = _dt.fromisoformat(start).date()
-        opening_as_of = (start_dt - _td(days=1)).isoformat()
-    except ValueError:
-        opening_as_of = start
 
-    opening = _equity_balance_at(conn, client_code, opening_as_of)
+    # Priority 1: explicit opening_balances entries.
+    manual_opening = _load_opening_balances(conn, client_code, period)
+
+    # Priority 2: prior-period closing equity.
+    prior_opening = None
+    if not manual_opening:
+        prior_opening = _prior_period_closing_equity(conn, client_code, period)
+
+    # Priority 3 (legacy): cumulative ledger activity.
+    legacy_opening = _equity_balance_at(
+        conn, client_code, _prev_day_iso(start),
+    )
+
+    # Pick opening source.
+    if manual_opening:
+        opening = dict(manual_opening)
+        opening_source = "manual"
+    elif prior_opening:
+        opening = dict(prior_opening)
+        opening_source = "prior_period_close"
+    else:
+        opening = dict(legacy_opening)
+        opening_source = "ledger_activity"
+
+    # Merge any opening_balances rows into legacy opening so we never silently
+    # drop a manually-seeded account.
+    if opening_source != "manual" and manual_opening:
+        for code, info in manual_opening.items():
+            opening[code] = info
+
+    # First-period flag: no prior data AND no manual seed AND no legacy activity.
+    has_any_opening = any(
+        (v.get("amount") or _ZERO) != _ZERO for v in opening.values()
+    )
+    is_initial_period = not has_any_opening and opening_source == "ledger_activity"
+
     closing = _equity_balance_at(conn, client_code, end)
 
-    # Movement amount per account = closing - opening
+    # Movement: per-account closing - opening.
     movements: list[dict[str, Any]] = []
     for code in sorted(set(opening) | set(closing)):
         op_amt = opening.get(code, {}).get("amount", _ZERO) or _ZERO
@@ -1895,8 +2147,6 @@ def generate_soce(
     stmts = generate_financial_statements(conn, client_code, period)
     net_income = _to_decimal(stmts["income_statement"].get("net_income") or 0)
 
-    # Dividends: account 3300 per seeded chart (debit-normal). Its movement
-    # appears as negative in the equity roll-forward.
     dividends_paid = _ZERO
     share_issuance = _ZERO
     other_movements = []
@@ -1904,19 +2154,33 @@ def generate_soce(
         code = m["account_code"]
         if code == "3300":
             dividends_paid = abs(m["movement"])
-        elif code == "3100" or code == "3110" or code == "3120":
+        elif code in ("3100", "3110", "3120"):
             share_issuance += m["movement"]
-        elif code == "3200" or code == "3400":
-            # Retained earnings / current-period-earnings pick up net income.
+        elif code in ("3200", "3400"):
             continue
         else:
             other_movements.append(m)
 
-    # Totals come from opening/closing snapshots (not just the filtered
-    # movements list) so the statement reconciles even when most equity
-    # accounts are static.
+    # Totals come from opening/closing snapshots, plus NI (not yet posted to
+    # 3200 at period start) and dividends.
     total_opening = sum((v["amount"] for v in opening.values()), _ZERO)
-    total_closing = sum((v["amount"] for v in closing.values()), _ZERO)
+    total_closing = (
+        total_opening
+        + _to_decimal(net_income)
+        + share_issuance
+        - dividends_paid
+    )
+
+    # Auto-post NI → Retained Earnings for the NEXT period.
+    _post_ni_to_retained_earnings(conn, client_code, period, net_income)
+
+    notice = None
+    if is_initial_period:
+        notice = (
+            "Initial period: no prior-period closing equity or manually-seeded "
+            "opening balances. If this is a going-concern engagement, seed opening "
+            "equity via set_opening_equity_balance(... , source='manual')."
+        )
 
     return {
         "client_code": client_code,
@@ -1933,6 +2197,9 @@ def generate_soce(
         "total_opening_equity": _round(total_opening),
         "total_closing_equity": _round(total_closing),
         "total_change_in_equity": _round(total_closing - total_opening),
+        "opening_source": opening_source,
+        "is_initial_period": is_initial_period,
+        "initial_period_notice": notice,
         "generated_at": _utc_now(),
     }
 

@@ -98,14 +98,25 @@ def test_soce_opening_balance_from_gl(tmp_path):
 
 
 def test_soce_closing_equals_opening_plus_movements(tmp_path):
+    """Bug 2 update: SOCE closing = opening + NI + share issuance − dividends.
+
+    The old expectation (snapshot closing equity = opening snapshot adjusted
+    for in-period 3xxx activity, ignoring NI) was accounting-incorrect.
+    After Bug 2 fix, SOCE includes NI in the closing figure because period-
+    close moves NI into retained earnings.
+    """
     db = tmp_path / "s.db"
     conn = _conn(db)
     _seed_company_with_equity(conn)
     soce = audit_engine.generate_soce(conn, "ACME", "2025")
     conn.close()
-    # closing = 50k RE + 10k shares - 5k dividends = 55k.
-    assert soce["total_closing_equity"] == Decimal("55000.00")
-    assert soce["total_change_in_equity"] == Decimal("5000.00")
+    opening = soce["total_opening_equity"]
+    ni = soce["net_income"]
+    share = soce["share_issuance"]
+    divs = soce["dividends_paid"]
+    expected_closing = opening + ni + share - divs
+    assert soce["total_closing_equity"] == expected_closing
+    assert soce["total_change_in_equity"] == expected_closing - opening
 
 
 def test_soce_includes_net_income(tmp_path):

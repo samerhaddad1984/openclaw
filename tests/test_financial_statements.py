@@ -59,6 +59,12 @@ def _setup_minimal_client(conn, client_code="ACME"):
 
 
 def test_trial_balance_with_totals_has_balanced_flag(tmp_path):
+    """Post-Bug-1-fix: expense documents synthesize a matching AP/Cash credit.
+
+    Seeded: asset debit 1100 $500, revenue credit 4000 $500, expense debit
+    5400 $100. The $100 expense now triggers a $100 credit to 1010 Cash,
+    so the TB balances: debits=600, credits=600.
+    """
     conn = sqlite3.connect(tmp_path / "t.db")
     conn.row_factory = sqlite3.Row
     _setup_minimal_client(conn)
@@ -66,26 +72,29 @@ def test_trial_balance_with_totals_has_balanced_flag(tmp_path):
     assert "debit_total" in tb
     assert "credit_total" in tb
     assert "balanced" in tb
-    assert tb["debit_total"] == pytest.approx(600.0)    # 500 + 100
-    assert tb["credit_total"] == pytest.approx(500.0)
-    # Without a double-entry GL, the TB is NOT expected to balance from
-    # document-only postings — the flag correctly surfaces that.
-    assert tb["balanced"] is False
+    assert tb["debit_total"] == pytest.approx(600.0)   # 500 AR + 100 expense
+    assert tb["credit_total"] == pytest.approx(600.0)  # 500 revenue + 100 cash
+    assert tb["balanced"] is True
 
 
 def test_trial_balance_balanced_flag_is_true_when_sides_match(tmp_path):
+    """Adding a cash-asset debit that mirrors the liability keeps TB balanced."""
     conn = sqlite3.connect(tmp_path / "t.db")
     conn.row_factory = sqlite3.Row
     _setup_minimal_client(conn)
-    # Manually force a balanced set by adding offsetting rows.
-    conn.execute(
-        "INSERT INTO documents (document_id, client_code, document_date, gl_account, "
-        "amount, review_status, vendor) VALUES ('d4','ACME','2026-04-15','2100',100.0,'Ready','Test')"
-    )
-    conn.execute(
-        "INSERT INTO posting_jobs (posting_id, document_id, posting_status, created_at, updated_at) "
-        "VALUES ('pj_d4','d4','posted',datetime('now'),datetime('now'))"
-    )
+    # Balanced pair: liability +100 and another asset +100 (both direct
+    # postings) → net balance impact = 0, TB remains square.
+    for did, gl in (("d4", "2100"), ("d5", "1050")):
+        conn.execute(
+            "INSERT INTO documents (document_id, client_code, document_date, gl_account, "
+            "amount, review_status, vendor) VALUES (?, 'ACME','2026-04-15',?,100.0,'Ready','Test')",
+            (did, gl),
+        )
+        conn.execute(
+            "INSERT INTO posting_jobs (posting_id, document_id, posting_status, created_at, updated_at) "
+            "VALUES (?, ?, 'posted', datetime('now'), datetime('now'))",
+            (f"pj_{did}", did),
+        )
     conn.commit()
     tb = ae.trial_balance_with_totals(conn, "ACME", "2026-04")
     assert tb["debit_total"] == pytest.approx(tb["credit_total"])
