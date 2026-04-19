@@ -48,6 +48,10 @@ VERSIONED_TABLES: dict[str, str] = {
     "partners":       "id",
     "manual_journal_entries": "entry_id",
     "sred_claims":    "id",
+    # Child of documents — line-item edits race with parent-doc edits.
+    "invoice_lines":  "line_id",
+    # Child of sred_claims — expenditure edits race with claim updates.
+    "sred_expenditures": "id",
 }
 
 

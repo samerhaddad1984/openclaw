@@ -20564,6 +20564,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     self._send_json({"ok": False, "error": "invalid_line_id"}, status=400)
                     return
+                # Optimistic-concurrency: the client must submit
+                # ``expected_version`` (or ``version``) carried from the
+                # previous read of the line. Stale → 409 with
+                # current_version. We also accept an optional
+                # ``expected_parent_version`` — when supplied and stale
+                # we refuse the write so line edits against a concurrently
+                # modified parent doc don't sneak through.
+                _line_expected_version = None
+                for _k in ("expected_version", "version", "__version"):
+                    _v = payload.get(_k)
+                    if _v is not None and _v != "":
+                        try:
+                            _line_expected_version = int(_v)
+                            break
+                        except (TypeError, ValueError):
+                            continue
+                _parent_expected_version = None
+                for _k in ("expected_parent_version", "parent_version",
+                           "document_version", "expected_document_version"):
+                    _v = payload.get(_k)
+                    if _v is not None and _v != "":
+                        try:
+                            _parent_expected_version = int(_v)
+                            break
+                        except (TypeError, ValueError):
+                            continue
                 new_desc = normalize_text(payload.get("description", ""))
                 new_gl   = normalize_text(payload.get("gl_account", ""))
                 new_tax  = normalize_text(payload.get("tax_code", ""))
@@ -20618,14 +20644,66 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         # explicit 0 will clear the tax line.
                         effective_gst = new_gst if new_gst is not None else old_gst
                         effective_qst = new_qst if new_qst is not None else old_qst
-                        _lconn.execute(
-                            "UPDATE invoice_lines SET gl_account = ?, tax_code = ?, "
-                            "description = ?, gst_amount = ?, qst_amount = ? "
-                            "WHERE line_id = ?",
-                            (new_gl, new_tax, new_desc,
-                             effective_gst, effective_qst, line_id),
+                        # Cross-row guard: if the caller supplied a
+                        # parent-document version and it doesn't match
+                        # current, refuse before we touch the line. This
+                        # prevents editing a line whose parent doc was
+                        # modified out-from-under the reviewer.
+                        from src.db.optimistic import add_version_column_if_missing as _addv
+                        try:
+                            _addv(_lconn, "documents")
+                            _addv(_lconn, "invoice_lines")
+                        except sqlite3.OperationalError:
+                            pass
+                        if _parent_expected_version is not None:
+                            _drow = _lconn.execute(
+                                "SELECT version FROM documents WHERE document_id = ?",
+                                (owning_doc,),
+                            ).fetchone()
+                            _cur_parent_ver = int(_drow["version"]) if _drow and _drow["version"] is not None else None
+                            if _cur_parent_ver != _parent_expected_version:
+                                self._send_json({
+                                    "ok": False,
+                                    "error": "parent_version_conflict",
+                                    "current_parent_version": _cur_parent_ver,
+                                    "reload_required": True,
+                                    "message": (
+                                        "Parent document was modified since you opened "
+                                        "this line. Reload to see their changes and re-submit."
+                                    ),
+                                }, status=409)
+                                return
+                        # Now route the line write through the versioned
+                        # helper. Two reviewers editing the same line get
+                        # exactly one winner; the loser sees 409 with
+                        # current_version.
+                        from src.db.version_handlers import versioned_update_from_request as _vupd
+                        _vres = _vupd(
+                            _lconn, table="invoice_lines", pk_value=line_id,
+                            fields={
+                                "gl_account": new_gl,
+                                "tax_code": new_tax,
+                                "description": new_desc,
+                                "gst_amount": effective_gst,
+                                "qst_amount": effective_qst,
+                            },
+                            body=payload,
+                            require_version=True,
                         )
-                        _lconn.commit()
+                        if _vres.status != 200:
+                            self._send_json(_vres.to_json(), status=_vres.status)
+                            return
+                        # Bump parent documents.version so parent readers
+                        # see that a child row changed.
+                        try:
+                            _lconn.execute(
+                                "UPDATE documents SET version = COALESCE(version, 1) + 1 "
+                                "WHERE document_id = ?",
+                                (owning_doc,),
+                            )
+                            _lconn.commit()
+                        except sqlite3.OperationalError:
+                            pass
                     # Sprint A: line-item GL / tax_code corrections feed the
                     # vendor_gl_learning table so future similar lines get a
                     # learned suggestion.
@@ -20664,6 +20742,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "description": new_desc,
                     "gst_amount": effective_gst,
                     "qst_amount": effective_qst,
+                    "version": _vres.new_version,
                 })
                 return
 
