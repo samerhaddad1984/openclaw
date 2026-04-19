@@ -1,10 +1,14 @@
-"""Sprint E Phase 1 — PREVIEW banners on incomplete CAS features.
+"""Sprint F — PREVIEW banners removed once the underlying features ship.
 
-These tests guard against regressions:
-- The banner helper is present and produces banner HTML with the
-  expected text markers ("PREVIEW", feature name, date).
-- Each of the five affected render functions prepends the banner to
-  its body before the first "card" content.
+Sprint E Phase 1 introduced amber PREVIEW banners on five pages whose
+implementations were incomplete. Sprint F finished those features, so
+the banners are now gone. These tests lock that outcome in: if a future
+refactor reintroduces a preview banner on a shipped feature, we want to
+fail loudly.
+
+The ``_preview_banner`` *helper* is intentionally preserved — it is
+still useful for any NEW feature that ships behind a banner — but no
+current render function calls it.
 """
 from __future__ import annotations
 
@@ -35,106 +39,64 @@ def rd():
 
 
 # ---------------------------------------------------------------------------
-# _preview_banner helper
+# _preview_banner helper remains available
 # ---------------------------------------------------------------------------
 
-def test_preview_banner_has_the_four_required_markers(rd):
-    html = rd._preview_banner("My Feature")
-    # The word PREVIEW must be visible (user's requirement).
+def test_preview_banner_helper_still_exists(rd):
+    """Future features may need a PREVIEW banner, so the helper stays."""
+    assert callable(rd._preview_banner)
+    html = rd._preview_banner("X")
     assert "PREVIEW" in html
-    # The feature name must appear.
-    assert "My Feature" in html
-    # Default expected-ready date (user wrote 2026-05-15).
-    assert "2026-05-15" in html
-    # The refusal-to-submit phrasing from the user's banner spec.
     assert "do not submit" in html
 
 
 def test_preview_banner_note_is_html_escaped(rd):
     html = rd._preview_banner("X", "tags & \"quotes\" are safe <here>")
-    # The literal "&" character gets HTML-escaped.
     assert "&amp;" in html
     assert "&lt;here&gt;" in html
 
 
-def test_preview_banner_custom_date_propagates(rd):
-    html = rd._preview_banner("X", expected_ready_date="2026-06-30")
-    assert "2026-06-30" in html
-    assert "2026-05-15" not in html
-
-
 def test_preview_banner_accent_colors_are_the_standard_amber(rd):
-    # Users (especially CPAs) expect a visible yellow alert, not red (blocker).
-    # Lock the banner palette so a future stylesheet cleanup doesn't drop it.
     html = rd._preview_banner("X")
-    assert "#FFF3CD" in html       # background
-    assert "#FFC107" in html       # border
-    assert "#856404" in html       # text
+    assert "#FFF3CD" in html
+    assert "#FFC107" in html
+    assert "#856404" in html
 
 
 # ---------------------------------------------------------------------------
-# Each affected render function prepends the banner
+# No production render function prepends a preview banner any more
 # ---------------------------------------------------------------------------
 
-_AFFECTED_RENDER_FUNCS = [
-    ("render_audit_sample",       "CAS 530"),   # appears in the banner note
-    ("render_rep_letter",         "CAS 580"),
-    ("render_t2",                 "T2"),
-    ("render_filing_summary",     "GST/QST"),
-    ("render_revenu_quebec",      "Revenu Québec"),
+_SHIPPED_RENDER_FUNCS = [
+    "render_audit_sample",      # CAS 530 shipped Sprint F Fix 1
+    "render_rep_letter",        # CAS 580 shipped Sprint F Fix 4
+    "render_t2",                # T2 PDF shipped Sprint F Fix 3
+    "render_filing_summary",    # GST/QST revenue shipped Sprint F Fix 2
+    "render_revenu_quebec",     # same revenue-side fix
 ]
 
 
-@pytest.mark.parametrize("func_name,marker", _AFFECTED_RENDER_FUNCS)
-def test_render_function_source_includes_preview_call(rd, func_name, marker):
-    """Spot-check the source of each render function: it must build a
-    `preview = _preview_banner(...)` string and reference it in its body.
-
-    We read the dashboard source rather than invoking the render
-    functions because their signatures / DB dependencies vary; this
-    guard is enough to catch a refactor that silently drops the
-    banner.
-    """
+@pytest.mark.parametrize("func_name", _SHIPPED_RENDER_FUNCS)
+def test_render_function_does_not_call_preview_banner(rd, func_name):
     import inspect
     src = inspect.getsource(getattr(rd, func_name))
-    assert "_preview_banner(" in src, f"{func_name} no longer calls _preview_banner"
-    # The body must reference the preview variable. Accept any formatting:
-    # "preview +", "preview\n+", etc.
-    import re
-    assert re.search(r"\bpreview\b", src), (
-        f"{func_name} does not reference its preview banner variable"
+    assert "_preview_banner(" not in src, (
+        f"{func_name} still calls _preview_banner — the banner was removed "
+        "when the feature shipped in Sprint F."
     )
-    # Body assembly must string-concat the preview — either `preview +` /
-    # `+ preview` on the same or neighbouring line.
-    assert re.search(r"preview\s*\+|\+\s*preview", src), (
-        f"{func_name} does not prepend preview to its body"
-    )
-    assert marker in src, f"{func_name} banner note no longer mentions {marker!r}"
 
 
-# ---------------------------------------------------------------------------
-# Nav chip for PREVIEW features
-# ---------------------------------------------------------------------------
-
-def test_sidebar_preview_chip_defined():
-    """The sidebar adds a small amber PREVIEW pill next to the three
-    affected nav entries (/audit/sample, /audit/rep_letter, /t2)."""
+def test_sidebar_has_no_preview_chip_on_shipped_nav_entries():
     src = open("/opt/otocpa/scripts/review_dashboard.py").read()
-    # Helper var holds the inline pill HTML.
-    assert "_preview_chip" in src
-    # And it's applied next to the three nav entries.
-    assert '"/audit/sample"' in src
-    assert '"/audit/rep_letter"' in src
-    assert '"/t2"' in src
-    # Specifically combined with the chip for each.
-    idx_sample = src.find('"/audit/sample", esc(t("samp_title"')
-    idx_rep = src.find('"/audit/rep_letter", esc(t("cas_rep_nav"')
-    idx_t2 = src.find('"/t2", esc(t("t2_nav_link"')
-    for i, name in [(idx_sample, "audit/sample"),
-                     (idx_rep, "audit/rep_letter"),
-                     (idx_t2, "t2")]:
-        assert i > 0, f"PREVIEW chip nav insertion missing for {name}"
-        window = src[i:i + 200]
-        assert "_preview_chip" in window, (
-            f"PREVIEW chip not applied next to /{name} nav entry"
+    # Each shipped feature now uses a plain _dnav(...) entry, not a
+    # _dlink(...) with _preview_chip concatenated.
+    for nav in ('"/audit/sample"', '"/audit/rep_letter"', '"/t2"'):
+        # Confirm it's registered as a standard nav entry (no "_preview_chip"
+        # inside a short window following the URL).
+        idx = src.find(nav)
+        assert idx > 0, f"nav entry {nav} missing from sidebar"
+        window = src[idx:idx + 200]
+        assert "_preview_chip" not in window, (
+            f"{nav} is still rendered with a PREVIEW chip — remove it "
+            "because the feature has shipped."
         )

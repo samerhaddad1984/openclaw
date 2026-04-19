@@ -195,10 +195,12 @@ class SamplingEngine:
         items: list[dict[str, Any]],
         n: int,
     ) -> list[dict[str, Any]]:
+        if n < 0:
+            raise ValueError(f"sample size cannot be negative: {n}")
+        if n == 0:
+            return []
         if n >= len(items):
             return list(items)
-        if n <= 0:
-            return []
         return self._rng.sample(items, n)
 
     # ------------------------------------------------------------------
