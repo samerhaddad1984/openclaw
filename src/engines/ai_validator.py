@@ -246,6 +246,24 @@ def apply_extraction_sanity(
     flags: List[str] = list(existing_flags or [])
     raw_findings: List[Dict[str, Any]] = []
 
+    # BUG 1 (belt-and-braces): downstream pipelines (AI-primary, regex) can
+    # reassign vendor from raw['vendor_name'] after the initial scrub in
+    # process_file. Re-check here so '<UNKNOWN>' / 'null' / 'N/A' never
+    # make it to the DB no matter which extractor produced them.
+    if vendor is not None:
+        # Local import avoids a circular dependency at module-load time.
+        from src.engines.ocr_engine import _is_vendor_placeholder  # noqa: PLC0415
+        if _is_vendor_placeholder(vendor):
+            flags.append("vendor_placeholder_stripped")
+            raw_findings.append({
+                "flag": "vendor_placeholder_stripped",
+                "severity": "MED",
+                "detail": f"placeholder={vendor!r}",
+                "original_vendor": vendor,
+            })
+            vendor = None
+            review_status = "NeedsReview"
+
     # BONUS: vendor confidence threshold.
     if vendor and confidence < VENDOR_CONFIDENCE_FLOOR:
         flags.append("vendor_low_confidence")

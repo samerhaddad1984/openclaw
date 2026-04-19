@@ -96,20 +96,33 @@ def _norm_vendor(s):
 def main():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
-    # Include all real uploads from the last 48h (not just those with a
-    # vendor) so that after the '<UNKNOWN>' scrub pass those receipts still
-    # get a second-opinion comparison — a NULL vendor that Claude also
-    # reads as NULL is a correct outcome, not a skipped one.
-    rows = conn.execute("""
-        SELECT document_id, file_name, file_path, client_code, review_status,
-               vendor, amount, subtotal, tax_total, document_date, category,
-               extraction_method, raw_result, created_at
-        FROM documents
-        WHERE created_at > datetime('now', '-48 hours')
-          AND ingest_source IN ('web_upload','public_upload','portal')
-          AND (subtotal IS NOT NULL OR amount IS NOT NULL OR vendor IS NOT NULL)
-        ORDER BY created_at DESC
-    """).fetchall()
+    # Always target the same 21 receipts from the initial audit so
+    # before/after numbers stay comparable across runs and ingest sources
+    # (reingest changes ingest_source to 'reingest_manual', which would
+    # otherwise drop these rows out of a time-based query).
+    audit_path = Path(
+        "/opt/otocpa/scripts/analysis/canadian_receipts_analysis_before_fixes.json"
+    )
+    if audit_path.exists():
+        target_ids = [e["document_id"] for e in json.loads(audit_path.read_text())]
+        rows = conn.execute(
+            f"SELECT document_id, file_name, file_path, client_code, review_status, "
+            f"vendor, amount, subtotal, tax_total, document_date, category, "
+            f"extraction_method, raw_result, created_at FROM documents "
+            f"WHERE document_id IN ({','.join('?'*len(target_ids))})",
+            target_ids,
+        ).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT document_id, file_name, file_path, client_code, review_status,
+                   vendor, amount, subtotal, tax_total, document_date, category,
+                   extraction_method, raw_result, created_at
+            FROM documents
+            WHERE created_at > datetime('now', '-48 hours')
+              AND ingest_source IN ('web_upload','public_upload','portal','reingest_manual')
+              AND (subtotal IS NOT NULL OR amount IS NOT NULL OR vendor IS NOT NULL)
+            ORDER BY created_at DESC
+        """).fetchall()
     print(f"{len(rows)} receipts to analyze\n")
 
     client = anthropic.Anthropic()

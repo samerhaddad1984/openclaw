@@ -1,0 +1,612 @@
+[
+  {
+    "document_id": "doc_101a67ab82fd",
+    "file_name": "receipt.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_101a67ab82fd_receipt.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "NOTRE-BOEUF-DE-GRACE",
+      "date": "2017-05-13",
+      "subtotal": 47.0,
+      "total": 54.05,
+      "tax_total": 7.05
+    },
+    "truth": {
+      "vendor": "NOTRE-BOEUF-DE-GRACE",
+      "date": "2017-05-13",
+      "subtotal": 47.0,
+      "gst": 2.35,
+      "qst": 4.7,
+      "total": 54.05,
+      "line_count": 6,
+      "confidence": "high",
+      "notes": "Restaurant in Montreal QC. Six menu items: Temple Tropical, Immaculee Conception, Sweet Potatoes, Salade D'Ete, Frappe (vanilla espresso). Some items have sub-options at $0.00 (bread choice, flavor choice)."
+    },
+    "truth_tax_total": 7.050000000000001,
+    "mismatches": [],
+    "cost_usd": 0.0035
+  },
+  {
+    "document_id": "doc_12bcb93cca6a",
+    "file_name": "original-14134-1452105464-3.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_12bcb93cca6a_original-14134-1452105464-3.webp",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Le Mile Public House",
+      "date": "2015-12-27",
+      "subtotal": 35.0,
+      "total": 40.24,
+      "tax_total": 5.24
+    },
+    "truth": {
+      "vendor": "Le Mile Public House",
+      "date": "2015-12-27",
+      "subtotal": 35.0,
+      "gst": 1.75,
+      "qst": 3.49,
+      "total": 40.24,
+      "line_count": 4,
+      "confidence": "high",
+      "notes": "TPS labeled as 'Trudeau-Weed' and TVQ labeled as 'PLQ-CSeries' \u2014 humorous political nicknames printed on receipt. One item (TH-SOUPE) was $0.00, possibly comped."
+    },
+    "truth_tax_total": 5.24,
+    "mismatches": [],
+    "cost_usd": 0.0053
+  },
+  {
+    "document_id": "doc_227d8d9240a9",
+    "file_name": "348s 1.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_227d8d9240a9_348s 1.jpg",
+    "review_status": "New",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "SHAKER CUISINE & MIXOLOGIE",
+      "date": "2022-06-24",
+      "subtotal": 26.07,
+      "total": 29.97,
+      "tax_total": 3.9000000000000004
+    },
+    "truth": {
+      "vendor": "SHAKER CUISINE & MIXOLOGIE",
+      "date": "2022-06-24",
+      "subtotal": 26.07,
+      "gst": 1.3,
+      "qst": 2.6,
+      "total": 29.97,
+      "line_count": 3,
+      "confidence": "medium",
+      "notes": "Some line item prices partially obscured; subtotal shown after 'rabais du responsable' discount applied; TPS=GST, TVQ=QST (Quebec)"
+    },
+    "truth_tax_total": 3.9000000000000004,
+    "mismatches": [],
+    "cost_usd": 0.003
+  },
+  {
+    "document_id": "doc_26435ceecb87",
+    "file_name": "nutenorth_receipt2.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_26435ceecb87_nutenorth_receipt2.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": null,
+      "date": null,
+      "subtotal": 87.28,
+      "total": 87.28,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": null,
+      "date": null,
+      "subtotal": 87.28,
+      "gst": null,
+      "qst": null,
+      "total": 87.28,
+      "line_count": 9,
+      "confidence": "medium",
+      "notes": "Partial receipt - top is cut off so vendor name and date are not visible. No taxes shown, likely because fresh produce (fruit) and groceries are GST/HST exempt in Canada. Bag fee of $0.50 included in subtotal. Payment made by debit card."
+    },
+    "truth_tax_total": null,
+    "mismatches": [],
+    "cost_usd": 0.004
+  },
+  {
+    "document_id": "doc_529ecfff9f5c",
+    "file_name": "keung-kee-restaurant.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_529ecfff9f5c_keung-kee-restaurant.jpg",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "KEUNG KEE",
+      "date": "2018-02-15",
+      "subtotal": 76.3,
+      "total": 87.73,
+      "tax_total": 11.43
+    },
+    "truth": {
+      "vendor": "Restaurant KEUNG KEE",
+      "date": "2018-02-15",
+      "subtotal": 76.3,
+      "gst": 3.82,
+      "qst": 7.61,
+      "total": 87.73,
+      "line_count": 5,
+      "confidence": "high",
+      "notes": "Item 262 Riz \u00e0 la Vapeur (M) at $4.50 appears to be a separate line item added after the main items but before subtotal"
+    },
+    "truth_tax_total": 11.43,
+    "mismatches": [
+      "vendor: ours='KEUNG KEE' truth='Restaurant KEUNG KEE'"
+    ],
+    "cost_usd": 0.0033
+  },
+  {
+    "document_id": "doc_6a74f1376f81",
+    "file_name": "DM_5tKGU8AA_8Gd.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_6a74f1376f81_DM_5tKGU8AA_8Gd.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "RESTAURANT LA PIAZZETTA ST-JEAN",
+      "date": "2017-10-25",
+      "subtotal": 14.5,
+      "total": 16.68,
+      "tax_total": 2.18
+    },
+    "truth": {
+      "vendor": "RESTAURANT LA PIAZZETTA ST-JEAN",
+      "date": "2017-10-25",
+      "subtotal": 14.5,
+      "gst": 0.73,
+      "qst": 1.45,
+      "total": 16.68,
+      "line_count": 3,
+      "confidence": "high",
+      "notes": "Subtotal inferred from total minus TPS and TVQ. Receipt indicates 3 additions (checks). Server identified as p1."
+    },
+    "truth_tax_total": 2.1799999999999997,
+    "mismatches": [],
+    "cost_usd": 0.0067
+  },
+  {
+    "document_id": "doc_6fa066541907",
+    "file_name": "InvoiceSample.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_6fa066541907_InvoiceSample.webp",
+    "review_status": "New",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Topnotepad",
+      "date": "2021-08-01",
+      "subtotal": 110.0,
+      "total": 110.0,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": "Topnotepad",
+      "date": "2021-08-01",
+      "subtotal": null,
+      "gst": null,
+      "qst": null,
+      "total": 110.0,
+      "line_count": 1,
+      "confidence": "low",
+      "notes": "This is not a Canadian receipt - no GST/QST tax lines present, no tax breakdown shown. Total and subtotal appear to be the same amount (110.00) with no taxes itemized. Billing address is New York, suggesting US-based invoice."
+    },
+    "truth_tax_total": null,
+    "mismatches": [
+      "subtotal: ours=110.0 truth=None"
+    ],
+    "cost_usd": 0.0054
+  },
+  {
+    "document_id": "doc_7c0f20f67fcc",
+    "file_name": "348s 2.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_7c0f20f67fcc_348s 2.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": null,
+      "date": "2023-12-28",
+      "subtotal": 110.38,
+      "total": 132.46,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": null,
+      "date": "2023-12-28",
+      "subtotal": 110.38,
+      "gst": null,
+      "qst": null,
+      "total": 132.46,
+      "line_count": 1,
+      "confidence": "high",
+      "notes": "No tax breakdown shown; tip of CAD $22.08 is included. Total = subtotal + tip. No vendor name visible on this portion of the receipt."
+    },
+    "truth_tax_total": null,
+    "mismatches": [],
+    "cost_usd": 0.0027
+  },
+  {
+    "document_id": "doc_7c1c2f7aed9c",
+    "file_name": "caption.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_7c1c2f7aed9c_caption.jpg",
+    "review_status": "New",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Pinchos Quebec",
+      "date": "2023-06-14",
+      "subtotal": 2.1,
+      "total": 2.1,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": "QUEBEC",
+      "date": "2023-06-14",
+      "subtotal": null,
+      "gst": null,
+      "qst": null,
+      "total": 2.1,
+      "line_count": 1,
+      "confidence": "high",
+      "notes": "This is a Spanish receipt from Pinchos Quebec (www.pinchosquebec.com), a bar/restaurant in Spain, not a Canadian receipt. No taxes are itemized. SUMA (sum) is 2.10 EUR for one Cafe Mediano."
+    },
+    "truth_tax_total": null,
+    "mismatches": [
+      "vendor: ours='Pinchos Quebec' truth='QUEBEC'",
+      "subtotal: ours=2.1 truth=None"
+    ],
+    "cost_usd": 0.0044
+  },
+  {
+    "document_id": "doc_8c09134bbffc",
+    "file_name": "our-adjusted-bill.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_8c09134bbffc_our-adjusted-bill.jpg",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "LE SAINT-AMOUR",
+      "date": "2018-07-27",
+      "subtotal": 379.85,
+      "total": 436.73,
+      "tax_total": 56.88
+    },
+    "truth": {
+      "vendor": "LE SAINT-AMOUR",
+      "date": "2018-07-27",
+      "subtotal": 379.85,
+      "gst": 18.99,
+      "qst": 37.89,
+      "total": 436.73,
+      "line_count": 16,
+      "confidence": "medium",
+      "notes": "Receipt is in French (Quebec). TAXE FED. = GST/TPS ~5%, TAXE QUEBEC = QST/TVQ ~9.975%. Some line items partially obscured or difficult to read precisely. Table #115, 2 clients."
+    },
+    "truth_tax_total": 56.879999999999995,
+    "mismatches": [],
+    "cost_usd": 0.0035
+  },
+  {
+    "document_id": "doc_8cec18a322bf",
+    "file_name": "my-receipt.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_8cec18a322bf_my-receipt.jpg",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Burger Bar Crescent",
+      "date": "2018-07-11",
+      "subtotal": 25.0,
+      "total": 28.74,
+      "tax_total": 3.74
+    },
+    "truth": {
+      "vendor": "Burger Bar Crescent",
+      "date": "2018-07-11",
+      "subtotal": 25.0,
+      "gst": 1.25,
+      "qst": 2.49,
+      "total": 28.74,
+      "line_count": 3,
+      "confidence": "high",
+      "notes": "Server tip not included. Served by Devon. Table 13, Check #473343-1."
+    },
+    "truth_tax_total": 3.74,
+    "mismatches": [],
+    "cost_usd": 0.0031
+  },
+  {
+    "document_id": "doc_91479cd668db",
+    "file_name": "348s 3.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_91479cd668db_348s 3.jpg",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Poulet Au Curry",
+      "date": "2017-07-28",
+      "subtotal": 36.4,
+      "total": 41.85,
+      "tax_total": 5.45
+    },
+    "truth": {
+      "vendor": null,
+      "date": "2017-07-28",
+      "subtotal": 36.4,
+      "gst": 1.82,
+      "qst": 3.63,
+      "total": 41.85,
+      "line_count": 4,
+      "confidence": "high",
+      "notes": "Vendor name not visible on receipt; location is Quebec City, QC. Two identical Poulet Au Curry orders plus beverage and service charge."
+    },
+    "truth_tax_total": 5.45,
+    "mismatches": [
+      "vendor: we had 'Poulet Au Curry', truth=null"
+    ],
+    "cost_usd": 0.0028
+  },
+  {
+    "document_id": "doc_97c443e71665",
+    "file_name": "prescription-drug-sample-receipt-quebec.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_97c443e71665_prescription-drug-sample-receipt-quebec.webp",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Pharmacy",
+      "date": "2018-06-11",
+      "subtotal": 52.95,
+      "total": 19.32,
+      "tax_total": 5.0
+    },
+    "truth": {
+      "vendor": null,
+      "date": "2018-06-11",
+      "subtotal": null,
+      "gst": null,
+      "qst": null,
+      "total": 19.32,
+      "line_count": 1,
+      "confidence": "high",
+      "notes": "This is a Quebec pharmacy prescription receipt (RGAM). No taxes shown separately; total represents patient contribution (franchise 5.00 + coassurance 14.32). Medication ABC cost 76.62, insurer paid 57.30, patient pays 19.32. No vendor name printed on receipt."
+    },
+    "truth_tax_total": null,
+    "mismatches": [
+      "vendor: we had 'Pharmacy', truth=null",
+      "subtotal: ours=52.95 truth=None",
+      "tax_total: ours=5.0 truth=None (gst=None qst=None)"
+    ],
+    "cost_usd": 0.0049
+  },
+  {
+    "document_id": "doc_a2acce2773d9",
+    "file_name": "56e593ade1d3b.image.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_a2acce2773d9_56e593ade1d3b.image.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_text_only",
+    "ours": {
+      "vendor": "unprix",
+      "date": null,
+      "subtotal": null,
+      "total": 1.0,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": "uniprix",
+      "date": null,
+      "subtotal": null,
+      "gst": null,
+      "qst": null,
+      "total": null,
+      "line_count": 5,
+      "confidence": "low",
+      "notes": "Receipt is sideways and low resolution making most fields illegible. Vendor 'Uniprix' is visible on the right edge. Quebec pharmacy chain so GST/QST would be expected but values cannot be reliably extracted."
+    },
+    "truth_tax_total": null,
+    "mismatches": [
+      "vendor: ours='unprix' truth='uniprix'",
+      "total: ours=1.0 truth=None"
+    ],
+    "cost_usd": 0.0034
+  },
+  {
+    "document_id": "doc_a4ce8c7659fe",
+    "file_name": "invoice_template_bold.png",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_a4ce8c7659fe_invoice_template_bold.png",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Libellum",
+      "date": "2020-01-11",
+      "subtotal": 595.0,
+      "total": 684.1,
+      "tax_total": 89.1
+    },
+    "truth": {
+      "vendor": "Demo app",
+      "date": "2020-01-11",
+      "subtotal": 595.0,
+      "gst": 29.75,
+      "qst": 59.35,
+      "total": 684.1,
+      "line_count": 3,
+      "confidence": "high",
+      "notes": "This is a demo/test invoice from Libellum.ca with a test client. GST registration number 123456789Fake and QST number 123456789Fake are explicitly marked as fake."
+    },
+    "truth_tax_total": 89.1,
+    "mismatches": [
+      "vendor: ours='Libellum' truth='Demo app'"
+    ],
+    "cost_usd": 0.0059
+  },
+  {
+    "document_id": "doc_ad7ddda093c8",
+    "file_name": "348s.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_ad7ddda093c8_348s.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "CHEZ BAPTISTE",
+      "date": "2023-06-30",
+      "subtotal": 25.22,
+      "total": 31.32,
+      "tax_total": 3.8
+    },
+    "truth": {
+      "vendor": "CHEZ BAPTISTE",
+      "date": "2023-06-30",
+      "subtotal": 25.22,
+      "gst": 1.26,
+      "qst": 2.52,
+      "total": 29.0,
+      "line_count": 1,
+      "confidence": "high",
+      "notes": "Receipt shows 1 pichet sangria. A second declined transaction receipt is also visible showing $31.32 total (TRANSACTION REFUSEE)."
+    },
+    "truth_tax_total": 3.7800000000000002,
+    "mismatches": [
+      "total: ours=31.32 truth=29.0"
+    ],
+    "cost_usd": 0.0029
+  },
+  {
+    "document_id": "doc_de5f8cf4bddb",
+    "file_name": "facture-aux-vivres.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_de5f8cf4bddb_facture-aux-vivres.jpg",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "AUX VIVRES",
+      "date": null,
+      "subtotal": 31.0,
+      "total": 35.32,
+      "tax_total": 4.32
+    },
+    "truth": {
+      "vendor": "AUX VIVRES",
+      "date": null,
+      "subtotal": 31.0,
+      "gst": 1.55,
+      "qst": 2.77,
+      "total": 35.32,
+      "line_count": 4,
+      "confidence": "high",
+      "notes": "No date on receipt, only time (22:47). Table #3, served by Yvonne. GST registration 838698058, QST registration 1215842602."
+    },
+    "truth_tax_total": 4.32,
+    "mismatches": [],
+    "cost_usd": 0.0029
+  },
+  {
+    "document_id": "doc_e468c098f2d5",
+    "file_name": "amigopos_v7_305.jpg",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_e468c098f2d5_amigopos_v7_305.jpg",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "RESTO BRASSERIE",
+      "date": "2011-10-26",
+      "subtotal": 2.5,
+      "total": 2.83,
+      "tax_total": 0.33
+    },
+    "truth": {
+      "vendor": "RESTO' - BRASSERIE",
+      "date": "2011-10-26",
+      "subtotal": 2.5,
+      "gst": 0.2,
+      "qst": 0.13,
+      "total": 2.83,
+      "line_count": 1,
+      "confidence": "high",
+      "notes": "Receipt marked as test document (Document en test / Ne pas remettre au client). TPS number: 239987234, TVQ number: 1012345678 0001"
+    },
+    "truth_tax_total": 0.33,
+    "mismatches": [],
+    "cost_usd": 0.0031
+  },
+  {
+    "document_id": "doc_e46eeea4138c",
+    "file_name": "87-42-cad-super-c-quebec-v0-wu1gfakvshjd1.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_e46eeea4138c_87-42-cad-super-c-quebec-v0-wu1gfakvshjd1.webp",
+    "review_status": "NeedsReview",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "Super C",
+      "date": null,
+      "subtotal": 86.37,
+      "total": 87.42,
+      "tax_total": 1.0499999999999998
+    },
+    "truth": {
+      "vendor": "Super C",
+      "date": null,
+      "subtotal": 86.37,
+      "gst": 0.35,
+      "qst": 0.7,
+      "total": 87.42,
+      "line_count": 29,
+      "confidence": "high",
+      "notes": "Taxes applied only on taxable item (beer at 6.99). Store #5927 located at 580 Boulevard Arthur-Sauve. Total savings of $26.30 noted at bottom."
+    },
+    "truth_tax_total": 1.0499999999999998,
+    "mismatches": [],
+    "cost_usd": 0.0061
+  },
+  {
+    "document_id": "doc_ea172c177f25",
+    "file_name": "\u00e9cofrais-sur-lalcool-v0-bj0fmwek3fue1.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_ea172c177f25_\u00e9cofrais-sur-lalcool-v0-bj0fmwek3fue1.webp",
+    "review_status": "Exception",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": null,
+      "date": null,
+      "subtotal": 451.1,
+      "total": 451.1,
+      "tax_total": null
+    },
+    "truth": {
+      "vendor": null,
+      "date": null,
+      "subtotal": 451.1,
+      "gst": null,
+      "qst": null,
+      "total": null,
+      "line_count": 21,
+      "confidence": "low",
+      "notes": "Partial receipt visible; vendor name and date are cut off at top. No tax lines visible. ECOFRAIS (eco fee) of 0.24 and CONSIGNE QC (bottle deposit) of 2.40 are present. FP suffix on several items likely indicates a tax-exempt or flat-price category. Subtotal shown as SOUS-TOTAL 451.10 but total and tax lines not visible."
+    },
+    "truth_tax_total": null,
+    "mismatches": [
+      "total: ours=451.1 truth=None"
+    ],
+    "cost_usd": 0.0051
+  },
+  {
+    "document_id": "doc_f14b01e4e4d5",
+    "file_name": "restaurants-charging-tps-gst-v0-xh1ouobcveae1.webp",
+    "file_path": "/opt/otocpa/data/ocr_uploads/UNASSIGNED/doc_f14b01e4e4d5_restaurants-charging-tps-gst-v0-xh1ouobcveae1.webp",
+    "review_status": "Ready",
+    "extraction_method": "google_docai_expense",
+    "ours": {
+      "vendor": "LATTUCA BARBECUE",
+      "date": "2024-12-31",
+      "subtotal": 48.0,
+      "total": 55.2,
+      "tax_total": 7.2
+    },
+    "truth": {
+      "vendor": "LATTUCA BARBECUE",
+      "date": "2024-12-31",
+      "subtotal": 48.0,
+      "gst": 2.4,
+      "qst": 4.79,
+      "total": 55.2,
+      "line_count": 2,
+      "confidence": "high",
+      "notes": "Tax rounding of $0.01 applied. Receipt includes both English and French totals. QST registration number 1222604741, GST registration number 802841783."
+    },
+    "truth_tax_total": 7.1899999999999995,
+    "mismatches": [],
+    "cost_usd": 0.0046
+  }
+]
