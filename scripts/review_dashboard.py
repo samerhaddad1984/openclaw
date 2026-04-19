@@ -19577,14 +19577,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- Stripe webhook (no auth) ---
             if path == "/stripe/webhook":
-                from src.integrations import stripe_client as _sc
                 sig = self.headers.get("Stripe-Signature", "")
                 try:
+                    # Import inside the try so a missing ``stripe`` SDK
+                    # (or import-time error in stripe_client) returns
+                    # 400 invalid_signature, not the outer exception
+                    # handler's silent 303 redirect to /. Stripe needs a
+                    # 4xx to keep retrying — a 200 from the redirect
+                    # would mark the event delivered and lose it.
+                    from src.integrations import stripe_client as _sc
                     event = _sc.handle_webhook(raw, sig)
                 except Exception:
-                    # Signature verification (or JSON parse) failed.
-                    # Return 400 without leaking exception detail so forged
-                    # requests cannot probe for internal error messages.
+                    # Signature verification, JSON parse, or SDK import
+                    # failed. Return 400 without leaking exception
+                    # detail so forged requests can't probe for
+                    # internal error messages.
                     logging.exception("stripe webhook signature verification failed")
                     self._send_json({"error": "invalid_signature"}, status=400)
                     return
