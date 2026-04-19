@@ -1575,16 +1575,316 @@ def generate_financial_statements(
     )
     tb_balanced = abs(tb_debit_total - tb_credit_total) <= _to_decimal("0.01")
 
+    # Sprint F Fix 5: Statement of Changes in Equity must travel with the
+    # balance sheet + income statement. Computing it here would recurse
+    # (generate_soce calls generate_financial_statements), so we inline a
+    # minimal version that uses the BS equity_detail we already have.
+    try:
+        start_d, end_d = _period_boundaries(period)
+        opening_equity_map = _equity_balance_at(conn, client_code,
+            _prev_day_iso(start_d))
+        total_opening = sum((v["amount"] for v in opening_equity_map.values()), _ZERO)
+        soce_inline = {
+            "period_start": start_d,
+            "period_end": end_d,
+            "total_opening_equity": _round(total_opening),
+            "net_income": is_["net_income"],
+            "total_closing_equity": bs["total_equity"],
+            "total_change_in_equity": _round(bs["total_equity"] - total_opening),
+            "opening_balances": opening_equity_map,
+        }
+    except Exception:
+        soce_inline = {
+            "total_opening_equity": _ZERO,
+            "net_income": is_["net_income"],
+            "total_closing_equity": bs["total_equity"],
+            "total_change_in_equity": bs["total_equity"],
+        }
+
     return {
         "client_code": client_code,
         "period": period,
         "balance_sheet": bs,
         "income_statement": is_,
+        "statement_of_changes_in_equity": soce_inline,
         "trial_balance_debit_total":  _round(tb_debit_total),
         "trial_balance_credit_total": _round(tb_credit_total),
         "trial_balance_balanced":     tb_balanced,
         "generated_at": _utc_now(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Statement of Changes in Equity (Sprint F Fix 5)
+# ---------------------------------------------------------------------------
+
+def _equity_balance_at(
+    conn: sqlite3.Connection,
+    client_code: str,
+    as_of_date: str,
+) -> dict[str, dict[str, Any]]:
+    """Return {account_code: {amount, name}} for all equity accounts
+    cumulative up to as_of_date (inclusive). Amount sign follows the account's
+    normal_balance (credit-normal equity accts reported as positive when
+    credit-balanced).
+    """
+    coa = {r["account_code"]: dict(r) for r in conn.execute(
+        "SELECT * FROM chart_of_accounts WHERE account_type='equity'"
+    ).fetchall()}
+    rows = conn.execute(
+        """SELECT gl_account, SUM(COALESCE(amount, 0)) AS total
+           FROM documents
+           WHERE LOWER(COALESCE(client_code,'')) = LOWER(?)
+             AND COALESCE(document_date,'') <= ?
+             AND LOWER(COALESCE(review_status,'')) != 'ignored'
+             AND gl_account LIKE '3%'
+           GROUP BY gl_account""",
+        (client_code, as_of_date),
+    ).fetchall()
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        code = r["gl_account"]
+        coa_entry = coa.get(code, {})
+        # debit-normal equity accounts (e.g., dividends, treasury shares)
+        # should be subtracted from total equity.
+        normal = coa_entry.get("normal_balance", "credit")
+        amt = _to_decimal(r["total"] or 0)
+        signed = -amt if normal == "debit" else amt
+        out[code] = {
+            "account_code": code,
+            "account_name": coa_entry.get("account_name") or code,
+            "amount": _round(signed),
+            "normal_balance": normal,
+        }
+    # Include seeded equity accounts that had zero activity so the statement
+    # shows a complete picture.
+    for code, entry in coa.items():
+        if code not in out:
+            out[code] = {
+                "account_code": code,
+                "account_name": entry.get("account_name") or code,
+                "amount": _ZERO,
+                "normal_balance": entry.get("normal_balance", "credit"),
+            }
+    return out
+
+
+def _prev_day_iso(date_iso: str) -> str:
+    """Return the day before an ISO-formatted date."""
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        d = _dt.fromisoformat(date_iso).date()
+        return (d - _td(days=1)).isoformat()
+    except ValueError:
+        return date_iso
+
+
+def _period_boundaries(period: str) -> tuple[str, str]:
+    """Convert 'YYYY-MM' or 'YYYY-MM-DD' to (start, end) dates."""
+    import calendar as _cal
+    p = str(period).strip()
+    if len(p) == 7 and p[4] == "-":
+        y, m = int(p[:4]), int(p[5:7])
+        return f"{p}-01", f"{p}-{_cal.monthrange(y, m)[1]:02d}"
+    if len(p) == 4 and p.isdigit():
+        return f"{p}-01-01", f"{p}-12-31"
+    if len(p) == 10 and p[4] == "-" and p[7] == "-":
+        return p, p
+    # Unknown shape — treat as both ends equal (caller may correct).
+    return p, p
+
+
+def generate_soce(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+) -> dict[str, Any]:
+    """Statement of Changes in Equity per ASPE 1400 / IFRS IAS 1.
+
+    Builds opening balances (equity accts cumulative up to period start - 1 day),
+    movements during the period (net income, dividends, share changes, other),
+    and closing balances (equity accts cumulative through period end).
+    """
+    ensure_audit_tables(conn)
+    seed_chart_of_accounts(conn)
+    seed_chart_of_accounts_quebec(conn)
+
+    start, end = _period_boundaries(period)
+    # Opening = balance as of day before start.
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        start_dt = _dt.fromisoformat(start).date()
+        opening_as_of = (start_dt - _td(days=1)).isoformat()
+    except ValueError:
+        opening_as_of = start
+
+    opening = _equity_balance_at(conn, client_code, opening_as_of)
+    closing = _equity_balance_at(conn, client_code, end)
+
+    # Movement amount per account = closing - opening
+    movements: list[dict[str, Any]] = []
+    for code in sorted(set(opening) | set(closing)):
+        op_amt = opening.get(code, {}).get("amount", _ZERO) or _ZERO
+        cl_amt = closing.get(code, {}).get("amount", _ZERO) or _ZERO
+        delta = _round(cl_amt - op_amt)
+        if delta == _ZERO:
+            continue
+        movements.append({
+            "account_code": code,
+            "account_name": (closing.get(code) or opening.get(code) or {}).get("account_name", code),
+            "opening": _round(op_amt),
+            "movement": delta,
+            "closing": _round(cl_amt),
+        })
+
+    # Derive named movements for CPA-friendly display.
+    stmts = generate_financial_statements(conn, client_code, period)
+    net_income = _to_decimal(stmts["income_statement"].get("net_income") or 0)
+
+    # Dividends: account 3300 per seeded chart (debit-normal). Its movement
+    # appears as negative in the equity roll-forward.
+    dividends_paid = _ZERO
+    share_issuance = _ZERO
+    other_movements = []
+    for m in movements:
+        code = m["account_code"]
+        if code == "3300":
+            dividends_paid = abs(m["movement"])
+        elif code == "3100" or code == "3110" or code == "3120":
+            share_issuance += m["movement"]
+        elif code == "3200" or code == "3400":
+            # Retained earnings / current-period-earnings pick up net income.
+            continue
+        else:
+            other_movements.append(m)
+
+    # Totals come from opening/closing snapshots (not just the filtered
+    # movements list) so the statement reconciles even when most equity
+    # accounts are static.
+    total_opening = sum((v["amount"] for v in opening.values()), _ZERO)
+    total_closing = sum((v["amount"] for v in closing.values()), _ZERO)
+
+    return {
+        "client_code": client_code,
+        "period": period,
+        "period_start": start,
+        "period_end": end,
+        "opening_balances": opening,
+        "closing_balances": closing,
+        "account_movements": movements,
+        "net_income": _round(net_income),
+        "dividends_paid": _round(dividends_paid),
+        "share_issuance": _round(share_issuance),
+        "other_movements": other_movements,
+        "total_opening_equity": _round(total_opening),
+        "total_closing_equity": _round(total_closing),
+        "total_change_in_equity": _round(total_closing - total_opening),
+        "generated_at": _utc_now(),
+    }
+
+
+def generate_soce_pdf(
+    conn: sqlite3.Connection,
+    client_code: str,
+    period: str,
+    firm_name: str = "OtoCPA CPA",
+    lang: str = "en",
+) -> bytes:
+    """Render SOCE as a PDF using reportlab (with a minimal fallback)."""
+    soce = generate_soce(conn, client_code, period)
+    try:
+        return _soce_pdf_reportlab(soce, firm_name, lang)
+    except ImportError:
+        return _soce_pdf_minimal(soce, firm_name, lang)
+
+
+def _soce_pdf_reportlab(soce: dict, firm_name: str, lang: str) -> bytes:
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+    )
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle("h", parent=styles["Heading2"], fontSize=14, spaceAfter=10)
+    story: list = []
+    story.append(Paragraph(firm_name, styles["Heading1"]))
+    story.append(Paragraph(
+        f"Statement of Changes in Equity — {soce['client_code']} — {soce['period']}",
+        h,
+    ))
+    story.append(Paragraph(
+        f"Period: {soce['period_start']} to {soce['period_end']}",
+        styles["BodyText"],
+    ))
+    story.append(Spacer(1, 0.2 * inch))
+
+    rows = [["Account", "Opening", "Movement", "Closing"]]
+    for m in soce["account_movements"]:
+        rows.append([
+            f"{m['account_code']} — {m['account_name']}",
+            f"${float(m['opening']):,.2f}",
+            f"${float(m['movement']):,.2f}",
+            f"${float(m['closing']):,.2f}",
+        ])
+    rows.append([
+        "Net income for period",
+        "",
+        f"${float(soce['net_income']):,.2f}",
+        "",
+    ])
+    if soce["dividends_paid"]:
+        rows.append([
+            "Dividends paid",
+            "",
+            f"(${float(soce['dividends_paid']):,.2f})",
+            "",
+        ])
+    if soce["share_issuance"]:
+        rows.append([
+            "Share capital changes",
+            "",
+            f"${float(soce['share_issuance']):,.2f}",
+            "",
+        ])
+    rows.append([
+        "TOTAL EQUITY",
+        f"${float(soce['total_opening_equity']):,.2f}",
+        f"${float(soce['total_change_in_equity']):,.2f}",
+        f"${float(soce['total_closing_equity']):,.2f}",
+    ])
+
+    tbl = Table(rows, colWidths=[3.2 * inch, 1.3 * inch, 1.3 * inch, 1.3 * inch])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a2d5c")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+    ]))
+    story.append(tbl)
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _soce_pdf_minimal(soce: dict, firm_name: str, lang: str) -> bytes:
+    body = [firm_name, f"Statement of Changes in Equity - {soce['client_code']} - {soce['period']}", ""]
+    body.append(f"Total opening equity: ${float(soce['total_opening_equity']):,.2f}")
+    body.append(f"Net income: ${float(soce['net_income']):,.2f}")
+    body.append(f"Dividends: ${float(soce['dividends_paid']):,.2f}")
+    body.append(f"Share issuance: ${float(soce['share_issuance']):,.2f}")
+    body.append(f"Total closing equity: ${float(soce['total_closing_equity']):,.2f}")
+    text = "\n".join(body)
+    return f"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n{text}".encode()
 
 
 def generate_financial_statements_pdf(

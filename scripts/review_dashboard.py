@@ -7627,6 +7627,25 @@ def render_financial_statements_page(
             f'<span>{esc(t("fs_net_income", lang))}</span><span>{_fmt(inc.get("net_income"))}</span></div>'
             f'</div>\n'
         )
+        # Statement of Changes in Equity (Sprint F Fix 5)
+        soce = stmts.get("statement_of_changes_in_equity") or {}
+        soce_pdf = f"/financial_statements/soce_pdf?client_code={urlquote(client_code)}&period={urlquote(period)}"
+        stmts_html += (
+            f'<div class="card" style="margin-top:16px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+            f'<h3 style="margin:0;">Statement of Changes in Equity</h3>'
+            f'<a href="{soce_pdf}" class="btn-secondary button-link" style="font-size:13px;">SOCE PDF</a>'
+            f'</div>'
+            f'<div style="display:flex;justify-content:space-between;padding:6px 0;">'
+            f'<span>Opening equity (period start)</span><span>{_fmt(soce.get("total_opening_equity"))}</span></div>'
+            f'<div style="display:flex;justify-content:space-between;padding:4px 0;">'
+            f'<span>Net income for period</span><span>{_fmt(soce.get("net_income"))}</span></div>'
+            f'<div style="display:flex;justify-content:space-between;padding:4px 0;">'
+            f'<span>Net change in equity</span><span>{_fmt(soce.get("total_change_in_equity"))}</span></div>'
+            f'<div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;border-top:2px solid #374151;">'
+            f'<span>Closing equity (period end)</span><span>{_fmt(soce.get("total_closing_equity"))}</span></div>'
+            f'</div>\n'
+        )
 
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
@@ -17231,6 +17250,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 with open_db() as conn:
                     pdf_bytes = _audit.generate_financial_statements_pdf(conn, fs_client, fs_period, lang=lang)
                 filename = f"financial_statements_{fs_client}_{fs_period}.pdf"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(pdf_bytes)))
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.end_headers()
+                self.wfile.write(pdf_bytes)
+                return
+
+            if path == "/financial_statements/soce_pdf":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(t("err_forbidden", lang), "", user=user, lang=lang), status=403)
+                    return
+                fs_client = qs.get("client_code", [""])[0].strip()
+                fs_period = qs.get("period", [""])[0].strip()
+                with open_db() as conn:
+                    pdf_bytes = _audit.generate_soce_pdf(conn, fs_client, fs_period, lang=lang)
+                filename = f"soce_{fs_client}_{fs_period}.pdf"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
                 self.send_header("Content-Length", str(len(pdf_bytes)))
