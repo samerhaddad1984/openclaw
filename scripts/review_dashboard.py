@@ -1300,6 +1300,11 @@ def bootstrap_schema() -> None:
         from src.integrations.qbo_schema import apply_qbo_sync_schema
         apply_qbo_sync_schema(conn)
 
+        # Smart-bank-source schema: clients.bank_source + multi-source
+        # columns on bank_transactions + bank_tx_dedup audit table.
+        from src.integrations.bank_source_schema import apply_bank_source_schema
+        apply_bank_source_schema(conn)
+
         # Sprint 4: client portal via QR token.
         # portal_token gives a client direct, cookieless-until-first-hit access
         # to their own upload/documents/bank/messages page. Tokens are long,
