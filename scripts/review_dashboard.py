@@ -1305,6 +1305,37 @@ def bootstrap_schema() -> None:
         from src.integrations.bank_source_schema import apply_bank_source_schema
         apply_bank_source_schema(conn)
 
+        # Gap-1: onboarding checklist + welcome modal state on
+        # dashboard_users + user_events audit trail. Applied via the
+        # already-open bootstrap connection so the transaction stays
+        # consistent with the other migrations above.
+        _oc_cols = {r['name'] if hasattr(r, 'keys') else r[1]
+                    for r in conn.execute("PRAGMA table_info(dashboard_users)").fetchall()}
+        for _col, _ddl in [
+            ('getting_started_completed', 'INTEGER DEFAULT 0'),
+            ('getting_started_dismissed_at', 'TEXT'),
+            ('first_login_at', 'TEXT'),
+            ('welcome_seen_at', 'TEXT'),
+            ('tour_completed_at', 'TEXT'),
+        ]:
+            if _col not in _oc_cols:
+                conn.execute(f"ALTER TABLE dashboard_users ADD COLUMN {_col} {_ddl}")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                firm_code TEXT,
+                event_type TEXT,
+                event_data TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_events_user "
+            "ON user_events(username, event_type)"
+        )
+        conn.commit()
+
         # Sprint 4: client portal via QR token.
         # portal_token gives a client direct, cookieless-until-first-hit access
         # to their own upload/documents/bank/messages page. Tokens are long,
