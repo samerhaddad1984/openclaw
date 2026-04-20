@@ -1334,6 +1334,50 @@ def bootstrap_schema() -> None:
             "CREATE INDEX IF NOT EXISTS idx_user_events_user "
             "ON user_events(username, event_type)"
         )
+
+        # Gap-2: review queue workflow state machine (assign / submit /
+        # approve / reject / escalate) with an append-only audit table.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS review_workflow (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                assigned_to_email TEXT,
+                submitted_by_email TEXT,
+                reviewed_by_email TEXT,
+                priority TEXT DEFAULT 'normal',
+                assigned_at TEXT,
+                submitted_at TEXT,
+                reviewed_at TEXT,
+                review_notes TEXT,
+                rejection_reason TEXT,
+                version INTEGER DEFAULT 1,
+                UNIQUE(firm_code, entity_type, entity_id)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_review_workflow_assignee "
+            "ON review_workflow(assigned_to_email, status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_review_workflow_reviewer "
+            "ON review_workflow(firm_code, status)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS review_workflow_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_id INTEGER,
+                actor_email TEXT,
+                actor_role TEXT,
+                action TEXT,
+                from_status TEXT,
+                to_status TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         conn.commit()
 
         # Sprint 4: client portal via QR token.
