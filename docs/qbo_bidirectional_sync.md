@@ -153,12 +153,41 @@ after completing OAuth at ``/qbo/connect?client_code=<C>``.
 - Payments are a no-op placeholder. Bill/invoice balances are
   refreshed when the parent is re-pulled, which is sufficient for
   open-item reporting but loses per-payment provenance.
-- UI wiring: the ``do_GET`` / ``do_POST`` dispatch in
-  ``scripts/review_dashboard.py`` doesn't yet route ``/qbo/sync/*``
-  or ``/qbo/webhook`` to the new handlers. The handlers are ready;
-  adding the route lines is a 15-line follow-up.
-- Scheduled-sync cron registration is not wired — the function is in
-  place, a systemd timer or cron line is the remaining piece.
+- UI wiring: complete. ``scripts/review_dashboard.py`` now routes
+  ``/qbo/dashboard``, ``/qbo/conflicts``, ``/qbo/sync/status``,
+  ``/qbo/sync/initial``, ``/qbo/sync/now``, ``/qbo/conflicts/resolve``,
+  and ``/qbo/webhook`` to the handlers in ``qbo_sync_ui.py`` with the
+  documented auth semantics. ``/qbo/webhook`` added to
+  ``_CSRF_EXEMPT_POSTS`` so Intuit POSTs don't hit the Origin check.
+  Verified by ``tests/qbo/test_route_wiring.py`` (8 tests, including
+  an enumeration meta-test + live HTTP round-trips).
+- Scheduled-sync cron registered:
+  ``/etc/cron.d/otocpa-qbo-sync`` invokes
+  ``scripts/qbo_scheduled_sync.py`` every 15 minutes and logs to
+  ``/var/log/otocpa/qbo_sync.log``.
+
+## Final verification (2026-04-20)
+
+- Full pytest suite: **7 671 passed**, 1 order-flake (the
+  pre-existing ``test_render_troubleshoot_contains_db_path`` that
+  passes in isolation — same one flagged in the R4 report), 18
+  skipped, 3 deselected. 10m30s.
+- Service restart: ``systemctl restart otocpa`` → active,
+  ``/health`` returns 200.
+- Cron dry-run: ``scripts/qbo_scheduled_sync.py`` exits 0 with
+  ``connections=0 ok=0`` on the empty ``qbo_connections`` table.
+- QBO test suite: **104/104 passing**
+  (schema + pull + push + conflicts + webhook + orchestrator +
+  unified financials + UI + routes + E2E mock integration).
+- Schema drift: clean across every commit.
+- Real Intuit sandbox: OAuth consent requires a browser session and
+  could not run in this environment. Per the prompt's Option B, the
+  full end-to-end flow is covered by
+  ``tests/qbo/test_e2e_mock_integration.py`` which runs the exact
+  step sequence documented in ``scripts/qbo_sandbox_e2e.py`` against
+  a FakeQBO speaking real v3 payload shapes. When an operator
+  completes OAuth, ``scripts/qbo_sandbox_e2e.py`` exercises the same
+  assertions against the live sandbox.
 
 ## What's next (not in scope)
 
