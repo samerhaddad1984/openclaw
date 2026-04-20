@@ -243,22 +243,20 @@ def test_api_contact_does_not_require_csrf(two_firm_app):
 # Owner-only routes refuse firm_admin.
 # ---------------------------------------------------------------------------
 
-def test_ingest_openclaw_rejects_unknown_sender(two_firm_app):
-    """/ingest/openclaw is the OpenClaw-gateway entrypoint. Its auth
-    model is sender-id-lookup: the posted payload MUST resolve to a
-    known client via get_client_by_sender_id, otherwise it's logged
-    as unknown_sender and a non-200 is returned. A forged payload
-    from a random WhatsApp number must not create a document.
+def test_ingest_openclaw_requires_api_key(two_firm_app):
+    """/ingest/openclaw requires an X-API-Key header that matches a
+    per-firm secret. This test replaces the R3 "unknown_sender" guard
+    — the API-key gate now runs FIRST, so a random POST without a key
+    gets 401 before even hitting the sender-id lookup.
 
-    Note: this endpoint does NOT require an API key. That's a
-    deliberate design choice (the OpenClaw gateway is the trust
-    boundary). Recorded as a FINDING in the R3 report — if the
-    threat model changes, add a shared-secret X-Openclaw-Sig header.
+    A follow-up test in tests/adversarial/test_ingest_api_key.py
+    verifies the happy path (correct key + unknown sender still
+    returns unknown_sender from the engine).
     """
     import urllib.request, json as _json
     body = _json.dumps({
         "platform": "whatsapp",
-        "sender_id": "+14165550000",  # not in any client's whatsapp_number
+        "sender_id": "+14165550000",
         "media_type": "image/jpeg",
         "client_message": "hi",
     }).encode()
@@ -272,8 +270,8 @@ def test_ingest_openclaw_rejects_unknown_sender(two_firm_app):
         status, payload = resp.status, _json.loads(resp.read())
     except urllib.error.HTTPError as e:
         status, payload = e.code, _json.loads(e.read())
-    assert status in (400, 404), status
-    assert payload.get("status") == "unknown_sender", payload
+    assert status == 401, (status, payload)
+    assert payload.get("error") == "invalid_or_missing_api_key", payload
 
 
 # ---------------------------------------------------------------------------

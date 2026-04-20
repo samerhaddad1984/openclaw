@@ -772,6 +772,49 @@ def _verify_password_link(token: str) -> str | None:
         return None
 
 
+def _resolve_firm_from_ingest_key(api_key: str) -> dict | None:
+    """Return the firm row whose ``ingest_api_key`` matches (constant-
+    time per row). None if no match or key is empty/None."""
+    if not api_key:
+        return None
+    try:
+        with open_db() as conn:
+            rows = conn.execute(
+                "SELECT firm_code, ingest_api_key FROM firms "
+                "WHERE ingest_api_key IS NOT NULL AND ingest_api_key != ''",
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for row in rows:
+        if isinstance(row, dict):
+            stored = row.get("ingest_api_key")
+            fc = row.get("firm_code")
+        elif isinstance(row, sqlite3.Row):
+            stored = row["ingest_api_key"]
+            fc = row["firm_code"]
+        else:
+            stored = row[1]
+            fc = row[0]
+        if stored and _hmac.compare_digest(stored.encode(), api_key.encode()):
+            return {"firm_code": fc}
+    return None
+
+
+def _rotate_firm_ingest_key(firm_code: str) -> str | None:
+    """Generate a new ingest_api_key for the firm and return it.
+    Returns None if the firm doesn't exist."""
+    new_key = secrets.token_urlsafe(32)
+    with open_db() as conn:
+        cur = conn.execute(
+            "UPDATE firms SET ingest_api_key = ? WHERE firm_code = ?",
+            (new_key, firm_code),
+        )
+        if cur.rowcount == 0:
+            return None
+        conn.commit()
+    return new_key
+
+
 def _password_reset_token_hash(token: str) -> str:
     """Hash a password-reset token with the shared link secret. Storing
     the hash (not the raw token) means a DB leak can't be replayed, and
@@ -1046,6 +1089,8 @@ def bootstrap_schema() -> None:
             ("subscription_plan",      "TEXT"),
             ("current_period_end",     "INTEGER"),
             ("created_at",             "TEXT"),
+            # OpenClaw ingest shared secret (X-API-Key header).
+            ("ingest_api_key",         "TEXT"),
         ):
             if col not in firm_cols:
                 try:
@@ -1057,6 +1102,30 @@ def bootstrap_schema() -> None:
         conn.execute(
             "INSERT OR IGNORE INTO firms (firm_code, firm_name, language, plan) VALUES ('OWNER','OtoCPA (Owner)','fr','owner')"
         )
+        # Backfill ingest_api_key for every firm that doesn't have one.
+        # A firm without a key would be unable to ingest; rather than
+        # failing startup, mint one per row. Row shape depends on
+        # connection row_factory (_dict_factory or sqlite3.Row).
+        try:
+            empty_keys = conn.execute(
+                "SELECT firm_code FROM firms "
+                "WHERE ingest_api_key IS NULL OR ingest_api_key = ''",
+            ).fetchall()
+            for row in empty_keys:
+                if isinstance(row, dict):
+                    fc = row.get("firm_code")
+                elif isinstance(row, sqlite3.Row):
+                    fc = row["firm_code"]
+                else:
+                    fc = row[0]
+                if not fc:
+                    continue
+                conn.execute(
+                    "UPDATE firms SET ingest_api_key = ? WHERE firm_code = ?",
+                    (secrets.token_urlsafe(32), fc),
+                )
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
         # Clients firm_code (tier 3 belongs to a firm). Plus the full set
@@ -13055,12 +13124,15 @@ def _provision_firm_from_stripe(session: Any, base_url: str = "") -> dict[str, A
         # User never logs in with this; they must go through the set-password link.
         placeholder_pw = secrets.token_urlsafe(32)
 
+        # Mint a per-firm ingest_api_key at provisioning time so
+        # /ingest/openclaw can authenticate the very first request.
+        _ingest_key = secrets.token_urlsafe(32)
         conn.execute(
             "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
-            " active, stripe_customer_id, stripe_subscription_id, subscription_status)"
-            " VALUES (?,?,?,?,?,?,1,?,?,?)",
+            " active, stripe_customer_id, stripe_subscription_id, subscription_status, ingest_api_key)"
+            " VALUES (?,?,?,?,?,?,1,?,?,?,?)",
             (firm_code, firm_name, email, email, "fr", plan_key,
-             customer_id, subscription_id, "active"),
+             customer_id, subscription_id, "active", _ingest_key),
         )
         conn.execute(
             "INSERT INTO dashboard_users (username, password_hash, role, display_name, active,"
@@ -19923,6 +19995,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
             # --- OpenClaw bridge — no session auth required ---
             if path == "/ingest/openclaw":
+                # Shared-secret check. Before R4 this route accepted
+                # any POST; the OpenClaw gateway was the trust boundary.
+                # We now require a per-firm X-API-Key so a
+                # direct-to-dashboard forge is rejected even if the
+                # sender_id happens to match a known client.
+                api_key = (self.headers.get("X-API-Key") or
+                           self.headers.get("X-Openclaw-Key") or "").strip()
+                firm_match = _resolve_firm_from_ingest_key(api_key)
+                if not firm_match:
+                    logging.warning(
+                        "ingest/openclaw: missing or invalid X-API-Key from %s",
+                        _get_client_ip(self),
+                    )
+                    self._send_json(
+                        {"ok": False, "document_id": None,
+                         "status": "unauthorized",
+                         "error": "invalid_or_missing_api_key"},
+                        status=401,
+                    )
+                    return
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except Exception:
