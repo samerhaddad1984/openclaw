@@ -170,6 +170,16 @@ class QBOSyncOrchestrator:
             counts['bills']           = puller.pull_bills(since_date=since)
             counts['invoices']        = puller.pull_invoices(since_date=since)
 
+            # Smart bank-source: when this client's bank_source is 'qbo'
+            # or 'both', incremental-pull bank transactions. For 'both'
+            # we also run dedup immediately so the next reconciliation
+            # query sees a clean view.
+            bank_outcome = self._maybe_pull_bank_transactions(since)
+            if bank_outcome is not None:
+                counts['bank_transactions'] = bank_outcome['pulled']
+                if bank_outcome.get('duplicates_hidden'):
+                    counts['duplicates_hidden'] = bank_outcome['duplicates_hidden']
+
             # Drain webhook queue for THIS realm.
             counts['webhook_events'] = self._drain_webhooks()
         except Exception as exc:  # noqa: BLE001
@@ -181,6 +191,41 @@ class QBOSyncOrchestrator:
                      entities=total, errors=error_count,
                      details=str(counts))
         return {'ok': error_count == 0, **counts}
+
+    def _maybe_pull_bank_transactions(
+        self, since: str,
+    ) -> Optional[dict[str, int]]:
+        """When clients.bank_source indicates QBO is an active source,
+        pull QBO bank register entries. When 'both' is set, also run
+        dedup so the next reconciliation query is clean."""
+        try:
+            with _open(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT bank_source FROM clients WHERE client_code=?",
+                    (self.client_code,),
+                ).fetchone()
+            bank_source = (row['bank_source'] if row and row['bank_source']
+                             else 'none')
+        except sqlite3.OperationalError:
+            return None
+
+        if bank_source not in ('qbo', 'both'):
+            return None
+
+        from src.integrations.qbo_bank_pull import QBOBankPull
+        pulled = QBOBankPull(
+            self.firm_code, self.client_code,
+            db_path=self.db_path, sandbox=self.sandbox,
+        ).pull_bank_transactions(since_date=since)
+
+        hidden = 0
+        if bank_source == 'both':
+            from src.engines.bank_tx_dedup import BankTransactionDeduplicator
+            hidden = BankTransactionDeduplicator(
+                self.firm_code, self.client_code, self.db_path,
+            ).mark_duplicates(auto_apply=True)
+
+        return {'pulled': pulled, 'duplicates_hidden': hidden}
 
     def _drain_webhooks(self) -> int:
         pending, process = self._webhook_processor

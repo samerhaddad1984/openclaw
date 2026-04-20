@@ -166,6 +166,18 @@ after completing OAuth at ``/qbo/connect?client_code=<C>``.
   ``scripts/qbo_scheduled_sync.py`` every 15 minutes and logs to
   ``/var/log/otocpa/qbo_sync.log``.
 
+## Bank data source (add-on, 2026-04-20)
+
+Smart-bank-source builds on top of this pipeline. When a client's
+``clients.bank_source`` is ``qbo`` or ``both``, the orchestrator's
+``incremental_sync`` additionally calls
+``QBOBankPull.pull_bank_transactions`` (Purchase / Deposit /
+Transfer / Check) and, for ``both``, runs the dedup engine in
+auto-apply mode so downstream reconciliation sees a clean view.
+
+Full reference: ``docs/bank_data_sources.md`` and
+``docs/smart_bank_source_report.md``.
+
 ## Final verification (2026-04-20)
 
 - Full pytest suite: **7 671 passed**, 1 order-flake (the
