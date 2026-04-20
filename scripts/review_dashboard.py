@@ -17900,6 +17900,40 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            # ---- Smart bank-source: setup + dedup pages (owner / firm_admin) ----
+            # GET /clients/{code}/bank/setup -> decision + render
+            # GET /clients/{code}/bank/dedup -> audit + manual unmark form
+            if path.startswith("/clients/") and (
+                path.endswith("/bank/setup") or path.endswith("/bank/dedup")
+            ):
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                parts = path.strip("/").split("/")
+                client_code = parts[1] if len(parts) >= 2 else ""
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "client_not_in_firm"}, status=403)
+                    return
+                from src.integrations.bank_source_setup import (
+                    decide_bank_setup as _bs_decide,
+                    render_bank_setup_page as _bs_render_setup,
+                    render_dedup_page as _bs_render_dedup,
+                )
+                firm = ctx["firm_code"]
+                if path.endswith("/bank/setup"):
+                    sandbox_env = os.environ.get("QBO_ENVIRONMENT", "").lower() == "sandbox"
+                    decision = _bs_decide(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        sandbox=sandbox_env,
+                    )
+                    self._send_html(_bs_render_setup(decision, lang=lang))
+                    return
+                # /bank/dedup
+                self._send_html(_bs_render_dedup(
+                    DB_PATH, firm_code=firm, client_code=client_code, lang=lang,
+                ))
+                return
+
             if path == "/":
                 # Onboarding redirect: owner with no staff or no clients
                 if _onboarding_check_needed(user):
@@ -20554,6 +20588,54 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         DB_PATH, firm_code=firm, client_code=client_code,
                         entity_type=entity_type, qbo_id=qbo_id,
                         strategy=strategy,
+                    )
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Smart bank-source: sync from QBO / unmark dedup ---
+            # POST /clients/{code}/bank/sync_from_qbo (owner / firm_admin)
+            # POST /clients/{code}/bank/dedup/unmark   (owner / firm_admin)
+            if path.startswith("/clients/") and (
+                path.endswith("/bank/sync_from_qbo")
+                or path.endswith("/bank/dedup/unmark")
+            ):
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                parts = path.strip("/").split("/")
+                client_code = parts[1] if len(parts) >= 2 else ""
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "client_not_in_firm"}, status=403)
+                    return
+                from src.integrations.bank_source_setup import (
+                    handle_sync_from_qbo as _bs_sync,
+                    handle_unmark_duplicate as _bs_unmark,
+                )
+                firm = ctx["firm_code"]
+                sandbox_env = os.environ.get("QBO_ENVIRONMENT", "").lower() == "sandbox"
+                if path.endswith("/bank/sync_from_qbo"):
+                    status, ctype, body = _bs_sync(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        sandbox=sandbox_env,
+                    )
+                else:
+                    duplicate_id = form.get("duplicate_id", "").strip()
+                    if not duplicate_id:
+                        self._send_json({"error": "duplicate_id_required"},
+                                          status=400)
+                        return
+                    logging.info(
+                        "bank_dedup_unmark user=%s firm=%s client=%s dup_id=%s",
+                        user.get("username"), firm, client_code, duplicate_id,
+                    )
+                    status, ctype, body = _bs_unmark(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        duplicate_id=duplicate_id,
+                        resolved_by=user.get("username", "unknown"),
                     )
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
