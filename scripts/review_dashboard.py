@@ -908,6 +908,8 @@ def bootstrap_schema() -> None:
             ("line_total_sum",          "REAL"),
             ("invoice_total_gap",       "REAL"),
             ("deposit_allocated",       "INTEGER DEFAULT 0"),
+            # /health/page counts ai_used; missing column → 500.
+            ("ai_used",                 "INTEGER DEFAULT 0"),
         ):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")
@@ -997,12 +999,33 @@ def bootstrap_schema() -> None:
         )
         conn.commit()
 
-        # Clients firm_code (tier 3 belongs to a firm).
+        # Clients firm_code (tier 3 belongs to a firm). Plus the full set
+        # of columns the dashboard reads from clients — render_clients_page
+        # SELECTs whatsapp_number, contact_email, language, active, etc.
+        # A pre-existing minimal clients table missing any of these
+        # would 500 the /clients page.
         client_cols = {row["name"] for row in conn.execute("PRAGMA table_info(clients)").fetchall()}
         if "firm_code" not in client_cols:
             conn.execute("ALTER TABLE clients ADD COLUMN firm_code TEXT")
             conn.execute("UPDATE clients SET firm_code='OWNER' WHERE firm_code IS NULL OR firm_code=''")
             conn.commit()
+        for _ccol, _cdef in (
+            ("client_name",                 "TEXT"),
+            ("contact_email",               "TEXT"),
+            ("language",                    "TEXT DEFAULT 'fr'"),
+            ("active",                      "INTEGER DEFAULT 1"),
+            ("whatsapp_number",             "TEXT"),
+            ("portal_token",                "TEXT"),
+            ("portal_token_created_at",     "TEXT"),
+            ("portal_token_rotated_count",  "INTEGER DEFAULT 0"),
+            ("created_at",                  "TEXT"),
+        ):
+            if _ccol not in client_cols:
+                try:
+                    conn.execute(f"ALTER TABLE clients ADD COLUMN {_ccol} {_cdef}")
+                except sqlite3.OperationalError:
+                    pass
+        conn.commit()
 
         # Bank connections firm_code (denormalized for fast firm-scoped reads).
         # Guard: bank_connections is optional in minimal bootstraps (some
@@ -1073,9 +1096,18 @@ def bootstrap_schema() -> None:
                 account_type TEXT,
                 last_sync TEXT,
                 active INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now'))
+                created_at TEXT DEFAULT (datetime('now')),
+                firm_code TEXT
             )
         """)
+        # Idempotent backfill: if the table existed before firm_code was
+        # baked into the CREATE above, ALTER it now. Earlier in
+        # bootstrap_schema we already tried this for *pre-existing*
+        # bank_connections; this handles the freshly-created table.
+        bc_cols = {row["name"] for row in conn.execute(
+            "PRAGMA table_info(bank_connections)").fetchall()}
+        if "firm_code" not in bc_cols:
+            conn.execute("ALTER TABLE bank_connections ADD COLUMN firm_code TEXT")
         # Plaid bank transactions (imported via /bank/sync, then matched to documents)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS bank_transactions (
