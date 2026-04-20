@@ -4899,7 +4899,10 @@ html,body{margin:0;padding:0;background:linear-gradient(180deg,#07152c 0%,#0b1b3
     .workspace .stats{grid-template-columns:1fr 1fr}
     .workspace .stat{min-width:auto}
     .workspace{padding:16px 14px 80px}
-    .app-topbar{padding:0 14px;height:58px}
+    .app-topbar{padding:0 14px;height:auto;min-height:58px;flex-wrap:wrap;gap:8px}
+    .topbar-left,.topbar-right{flex-wrap:wrap;min-width:0}
+    .topbar-right{width:100%;justify-content:flex-end}
+    body,html{overflow-x:hidden}
     .workspace .card{padding:14px;margin-bottom:12px}
     .workspace .topbar{flex-direction:column;gap:8px}
     .workspace .actions{justify-content:center}
