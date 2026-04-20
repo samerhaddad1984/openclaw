@@ -772,6 +772,60 @@ def _verify_password_link(token: str) -> str | None:
         return None
 
 
+def _password_reset_token_hash(token: str) -> str:
+    """Hash a password-reset token with the shared link secret. Storing
+    the hash (not the raw token) means a DB leak can't be replayed, and
+    we still get constant-time equality via hmac.compare_digest."""
+    return _hmac.new(
+        _get_password_link_secret().encode(),
+        b"pwreset-used:" + token.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _password_reset_token_already_used(token: str) -> bool:
+    """Return True if the token's hash has been recorded as consumed."""
+    h = _password_reset_token_hash(token)
+    try:
+        with open_db() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM password_reset_used WHERE token_hash = ?",
+                (h,),
+            ).fetchone()
+        return row is not None
+    except sqlite3.OperationalError:
+        # Table missing on a minimal DB → treat as "not used yet" so the
+        # reset can proceed; the bootstrap migration creates it.
+        return False
+
+
+def _password_reset_token_mark_used(token: str, username: str) -> None:
+    """Record the token hash so a second /set-password with the same
+    token is refused."""
+    h = _password_reset_token_hash(token)
+    try:
+        with open_db() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO password_reset_used "
+                "(token_hash, username, used_at) VALUES (?, ?, ?)",
+                (h, username, utc_now_iso()),
+            )
+            # Lazy cleanup: purge entries older than 7 days so the table
+            # doesn't grow forever. Rate-limited by the cutoff itself.
+            cutoff = (utc_now() - timedelta(days=7)).replace(
+                microsecond=0,
+            ).isoformat()
+            conn.execute(
+                "DELETE FROM password_reset_used WHERE used_at < ?",
+                (cutoff,),
+            )
+            conn.commit()
+    except sqlite3.OperationalError:
+        # Table missing — bootstrap hasn't run. Non-fatal; subsequent
+        # reuse attempt will find the table absent and pass through.
+        pass
+
+
 def _validate_password_strength(new_pw: str, confirm_pw: str) -> str:
     """Returns an error string, or '' if the password is acceptable."""
     if not new_pw or len(new_pw) < 10:
@@ -1079,6 +1133,15 @@ def bootstrap_schema() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_forgot_identifier ON forgot_password_attempts(identifier)")
+        # Password-reset single-use registry. We store a hash of the
+        # token so a DB leak can't reconstruct a live reset token.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_used (
+                token_hash TEXT PRIMARY KEY,
+                username   TEXT NOT NULL,
+                used_at    TEXT NOT NULL
+            )
+        """)
         conn.commit()
 
         # Pending 2FA tokens (issued after password ok, before TOTP verified)
@@ -19703,6 +19766,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if not username:
                     self._send_html(render_set_password_invalid(), status=400)
                     return
+                # Single-use: a token that's already been consumed must
+                # be rejected even if its HMAC + expiry still check out.
+                if _password_reset_token_already_used(token):
+                    self._send_html(render_set_password_invalid(), status=400)
+                    return
                 new_pw = form.get("new_password", "")
                 confirm_pw = form.get("confirm_password", "")
                 err = _validate_password_strength(new_pw, confirm_pw)
@@ -19722,6 +19790,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (hash_password(new_pw), username),
                     )
                     conn.commit()
+                # Record the token as consumed BEFORE redirecting so a
+                # rapid replay sees the registry entry.
+                _password_reset_token_mark_used(token, username)
                 self._flash_redirect("/login", flash="Mot de passe d\u00e9fini. Connectez-vous / Password set. Sign in.")
                 return
 
