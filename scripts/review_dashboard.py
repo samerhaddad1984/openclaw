@@ -13126,14 +13126,27 @@ def _provision_firm_from_stripe(session: Any, base_url: str = "") -> dict[str, A
 
         # Mint a per-firm ingest_api_key at provisioning time so
         # /ingest/openclaw can authenticate the very first request.
+        # Fall back gracefully if the column doesn't exist (legacy
+        # pre-bootstrap schema in some test fixtures).
         _ingest_key = secrets.token_urlsafe(32)
-        conn.execute(
-            "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
-            " active, stripe_customer_id, stripe_subscription_id, subscription_status, ingest_api_key)"
-            " VALUES (?,?,?,?,?,?,1,?,?,?,?)",
-            (firm_code, firm_name, email, email, "fr", plan_key,
-             customer_id, subscription_id, "active", _ingest_key),
-        )
+        try:
+            conn.execute(
+                "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
+                " active, stripe_customer_id, stripe_subscription_id, subscription_status, ingest_api_key)"
+                " VALUES (?,?,?,?,?,?,1,?,?,?,?)",
+                (firm_code, firm_name, email, email, "fr", plan_key,
+                 customer_id, subscription_id, "active", _ingest_key),
+            )
+        except sqlite3.OperationalError:
+            # Legacy schema without ingest_api_key. Insert without the
+            # column; a later bootstrap_schema() run backfills the key.
+            conn.execute(
+                "INSERT INTO firms (firm_code, firm_name, contact_email, billing_email, language, plan,"
+                " active, stripe_customer_id, stripe_subscription_id, subscription_status)"
+                " VALUES (?,?,?,?,?,?,1,?,?,?)",
+                (firm_code, firm_name, email, email, "fr", plan_key,
+                 customer_id, subscription_id, "active"),
+            )
         conn.execute(
             "INSERT INTO dashboard_users (username, password_hash, role, display_name, active,"
             " language, firm_code, email, must_reset_password, created_at)"

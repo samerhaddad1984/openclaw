@@ -433,6 +433,12 @@ def _make_server(tmp_db: Path) -> tuple[ThreadingHTTPServer, int]:
     # Patch DB_PATH inside review_dashboard before importing the handler
     import scripts.review_dashboard as _rd
     _rd.DB_PATH = tmp_db
+    # Run bootstrap so firms.ingest_api_key is present (R4 requirement
+    # for /ingest/openclaw auth).
+    try:
+        _rd.bootstrap_schema()
+    except Exception:
+        pass
 
     from scripts.review_dashboard import ReviewDashboardHandler
     server = ThreadingHTTPServer(("127.0.0.1", 0), ReviewDashboardHandler)
@@ -442,12 +448,36 @@ def _make_server(tmp_db: Path) -> tuple[ThreadingHTTPServer, int]:
     return server, port
 
 
+def _get_ingest_api_key() -> str:
+    """Look up any firm's ingest_api_key from the live DB_PATH. R4
+    added a shared-secret check on /ingest/openclaw; legacy tests
+    carry the key automatically by reading whatever bootstrap minted."""
+    import scripts.review_dashboard as _rd
+    try:
+        with sqlite3.connect(str(_rd.DB_PATH)) as conn:
+            row = conn.execute(
+                "SELECT ingest_api_key FROM firms "
+                "WHERE ingest_api_key IS NOT NULL AND ingest_api_key != '' "
+                "LIMIT 1",
+            ).fetchone()
+            if row and row[0]:
+                return row[0]
+    except Exception:
+        pass
+    return ""
+
+
 def _post_json(port: int, path: str, body: dict) -> tuple[int, dict]:
     data = json.dumps(body).encode()
+    headers = {"Content-Type": "application/json"}
+    if path == "/ingest/openclaw":
+        key = _get_ingest_api_key()
+        if key:
+            headers["X-API-Key"] = key
     req  = Request(
         f"http://127.0.0.1:{port}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urlopen(req, timeout=10) as resp:
@@ -458,10 +488,15 @@ def _post_json_expect_error(port: int, path: str, body: dict) -> tuple[int, dict
     """Like _post_json but handles non-2xx responses."""
     import urllib.error
     data = json.dumps(body).encode()
+    headers = {"Content-Type": "application/json"}
+    if path == "/ingest/openclaw":
+        key = _get_ingest_api_key()
+        if key:
+            headers["X-API-Key"] = key
     req  = Request(
         f"http://127.0.0.1:{port}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
@@ -495,10 +530,16 @@ class TestOpenclawEndpoint:
 
     def test_invalid_json_returns_400(self):
         import urllib.error, urllib.request
+        headers = {"Content-Type": "application/json"}
+        # R4 API-key gate runs before JSON parse; include the key so
+        # we reach the invalid_json branch we're trying to test.
+        key = _get_ingest_api_key()
+        if key:
+            headers["X-API-Key"] = key
         req = Request(
             f"http://127.0.0.1:{self._port}/ingest/openclaw",
             data=b"not json at all",
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:
