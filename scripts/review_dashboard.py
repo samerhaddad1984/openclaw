@@ -1294,6 +1294,12 @@ def bootstrap_schema() -> None:
         )
         conn.commit()
 
+        # QBO bidirectional-sync schema (qbo_sync_state + entity caches +
+        # webhook queue + per-run log). Kept in a dedicated module so test
+        # fixtures can apply the same DDL without importing this dashboard.
+        from src.integrations.qbo_schema import apply_qbo_sync_schema
+        apply_qbo_sync_schema(conn)
+
         # Sprint 4: client portal via QR token.
         # portal_token gives a client direct, cookieless-until-first-hit access
         # to their own upload/documents/bank/messages page. Tokens are long,
