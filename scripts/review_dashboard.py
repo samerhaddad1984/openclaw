@@ -1353,6 +1353,20 @@ def bootstrap_schema() -> None:
             # will create it on first use.
             pass
 
+        # Version-column migration for every versioned table. The module
+        # ran this once at import against the original DB_PATH; call it
+        # again inside bootstrap_schema so a restored-from-backup DB or
+        # a test that monkeypatches DB_PATH also gets the columns.
+        try:
+            from src.db.optimistic import (  # noqa: PLC0415
+                ensure_all_version_columns as _ensure_versions_here,
+            )
+            _ensure_versions_here(conn)
+        except Exception:
+            # Don't block startup on version-migration errors; the
+            # versioned helpers have their own lazy fallbacks.
+            pass
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers
