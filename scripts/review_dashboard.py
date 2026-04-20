@@ -1378,6 +1378,39 @@ def bootstrap_schema() -> None:
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+
+        # Gap-4: month-end close wizard state + accounting periods.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS close_wizard_state (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                step TEXT NOT NULL,
+                step_status TEXT NOT NULL DEFAULT 'pending',
+                step_data TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                actor_email TEXT,
+                UNIQUE(firm_code, client_code, period, step)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_close_wizard_scope "
+            "ON close_wizard_state(firm_code, client_code, period)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS accounting_periods (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                locked_by TEXT,
+                locked_at TEXT,
+                UNIQUE(firm_code, client_code, period)
+            )
+        """)
         conn.commit()
 
         # Sprint 4: client portal via QR token.
