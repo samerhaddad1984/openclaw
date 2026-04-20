@@ -1659,6 +1659,7 @@ def _contact_form_rate_limited(ip: str) -> bool:
 _CSRF_EXEMPT_POSTS = frozenset({
     # Webhooks / machine-to-machine callers with their own auth
     "/stripe/webhook",       # Stripe-Signature verified in handler
+    "/qbo/webhook",          # Intuit-Signature verified in handler
     "/ingest/openclaw",      # API key auth
     "/api/contact",          # CORS-bound public form + per-IP rate limit
     "/bank/callback",        # Plaid public-token exchange
@@ -17854,6 +17855,46 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     ctx, user, flash=flash, flash_error=flash_error, lang=lang))
                 return
 
+            # ---- Bidirectional-sync routes (owner / firm_admin) ----
+            if path in ("/qbo/dashboard", "/qbo/conflicts", "/qbo/sync/status"):
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                client_code = qs.get("client_code", [""])[0].strip()
+                if not client_code:
+                    self._flash_redirect("/qbo/status",
+                                          error="client_code is required.")
+                    return
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "client_not_in_firm"}, status=403)
+                    return
+                from src.integrations.qbo_sync_ui import (
+                    handle_sync_status_api as _qbo_status_api,
+                    render_conflicts_page as _qbo_conflicts,
+                    render_sync_dashboard as _qbo_dashboard,
+                )
+                firm = ctx["firm_code"]
+                if path == "/qbo/dashboard":
+                    self._send_html(_qbo_dashboard(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                    ))
+                    return
+                if path == "/qbo/conflicts":
+                    self._send_html(_qbo_conflicts(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                    ))
+                    return
+                # /qbo/sync/status — JSON API
+                status, ctype, body = _qbo_status_api(
+                    DB_PATH, firm_code=firm, client_code=client_code,
+                )
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path == "/":
                 # Onboarding redirect: owner with no staff or no clients
                 if _onboarding_check_needed(user):
@@ -19853,6 +19894,28 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_json({"received": True})
                 return
 
+            # --- Intuit/QuickBooks webhook (signature-authenticated) ---
+            # Delivered by Intuit when entities change in any connected
+            # realm. Verified via HMAC-SHA256 of the raw body using the
+            # QBO_WEBHOOK_VERIFIER_TOKEN shared secret. ALWAYS 200 so
+            # Intuit doesn't storm-retry; the real disposition is in the
+            # JSON body. Payload is queued in qbo_webhook_events for the
+            # incremental-sync worker to drain.
+            if path == "/qbo/webhook":
+                sig = self.headers.get("intuit-signature", "")
+                from src.integrations.qbo_sync_ui import (
+                    handle_webhook_route as _qbo_handle_webhook,
+                )
+                status, ctype, body = _qbo_handle_webhook(
+                    raw, sig, db_path=DB_PATH,
+                )
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             # --- Set password via signed link (no auth) ---
             if path == "/set-password":
                 token = form.get("token", "").strip()
@@ -20426,6 +20489,72 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 disconnect_qbo(firm_for_client, client_code)
                 self._flash_redirect("/qbo/status",
                                      flash=f"Disconnected {client_code}.")
+                return
+
+            # --- QBO bidirectional sync: manual triggers + conflict resolve ---
+            # POST /qbo/sync/initial?client_code=X   (owner / firm_admin)
+            # POST /qbo/sync/now?client_code=X        (owner / firm_admin)
+            # POST /qbo/conflicts/resolve             (owner only)
+            if path in ("/qbo/sync/initial", "/qbo/sync/now",
+                         "/qbo/conflicts/resolve"):
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_json({"error": "forbidden"}, status=403)
+                    return
+                if path == "/qbo/conflicts/resolve" and ctx.get("role") != "owner":
+                    self._send_json({"error": "owner_only"}, status=403)
+                    return
+                client_code = (form.get("client_code") or
+                                qs.get("client_code", [""])[0]).strip()
+                if not client_code:
+                    self._send_json({"error": "client_code_required"}, status=400)
+                    return
+                if not _require_client_in_firm(client_code, ctx):
+                    self._send_json({"error": "client_not_in_firm"}, status=403)
+                    return
+                firm = ctx["firm_code"]
+                from src.integrations.qbo_sync_ui import (
+                    handle_incremental_sync as _qbo_incr,
+                    handle_initial_sync as _qbo_initial,
+                    handle_resolve_conflict as _qbo_resolve,
+                )
+                sandbox_env = os.environ.get("QBO_ENVIRONMENT", "").lower() == "sandbox"
+                if path == "/qbo/sync/initial":
+                    status, ctype, body = _qbo_initial(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        sandbox=sandbox_env,
+                    )
+                elif path == "/qbo/sync/now":
+                    status, ctype, body = _qbo_incr(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        sandbox=sandbox_env,
+                    )
+                else:  # /qbo/conflicts/resolve
+                    entity_type = form.get("entity_type", "").strip()
+                    qbo_id = form.get("qbo_id", "").strip()
+                    strategy = form.get("strategy", "flag_for_review").strip()
+                    if not (entity_type and qbo_id):
+                        self._send_json(
+                            {"error": "entity_type_and_qbo_id_required"},
+                            status=400,
+                        )
+                        return
+                    # Audit trail: who resolved what, when, with which strategy.
+                    logging.info(
+                        "qbo_conflict_resolved user=%s firm=%s client=%s "
+                        "entity=%s qbo_id=%s strategy=%s",
+                        user.get("username"), firm, client_code,
+                        entity_type, qbo_id, strategy,
+                    )
+                    status, ctype, body = _qbo_resolve(
+                        DB_PATH, firm_code=firm, client_code=client_code,
+                        entity_type=entity_type, qbo_id=qbo_id,
+                        strategy=strategy,
+                    )
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
 
             # --- Bank: disconnect ---
