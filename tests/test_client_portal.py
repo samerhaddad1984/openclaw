@@ -303,12 +303,22 @@ def test_portal_referrer_policy_header_set(portal_env, http_server):
     assert headers.get("Referrer-Policy", "").lower() == "no-referrer"
 
 
-def test_portal_invalid_token_returns_404(portal_env, http_server):
+def test_portal_invalid_token_serves_bilingual_invalid_page(portal_env, http_server):
+    """Deliberate UX change: /c/<bogus-token> now returns 200 with the
+    bilingual invalid-link HTML body. Mobile Safari / iOS WebKit /
+    some corporate proxies intercept 4xx responses and replace our
+    friendly HTML with a generic "This page isn't working" screen —
+    200 + HTML guarantees the client sees the instruction to contact
+    their CPA. Programmatic callers should check for invalid tokens
+    via ``resolve_portal_token()`` server-side, not HTTP status."""
     status, _headers, body = _get(f"{http_server}/c/this_is_a_bogus_token_but_long_enough_xx")
-    assert status == 404
-    # Bilingual invalid-link body.
+    assert status == 200
     text = body.decode("utf-8")
     assert "Invalid" in text or "invalide" in text.lower()
+    # Cache-Control: no-store so a retry with a fresh token hits the server.
+    assert "no-store" in _headers.get("Cache-Control", "").lower(), (
+        "invalid-link page must NOT be cached — client may retry with a fresh token"
+    )
 
 
 def test_portal_access_logged(portal_env, http_server):

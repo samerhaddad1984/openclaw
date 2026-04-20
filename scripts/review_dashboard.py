@@ -11423,7 +11423,7 @@ header.portal{background:#1F3864;color:white;padding:16px;}
 header.portal h1{margin:0;font-size:20px;}
 header.portal .sub{opacity:.85;font-size:13px;margin-top:2px;}
 .tabs{display:flex;gap:4px;background:white;border-radius:10px;padding:4px;margin:16px 0;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,.05);}
-.tabs a{flex:1;text-align:center;padding:10px 8px;border-radius:8px;color:#374151;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;}
+.tabs a{flex:1;text-align:center;padding:14px 8px;border-radius:8px;color:#374151;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;min-height:44px;box-sizing:border-box;}
 .tabs a.active{background:#1F3864;color:white;}
 .card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;}
 .card h2{margin:0 0 12px;font-size:18px;color:#1F3864;}
@@ -11431,7 +11431,7 @@ header.portal .sub{opacity:.85;font-size:13px;margin-top:2px;}
 .drop{border:2px dashed #1F3864;border-radius:10px;padding:28px;text-align:center;color:#6b7280;background:#f9fafb;cursor:pointer;}
 input[type=file]{display:block;margin:12px 0;width:100%;}
 textarea,input[type=text]{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;box-sizing:border-box;}
-button,.btn{background:#1F3864;color:white;border:none;padding:12px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;display:inline-block;text-decoration:none;}
+button,.btn{background:#1F3864;color:white;border:none;padding:14px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;display:inline-block;text-decoration:none;min-height:44px;}
 button.secondary{background:#e5e7eb;color:#111827;}
 table{width:100%;border-collapse:collapse;font-size:14px;}
 th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #f3f4f6;}
@@ -11483,8 +11483,11 @@ def _portal_tabs(active: str, token: str) -> str:
 
 
 def render_portal_invalid_page() -> str:
+    # lang is "fr" to prefer French for Quebec defaults; the body is
+    # bilingual so EN users see their text too. A <div lang="en"> marks
+    # the English block explicitly for screen readers.
     return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>OtoCPA &middot; Invalid link</title>"
         f"<style>{_PORTAL_STYLE}</style></head><body>"
@@ -11492,7 +11495,7 @@ def render_portal_invalid_page() -> str:
         "<h2 style='color:#991b1b;'>&#x26A0;&#xFE0F; Lien invalide / Invalid link</h2>"
         "<p class='muted'>Ce lien de portail client n'est pas valide ou a &eacute;t&eacute; "
         "remplac&eacute;. Veuillez contacter votre cabinet comptable pour obtenir un nouveau lien.</p>"
-        "<p class='muted'>This client portal link is not valid or has been rotated. "
+        "<p class='muted' lang='en'>This client portal link is not valid or has been rotated. "
         "Please contact your accounting firm for a new link.</p>"
         "</div></div></body></html>"
     )
@@ -11502,13 +11505,19 @@ def _portal_page_shell(client: dict, token: str, tab: str, body: str,
                        flash: str = "", flash_error: str = "") -> str:
     """Wrap portal body in common shell (header + tabs + flash)."""
     name = esc(client.get("client_name") or client.get("client_code") or "")
+    # Pick a lang attribute from the client's preferred language; default
+    # to French (Quebec default). Screen readers will switch voices
+    # accordingly.
+    client_lang = (client.get("language") or "fr").strip().lower()
+    if client_lang not in ("fr", "en"):
+        client_lang = "fr"
     flash_html = ""
     if flash:
         flash_html = f'<div class="flash ok">{esc(flash)}</div>'
     elif flash_error:
         flash_html = f'<div class="flash err">{esc(flash_error)}</div>'
     return (
-        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<!doctype html><html lang='{client_lang}'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>OtoCPA &middot; {name}</title>"
         f"<style>{_PORTAL_STYLE}</style></head><body>"
@@ -17165,11 +17174,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         ]
 
     def _portal_send_invalid(self) -> None:
+        # Serve the bilingual invalid-link page with HTTP 200.
+        # Rationale: mobile Safari, iOS WebKit, and many corporate
+        # proxies intercept 4xx responses and replace our friendly
+        # HTML with a generic "This page isn't working" screen. A
+        # 200 guarantees the client sees our instruction to contact
+        # their CPA. The page content itself is the signal; callers
+        # that programmatically check for invalid tokens do so via
+        # resolve_portal_token() server-side, not by parsing HTTP
+        # status.
         body = render_portal_invalid_page().encode("utf-8")
-        self.send_response(404)
+        self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Referrer-Policy", "no-referrer")
+        # Don't let this get cached — the client may later retry with
+        # a fresh token and should always hit the server first.
+        self.send_header("Cache-Control", "no-store, max-age=0")
         self.end_headers()
         self.wfile.write(body)
 

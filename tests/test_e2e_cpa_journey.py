@@ -869,9 +869,14 @@ class TestE2ECpaJourney:
     # ------- Phase 9 -------
 
     def test_18_invalid_portal_token_rejected(self, fresh_db, http_server):
+        # Deliberate UX change (see tests/portal/test_client_experience.py):
+        # /c/<bogus> returns 200 + bilingual invalid-link HTML so mobile
+        # browsers / corporate proxies don't intercept a 4xx with their
+        # generic error page. The contract is: page body signals the
+        # problem, not HTTP status.
         status, _h, body = _get(
             f"{http_server}/c/bogus-token-12345-but-long-enough-for-len-check")
-        assert status == 404
+        assert status == 200
         text = body.decode("utf-8").lower()
         assert "invalid" in text or "invalide" in text
 
@@ -958,9 +963,12 @@ class TestE2ECpaJourney:
         # We verify at the helper level since the HTTP route redirects.
         # POST /c/{B1_token}/upload WITHOUT the token path element should be
         # rejected by /upload (which requires session for firm_admin) — here we
-        # verify a random bogus portal path is 404.
-        s, _h, _b = _get(f"{http_server}/c/this_is_not_token_but_long_enough_1234")
-        assert s == 404
+        # verify a random bogus portal path returns 200 with the bilingual
+        # invalid-link page (not a 4xx, because mobile browsers can mask
+        # 4xx responses with their own error pages).
+        s, _h, b = _get(f"{http_server}/c/this_is_not_token_but_long_enough_1234")
+        assert s == 200
+        assert b"invalid" in b.lower() or b"invalide" in b.lower()
 
     def test_22_employee_cannot_escalate(self, fresh_db, http_server):
         rd = fresh_db["rd"]

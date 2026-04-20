@@ -84,6 +84,23 @@ The **two critical bugs** are the most impactful:
 5. **Run the leak probe nightly with `LEAK_SECONDS=7200`** once the infrastructure exists. Or ship a `/metrics` Prometheus endpoint and alert on RSS trajectory.
 6. **Install Playwright system libs on the CI host** so the HTTP-only browser harness can be promoted to real JS interaction. Every R2 test with "browser-equivalent" in the name could then upgrade to real clicks.
 
+## Addendum: client-portal real-world testing
+
+Ten scenarios walked the portal as a restaurant-owner-with-a-phone
+would see it. Five findings, all fixed:
+
+| # | Severity | Bug | Commit |
+| --- | --- | --- | --- |
+| P1 | MEDIUM UX | Portal `<html>` tag had no `lang` attribute → bilingual screen readers guessed wrong | included below |
+| P2 | MEDIUM UX | Upload button was 40 px tall (below WCAG 2.5.5 / Apple HIG 44 px tap target) | included below |
+| P3 | MEDIUM UX | Nav tabs were 36 px tall — worse, and they're the primary navigation | included below |
+| P4 | HIGH UX | `/c/<stale-or-bogus-token>` returned HTTP 404 — mobile Safari / iOS WebKit / some corporate proxies intercept 4xx with their own "This page isn't working" screen, hiding the bilingual "contact your accounting firm" message | included below |
+| P5 | HIGH UX | Same 404 for an inactive (deactivated) client | included below |
+
+No bugs found in: QR roundtrip (3 sizes pass through OpenCV's detector), 2 MB slow-3G upload, 20-photo batch upload (all queue), FR/EN labels on portal chrome, bidirectional messaging ordering, Plaid `client_user_id` correctness, inactive-client info leak (no firm code or client name in the invalid-link body).
+
+**Tests added:** `tests/portal/test_client_experience.py` — 18 tests. Full portal suite (existing + new): 43 passing. Full pytest: **6,829 passing**, up from 6,813.
+
 ## Commit trail this round (chronological)
 
 | Commit | Scope |
