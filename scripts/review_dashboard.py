@@ -900,6 +900,7 @@ def bootstrap_schema() -> None:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
         # INTEGER/REAL columns with sane defaults.
         for col, ddl in (
+            ("amount",                  "REAL"),
             ("confidence",              "REAL"),
             ("hallucination_suspected", "INTEGER DEFAULT 0"),
             ("correction_count",        "INTEGER DEFAULT 0"),
@@ -913,6 +914,11 @@ def bootstrap_schema() -> None:
         ):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")
+        # Fundamental TEXT columns the dashboard SELECTs in many places.
+        for col in ("document_date", "ingest_source", "created_at",
+                    "updated_at", "vendor", "client_code"):
+            if col not in existing:
+                conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
         conn.commit()
 
         # Add must_reset_password / language columns to dashboard_users if missing
