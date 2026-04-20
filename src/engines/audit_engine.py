@@ -1341,8 +1341,13 @@ def generate_trial_balance(
                ORDER BY d.gl_account""",
             (client_code, f"{period}%"),
         ).fetchall()
-    except Exception:
-        return []
+    except sqlite3.OperationalError:
+        # ``documents`` or ``posting_jobs`` may not exist on a fresh
+        # accounting-only DB. That's fine — fall through with no
+        # document rows so the AR / opening-balance / manual-JE
+        # rollups still run. Bare ``except: return []`` was hiding
+        # manual JEs from the trial balance.
+        rows = []
 
     # --- AR-side aggregation (revenue 4100 + AR 1200 + tax liability 2300/2310)
     #    Revenue = amount_ht, GST payable = gst_amount, QST payable = qst_amount.
@@ -1490,6 +1495,55 @@ def generate_trial_balance(
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+    # --- Manual JEs from gl_transactions ----------------------------------
+    # post_journal_entry writes one row per leg into gl_transactions; the
+    # TB had no plumbing to pick that up, so manual adjustments
+    # (depreciation, accruals, prior-period corrections, retained-earnings
+    # roll-forwards) were silently invisible in the financial statements.
+    # Fold them in alongside the AR/AP rollups.
+    je_per_account: dict[str, dict[str, Decimal]] = {}
+    try:
+        je_rows = conn.execute(
+            """SELECT account_code, side, SUM(amount) AS total
+               FROM gl_transactions
+               WHERE LOWER(client_code) = LOWER(?)
+                 AND (period = ? OR entry_date LIKE ?)
+               GROUP BY account_code, side""",
+            (client_code, period, f"{period}%"),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        je_rows = []
+    for r in je_rows or []:
+        acct = (r["account_code"] or "").strip()
+        if not acct:
+            continue
+        slot = je_per_account.setdefault(acct, {"debit": _ZERO, "credit": _ZERO})
+        slot[r["side"]] = _to_decimal(r["total"] or 0)
+    for acct, sides in je_per_account.items():
+        debit_amt = float(sides.get("debit", _ZERO))
+        credit_amt = float(sides.get("credit", _ZERO))
+        if debit_amt == 0 and credit_amt == 0:
+            continue
+        coa_row = conn.execute(
+            "SELECT account_name FROM chart_of_accounts WHERE account_code=?",
+            (acct,),
+        ).fetchone()
+        name = coa_row["account_name"] if coa_row else acct
+        now = _utc_now()
+        conn.execute(
+            """INSERT INTO trial_balance (client_code, period, account_code,
+               account_name, debit_total, credit_total, net_balance, generated_at)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(client_code, period, account_code) DO UPDATE SET
+                   debit_total  = excluded.debit_total + trial_balance.debit_total,
+                   credit_total = excluded.credit_total + trial_balance.credit_total,
+                   net_balance  = (excluded.debit_total + trial_balance.debit_total)
+                                   - (excluded.credit_total + trial_balance.credit_total),
+                   generated_at = excluded.generated_at""",
+            (client_code, period, acct, name, debit_amt, credit_amt,
+             debit_amt - credit_amt, now),
+        )
 
     # --- Apply AR rows + AP-credit synthesis + unpaid-AP debits ---------
     for code, amt in ap_unpaid_debit.items():
@@ -2483,18 +2537,38 @@ def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
     y += 14
     _section(t("fs_equity", lang), bs["equity"]["items"])
     page.insert_text((50, y), t("fs_total_equity", lang), fontsize=9, fontname="hebo")
-    page.insert_text((450, y), f"${float(bs['equity']['total']):,.2f}", fontsize=9, fontname="hebo")
+    # bs["equity"] was overwritten to a flat dict by
+    # generate_financial_statements; the canonical totals dict lives
+    # under bs["equity_detail"]. Fall back through both shapes so this
+    # code path is robust to future readers.
+    _eq_total = (
+        bs.get("equity_detail", {}).get("total")
+        if isinstance(bs.get("equity_detail"), dict)
+        else None
+    )
+    if _eq_total is None:
+        _eq_total = bs.get("equity_total", 0)
+    page.insert_text((450, y), f"${float(_eq_total):,.2f}", fontsize=9, fontname="hebo")
     y += 20
     page.draw_line((50, y), (562, y), color=(0.75, 0.75, 0.75), width=0.5)
     y += 14
     page.insert_text((50, y), t("fs_income_statement", lang), fontsize=11, fontname="hebo",
                      color=(0.08, 0.16, 0.44))
     y += 14
-    _section(t("fs_revenue", lang), is_["revenue"])
+    # Same flat-dict-vs-list issue as bs["equity"]: is_["revenue"] /
+    # ["expenses"] are the flat dicts; the list-of-dicts the renderer
+    # wants lives under is_["revenue_detail"] / ["expenses_detail"].
+    _rev_items = is_.get("revenue_detail")
+    if not isinstance(_rev_items, list):
+        _rev_items = []
+    _exp_items = is_.get("expenses_detail")
+    if not isinstance(_exp_items, list):
+        _exp_items = []
+    _section(t("fs_revenue", lang), _rev_items)
     page.insert_text((50, y), t("fs_total_revenue", lang), fontsize=9, fontname="hebo")
     page.insert_text((450, y), f"${float(is_['total_revenue']):,.2f}", fontsize=9, fontname="hebo")
     y += 12
-    _section(t("fs_expenses", lang), is_["expenses"])
+    _section(t("fs_expenses", lang), _exp_items)
     page.insert_text((50, y), t("fs_total_expenses", lang), fontsize=9, fontname="hebo")
     page.insert_text((450, y), f"${float(is_['total_expenses']):,.2f}", fontsize=9, fontname="hebo")
     y += 14
@@ -2544,11 +2618,25 @@ def _fs_pdf_minimal(stmts, firm_name, lang, t) -> bytes:
         y -= 10
     add(50, y, f"{t('fs_total_liabilities', lang)}: ${float(bs['liabilities']['total']):.2f}", 9)
     y -= 14
-    add(50, y, f"{t('fs_total_equity', lang)}: ${float(bs['equity']['total']):.2f}", 9)
+    _eq_total_min = (
+        bs.get("equity_detail", {}).get("total")
+        if isinstance(bs.get("equity_detail"), dict)
+        else None
+    )
+    if _eq_total_min is None:
+        _eq_total_min = bs.get("equity_total", 0)
+    add(50, y, f"{t('fs_total_equity', lang)}: ${float(_eq_total_min):.2f}", 9)
     y -= 20
     add(50, y, t("fs_income_statement", lang), 11)
     y -= 12
-    for item in is_["revenue"]:
+    # is_["revenue"] / ["expenses"] were overwritten to flat dicts by
+    # generate_financial_statements; the canonical list-of-dicts lives
+    # under is_["revenue_detail"] / ["expenses_detail"]. Same pattern as
+    # bs["equity"] / bs["equity_detail"].
+    _rev_items = is_.get("revenue_detail")
+    if not isinstance(_rev_items, list):
+        _rev_items = []
+    for item in _rev_items:
         if y < 80:
             break
         add(60, y, f"{item['account_code']} {item['account_name']}", 8)
@@ -2556,7 +2644,10 @@ def _fs_pdf_minimal(stmts, firm_name, lang, t) -> bytes:
         y -= 10
     add(50, y, f"{t('fs_total_revenue', lang)}: ${float(is_['total_revenue']):.2f}", 9)
     y -= 12
-    for item in is_["expenses"]:
+    _exp_items = is_.get("expenses_detail")
+    if not isinstance(_exp_items, list):
+        _exp_items = []
+    for item in _exp_items:
         if y < 80:
             break
         add(60, y, f"{item['account_code']} {item['account_name']}", 8)
