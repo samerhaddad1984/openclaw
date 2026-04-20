@@ -1966,16 +1966,37 @@ def process_file(
             finally:
                 _ai_conn.close()
 
-            # Apply AI-primary results
+            # Apply AI-primary results.
+            # Live stress (R5) found claude-haiku hallucinating flat 100.0
+            # for amount/gst/qst on receipts where DocAI had already
+            # extracted the correct numeric values. DocAI's expense
+            # processor is more reliable than free-form AI for receipt
+            # numerics, so we don't let the AI overwrite a DocAI-populated
+            # amount or tax split. AI can still fill them when DocAI left
+            # them None (e.g. gst/qst which DocAI doesn't split).
+            _docai_succeeded_num = extraction_method.startswith('google_docai_expense') \
+                or extraction_method.startswith('google_docai_invoice')
             if _ai_primary.get('ai_used'):
                 # AI succeeded — use its results, regex already merged inside
                 if _ai_primary.get('vendor_name'):
                     vendor = _ai_primary['vendor_name']
                     raw['vendor_name'] = vendor
                 if _ai_primary.get('amount') is not None:
-                    amount = float(_ai_primary['amount'])
-                    raw['total'] = amount
-                    _parsed_fields['amount'] = amount
+                    ai_amt = float(_ai_primary['amount'])
+                    # Guard: when DocAI has an amount, only accept AI amount
+                    # if it agrees with DocAI within 10%. This blocks the
+                    # "AI returned 100.0" hallucination.
+                    if _docai_succeeded_num and amount is not None:
+                        if abs(ai_amt - amount) > max(0.5, amount * 0.10):
+                            _extraction_flags.append("ai_amount_rejected_vs_docai")
+                        else:
+                            amount = ai_amt
+                            raw['total'] = amount
+                            _parsed_fields['amount'] = amount
+                    else:
+                        amount = ai_amt
+                        raw['total'] = amount
+                        _parsed_fields['amount'] = amount
                 if _ai_primary.get('document_date'):
                     document_date = _ai_primary['document_date']
                     raw['document_date'] = document_date
@@ -1989,11 +2010,22 @@ def process_file(
                 if _ai_primary.get('qst_number'):
                     raw['qst_number'] = _ai_primary['qst_number']
                 if _ai_primary.get('gst_amount') is not None:
-                    raw['gst_amount'] = _ai_primary['gst_amount']
-                    _gst_amount = float(_ai_primary['gst_amount'])
+                    ai_gst = float(_ai_primary['gst_amount'])
+                    # Sanity: Canadian GST is 5% of subtotal. Reject AI
+                    # gst values > 15% of total — those are hallucinations.
+                    if amount is not None and ai_gst > amount * 0.15 and ai_gst > 5.0:
+                        _extraction_flags.append("ai_gst_rejected_too_large")
+                    else:
+                        raw['gst_amount'] = ai_gst
+                        _gst_amount = ai_gst
                 if _ai_primary.get('qst_amount') is not None:
-                    raw['qst_amount'] = _ai_primary['qst_amount']
-                    _qst_amount = float(_ai_primary['qst_amount'])
+                    ai_qst = float(_ai_primary['qst_amount'])
+                    # QST is 9.975% in Quebec. Reject AI qst > 20% of total.
+                    if amount is not None and ai_qst > amount * 0.20 and ai_qst > 10.0:
+                        _extraction_flags.append("ai_qst_rejected_too_large")
+                    else:
+                        raw['qst_amount'] = ai_qst
+                        _qst_amount = ai_qst
                 if _ai_primary.get('gl_account'):
                     raw['gl_account'] = _ai_primary['gl_account']
                 if _ai_primary.get('tax_code'):
