@@ -828,9 +828,10 @@ _QC_MONTHS: dict[str, str] = {
     "avril": "04", "mai": "05", "juin": "06", "juillet": "07",
     "août": "08", "aout": "08", "septembre": "09", "octobre": "10",
     "novembre": "11", "décembre": "12", "decembre": "12",
-    "jan": "01", "fév": "02", "fev": "02", "mar": "03", "avr": "04",
-    "jui": "06", "jul": "07", "aoû": "08", "sep": "09", "oct": "10",
-    "nov": "11", "déc": "12", "dec": "12",
+    "jan": "01", "feb": "02", "fév": "02", "fev": "02", "mar": "03",
+    "apr": "04", "avr": "04", "jun": "06", "jui": "06", "jul": "07",
+    "aug": "08", "aoû": "08", "aou": "08", "sep": "09", "sept": "09",
+    "oct": "10", "nov": "11", "déc": "12", "dec": "12",
     # English month names
     "january": "01", "february": "02", "march": "03", "april": "04",
     "may": "05", "june": "06", "july": "07", "august": "08",
@@ -866,19 +867,24 @@ def _fix_quebec_amount(raw: Any) -> float | None:
 
 
 def _date_in_sane_range(year: int, month: int, day: int) -> bool:
-    """True if the date is plausibly a real receipt date.
+    """True if the date is a plausible real receipt date.
 
-    Sanity rules (mega-session Part 3 fix):
+    Sanity rules (mega-session Part 3 + R5 investigation):
       * year must be between 2000 and current_year + 1 (no far-future)
-      * month 1-12, day 1-31 (calendar validity checked separately)
+      * month 1-12, day 1-31
+      * calendar-valid (``date(y, m, d)`` succeeds — blocks Feb 31 etc.)
     """
-    from datetime import datetime as _dt
+    from datetime import date as _date, datetime as _dt
     current_year = _dt.now().year
     if year < 2000 or year > current_year + 1:
         return False
     if not (1 <= month <= 12):
         return False
     if not (1 <= day <= 31):
+        return False
+    try:
+        _date(year, month, day)
+    except ValueError:
         return False
     return True
 
@@ -923,15 +929,50 @@ def _fix_quebec_date(raw: Any) -> str | None:
         # review rather than silently storing a wrong date.
         if year > current_year + 1:
             return None
+        if not _date_in_sane_range(year, month, day):
+            return None
         return f"{year}-{month:02d}-{day:02d}"
 
-    # DD/MM/YY or DD-MM-YYYY or DD/MM/YYYY
+    # DD/MM/YY or DD-MM-YYYY or DD/MM/YYYY.
+    # Default to DD/MM (Canadian/Malaysian convention). When first
+    # number > 12 the day position is unambiguous; when second > 12
+    # the receipt is US-style MM/DD.
     m = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})$", s)
     if m:
-        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        a, b, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if year < 100:
             year += 2000
+        if a > 12 and b <= 12:
+            day, month = a, b
+        elif b > 12 and a <= 12:
+            month, day = a, b
+        elif a > 12 and b > 12:
+            # Both > 12 — not a real date. Flag caller by returning None
+            # so we don't silently store a SKU code (e.g. `23-33-53`).
+            return None
+        else:
+            # Ambiguous but both ≤ 12: keep DD/MM default.
+            day, month = a, b
+        if not _date_in_sane_range(year, month, day):
+            return None
         return f"{year}-{month:02d}-{day:02d}"
+
+    # DD[-/ ]MMM[-/ ]YYYY and DD[-/ ]MMM[-/ ]YY forms — e.g.
+    # "05-JAN-2017", "22 MAR 2018", "14/JUN/2017", "05 MAY 18".
+    # Tried BEFORE the split-by-space branch so dash-separated forms
+    # resolve without requiring whitespace.
+    m = re.match(
+        r"^(\d{1,2})[\-/ ]+([A-Za-zÀ-ÿ]{3,12})[\-/ ]+(\d{2,4})$", s, re.IGNORECASE
+    )
+    if m:
+        day, month_raw, year = int(m.group(1)), m.group(2).lower(), int(m.group(3))
+        month_num = _QC_MONTHS.get(month_raw) or _QC_MONTHS.get(month_raw[:3])
+        if month_num:
+            if year < 100:
+                year += 2000
+            month = int(month_num)
+            if _date_in_sane_range(year, month, day):
+                return f"{year}-{month_num}-{day:02d}"
 
     # "19 mars 2026" or "mars 19 2026" or "19 mars, 2026"
     s_clean = s.replace(",", " ").strip()
@@ -953,7 +994,9 @@ def _fix_quebec_date(raw: Any) -> str | None:
                         day, year = a, b
                     if year < 100:
                         year += 2000
-                    return f"{year}-{month_num}-{day:02d}"
+                    if _date_in_sane_range(year, int(month_num), day):
+                        return f"{year}-{month_num}-{day:02d}"
+                    return None
 
     return None
 
@@ -1706,7 +1749,14 @@ def process_file(
                     if parsed is not None:
                         raw['tax_total'] = parsed
                 if docai_result.get('document_date'):
-                    raw['document_date'] = docai_result['document_date']
+                    # DocAI returns dates in the same format the receipt
+                    # printed (e.g. '24-03-18', '05-JAN-2017', '22 MAR
+                    # 2018'). Normalise to YYYY-MM-DD via _fix_quebec_date
+                    # so the AI-primary reconciliation sees a consistent
+                    # comparison target.
+                    _docai_date = _fix_quebec_date(docai_result['document_date'])
+                    if _docai_date:
+                        raw['document_date'] = _docai_date
                 if docai_result.get('invoice_number'):
                     raw['invoice_number'] = docai_result['invoice_number']
                 if docai_result.get('gst_number'):
@@ -1998,8 +2048,18 @@ def process_file(
                         raw['total'] = amount
                         _parsed_fields['amount'] = amount
                 if _ai_primary.get('document_date'):
-                    document_date = _ai_primary['document_date']
-                    raw['document_date'] = document_date
+                    ai_date = _ai_primary['document_date']
+                    # Guard: when DocAI returned a date, reject AI dates
+                    # that disagree. Same rationale as the amount guard —
+                    # claude-haiku occasionally flips D/M or invents a
+                    # far-future year from a 2-digit OCR ('24-03-18' →
+                    # '2024-03-18'). DocAI's structured date extraction
+                    # is more reliable for that surface.
+                    if _docai_succeeded_num and document_date and ai_date != document_date:
+                        _extraction_flags.append("ai_date_rejected_vs_docai")
+                    else:
+                        document_date = ai_date
+                        raw['document_date'] = document_date
                 if _ai_primary.get('currency'):
                     currency = _ai_primary['currency']
                     raw['currency'] = currency
@@ -3666,7 +3726,16 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
         r"[.,]?\s+(\d{1,2}),?\s+(\d{4})",
         re.IGNORECASE,
     )
-    for line in lines:
+    # Priority 1: lines carrying an explicit date label beat bare numeric
+    # strings. Without this a SKU code like `23-33-53` on an earlier line
+    # will win over the real `24-03-18` in the footer.
+    _date_label_re = re.compile(
+        r"(?:^|\s|\b)(?:date|dated|invoice\s+date|receipt\s+date|"
+        r"bizdate|trans(?:action)?\s*date|facture\s+(?:du|en\s+date\s+de)|"
+        r"en\s+date\s+du)\b", re.IGNORECASE)
+    labeled_lines: list[str] = [line for line in lines if _date_label_re.search(line)]
+    search_order: list[str] = labeled_lines + [line for line in lines if line not in labeled_lines]
+    for line in search_order:
         for pat in date_patterns:
             m = pat.search(line)
             if m:
@@ -3686,6 +3755,11 @@ def parse_invoice_fields(text: str) -> dict[str, Any]:
                 day = day_before or day_after
                 mm = _MONTH_MAP.get(month_str[:3].lower())
                 if mm and day:
+                    try:
+                        from datetime import date as _date_cls
+                        _date_cls(int(year), int(mm), int(day))
+                    except ValueError:
+                        continue
                     result["document_date"] = f"{year}-{mm}-{day.zfill(2)}"
                     confidence += 0.1
                     break

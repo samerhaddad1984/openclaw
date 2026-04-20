@@ -65,7 +65,14 @@ def process_with_docai(file_path: Path, doc_type: str = 'invoice') -> dict:
             value = entity.mention_text.strip() if entity.mention_text else ''
             confidence = entity.confidence
 
-            # Map Document AI fields to OtoCPA fields
+            # Map Document AI fields to OtoCPA fields.
+            # receipt_date is what the DocAI *expense* processor returns;
+            # invoice_date is what the invoice processor returns. Both map
+            # to our single `document_date` column. Before this fix the
+            # expense processor's date was silently dropped (no mapping),
+            # which pushed date extraction onto the much noisier regex
+            # path in parse_invoice_fields — SKU codes like `23-33-53`
+            # would pattern-match and win over the real date.
             field_map = {
                 'supplier_name': 'vendor_name',
                 'vendor_name': 'vendor_name',
@@ -74,6 +81,7 @@ def process_with_docai(file_path: Path, doc_type: str = 'invoice') -> dict:
                 'net_amount': 'subtotal',
                 'total_tax_amount': 'tax_total',
                 'invoice_date': 'document_date',
+                'receipt_date': 'document_date',
                 'due_date': 'due_date',
                 'invoice_id': 'invoice_number',
                 'purchase_order': 'po_number',
