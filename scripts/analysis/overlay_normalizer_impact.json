@@ -1,0 +1,222 @@
+{
+  "summary": {
+    "total": 21,
+    "matches_before": 13,
+    "matches_after": 13,
+    "rate_before": 0.6190476190476191,
+    "rate_after": 0.6190476190476191,
+    "delta_pp": 0.0
+  },
+  "rows": [
+    {
+      "file_name": "facture-aux-vivres.jpg",
+      "truth_vendor": "AUX VIVRES",
+      "ours_before": "AUX VIVRES",
+      "ours_after": "Aux Vivres",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "original-14134-1452105464-3.webp",
+      "truth_vendor": "Le Mile Public House",
+      "ours_before": "Le Mile Public House",
+      "ours_after": "Le Mile Public House",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "DM_5tKGU8AA_8Gd.jpg",
+      "truth_vendor": "RESTAURANT LA PIAZZETTA ST-JEAN",
+      "ours_before": "RESTAURANT LA PIAZZETTA ST-JEAN",
+      "ours_after": "Restaurant La Piazzetta St-Jean",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "amigopos_v7_305.jpg",
+      "truth_vendor": "RESTO' - BRASSERIE",
+      "ours_before": "RESTO BRASSERIE",
+      "ours_after": "Resto Brasserie",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "mismatch",
+      "status_after": "mismatch"
+    },
+    {
+      "file_name": "prescription-drug-sample-receipt-quebec.webp",
+      "truth_vendor": null,
+      "ours_before": "Pharmacien",
+      "ours_after": "Pharmaprix",
+      "normalizer_source": "typo",
+      "overlay_hit": null,
+      "status_before": "only_ours",
+      "status_after": "only_ours"
+    },
+    {
+      "file_name": "our-adjusted-bill.jpg",
+      "truth_vendor": "LE SAINT-AMOUR",
+      "ours_before": "LE SAINT-AMOUR",
+      "ours_after": "Le Saint-Amour",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "56e593ade1d3b.image.jpg",
+      "truth_vendor": "Uniprix",
+      "ours_before": "unprix",
+      "ours_after": "Uniprix",
+      "normalizer_source": "typo",
+      "overlay_hit": null,
+      "status_before": "mismatch",
+      "status_after": "match"
+    },
+    {
+      "file_name": "invoice_template_bold.png",
+      "truth_vendor": "Demo app",
+      "ours_before": "Libellum",
+      "ours_after": "Libellum Technologies",
+      "normalizer_source": "self_learning",
+      "overlay_hit": null,
+      "status_before": "mismatch",
+      "status_after": "mismatch"
+    },
+    {
+      "file_name": "receipt.jpg",
+      "truth_vendor": "NOTRE-BOEUF-DE-GRACE",
+      "ours_before": "NOTRE-BOEUF-DE-GRACE",
+      "ours_after": "Notre-Boeuf-De-Grace",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "InvoiceSample.webp",
+      "truth_vendor": "Topnotepad",
+      "ours_before": "Topnotepad",
+      "ours_after": "Topnotepad",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "restaurants-charging-tps-gst-v0-xh1ouobcveae1.webp",
+      "truth_vendor": "LATTUCA BARBECUE",
+      "ours_before": "LATTUCA BARBECUE",
+      "ours_after": "Lattuca Barbecue",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "my-receipt.jpg",
+      "truth_vendor": "Burger Bar Crescent",
+      "ours_before": "Burger Bar Crescent",
+      "ours_after": "Burger Bar Crescent",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "nutenorth_receipt2.jpg",
+      "truth_vendor": null,
+      "ours_before": null,
+      "ours_after": null,
+      "normalizer_source": "empty",
+      "overlay_hit": null,
+      "status_before": "both_null",
+      "status_after": "both_null"
+    },
+    {
+      "file_name": "keung-kee-restaurant.jpg",
+      "truth_vendor": "Restaurant KEUNG KEE",
+      "ours_before": "KEUNG KEE",
+      "ours_after": "Restaurant KEUNG KEE",
+      "normalizer_source": "self_learning",
+      "overlay_hit": null,
+      "status_before": "match_fuzzy",
+      "status_after": "match"
+    },
+    {
+      "file_name": "348s.jpg",
+      "truth_vendor": "CHEZ BAPTISTE",
+      "ours_before": "CHEZ BAPTISTE",
+      "ours_after": "Chez Baptiste",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "87-42-cad-super-c-quebec-v0-wu1gfakvshjd1.webp",
+      "truth_vendor": "Super C",
+      "ours_before": "Super C",
+      "ours_after": "Super C",
+      "normalizer_source": "brand_map",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "348s 1.jpg",
+      "truth_vendor": "SHAKER CUISINE & MIXOLOGIE",
+      "ours_before": "SHAKER CUISINE & MIXOLOGIE",
+      "ours_after": "Shaker Cuisine & Mixologie",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "match",
+      "status_after": "match"
+    },
+    {
+      "file_name": "caption.jpg",
+      "truth_vendor": "QUEBEC",
+      "ours_before": "Pinchos Quebec",
+      "ours_after": "Pinchos",
+      "normalizer_source": "self_learning",
+      "overlay_hit": null,
+      "status_before": "match_fuzzy",
+      "status_after": "mismatch"
+    },
+    {
+      "file_name": "\u00e9cofrais-sur-lalcool-v0-bj0fmwek3fue1.webp",
+      "truth_vendor": null,
+      "ours_before": null,
+      "ours_after": null,
+      "normalizer_source": "empty",
+      "overlay_hit": null,
+      "status_before": "both_null",
+      "status_after": "both_null"
+    },
+    {
+      "file_name": "348s 2.jpg",
+      "truth_vendor": null,
+      "ours_before": null,
+      "ours_after": null,
+      "normalizer_source": "empty",
+      "overlay_hit": null,
+      "status_before": "both_null",
+      "status_after": "both_null"
+    },
+    {
+      "file_name": "348s 3.jpg",
+      "truth_vendor": null,
+      "ours_before": "Poulet Au Curry",
+      "ours_after": "Poulet Au Curry",
+      "normalizer_source": "no_change",
+      "overlay_hit": null,
+      "status_before": "only_ours",
+      "status_after": "only_ours"
+    }
+  ]
+}

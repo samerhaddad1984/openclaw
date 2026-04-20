@@ -48,6 +48,26 @@
 
 Raw data: `/opt/otocpa/scripts/analysis/canadian_receipts_analysis_after_learning.json`.
 
+## 2026-04-20 update — after Tracks 1+2 (overlays + normalizer)
+
+Offline re-measurement on the same 21 receipts after shipping the
+vendor normalizer and the 36-merchant overlay registry:
+
+- Vendor **exact** match rate: **52.4% → 61.9%** (+9.5 pp).
+- Vendor exact-or-fuzzy match rate: 61.9% → 61.9% (promotions rather
+  than new coverage on this corpus).
+- One concrete regression-class fix: `unprix` OCR typo now lands as
+  `Uniprix`.
+- Impact is corpus-bound: only 2 / 21 of the test set map to a
+  registered overlay. The framework covers Metro / IGA / Tim Hortons
+  / Jean Coutu / Pharmaprix / Walmart etc. which dominate real CPA
+  receipts but are under-represented in this 21-receipt sample.
+
+See `docs/ocr_upgrade_report.md` for the full three-track sprint
+report. Raw per-receipt delta lives in
+`scripts/analysis/overlay_normalizer_impact.json`.
+
+
 ## Caveats
 
 - Claude Vision is treated as ground truth but can itself be wrong (e.g., on ambiguous multi-line vendor headers, neither Claude nor our pipeline is guaranteed correct).
