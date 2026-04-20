@@ -11,9 +11,16 @@ from pathlib import Path
 
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {
-        r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()
-    }
+    # PRAGMA table_info returns (cid, name, type, notnull, dflt_value, pk).
+    # Use name-keyed access when the connection has a dict-style
+    # row_factory; otherwise fall back to positional index.
+    out = set()
+    for r in conn.execute(f"PRAGMA table_info({table})").fetchall():
+        if hasattr(r, 'keys'):
+            out.add(r['name'])
+        else:
+            out.add(r[1])
+    return out
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, col: str,
@@ -25,8 +32,16 @@ def _ensure_column(conn: sqlite3.Connection, table: str, col: str,
 def apply_bank_source_schema(conn: sqlite3.Connection) -> None:
     """Idempotently add bank-source columns + dedup table."""
     # clients.bank_source ∈ {'qbo','plaid','both','none'}
-    if 'clients' in {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    # row_factory may be default tuple OR sqlite3.Row OR a custom dict
+    # factory (review_dashboard uses one) — read by name to stay
+    # compatible with all three.
+    table_names = {
+        (r['name'] if hasattr(r, 'keys') else r[0])
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if 'clients' in table_names:
         _ensure_column(conn, 'clients', 'bank_source',
                         "TEXT DEFAULT 'none'")
     # bank_transactions may not exist in a fresh test DB; create minimal
