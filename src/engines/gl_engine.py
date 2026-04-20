@@ -185,6 +185,22 @@ def reverse_journal_entry(
         if status not in ("draft", "posted"):
             raise ValueError(f"cannot_reverse_entry_status={status}")
 
+        # Period-lock guard parity with post_journal_entry: reverse
+        # writes new compensating rows into the same period the
+        # original entry sits in. If that period is locked, the
+        # reversal would silently land in a closed period.
+        if status == "posted":
+            try:
+                from src.agents.core.period_close import is_period_locked  # noqa: PLC0415
+                if is_period_locked(conn, row["client_code"], row["period"] or ""):
+                    raise ValueError(f"period_locked:{row['period']}")
+            except ValueError:
+                raise
+            except Exception:
+                # Don't block reversal if period_close is missing or
+                # the lock check itself errors — match post's posture.
+                pass
+
         amount = float(row["amount"] or 0)
         with conn:
             if status == "posted" and amount > 0:
