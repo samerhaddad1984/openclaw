@@ -1411,6 +1411,50 @@ def bootstrap_schema() -> None:
                 UNIQUE(firm_code, client_code, period)
             )
         """)
+
+        # Gap-5: client portal notifications + threaded messaging.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_code TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT,
+                body TEXT,
+                document_id TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                read_at TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_client_notifications_client "
+            "ON client_notifications(client_code, read_at)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_message_threads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT,
+                client_code TEXT,
+                subject TEXT,
+                document_id TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_message_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id INTEGER NOT NULL,
+                sender_type TEXT NOT NULL,
+                sender_id TEXT,
+                body TEXT,
+                attachment_url TEXT,
+                read_at TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cm_posts_thread "
+            "ON client_message_posts(thread_id, created_at)"
+        )
         conn.commit()
 
         # Sprint 4: client portal via QR token.
