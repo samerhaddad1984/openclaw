@@ -147,12 +147,25 @@ def recent_activity(
     events: list[dict[str, Any]] = []
     with _open(db_path) as conn:
         if _table_exists(conn, 'documents'):
+            # Prefer explicit review_timestamp when present; fall back to
+            # uploaded_at then document_date. Legacy test DBs that don't
+            # have review_timestamp fall through to the two-column version.
+            doc_cols = {r['name'] if hasattr(r, 'keys') else r[1]
+                         for r in conn.execute(
+                             "PRAGMA table_info(documents)"
+                         ).fetchall()}
+            if 'review_timestamp' in doc_cols:
+                ts_sql = ("COALESCE(review_timestamp, uploaded_at, "
+                          "document_date)")
+            elif 'uploaded_at' in doc_cols:
+                ts_sql = "COALESCE(uploaded_at, document_date)"
+            else:
+                ts_sql = "document_date"
             rows = conn.execute(
-                "SELECT document_id, vendor, amount, review_status, "
-                "  COALESCE(review_timestamp, "
-                "           uploaded_at, document_date) AS ts "
-                "FROM documents WHERE client_code=? "
-                "ORDER BY ts DESC LIMIT ?",
+                f"SELECT document_id, vendor, amount, review_status, "
+                f"  {ts_sql} AS ts "
+                f"FROM documents WHERE client_code=? "
+                f"ORDER BY ts DESC LIMIT ?",
                 (client_code, limit),
             ).fetchall()
             for r in rows:
