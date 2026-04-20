@@ -69,6 +69,35 @@ def test_backup_script_runs_pragma_integrity_check():
     )
 
 
+def test_backup_script_does_not_hardcode_postgres_password():
+    """The PG password must come from PGPASSFILE (.pgpass, 0600 perms),
+    an OTOCPA_PG_PASSWORD env var, or libpq's default ~/.pgpass. Never
+    from a literal in the script."""
+    src = BACKUP_SCRIPT.read_text()
+    # The literal we previously shipped.
+    assert "OtoCPA2026!Secure" not in src, (
+        "backup script still contains the hardcoded PG password "
+        "literal. Move it to /opt/otocpa/.pgpass (0600) or a systemd "
+        "credential."
+    )
+    # Must reference the approved credential sources.
+    assert "PGPASSFILE" in src, "script must honour libpq's PGPASSFILE"
+    assert "OTOCPA_PG_PASSWORD" in src, "env-var fallback removed"
+
+
+def test_pgpass_file_exists_with_600_perms():
+    """If /opt/otocpa/.pgpass exists, it must be mode 0600. libpq
+    refuses to read looser-permission passfiles; a 0644 file silently
+    degrades the backup to prompting pg_dump."""
+    pp = Path("/opt/otocpa/.pgpass")
+    if not pp.exists():
+        pytest.skip("/opt/otocpa/.pgpass not present in this environment")
+    mode = oct(pp.stat().st_mode)[-3:]
+    assert mode == "600", (
+        f"/opt/otocpa/.pgpass has mode {mode}; libpq requires 600"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Live restore drill (run only when the backup directory is present).
 # ---------------------------------------------------------------------------
