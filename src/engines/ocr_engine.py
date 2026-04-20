@@ -2214,6 +2214,32 @@ def process_file(
     except Exception:  # pragma: no cover
         logging.exception("apply_vendor_learning failed")
 
+    # Sprint OCR-upgrade Track 2: final canonicalisation pass.
+    # Strips legal suffixes, fixes known OCR typos (unprix → Uniprix), and
+    # routes parent legal entities (TDL Group) to consumer brands
+    # (Tim Hortons). Runs AFTER self-learning so firm-specific corrections
+    # still win, but catches brand-map hits the learning layer missed.
+    try:
+        from src.engines.vendor_normalizer import VendorNormalizer  # noqa: PLC0415
+        _norm = VendorNormalizer(db_path=db_path, firm_code=_firm_for_learn)
+        _norm_result = _norm.normalize(vendor)
+        _canonical = _norm_result.get("canonical")
+        _src = _norm_result.get("source")
+        if (
+            _canonical
+            and _canonical != vendor
+            and _src in {"brand_map", "typo", "fuzzy"}
+        ):
+            raw["vendor_normalized_from"] = vendor
+            raw["vendor_normalized_source"] = _src
+            raw["vendor_normalized_confidence"] = _norm_result.get("confidence")
+            vendor = _canonical
+            _extraction_flags = list(_extraction_flags or [])
+            if "vendor_normalized" not in _extraction_flags:
+                _extraction_flags.append("vendor_normalized")
+    except Exception:  # pragma: no cover
+        logging.exception("vendor_normalizer failed")
+
     # 6. DB upsert
     record: dict[str, Any] = {
         "document_id":            doc_id,
