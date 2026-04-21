@@ -13215,8 +13215,8 @@ a:hover{{color:#16C172}}
         </div>
         <div class="feature">
             <h3>Flux d'audit conformes aux NCA / CAS-Compliant Audit Workflows</h3>
-            <p lang="fr">Conçu pour les normes d'audit canadiennes : importance relative, évaluation des risques, échantillonnage statistique, lettres d'affirmation.</p>
-            <p lang="en">Built for Canadian auditing standards: materiality, risk assessment, statistical sampling, representation letters.</p>
+            <p lang="fr">Conçu pour les normes d'audit canadiennes : importance relative (NCA 320), évaluation des risques (NCA 315), échantillonnage statistique (NCA 530), lettres d'affirmation (NCA 580) et dossiers de travail.</p>
+            <p lang="en">Built for Canadian auditing standards: materiality (CAS 320), risk assessment (CAS 315), statistical sampling (CAS 530), representation letters (CAS 580), and working papers.</p>
         </div>
         <div class="feature">
             <h3>Conçu d'abord pour le Québec / Quebec-First Design</h3>
