@@ -13379,11 +13379,11 @@ a:hover{{color:#16C172}}
 
 <div class="enterprise">
     <p>Besoin de plus? / Need more?</p>
-    <a href="mailto:contact@otocpa.com">Contactez-nous pour Entreprise / Contact us for Enterprise &rarr;</a>
+    <a href="/contact">Contactez-nous pour Entreprise / Contact us for Enterprise &rarr;</a>
 </div>
 
 <footer class="public-footer">
-    <p>&copy; 2026 OtoCPA Inc. <span class="sep">|</span> <a href="/privacy">Politique de confidentialité</a> <span class="sep">|</span> Conforme Loi 25 <span class="sep">|</span> Données hébergées au Canada</p>
+    <p>&copy; 2026 OtoCPA Inc. <span class="sep">|</span> <a href="/privacy">Politique de confidentialité</a> <span class="sep">|</span> <a href="/contact">Contact</a> <span class="sep">|</span> Conforme Loi 25 <span class="sep">|</span> Données hébergées au Canada</p>
     <p class="login-line">Déjà client? <a href="/login">Connexion &rarr;</a></p>
 </footer>
 
@@ -13393,6 +13393,173 @@ function setBilling(mode) {{
     document.getElementById('btn-monthly').classList.toggle('active', mode === 'monthly');
     document.getElementById('btn-yearly').classList.toggle('active', mode === 'yearly');
 }}
+</script>
+</body>
+</html>"""
+
+
+def render_contact_page(flash: str = "", flash_error: str = "") -> str:
+    """Public Contact page — bilingual form that POSTs to /api/contact."""
+    flash_html = ""
+    if flash:
+        flash_html = (
+            '<div class="notice" style="background:rgba(22,193,114,0.08);'
+            'border:1px solid rgba(22,193,114,0.35);color:#7AD66A;'
+            'padding:12px 16px;border-radius:10px;margin:0 0 18px;">'
+            f'{html.escape(flash)}</div>'
+        )
+    if flash_error:
+        flash_html += (
+            '<div class="notice" style="background:rgba(239,68,68,0.08);'
+            'border:1px solid rgba(239,68,68,0.35);color:#fca5a5;'
+            'padding:12px 16px;border-radius:10px;margin:0 0 18px;">'
+            f'{html.escape(flash_error)}</div>'
+        )
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — OtoCPA</title>
+<style>{PUBLIC_CSS}
+.contact-wrap{{max-width:640px;margin:48px auto;padding:0 24px}}
+.contact-card{{
+  background:#0f1e30;border:1px solid #1a2d45;border-radius:16px;
+  padding:36px;box-shadow:0 12px 32px rgba(0,0,0,0.25);
+}}
+.contact-card h1{{
+  margin:0 0 6px;font-size:28px;font-weight:700;color:#F4F6F8;
+  letter-spacing:-0.3px;
+}}
+.contact-card .sub{{margin:0 0 22px;color:#c0d0e0;font-size:15px}}
+.contact-card label{{
+  display:block;color:#c0d0e0;font-size:13px;font-weight:600;
+  margin:12px 0 6px;
+}}
+.contact-card input,.contact-card textarea{{
+  width:100%;padding:11px 13px;background:#081633;
+  border:1px solid #1a2d45;border-radius:8px;color:#F4F6F8;
+  font-size:14px;font-family:inherit;
+}}
+.contact-card input:focus,.contact-card textarea:focus{{
+  outline:none;border-color:#16C172;
+}}
+.contact-card textarea{{min-height:120px;resize:vertical}}
+.contact-card .row2{{display:grid;grid-template-columns:1fr 1fr;gap:14px}}
+.contact-card .hint{{
+  color:#6b8099;font-size:12px;margin:6px 0 0;
+}}
+.contact-card button{{
+  margin-top:22px;width:100%;padding:14px;
+  background:linear-gradient(135deg,#16C172,#7AD66A);
+  color:#000;border:none;border-radius:8px;
+  font-size:15px;font-weight:700;cursor:pointer;
+  font-family:inherit;
+}}
+.contact-card button:hover{{filter:brightness(1.05)}}
+.contact-card button:disabled{{filter:grayscale(0.5);cursor:wait}}
+.mailto-fallback{{
+  text-align:center;margin-top:22px;color:#6b8099;font-size:13px;
+}}
+.mailto-fallback a{{color:#7AD66A}}
+.back-link{{
+  display:inline-block;margin:0 0 18px;color:#6b8099;
+  font-size:13px;text-decoration:none;
+}}
+.back-link:hover{{color:#7AD66A}}
+@media (max-width:520px){{.contact-card .row2{{grid-template-columns:1fr}}}}
+</style>
+</head>
+<body>
+<header class="site-header">{LOGO_SVG_LARGE}</header>
+<div class="contact-wrap">
+    <a class="back-link" href="/signup">&larr; Retour / Back</a>
+    <div class="contact-card">
+        <h1>Contactez-nous / Contact us</h1>
+        <p class="sub">Posez-nous une question, demandez une démo, ou
+           discutez d'un plan Entreprise. /
+           Ask a question, request a demo, or talk about an Enterprise plan.</p>
+        {flash_html}
+        <form id="contact-form" method="POST" action="/contact">
+            <div class="row2">
+                <div>
+                    <label for="name">Nom / Name *</label>
+                    <input id="name" name="name" type="text" required maxlength="120" autocomplete="name">
+                </div>
+                <div>
+                    <label for="firm">Cabinet / Firm *</label>
+                    <input id="firm" name="firm" type="text" required maxlength="160" autocomplete="organization">
+                </div>
+            </div>
+            <div class="row2">
+                <div>
+                    <label for="email">Courriel / Email *</label>
+                    <input id="email" name="email" type="email" required maxlength="200" autocomplete="email">
+                </div>
+                <div>
+                    <label for="phone">Téléphone / Phone</label>
+                    <input id="phone" name="phone" type="tel" maxlength="60" autocomplete="tel">
+                </div>
+            </div>
+            <label for="clients">Nombre de clients CPA / Number of CPA clients</label>
+            <input id="clients" name="clients" type="text" maxlength="80" placeholder="ex. 15-30">
+            <label for="message">Message</label>
+            <textarea id="message" name="message" maxlength="4000" placeholder="Dites-nous ce dont vous avez besoin / Tell us what you need"></textarea>
+            <p class="hint">* champs requis / required fields</p>
+            <button type="submit" id="contact-submit">Envoyer / Send &rarr;</button>
+        </form>
+        <p class="mailto-fallback">Vous préférez le courriel direct? /
+           Prefer direct email?<br>
+           <a href="mailto:contact@otocpa.com">contact@otocpa.com</a></p>
+    </div>
+</div>
+<script>
+(function(){{
+    var form = document.getElementById('contact-form');
+    var btn = document.getElementById('contact-submit');
+    form.addEventListener('submit', function(ev){{
+        // Progressive enhancement: POST as JSON to /api/contact so the
+        // existing CORS-enabled backend handles it, without a full
+        // page reload. If JS is disabled, the form still POSTs to
+        // /contact (handled server-side as a form-encoded submit).
+        if (!window.fetch) return; // leave native form POST
+        ev.preventDefault();
+        btn.disabled = true;
+        btn.textContent = 'Envoi... / Sending...';
+        var data = {{
+            name: form.name.value,
+            firm: form.firm.value,
+            email: form.email.value,
+            phone: form.phone.value,
+            clients: form.clients.value,
+            message: form.message.value,
+            source: 'contact_page'
+        }};
+        fetch('/api/contact', {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify(data)
+        }}).then(function(r){{ return r.json().catch(function(){{ return {{ok:false}}; }}); }})
+          .then(function(j){{
+            if (j && j.ok) {{
+                window.location = '/contact?flash=' + encodeURIComponent(
+                    'Merci! Nous vous répondrons sous 24h. / Thanks! We\\'ll reply within 24h.');
+            }} else {{
+                btn.disabled = false;
+                btn.textContent = 'Envoyer / Send \\u2192';
+                var err = (j && j.error === 'rate_limited')
+                    ? 'Trop de tentatives. Réessayez dans 1h. / Too many attempts. Try again in 1h.'
+                    : 'Envoi échoué. Écrivez-nous à contact@otocpa.com. / Send failed. Email contact@otocpa.com.';
+                window.location = '/contact?error=' + encodeURIComponent(err);
+            }}
+          }}).catch(function(){{
+            btn.disabled = false;
+            btn.textContent = 'Envoyer / Send \\u2192';
+            window.location = '/contact?error=' + encodeURIComponent(
+                'Envoi échoué. Écrivez-nous à contact@otocpa.com. / Send failed. Email contact@otocpa.com.');
+          }});
+    }});
+}})();
 </script>
 </body>
 </html>"""
@@ -18930,6 +19097,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_signup_page())
                 return
 
+            # Public Contact page (no auth) — form posts to /api/contact.
+            if path == "/contact":
+                self._send_html(render_contact_page(
+                    flash=flash, flash_error=flash_error))
+                return
+
             if path == "/signup/checkout":
                 plan_key = qs.get("plan", [""])[0].strip()
                 try:
@@ -21178,6 +21351,57 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             _set_impersonation_context(self)
             parsed_url = urllib.parse.urlparse(self.path)
             path = parsed_url.path
+
+            # --- Public Contact page fallback (no-JS form submit) ---
+            # The /contact page hijacks submit via fetch() → /api/contact
+            # for modern browsers. When JS is disabled the form falls
+            # back to this form-encoded POST, which does the same insert
+            # and redirects to /contact with a flash.
+            if path == '/contact':
+                import sqlite3 as _sqlite3
+                client_ip = _get_client_ip(self)
+                if _contact_form_rate_limited(client_ip):
+                    self._flash_redirect(
+                        '/contact', error=(
+                            "Trop de tentatives. Reessayez dans 1h. / "
+                            "Too many attempts. Try again in 1h."))
+                    return
+                body_len = int(self.headers.get('Content-Length', 0))
+                raw = self.rfile.read(body_len) if body_len else b''
+                form = parse_form_body(raw)
+                name = (form.get('name') or '').strip()
+                firm = (form.get('firm') or '').strip()
+                email = (form.get('email') or '').strip()
+                if not name or not firm or not email:
+                    self._flash_redirect(
+                        '/contact', error=(
+                            "Champs requis manquants. / Missing required fields."))
+                    return
+                try:
+                    conn = _sqlite3.connect('data/otocpa_agent.db')
+                    conn.execute(
+                        "INSERT INTO contact_leads "
+                        "(name, firm, email, phone, clients, message, source) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (name, firm, email,
+                         (form.get('phone') or '').strip(),
+                         (form.get('clients') or '').strip(),
+                         (form.get('message') or '').strip(),
+                         'contact_page_nojs'))
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    logging.exception("contact form insert failed")
+                    self._flash_redirect(
+                        '/contact', error=(
+                            "Envoi echoue. Ecrivez-nous a contact@otocpa.com. / "
+                            "Send failed. Email contact@otocpa.com."))
+                    return
+                self._flash_redirect(
+                    '/contact', flash=(
+                        "Merci! Nous vous repondrons sous 24h. / "
+                        "Thanks! We'll reply within 24h."))
+                return
 
             # --- Public contact form (no auth, CORS-enabled) ---
             if path == '/api/contact':
