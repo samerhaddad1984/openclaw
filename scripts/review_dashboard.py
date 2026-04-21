@@ -13225,8 +13225,8 @@ a:hover{{color:#16C172}}
         </div>
         <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
-            <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada. Piste d'audit prête SOC 2. Rétention de 7 ans.</p>
-            <p lang="en">2FA enforced. All data in Canada. SOC 2-ready audit trail. 7-year retention.</p>
+            <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada (Toronto). Piste d'audit avec rétention de 7 ans. Conforme à la LPRPDE et à la Loi 25 du Québec.</p>
+            <p lang="en">2FA enforced. All data hosted in Canada (Toronto). Audit trail with 7-year retention. PIPEDA and Quebec Law 25 compliant.</p>
         </div>
     </div>
 </section>
