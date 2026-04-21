@@ -1041,6 +1041,214 @@ def render_user_portal_admin(
     )
 
 
+PORTAL_USER_TOUR_TOTAL = 3
+
+
+_PORTAL_USER_TOUR_CONTENT = [
+    {
+        'en': {
+            'title': 'Welcome, {name}!',
+            'subtitle': 'You were invited to submit receipts to {firm}.',
+            'body': (
+                "This portal is where you upload receipts and invoices "
+                "so your accountant can record them. Your uploads are "
+                "tagged with your name so {firm} always knows who sent "
+                "what."
+            ),
+        },
+        'fr': {
+            'title': 'Bienvenue, {name} !',
+            'subtitle': 'Vous avez été invité(e) à soumettre des reçus à {firm}.',
+            'body': (
+                "Ce portail vous permet de téléverser reçus et factures "
+                "pour que votre comptable puisse les enregistrer. Vos "
+                "téléversements portent votre nom pour que {firm} sache "
+                "toujours qui a envoyé quoi."
+            ),
+        },
+    },
+    {
+        'en': {
+            'title': 'How to upload',
+            'subtitle': 'Two taps and it is on the way.',
+            'body': (
+                "Take a photo with your phone (or pick a PDF), tap "
+                "'Upload'. We run OCR on it, {firm} reviews, and "
+                "the number lands in their books. You can upload as "
+                "many at a time as you want."
+            ),
+        },
+        'fr': {
+            'title': 'Comment téléverser',
+            'subtitle': 'Deux tapes et c\'est parti.',
+            'body': (
+                "Prenez une photo avec votre téléphone (ou choisissez "
+                "un PDF), tapez « Téléverser ». Nous effectuons l'OCR, "
+                "{firm} révise, et le montant est enregistré. Vous "
+                "pouvez téléverser autant de documents que nécessaire "
+                "à la fois."
+            ),
+        },
+    },
+    {
+        'en': {
+            'title': 'Messages + status',
+            'subtitle': 'Know where things stand.',
+            'body': (
+                "The Status page shows what has been processed, what "
+                "is still in review, and what was approved. If {firm} "
+                "has a question about a receipt, they'll message you "
+                "here and you can reply without leaving the portal."
+            ),
+        },
+        'fr': {
+            'title': 'Messages et statut',
+            'subtitle': 'Sachez où en sont vos documents.',
+            'body': (
+                "La page Statut montre ce qui a été traité, ce qui "
+                "est en révision et ce qui a été approuvé. Si {firm} "
+                "a une question sur un reçu, ils vous enverront un "
+                "message ici et vous pourrez répondre sans quitter "
+                "le portail."
+            ),
+        },
+    },
+]
+
+
+def _portal_tour_labels(lang: str) -> dict[str, str]:
+    fr = {
+        'step_of': 'Étape {n} sur {total}',
+        'back': '&larr; Retour',
+        'next': 'Suivant &rarr;',
+        'finish': 'Commencer',
+        'skip': 'Ignorer la visite',
+        'other': 'English',
+    }
+    en = {
+        'step_of': 'Step {n} of {total}',
+        'back': '&larr; Back',
+        'next': 'Next &rarr;',
+        'finish': 'Get started',
+        'skip': 'Skip tour',
+        'other': 'Français',
+    }
+    return fr if lang == 'fr' else en
+
+
+def render_portal_user_tour(
+    step: int, *,
+    user_name: str,
+    firm_name: str,
+    user_token: str,
+    lang: str = 'en',
+) -> str:
+    """Three-screen bilingual tour shown on first login after invite."""
+    lang_key = 'fr' if (lang or '').lower().startswith('fr') else 'en'
+    total = PORTAL_USER_TOUR_TOTAL
+    step = max(1, min(total, step))
+    screen = _PORTAL_USER_TOUR_CONTENT[step - 1][lang_key]
+    labels = _portal_tour_labels(lang_key)
+
+    title = screen['title'].format(name=_esc(user_name or ''))
+    subtitle = screen['subtitle'].format(firm=_esc(firm_name or ''))
+    body_text = screen['body'].format(firm=_esc(firm_name or ''))
+    step_label = labels['step_of'].format(n=step, total=total)
+
+    prev_html = ''
+    if step > 1:
+        prev_html = (
+            f'<a href="/cp/{_esc(user_token)}/tour/{step-1}?lang={lang_key}" '
+            'style="margin-right:12px;color:#6b7280;">'
+            f'{labels["back"]}</a>'
+        )
+
+    if step < total:
+        next_btn = (
+            f'<a href="/cp/{_esc(user_token)}/tour/{step+1}?lang={lang_key}" '
+            'style="background:#1e40af;color:white;padding:10px 22px;'
+            'border-radius:4px;text-decoration:none;font-weight:bold;">'
+            f'{labels["next"]}</a>'
+        )
+    else:
+        next_btn = (
+            '<form method="POST" '
+            f'action="/cp/{_esc(user_token)}/tour/complete" '
+            'style="display:inline;">'
+            f'<input type="hidden" name="lang" value="{lang_key}">'
+            '<button type="submit" '
+            'style="background:#16C172;color:black;padding:10px 22px;'
+            'border:none;border-radius:4px;font-weight:bold;cursor:pointer;">'
+            f'{labels["finish"]}</button></form>'
+        )
+    skip = (
+        '<form method="POST" '
+        f'action="/cp/{_esc(user_token)}/tour/complete" '
+        'style="display:inline;margin-left:16px;">'
+        f'<input type="hidden" name="lang" value="{lang_key}">'
+        '<button type="submit" '
+        'style="background:none;border:none;color:#9ca3af;'
+        'cursor:pointer;text-decoration:underline;padding:0;">'
+        f'{labels["skip"]}</button></form>'
+    )
+
+    other_lang = 'en' if lang_key == 'fr' else 'fr'
+    switcher = (
+        f'<a href="/cp/{_esc(user_token)}/tour/{step}?lang={other_lang}" '
+        'style="position:absolute;top:10px;right:14px;color:#9ca3af;'
+        'font-size:13px;">'
+        f'{_esc(labels["other"])}</a>'
+    )
+
+    return (
+        '<!DOCTYPE html><html lang="' + lang_key + '">'
+        '<head><meta charset="utf-8">'
+        f'<title>{_esc(title)}</title>'
+        '<style>body{font-family:system-ui,Arial;max-width:640px;'
+        'margin:2rem auto;padding:1rem;}'
+        '.card{background:white;border:1px solid #e5e7eb;padding:2rem;'
+        'border-radius:8px;position:relative;}</style></head><body>'
+        '<div class="card" data-tour-screen="portal_user" '
+        f'data-tour-step="{step}" data-tour-lang="{lang_key}">'
+        f'{switcher}'
+        f'<div style="color:#9ca3af;font-size:13px;">{step_label}</div>'
+        f'<h2 style="margin:6px 0 4px;">{title}</h2>'
+        f'<div style="color:#6b7280;margin-bottom:1rem;">{subtitle}</div>'
+        f'<p style="line-height:1.6;">{body_text}</p>'
+        '<div style="margin-top:2rem;text-align:right;">'
+        f'{prev_html}{next_btn}{skip}'
+        '</div></div></body></html>'
+    )
+
+
+def portal_user_tour_completed(
+    db_path: Path | str, *, user_id: int,
+) -> bool:
+    """Return True when this portal user has seen (or skipped) the tour."""
+    with _open(db_path) as conn:
+        row = conn.execute(
+            "SELECT first_tour_completed_at FROM client_portal_users "
+            "WHERE id=?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return False
+    return bool(row['first_tour_completed_at'])
+
+
+def mark_portal_user_tour_completed(
+    db_path: Path | str, *, user_id: int,
+) -> None:
+    with _open(db_path) as conn:
+        conn.execute(
+            "UPDATE client_portal_users "
+            "SET first_tour_completed_at=COALESCE(first_tour_completed_at, ?) "
+            "WHERE id=?",
+            (_iso_now(), user_id),
+        )
+        conn.commit()
+
+
 def render_target_user_dropdown(
     users: list[dict[str, Any]], *,
     selected_id: int | None = None,

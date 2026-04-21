@@ -1599,9 +1599,22 @@ def bootstrap_schema() -> None:
                 suspended_at TEXT,
                 removed_at TEXT,
                 version INTEGER DEFAULT 1,
+                first_tour_completed_at TEXT,
                 UNIQUE(firm_code, client_code, email)
             )
         """)
+        # Idempotent migration for older DBs — add the tour column
+        # without losing existing rows.
+        _cpu_cols = {r['name'] for r in conn.execute(
+            "PRAGMA table_info(client_portal_users)").fetchall()}
+        if 'first_tour_completed_at' not in _cpu_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_portal_users "
+                    "ADD COLUMN first_tour_completed_at TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cpu_token "
             "ON client_portal_users(user_token)"
@@ -18105,6 +18118,48 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         _mup.mark_active(DB_PATH, user_id=portal_user['id'])
         section = section.strip("/").lower()
 
+        # First-time tour (Item 3): on initial portal visit after
+        # accepting the invite, redirect to the 3-screen welcome tour
+        # unless they've already completed/skipped it. Tour pages
+        # themselves live at /cp/{token}/tour/{n} and bypass this redirect.
+        if not section.startswith("tour") and section != "tour" and \
+           not _mup.portal_user_tour_completed(
+               DB_PATH, user_id=portal_user['id']):
+            hdr_lang = self.headers.get("Accept-Language", "")
+            _tour_lang = 'fr' if hdr_lang.lower().startswith('fr') else 'en'
+            self._redirect(
+                f"/cp/{user_token}/tour/1?lang={_tour_lang}"
+            )
+            return
+
+        # Tour screens
+        if section.startswith("tour/") or section == "tour":
+            tour_parts = section.split("/")
+            try:
+                step_n = int(tour_parts[1]) if len(tour_parts) > 1 else 1
+            except ValueError:
+                step_n = 1
+            qs_lang = (qs.get('lang', [''])[0] or '').strip()
+            tour_lang = qs_lang if qs_lang in ('fr', 'en') else 'en'
+            firm_row = None
+            try:
+                with open_db() as _conn:
+                    firm_row = _conn.execute(
+                        "SELECT name FROM firms WHERE firm_code=?",
+                        (portal_user['firm_code'],),
+                    ).fetchone()
+            except Exception:
+                firm_row = None
+            firm_display = firm_row["name"] if firm_row else portal_user['firm_code']
+            html_str = _mup.render_portal_user_tour(
+                step_n,
+                user_name=portal_user.get('full_name') or portal_user['email'],
+                firm_name=firm_display,
+                user_token=user_token, lang=tour_lang,
+            )
+            self._send_html(html_str)
+            return
+
         # Default landing = upload
         if section in ("", "upload"):
             html_str = render_portal_upload(dict(client), user_token,
@@ -18176,6 +18231,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_html(_mup.render_invalid_token(), status=404)
             return True
         section = section.strip("/").lower()
+
+        if section == "tour/complete":
+            _mup.mark_portal_user_tour_completed(
+                DB_PATH, user_id=portal_user['id']
+            )
+            self._user_portal_redirect(
+                user_token, "upload",
+                flash="Welcome! Your first upload can go here.",
+            )
+            return True
 
         if section == "upload":
             return self._handle_user_portal_upload(
