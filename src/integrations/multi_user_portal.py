@@ -458,11 +458,35 @@ def _new_invite_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def get_invitation_by_request_id(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, client_request_id: str,
+) -> dict[str, Any] | None:
+    """Look up a prior invitation by its client_request_id.
+
+    Used by the invite-POST handler to de-dupe double-clicks: if the
+    second POST shares a request_id with an already-created row, the
+    handler short-circuits and returns the cached invitation."""
+    if not client_request_id:
+        return None
+    with _open(db_path) as conn:
+        try:
+            row = conn.execute(
+                "SELECT * FROM client_portal_invitations "
+                "WHERE firm_code=? AND client_code=? AND client_request_id=?",
+                (firm_code, client_code, client_request_id),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+    return _rowdict(row)
+
+
 def create_invitation(
     db_path: Path | str, *,
     firm_code: str, client_code: str,
     email: str, full_name: str, role: str,
     invited_by: str, lang: str | None = None,
+    client_request_id: str | None = None,
 ) -> dict[str, Any]:
     """Create or replace a pending invitation for (client, email).
 
@@ -476,6 +500,25 @@ def create_invitation(
         raise ValueError(f"invalid role {role!r}")
     if not email or '@' not in email:
         raise ValueError(f"invalid email {email!r}")
+
+    # Item 5: idempotency — if this exact (firm, client, request_id)
+    # triple already has an invitation, return it unchanged instead of
+    # minting a second token + cancelling the first.
+    if client_request_id:
+        existing = get_invitation_by_request_id(
+            db_path, firm_code=firm_code, client_code=client_code,
+            client_request_id=client_request_id,
+        )
+        if existing is not None:
+            return {
+                'id': existing['id'],
+                'token': existing['invitation_token'],
+                'email': existing['email'],
+                'role': existing['invited_role'],
+                'expires_at': existing['expires_at'],
+                'idempotent_replay': True,
+            }
+
     token = _new_invite_token()
     now = _iso_now()
     expires = _iso_in(INVITE_EXPIRY_DAYS)
@@ -494,13 +537,15 @@ def create_invitation(
                 "INSERT INTO client_portal_invitations "
                 "(firm_code, client_code, email, full_name, invited_role, "
                 " invitation_token, invited_by, invited_at, expires_at, "
-                " status, invited_language) "
-                "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?)",
+                " status, invited_language, client_request_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?, ?)",
                 (firm_code, client_code, email, full_name, role, token,
-                 invited_by, now, expires, invited_language),
+                 invited_by, now, expires, invited_language,
+                 client_request_id),
             )
         except sqlite3.OperationalError:
-            # Pre-migration DBs may not yet have invited_language.
+            # Pre-migration DBs may not yet have invited_language /
+            # client_request_id.
             cur = conn.execute(
                 "INSERT INTO client_portal_invitations "
                 "(firm_code, client_code, email, full_name, invited_role, "
@@ -509,13 +554,32 @@ def create_invitation(
                 (firm_code, client_code, email, full_name, role, token,
                  invited_by, now, expires),
             )
+        except sqlite3.IntegrityError:
+            # Concurrent double-click race: a sibling request with the
+            # same client_request_id won the INSERT. Replay that row.
+            existing = get_invitation_by_request_id(
+                db_path, firm_code=firm_code, client_code=client_code,
+                client_request_id=client_request_id or '',
+            )
+            if existing:
+                conn.rollback()
+                return {
+                    'id': existing['id'],
+                    'token': existing['invitation_token'],
+                    'email': existing['email'],
+                    'role': existing['invited_role'],
+                    'expires_at': existing['expires_at'],
+                    'idempotent_replay': True,
+                }
+            raise
         inv_id = int(cur.lastrowid)
         _audit(conn, firm_code=firm_code, client_code=client_code,
                 actor_email=invited_by, action='invitation_created',
                 detail=f'email={email} role={role} lang={invited_language or "auto"}')
         conn.commit()
     return {'id': inv_id, 'token': token, 'email': email,
-             'role': role, 'expires_at': expires}
+             'role': role, 'expires_at': expires,
+             'idempotent_replay': False}
 
 
 def get_invitation(
@@ -667,6 +731,30 @@ def _per_user_log_lock():
 
 
 _per_user_uploads: dict[int, list[float]] = {}
+
+
+# Item 5: per-admin invitation rate limit (10 invites / 60s / admin).
+_PER_ADMIN_INVITES_PER_MIN = 10
+_per_admin_invites: dict[int, list[float]] = {}
+
+
+def invite_rate_allowed(admin_user_id: int) -> bool:
+    """True when the portal admin is under 10 invites / minute."""
+    import time as _t
+    now = _t.time()
+    with _per_user_log_lock():
+        log = _per_admin_invites.setdefault(admin_user_id, [])
+        cutoff = now - 60.0
+        log[:] = [t for t in log if t >= cutoff]
+        if len(log) >= _PER_ADMIN_INVITES_PER_MIN:
+            return False
+        log.append(now)
+    return True
+
+
+def reset_invite_rate_limits() -> None:
+    with _per_user_log_lock():
+        _per_admin_invites.clear()
 
 
 def upload_rate_allowed(user_id: int) -> bool:
@@ -919,6 +1007,12 @@ def render_cpa_portal_users(
     )
 
 
+def _invite_request_id() -> str:
+    """Per-form-render random request id (hex-32). The backend uses
+    this to de-dupe double-click POSTs (Item 5)."""
+    return 'inv_' + secrets.token_hex(16)
+
+
 def render_user_portal_admin(
     *, client: dict[str, Any], user_token: str,
     users: list[dict[str, Any]],
@@ -1017,16 +1111,35 @@ def render_user_portal_admin(
         f'{flash_html}'
         '<div class="card"><h2>Invite someone</h2>'
         f'<form method="POST" action="/cp/{_esc(user_token)}/invite" '
+        'id="portal-invite-form" '
+        'onsubmit="return _inviteSubmit(this);" '
         'style="display:grid;grid-template-columns:1fr 1fr 120px auto;gap:8px;">'
+        # Item 5: client_request_id minted per form render; double-
+        # click submits the same id twice, backend replays cached row.
+        f'<input type="hidden" name="client_request_id" value="'
+        f'{_esc(_invite_request_id())}">'
         '<input type="email" name="email" placeholder="Email" required>'
         '<input type="text" name="full_name" placeholder="Full name">'
         '<select name="role">'
         '<option value="contributor">Contributor</option>'
         '<option value="admin">Admin</option>'
         '</select>'
-        '<button type="submit" class="primary" '
+        '<button type="submit" id="portal-invite-btn" class="primary" '
         'style="background:#1e40af;color:white;padding:8px 14px;border:none;">'
-        'Send invitation</button></form></div>'
+        'Send invitation</button></form>'
+        '<script>'
+        'function _inviteSubmit(f){'
+        'var b=document.getElementById("portal-invite-btn");'
+        'if(b && b.dataset.submitting==="1"){return false;}'
+        'if(b){b.dataset.submitting="1";b.disabled=true;'
+        'b.style.background="#6b7280";b.style.cursor="wait";'
+        'b.textContent="Sending...";'
+        'setTimeout(function(){b.disabled=false;b.dataset.submitting="";'
+        'b.style.background="#1e40af";b.style.cursor="pointer";'
+        'b.textContent="Send invitation";}, 30000);}'
+        'return true;}'
+        '</script>'
+        '</div>'
         '<h2>Team members</h2>'
         '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th>'
         '<th>Status</th><th>Uploads</th><th>Last active</th><th>Actions</th></tr></thead>'

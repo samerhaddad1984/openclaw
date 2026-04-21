@@ -1655,6 +1655,26 @@ def bootstrap_schema() -> None:
                 )
             except sqlite3.OperationalError:
                 pass
+        # Item 5: client_request_id lets the POST handler de-dupe
+        # rapid double-clicks without minting two invitation tokens.
+        if 'client_request_id' not in _cpi_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_portal_invitations "
+                    "ADD COLUMN client_request_id TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass
+        # Partial unique index on client_request_id so NULL rows don't
+        # collide. Scoped to firm + client so the same request_id can
+        # (in theory) be reused across different clients, though the
+        # frontend always mints fresh ones.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "idx_cpi_client_request "
+            "ON client_portal_invitations(firm_code, client_code, client_request_id) "
+            "WHERE client_request_id IS NOT NULL"
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cpi_token "
             "ON client_portal_invitations(invitation_token)"
@@ -18427,11 +18447,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 '<h1>Forbidden</h1><p>Only admin users can invite.</p>',
                 status=403)
             return True
+        # Item 5: rate-limit invitations to 10/min/admin.
+        if not _mup.invite_rate_allowed(portal_user['id']):
+            self._user_portal_redirect(
+                user_token, "admin",
+                error="Too many invitations — please wait a minute and try again.",
+            )
+            return True
         form = urllib.parse.parse_qs(raw.decode("utf-8"),
                                        keep_blank_values=True)
         email = (form.get("email", [""])[0] or "").strip()
         full_name = (form.get("full_name", [""])[0] or "").strip()
         role = (form.get("role", ["contributor"])[0] or "contributor").strip()
+        client_request_id = (
+            form.get("client_request_id", [""])[0] or ""
+        ).strip() or None
         if not email or role not in ('admin', 'contributor'):
             self._user_portal_redirect(user_token, "admin",
                                          error="Email + role required")
@@ -18442,10 +18472,19 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 client_code=portal_user['client_code'],
                 email=email, full_name=full_name, role=role,
                 invited_by=portal_user['email'],
+                client_request_id=client_request_id,
             )
         except ValueError as exc:
             self._user_portal_redirect(user_token, "admin",
                                          error=str(exc))
+            return True
+        # Skip email + audit on idempotent replay so duplicate POST
+        # doesn't enqueue a second email.
+        if inv.get('idempotent_replay'):
+            self._user_portal_redirect(
+                user_token, "admin",
+                flash=f"Already invited {email} (duplicate click ignored)",
+            )
             return True
         # Queue the invitation email rather than sending directly so a
         # transient SMTP/Gmail failure auto-retries from the cron path.
