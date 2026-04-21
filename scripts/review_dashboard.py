@@ -13220,8 +13220,8 @@ a:hover{{color:#16C172}}
         </div>
         <div class="feature">
             <h3>Conçu d'abord pour le Québec / Quebec-First Design</h3>
-            <p lang="fr">Bilingue complet FR/EN. Gestion native TPS/TVQ. Conçu par des Québécois pour des Québécois.</p>
-            <p lang="en">Full bilingual FR/EN. Native TPS/TVQ handling. Built by Quebecois for Quebecois.</p>
+            <p lang="fr">Bilingue complet FR/EN en français canadien — pas en français de France. Gestion native TPS/TVQ, terminologie de l'ARC et de Revenu Québec. Conçu par des Québécois pour des Québécois.</p>
+            <p lang="en">Full bilingual FR/EN in Canadian French — not European French. Native TPS/TVQ handling, CRA and Revenu Québec terminology. Built by Quebecois for Quebecois.</p>
         </div>
         <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
