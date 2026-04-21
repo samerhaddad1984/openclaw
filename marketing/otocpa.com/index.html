@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OtoCPA — Automatisation comptable / Accounting Automation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black: #081633;
+  --dark: #0d1a2e;
+  --card: #0f1e30;
+  --border: #1a2d45;
+  --green: #16C172;
+  --green2: #7AD66A;
+  --green-dim: #0fa85e;
+  --gold: #c9a84c;
+  --white: #F4F6F8;
+  --muted: #6b8099;
+  --text: #c0d0e0;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:'DM Sans',sans-serif;background:var(--black);color:var(--text);overflow-x:hidden;line-height:1.6;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:14px 48px;backdrop-filter:blur(20px);background:rgba(8,22,51,0.88);border-bottom:1px solid rgba(26,45,69,0.6);}
+.nav-logo{font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:var(--white);letter-spacing:-0.5px;text-decoration:none;}
+.nav-logo span{color:var(--green);}
+.nav-links{display:flex;align-items:center;gap:24px;list-style:none;}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;transition:color 0.2s;}
+.nav-links a:hover{color:var(--white);}
+.nav-cta{background:var(--green)!important;color:#000!important;padding:10px 20px;border-radius:6px;font-weight:600!important;}
+.nav-cta:hover{background:var(--green-dim)!important;}
+.lang-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:var(--white)!important;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s;}
+.lang-btn:hover{background:rgba(255,255,255,0.15);}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;padding:120px 48px 80px;text-align:center;overflow:hidden;}
+.hero-glow{position:absolute;top:20%;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(ellipse,rgba(22,193,114,0.09) 0%,transparent 70%);pointer-events:none;}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(26,45,69,0.35) 1px,transparent 1px),linear-gradient(90deg,rgba(26,45,69,0.35) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 80% 60% at 50% 40%,black 30%,transparent 100%);}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(22,193,114,0.1);border:1px solid rgba(22,193,114,0.3);border-radius:100px;padding:6px 16px;font-size:13px;color:var(--green);margin-bottom:32px;animation:fadeUp 0.6s ease both;}
+.hero-badge::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.hero-content{position:relative;z-index:1;max-width:820px;}
+.hero h1{font-family:'Playfair Display',serif;font-size:clamp(44px,6.5vw,76px);font-weight:700;color:var(--white);line-height:1.08;letter-spacing:-2.5px;margin-bottom:24px;animation:fadeUp 0.6s ease 0.1s both;}
+.hero h1 em{font-style:normal;color:var(--green);}
+.hero-sub{font-size:19px;color:var(--muted);max-width:560px;margin:0 auto 16px;font-weight:300;line-height:1.7;animation:fadeUp 0.6s ease 0.2s both;}
+.hero-proof{font-size:15px;color:var(--text);margin-bottom:40px;animation:fadeUp 0.6s ease 0.25s both;}
+.hero-proof strong{color:var(--green);}
+.hero-actions{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;animation:fadeUp 0.6s ease 0.3s both;}
+.btn-primary{background:linear-gradient(135deg,var(--green),var(--green2));color:#000;padding:16px 36px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;transition:all 0.2s;}
+.btn-primary:hover{opacity:0.9;transform:translateY(-1px);box-shadow:0 8px 32px rgba(22,193,114,0.3);}
+.btn-secondary{background:transparent;color:var(--text);padding:16px 36px;border-radius:8px;font-size:15px;font-weight:500;text-decoration:none;border:1px solid var(--border);transition:all 0.2s;}
+.btn-secondary:hover{border-color:var(--muted);color:var(--white);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* STATS */
+.stats{display:flex;justify-content:center;gap:48px;padding:16px 48px 80px;flex-wrap:wrap;animation:fadeUp 0.6s ease 0.4s both;}
+.stat{text-align:center;}
+.stat-num{font-family:'Playfair Display',serif;font-size:36px;font-weight:700;color:var(--white);display:block;}
+.stat-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.stat-divider{width:1px;background:var(--border);align-self:stretch;}
+
+/* SECTIONS */
+section{padding:100px 48px;position:relative;}
+.section-label{font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:16px;}
+.section-title{font-family:'Playfair Display',serif;font-size:clamp(32px,4vw,48px);font-weight:700;color:var(--white);line-height:1.2;letter-spacing:-1px;margin-bottom:20px;}
+.section-subtitle{font-size:17px;color:var(--muted);max-width:520px;line-height:1.7;}
+
+/* BEFORE/AFTER */
+.ba-container{max-width:900px;margin:60px auto 0;display:grid;grid-template-columns:1fr auto 1fr;gap:32px;align-items:center;}
+.ba-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;}
+.ba-card.after{border-color:rgba(22,193,114,0.4);}
+.ba-label{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px;}
+.ba-label.before-label{color:var(--muted);}
+.ba-label.after-label{color:var(--green);}
+.ba-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);font-size:14px;}
+.ba-item:last-child{border-bottom:none;}
+.ba-icon{font-size:18px;flex-shrink:0;}
+.ba-text{color:var(--text);}
+.ba-time{margin-left:auto;font-size:12px;font-weight:600;padding:3px 10px;border-radius:100px;}
+.ba-time.slow{background:rgba(239,68,68,0.1);color:#f87171;}
+.ba-time.fast{background:rgba(22,193,114,0.1);color:var(--green);}
+.ba-arrow{font-size:32px;color:var(--green);text-align:center;}
+.ba-summary{max-width:900px;margin:32px auto 0;background:rgba(22,193,114,0.06);border:1px solid rgba(22,193,114,0.2);border-radius:12px;padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;}
+.ba-summary p{font-size:15px;color:var(--text);}
+.ba-summary strong{color:var(--green);}
+
+/* HOW IT WORKS */
+.flow-container{max-width:1100px;margin:60px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;position:relative;}
+.flow-container::before{content:'';position:absolute;top:32px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--border),var(--green),var(--border),transparent);}
+.flow-step{text-align:center;padding:0 20px;}
+.flow-icon{width:64px;height:64px;border-radius:16px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px;position:relative;z-index:1;}
+.flow-step:nth-child(3) .flow-icon{border-color:rgba(22,193,114,0.4);background:rgba(22,193,114,0.05);}
+.flow-num{position:absolute;top:-8px;right:-8px;width:20px;height:20px;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.flow-step h3{font-size:15px;font-weight:600;color:var(--white);margin-bottom:8px;}
+.flow-step p{font-size:13px;color:var(--muted);line-height:1.6;}
+
+/* FEATURES */
+.features-grid{max-width:1100px;margin:60px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.feature-card{background:var(--dark);padding:36px;transition:background 0.2s;}
+.feature-card:hover{background:var(--card);}
+.feature-icon{font-size:32px;margin-bottom:16px;display:block;}
+.feature-card h3{font-size:17px;font-weight:600;color:var(--white);margin-bottom:10px;}
+.feature-card p{font-size:14px;color:var(--muted);line-height:1.7;}
+.feature-card .tag{display:inline-block;margin-top:16px;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);background:rgba(22,193,114,0.08);padding:4px 10px;border-radius:4px;}
+
+/* TRUST */
+.trust-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;max-width:1000px;margin:60px auto 0;}
+.trust-item{text-align:center;padding:32px 24px;background:var(--card);border:1px solid var(--border);border-radius:12px;}
+.trust-icon{font-size:32px;margin-bottom:16px;display:block;}
+.trust-item h4{font-size:15px;font-weight:600;color:var(--white);margin-bottom:8px;}
+.trust-item p{font-size:13px;color:var(--muted);line-height:1.6;}
+
+/* PRICING */
+.pricing-toggle{display:flex;align-items:center;gap:12px;margin-bottom:48px;font-size:14px;color:var(--muted);}
+.toggle-switch{width:44px;height:24px;background:var(--card);border:1px solid var(--border);border-radius:100px;cursor:pointer;position:relative;transition:background 0.2s;}
+.toggle-switch.on{background:var(--green);}
+.toggle-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;background:white;border-radius:50%;transition:transform 0.2s;}
+.toggle-switch.on .toggle-knob{transform:translateX(20px);}
+.save-badge{background:rgba(201,168,76,0.15);color:var(--gold);border:1px solid rgba(201,168,76,0.3);padding:3px 10px;border-radius:100px;font-size:12px;font-weight:600;}
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;max-width:1000px;margin:0 auto;}
+.pricing-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px;position:relative;transition:transform 0.2s,border-color 0.2s;}
+.pricing-card:hover{transform:translateY(-4px);}
+.pricing-card.featured{border-color:var(--green);background:linear-gradient(135deg,var(--card),rgba(22,193,114,0.04));}
+.popular-tag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--green),var(--green2));color:#000;padding:4px 16px;border-radius:100px;font-size:12px;font-weight:700;white-space:nowrap;}
+.plan-name{font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.plan-price{font-family:'Playfair Display',serif;font-size:48px;font-weight:700;color:var(--white);line-height:1;margin-bottom:4px;}
+.plan-price sup{font-size:24px;vertical-align:top;margin-top:8px;font-family:'DM Sans',sans-serif;font-weight:500;}
+.plan-price sub{font-size:16px;font-family:'DM Sans',sans-serif;font-weight:400;color:var(--muted);}
+.plan-desc{font-size:13px;color:var(--muted);margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--border);}
+.plan-features{list-style:none;margin-bottom:32px;}
+.plan-features li{font-size:14px;color:var(--text);padding:8px 0;display:flex;align-items:flex-start;gap:10px;}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;}
+.plan-cta{display:block;text-align:center;padding:14px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;transition:all 0.2s;}
+.plan-cta.primary{background:linear-gradient(135deg,var(--green),var(--green2));color:#000;}
+.plan-cta.primary:hover{opacity:0.9;box-shadow:0 8px 24px rgba(22,193,114,0.25);}
+.plan-cta.outline{border:1px solid var(--border);color:var(--text);}
+.plan-cta.outline:hover{border-color:var(--green);color:var(--green);}
+.enterprise-card{max-width:1000px;margin:24px auto 0;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+.enterprise-card h3{font-size:20px;font-weight:600;color:var(--white);margin-bottom:6px;}
+.enterprise-card p{font-size:14px;color:var(--muted);}
+
+/* CTA */
+.cta-section{text-align:center;padding:120px 48px;position:relative;overflow:hidden;}
+.cta-glow{position:absolute;bottom:-100px;left:50%;transform:translateX(-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(22,193,114,0.12) 0%,transparent 70%);}
+.cta-section h2{font-family:'Playfair Display',serif;font-size:clamp(36px,5vw,56px);font-weight:700;color:var(--white);letter-spacing:-2px;margin-bottom:20px;position:relative;}
+.cta-section p{font-size:17px;color:var(--muted);margin-bottom:40px;position:relative;}
+
+/* FOOTER */
+footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:start;}
+.footer-brand p{font-size:13px;color:var(--muted);margin-top:12px;}
+.footer-links{display:flex;gap:24px;flex-wrap:wrap;}
+.footer-links a{font-size:13px;color:var(--muted);text-decoration:none;transition:color 0.2s;}
+.footer-links a:hover{color:var(--white);}
+.footer-bottom{grid-column:1/-1;padding-top:32px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+.footer-bottom p{font-size:12px;color:var(--muted);}
+.law25-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--green);background:rgba(22,193,114,0.08);border:1px solid rgba(22,193,114,0.2);padding:4px 12px;border-radius:100px;}
+
+@media(max-width:768px){nav{padding:12px 20px;}.nav-links{display:none;}section{padding:60px 24px;}.hero{padding:100px 24px 60px;}.stats{gap:24px;}.stat-divider{display:none;}footer{grid-template-columns:1fr;padding:32px 24px;}.flow-container::before{display:none;}.ba-container{grid-template-columns:1fr;}.ba-arrow{transform:rotate(90deg);}}
+.reveal{opacity:0;transform:translateY(24px);transition:opacity 0.6s ease,transform 0.6s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="logoGreen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16C172"/>
+      <stop offset="100%" stop-color="#7AD66A"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- NAV -->
+<nav>
+  <a href="#" style="display:flex;align-items:center;text-decoration:none;">
+    <svg width="120" height="36" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+      <g transform="translate(80,48)"><circle cx="52" cy="118" r="14" fill="url(#logoGreen)"/><circle cx="276" cy="118" r="14" fill="url(#logoGreen)"/><path d="M52 132 C52 165,58 178,78 188 L78 148 C67 144,58 140,52 132Z" fill="url(#logoGreen)"/><path d="M276 132 C276 165,270 178,250 188 L250 148 C261 144,270 140,276 132Z" fill="url(#logoGreen)"/><path d="M92 86 Q160 28 228 86 L228 178 Q228 240 160 284 Q92 240 92 178 Z" fill="url(#logoGreen)"/><path d="M160 53 Q194 54 228 86 L228 178 Q228 240 160 284 Z" fill="#0E8F61" opacity="0.20"/><rect x="120" y="78" width="80" height="64" rx="22" fill="#0B1837"/><circle cx="144" cy="126" r="13" fill="url(#logoGreen)"/><circle cx="184" cy="126" r="13" fill="url(#logoGreen)"/><path d="M152 184 Q160 190 168 184" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/><path d="M62 190 Q160 246 258 190" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/></g>
+      <g transform="translate(400,78)"><text x="0" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#F4F6F8">Oto</text><text x="250" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="url(#logoGreen)">CPA</text></g>
+    </svg>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how" id="nav-how">Comment ça marche</a></li>
+    <li><a href="#features" id="nav-features">Fonctionnalités</a></li>
+    <li><a href="#pricing" id="nav-pricing">Tarifs</a></li>
+    <li><a href="https://app.otocpa.com/login" id="nav-login">Connexion</a></li>
+    <li><button class="lang-btn" onclick="toggleLang()" id="lang-toggle-btn">EN</button></li>
+    <li><a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="nav-cta"><span id="nav-cta-text">Démo gratuite →</span></a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <div class="hero-badge"><span id="hero-badge-text">Conforme Loi 25 · Données hébergées au Canada</span></div>
+    <div style="animation:fadeUp 0.5s ease both;">
+      <svg width="280" height="84" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto 32px;display:block;">
+        <g transform="translate(80,48)"><circle cx="52" cy="118" r="14" fill="url(#logoGreen)"/><circle cx="276" cy="118" r="14" fill="url(#logoGreen)"/><path d="M52 132 C52 165,58 178,78 188 L78 148 C67 144,58 140,52 132Z" fill="url(#logoGreen)"/><path d="M276 132 C276 165,270 178,250 188 L250 148 C261 144,270 140,276 132Z" fill="url(#logoGreen)"/><path d="M92 86 Q160 28 228 86 L228 178 Q228 240 160 284 Q92 240 92 178 Z" fill="url(#logoGreen)"/><path d="M160 53 Q194 54 228 86 L228 178 Q228 240 160 284 Z" fill="#0E8F61" opacity="0.20"/><rect x="120" y="78" width="80" height="64" rx="22" fill="#0B1837"/><circle cx="144" cy="126" r="13" fill="url(#logoGreen)"/><circle cx="184" cy="126" r="13" fill="url(#logoGreen)"/><path d="M152 184 Q160 190 168 184" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/><path d="M62 190 Q160 246 258 190" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/></g>
+        <g transform="translate(400,78)"><text x="0" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#F4F6F8">Oto</text><text x="250" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="url(#logoGreen)">CPA</text></g>
+      </svg>
+    </div>
+    <h1 id="hero-h1">Éliminez <em>80%</em> de la<br>saisie comptable.</h1>
+    <p class="hero-sub" id="hero-sub">Vos clients envoient une photo. L'IA extrait chaque ligne, applique les règles TPS/TVQ, et envoie vers QuickBooks.</p>
+    <p class="hero-proof" id="hero-proof">OtoCPA travaille <strong>24/7</strong> — l'équivalent d'un employé à <strong>moins de 10$/heure</strong></p>
+    <div class="hero-actions">
+      <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="cta-primary-btn">📧 Demander une démo →</a>
+      <a href="#how" class="btn-secondary" id="cta-secondary-btn">Voir comment ça marche</a>
+    </div>
+  </div>
+</section>
+
+<div class="stats reveal">
+  <div class="stat"><span class="stat-num">&lt; 60s</span><span class="stat-label" id="stat-1-label">Reçu → QuickBooks</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat"><span class="stat-num">98%</span><span class="stat-label" id="stat-2-label">Précision IA</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat"><span class="stat-num">24/7</span><span class="stat-label" id="stat-3-label">Disponible en tout temps</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat"><span class="stat-num">10×</span><span class="stat-label" id="stat-4-label">ROI moyen / mois</span></div>
+</div>
+
+<!-- BEFORE/AFTER -->
+<section style="background:var(--dark);">
+  <div style="max-width:1100px;margin:0 auto;">
+    <div class="section-label reveal" id="ba-section-label">Avant / Après</div>
+    <h2 class="section-title reveal" id="ba-section-title">Ce que vous faisiez.<br>Ce que vous faites maintenant.</h2>
+    <div class="ba-container reveal">
+      <div class="ba-card">
+        <div class="ba-label before-label" id="ba-label-before">😓 Avant OtoCPA</div>
+        <div class="ba-item"><span class="ba-icon">📄</span><span class="ba-text" id="ba-b1">Saisie manuelle du reçu</span><span class="ba-time slow">3 min</span></div>
+        <div class="ba-item"><span class="ba-icon">🔍</span><span class="ba-text" id="ba-b2">Vérification TPS/TVQ</span><span class="ba-time slow">2 min</span></div>
+        <div class="ba-item"><span class="ba-icon">📊</span><span class="ba-text" id="ba-b3">Affectation compte GL</span><span class="ba-time slow">1 min</span></div>
+        <div class="ba-item"><span class="ba-icon">💻</span><span class="ba-text" id="ba-b4">Saisie dans QuickBooks</span><span class="ba-time slow">2 min</span></div>
+        <div class="ba-item" style="border-bottom:none;padding-top:16px;"><span class="ba-text" id="ba-b-total" style="font-weight:600;color:#f87171;">Total: ~8 min par reçu</span></div>
+      </div>
+      <div class="ba-arrow">→</div>
+      <div class="ba-card after">
+        <div class="ba-label after-label" id="ba-label-after">✅ Avec OtoCPA</div>
+        <div class="ba-item"><span class="ba-icon">📱</span><span class="ba-text" id="ba-a1">Client envoie photo WhatsApp</span><span class="ba-time fast">0 s</span></div>
+        <div class="ba-item"><span class="ba-icon">🤖</span><span class="ba-text" id="ba-a2">IA extrait tous les postes</span><span class="ba-time fast">45 s</span></div>
+        <div class="ba-item"><span class="ba-icon">👁️</span><span class="ba-text" id="ba-a3">CPA révise et approuve</span><span class="ba-time fast">20 s</span></div>
+        <div class="ba-item"><span class="ba-icon">📊</span><span class="ba-text" id="ba-a4">Export automatique QuickBooks</span><span class="ba-time fast">1 s</span></div>
+        <div class="ba-item" style="border-bottom:none;padding-top:16px;"><span class="ba-text" id="ba-a-total" style="font-weight:600;color:var(--green);">Total: ~1 min par reçu</span></div>
+      </div>
+    </div>
+    <div class="ba-summary reveal">
+      <p id="ba-summary-text">À 500 reçus/mois: <strong>+65 heures économisées</strong> → valeur de <strong>1 600$ CAD/mois</strong> en coûts de saisie évités. OtoCPA se rembourse en quelques jours.</p>
+      <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="ba-cta" style="white-space:nowrap;">📧 Demander une démo →</a>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="background:var(--black);">
+  <div style="max-width:1100px;margin:0 auto;">
+    <div class="section-label reveal" id="section-how-label">Comment ça marche</div>
+    <h2 class="section-title reveal" id="section-how-title">De la photo au grand livre<br>en moins d'une minute</h2>
+    <p class="section-subtitle reveal" id="section-how-sub">Aucune installation pour vos clients. Aucune formation. Juste une photo WhatsApp.</p>
+    <div class="flow-container reveal">
+      <div class="flow-step"><div class="flow-icon">📱<span class="flow-num">1</span></div><h3 id="flow-1-title">Photo WhatsApp</h3><p id="flow-1-text">Le client envoie une photo de son reçu par WhatsApp ou via code QR</p></div>
+      <div class="flow-step"><div class="flow-icon">🔍<span class="flow-num">2</span></div><h3 id="flow-2-title">Lecture OCR</h3><p id="flow-2-text">Google DocAI lit l'image avec une précision de 98%</p></div>
+      <div class="flow-step"><div class="flow-icon">🧠<span class="flow-num">3</span></div><h3 id="flow-3-title">Classification IA</h3><p id="flow-3-text">DeepSeek V3 classifie chaque poste: GL, TPS/TVQ, immobilisation</p></div>
+      <div class="flow-step"><div class="flow-icon">✅<span class="flow-num">4</span></div><h3 id="flow-4-title">Révision CPA</h3><p id="flow-4-text">Vous révisez, corrigez si nécessaire, approuvez en un clic</p></div>
+      <div class="flow-step"><div class="flow-icon">📊<span class="flow-num">5</span></div><h3 id="flow-5-title">Export QuickBooks</h3><p id="flow-5-text">Chaque poste devient une ligne dans QBO. Zéro saisie.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="background:var(--dark);">
+  <div style="max-width:1100px;margin:0 auto;">
+    <div class="section-label reveal" id="section-feat-label">Fonctionnalités</div>
+    <h2 class="section-title reveal" id="section-feat-title">Tout ce dont un cabinet CPA<br>a besoin. Rien de plus.</h2>
+    <div class="features-grid reveal">
+      <div class="feature-card"><span class="feature-icon">📸</span><h3 id="f1-title">Intake WhatsApp</h3><p id="f1-text">Vos clients envoient leurs reçus par WhatsApp. Pas d'application à installer, pas de formation nécessaire.</p><span class="tag">Automatique</span></div>
+      <div class="feature-card"><span class="feature-icon">🧠</span><h3 id="f2-title">IA par ligne de poste</h3><p id="f2-text">Chaque article reçoit son propre compte GL et code de taxe. IGA, Costco, Home Depot — chaque format reconnu.</p><span class="tag">DeepSeek V3.2</span></div>
+      <div class="feature-card"><span class="feature-icon">🇨🇦</span><h3 id="f3-title">Règles fiscales québécoises</h3><p id="f3-text">TPS/TVQ automatiques. Articles détaxés (Z), repas 50% (M), immobilisations >500$. Conforme ARC et Revenu Québec.</p><span class="tag">Québec-natif</span></div>
+      <div class="feature-card"><span class="feature-icon">🔗</span><h3 id="f4-title">Export QuickBooks Online</h3><p id="f4-text">Chaque poste devient une ligne distincte dans QBO. Zéro saisie manuelle. Réconciliation parfaite.</p><span class="tag">OAuth 2.0</span></div>
+      <div class="feature-card"><span class="feature-icon">🏦</span><h3 id="f5-title">Relevés bancaires Plaid</h3><p id="f5-text">Connectez les comptes bancaires de vos clients. Transactions importées et réconciliées automatiquement.</p><span class="tag">Plaid Connect</span></div>
+      <div class="feature-card"><span class="feature-icon">🔒</span><h3 id="f6-title">Sécurité & Loi 25</h3><p id="f6-text">Données hébergées à Toronto. 2FA obligatoire. AES-256. Ententes signées avec tous les tiers. Aucune IA chinoise.</p><span class="tag">Loi 25 ✓</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST -->
+<section style="background:var(--black);">
+  <div style="max-width:1100px;margin:0 auto;text-align:center;">
+    <div class="section-label reveal" id="trust-label">Conformité & Sécurité</div>
+    <h2 class="section-title reveal" id="trust-title">Conçu pour les données<br>financières les plus sensibles</h2>
+    <div class="trust-grid reveal">
+      <div class="trust-item"><span class="trust-icon">🇨🇦</span><h4 id="t1-title">Données au Canada</h4><p id="t1-text">Hébergement DigitalOcean Toronto. Vos données ne quittent jamais le Canada.</p></div>
+      <div class="trust-item"><span class="trust-icon">📜</span><h4 id="t2-title">Loi 25 / Bill 64</h4><p id="t2-text">Évaluation d'impact vie privée complète. Consentement éclairé. Droit à l'effacement.</p></div>
+      <div class="trust-item"><span class="trust-icon">🔐</span><h4 id="t3-title">Chiffrement AES-256</h4><p id="t3-text">Données chiffrées au repos et en transit. TLS 1.2+ pour toutes les communications.</p></div>
+      <div class="trust-item"><span class="trust-icon">✅</span><h4 id="t4-title">Chaque ligne vérifiée</h4><p id="t4-text">Aucune écriture automatique sans validation CPA. Contrôle total. Audit complet.</p></div>
+    </div>
+  </div>
+</section>
+
+[<!-- ============================================
+     DIAGNOSTIC TOOL — Paste this section into
+     otocpa.com landing page (before pricing)
+     ============================================ -->
+<section style="background:var(--black);padding:100px 48px;">
+  <div style="max-width:720px;margin:0 auto;">
+    <div class="section-label reveal" style="text-align:center;" id="diag-section-label">Diagnostic gratuit</div>
+    <h2 class="section-title reveal" style="text-align:center;" id="diag-section-title">Combien de temps<br>votre cabinet perd-il?</h2>
+    <p class="section-subtitle reveal" style="text-align:center;margin:0 auto 48px;" id="diag-section-sub">3 questions. Vos propres chiffres. Résultat en 30 secondes.</p>
+
+    <div class="reveal" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;">
+
+      <!-- Step indicator -->
+      <div style="display:flex;gap:6px;margin-bottom:24px;">
+        <div class="diag-dot diag-dot-active" data-dot="1" style="width:24px;height:8px;border-radius:4px;background:var(--green);"></div>
+        <div class="diag-dot" data-dot="2" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></div>
+        <div class="diag-dot" data-dot="3" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></div>
+        <div class="diag-dot" data-dot="4" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></div>
+      </div>
+
+      <!-- STEP 1 -->
+      <div class="diag-step active" id="diag-s1">
+        <h3 style="font-size:22px;color:var(--white);margin-bottom:8px;" id="diag-s1-title">Vos chiffres</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:24px;" id="diag-s1-sub">Utilisez des estimations réalistes.</p>
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <label style="font-size:14px;color:var(--text);" id="diag-l-docs">Documents par mois</label>
+            <span style="font-size:14px;font-weight:600;color:var(--green);" id="diag-docs-val">200</span>
+          </div>
+          <input type="range" min="10" max="2000" step="10" value="200" id="diag-docs" style="width:100%;" oninput="diagUpd('docs','')">
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <label style="font-size:14px;color:var(--text);" id="diag-l-time">Temps moyen par document</label>
+            <span style="font-size:14px;font-weight:600;color:var(--green);" id="diag-tpd-val">8 min</span>
+          </div>
+          <input type="range" min="2" max="30" step="1" value="8" id="diag-tpd" style="width:100%;" oninput="diagUpd('tpd',' min')">
+        </div>
+
+        <div style="margin-bottom:24px;">
+          <label style="font-size:14px;color:var(--text);display:block;margin-bottom:10px;" id="diag-l-rating">Votre processus actuel</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="diag-rating-btn" onclick="diagSelRating(this,1)" id="diag-r1" style="border:1px solid var(--border);background:transparent;color:var(--text);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Très efficace</button>
+            <button class="diag-rating-btn" onclick="diagSelRating(this,2)" id="diag-r2" style="border:1px solid var(--border);background:transparent;color:var(--text);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Quelques inefficacités</button>
+            <button class="diag-rating-btn selected" onclick="diagSelRating(this,3)" id="diag-r3" style="border:1px solid var(--green);background:rgba(22,193,114,0.1);color:var(--green);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px;">Très manuel</button>
+          </div>
+        </div>
+
+        <button onclick="diagGo(2)" style="width:100%;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border:none;padding:14px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;" id="diag-s1-cta">Voir mon analyse →</button>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="diag-step" id="diag-s2" style="display:none;">
+        <h3 style="font-size:22px;color:var(--white);margin-bottom:8px;" id="diag-s2-title">Votre réalité actuelle</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:24px;" id="diag-s2-sub">Basée sur vos chiffres.</p>
+
+        <div style="text-align:center;background:var(--black);border:1px solid var(--border);border-radius:12px;padding:32px;margin-bottom:16px;">
+          <div style="font-size:56px;font-weight:700;color:var(--white);line-height:1;font-family:'Playfair Display',serif;" id="diag-total-hours">—</div>
+          <div style="font-size:14px;color:var(--muted);margin-top:8px;" id="diag-big-label">heures/mois de traitement manuel</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+          <div style="background:var(--black);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:var(--white);" id="diag-base-h">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="diag-stat1">Saisie</div>
+          </div>
+          <div style="background:var(--black);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:var(--white);" id="diag-corr-h">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="diag-stat2">Révision</div>
+          </div>
+          <div style="background:var(--black);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:20px;font-weight:700;color:var(--white);" id="diag-corr-docs">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="diag-stat3">Docs révisés</div>
+          </div>
+        </div>
+
+        <div style="background:rgba(22,193,114,0.06);border:1px solid rgba(22,193,114,0.2);border-radius:8px;padding:16px;font-size:14px;line-height:1.6;color:var(--text);margin-bottom:20px;" id="diag-insight"></div>
+
+        <button onclick="diagGo(3)" style="width:100%;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border:none;padding:14px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;" id="diag-s2-cta">Affiner mon analyse →</button>
+        <button onclick="diagGo(1)" style="width:100%;background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;" id="diag-s2-back">← Modifier mes chiffres</button>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="diag-step" id="diag-s3" style="display:none;">
+        <h3 style="font-size:22px;color:var(--white);margin-bottom:8px;" id="diag-s3-title">Affinez les hypothèses</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:24px;" id="diag-s3-sub">Ajustez pour correspondre à votre réalité.</p>
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <label style="font-size:14px;color:var(--text);" id="diag-l-rr">Taux de révision</label>
+            <span style="font-size:14px;font-weight:600;color:var(--green);" id="diag-rr-val">30%</span>
+          </div>
+          <input type="range" min="5" max="80" step="5" value="30" id="diag-rr" style="width:100%;" oninput="diagUpd('rr','%')">
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <label style="font-size:14px;color:var(--text);" id="diag-l-rt">Temps de correction</label>
+            <span style="font-size:14px;font-weight:600;color:var(--green);" id="diag-rt-val">15 min</span>
+          </div>
+          <input type="range" min="5" max="60" step="5" value="15" id="diag-rt" style="width:100%;" oninput="diagUpd('rt',' min')">
+        </div>
+
+        <div style="margin-bottom:24px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <label style="font-size:14px;color:var(--text);" id="diag-l-rate">Valeur horaire (optionnel)</label>
+            <span style="font-size:14px;font-weight:600;color:var(--green);" id="diag-rate-val">—</span>
+          </div>
+          <input type="range" min="0" max="150" step="5" value="0" id="diag-rate" style="width:100%;" oninput="diagUpdRate()">
+        </div>
+
+        <button onclick="diagGo(4)" style="width:100%;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border:none;padding:14px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;" id="diag-s3-cta">Voir le scénario optimisé →</button>
+        <button onclick="diagGo(2)" style="width:100%;background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;" id="diag-s3-back">← Retour</button>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="diag-step" id="diag-s4" style="display:none;">
+        <h3 style="font-size:22px;color:var(--white);margin-bottom:8px;" id="diag-s4-title">Quel est votre objectif?</h3>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:20px;" id="diag-s4-sub">Le résultat s'adapte à votre priorité.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+          <button class="diag-goal-btn selected" id="diag-goal-cap" onclick="diagSelGoal('cap')" style="background:transparent;border:2px solid var(--green);border-radius:12px;padding:16px;cursor:pointer;text-align:center;">
+            <div style="font-weight:600;color:var(--white);font-size:14px;margin-bottom:4px;" id="diag-g-cap-t">Augmenter la capacité</div>
+            <div style="font-size:12px;color:var(--muted);" id="diag-g-cap-s">Prendre plus de clients</div>
+          </button>
+          <button class="diag-goal-btn" id="diag-goal-red" onclick="diagSelGoal('red')" style="background:transparent;border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;text-align:center;">
+            <div style="font-weight:600;color:var(--white);font-size:14px;margin-bottom:4px;" id="diag-g-red-t">Réduire la charge</div>
+            <div style="font-size:12px;color:var(--muted);" id="diag-g-red-s">Moins d'heures supp.</div>
+          </button>
+        </div>
+
+        <div style="background:var(--black);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">
+            <span id="diag-r-before">Actuellement</span>
+            <span id="diag-r-after">Avec OtoCPA</span>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text);margin-bottom:6px;">
+              <span id="diag-r-bar1-lbl">Saisie</span>
+              <span id="diag-r-bar1-nums" style="color:var(--muted);">—</span>
+            </div>
+            <div style="height:6px;background:var(--border);border-radius:3px;margin-bottom:3px;overflow:hidden;"><div id="diag-b1-old" style="height:100%;background:#f87171;width:100%;"></div></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;"><div id="diag-b1-new" style="height:100%;background:var(--green);width:40%;"></div></div>
+          </div>
+
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text);margin-bottom:6px;">
+              <span id="diag-r-bar2-lbl">Révision</span>
+              <span id="diag-r-bar2-nums" style="color:var(--muted);">—</span>
+            </div>
+            <div style="height:6px;background:var(--border);border-radius:3px;margin-bottom:3px;overflow:hidden;"><div id="diag-b2-old" style="height:100%;background:#f87171;width:100%;"></div></div>
+            <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;"><div id="diag-b2-new" style="height:100%;background:var(--green);width:40%;"></div></div>
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+              <span style="font-size:14px;color:var(--muted);" id="diag-r-saved-lbl">Heures récupérées</span>
+              <span style="font-size:28px;font-weight:700;color:var(--green);font-family:'Playfair Display',serif;" id="diag-r-saved">—</span>
+            </div>
+            <div id="diag-r-goal-result" style="margin-top:10px;font-size:14px;color:var(--text);line-height:1.5;"></div>
+            <div id="diag-r-value-result" style="margin-top:6px;font-size:13px;color:var(--green);"></div>
+          </div>
+        </div>
+
+        <p style="font-size:12px;color:var(--muted);padding:10px;border-radius:6px;line-height:1.5;margin-bottom:16px;" id="diag-honesty">⚠️ OtoCPA ne supprime pas la révision — il réduit le travail répétitif. Les résultats dépendent de la qualité des documents et de votre flux de travail.</p>
+
+        <button onclick="openContactModal()" style="width:100%;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border:none;padding:14px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;" id="diag-s4-cta">Voir ça avec mes vrais documents →</button>
+        <button onclick="diagGo(3)" style="width:100%;background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;" id="diag-s4-back">← Retour</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================
+     CONTACT FORM MODAL
+     Replaces all mailto: links with real form
+     ============================================ -->
+<div id="contactModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;padding:32px;position:relative;max-height:90vh;overflow-y:auto;">
+    <button onclick="closeContactModal()" style="position:absolute;top:16px;right:16px;background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;width:32px;height:32px;">×</button>
+
+    <div id="contactFormView">
+      <h3 style="font-size:24px;color:var(--white);margin-bottom:8px;" id="cm-title">Contactez-nous</h3>
+      <p style="font-size:14px;color:var(--muted);margin-bottom:24px;" id="cm-sub">Nous vous répondrons dans les 24 heures.</p>
+
+      <form id="contactForm" onsubmit="submitContact(event)">
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-name">Votre nom *</label>
+          <input type="text" name="name" required style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-firm">Nom du cabinet *</label>
+          <input type="text" name="firm" required style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-email">Courriel *</label>
+          <input type="email" name="email" required style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-phone">Téléphone</label>
+          <input type="tel" name="phone" style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-clients">Nombre de clients approximatif</label>
+          <select name="clients" style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;">
+            <option value="1-5">1-5</option>
+            <option value="5-20">5-20</option>
+            <option value="20-50">20-50</option>
+            <option value="50+">50+</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-size:13px;color:var(--text);margin-bottom:6px;" id="cm-l-msg">Message</label>
+          <textarea name="message" rows="3" style="width:100%;background:var(--black);border:1px solid var(--border);color:var(--white);padding:10px 14px;border-radius:8px;font-size:14px;resize:vertical;"></textarea>
+        </div>
+
+        <input type="hidden" name="source" id="cm-source" value="">
+        <input type="hidden" name="diagnostic_data" id="cm-diag" value="">
+
+        <button type="submit" id="cm-submit" style="width:100%;background:linear-gradient(135deg,var(--green),var(--green2));color:#000;border:none;padding:14px;border-radius:8px;font-weight:600;font-size:15px;cursor:pointer;">Envoyer ma demande</button>
+      </form>
+    </div>
+
+    <div id="contactSuccessView" style="display:none;text-align:center;padding:20px 0;">
+      <div style="width:64px;height:64px;border-radius:50%;background:rgba(22,193,114,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;color:var(--green);">✓</div>
+      <h3 style="font-size:22px;color:var(--white);margin-bottom:8px;" id="cm-success-title">Message envoyé!</h3>
+      <p style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:20px;" id="cm-success-text">Notre équipe vous contactera dans les 24 heures à l'adresse indiquée.</p>
+      <button onclick="closeContactModal()" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer;" id="cm-close-btn">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// DIAGNOSTIC
+let diagRating = 3;
+let diagGoal = 'cap';
+
+function diagUpd(field, suffix) {
+  const v = document.getElementById('diag-' + field).value;
+  document.getElementById('diag-' + field + '-val').textContent = v + suffix;
+}
+function diagUpdRate() {
+  const v = document.getElementById('diag-rate').value;
+  document.getElementById('diag-rate-val').textContent = v == 0 ? '—' : '$' + v + '/h';
+}
+function diagSelRating(btn, val) {
+  diagRating = val;
+  document.querySelectorAll('.diag-rating-btn').forEach(b => {
+    b.classList.remove('selected');
+    b.style.border = '1px solid var(--border)';
+    b.style.background = 'transparent';
+    b.style.color = 'var(--text)';
+  });
+  btn.classList.add('selected');
+  btn.style.border = '1px solid var(--green)';
+  btn.style.background = 'rgba(22,193,114,0.1)';
+  btn.style.color = 'var(--green)';
+}
+function diagSelGoal(g) {
+  diagGoal = g;
+  const cap = document.getElementById('diag-goal-cap');
+  const red = document.getElementById('diag-goal-red');
+  if (g === 'cap') {
+    cap.style.border = '2px solid var(--green)';
+    red.style.border = '1px solid var(--border)';
+  } else {
+    cap.style.border = '1px solid var(--border)';
+    red.style.border = '2px solid var(--green)';
+  }
+  diagCalcResult();
+}
+function diagGo(n) {
+  document.querySelectorAll('.diag-step').forEach(s => s.style.display = 'none');
+  document.getElementById('diag-s' + n).style.display = 'block';
+  document.querySelectorAll('.diag-dot').forEach((d, i) => {
+    const num = i + 1;
+    d.style.width = num === n ? '24px' : '8px';
+    d.style.borderRadius = num === n ? '4px' : '50%';
+    d.style.background = num <= n ? 'var(--green)' : 'var(--border)';
+  });
+  if (n === 2) diagCalcS2();
+  if (n === 4) diagCalcResult();
+}
+function diagCalcS2() {
+  const docs = +document.getElementById('diag-docs').value;
+  const tpd = +document.getElementById('diag-tpd').value;
+  const rr = { 1: 0.15, 2: 0.30, 3: 0.50 }[diagRating];
+  const rt = { 1: 10, 2: 15, 3: 20 }[diagRating];
+  const baseH = Math.round(docs * tpd / 60 * 10) / 10;
+  const corrDocs = Math.round(docs * rr);
+  const corrH = Math.round(docs * rr * rt / 60 * 10) / 10;
+  const total = Math.round((baseH + corrH) * 10) / 10;
+  document.getElementById('diag-total-hours').textContent = total;
+  document.getElementById('diag-base-h').textContent = baseH + 'h';
+  document.getElementById('diag-corr-h').textContent = corrH + 'h';
+  document.getElementById('diag-corr-docs').textContent = corrDocs;
+  const insights = {
+    1: 'Vous vous êtes évalué comme très efficace, mais vos chiffres montrent une charge de travail significative. Normal — la saisie manuelle s\'accumule discrètement.',
+    2: 'Vous reconnaissez quelques inefficacités. Vos chiffres le confirment. C\'est exactement le type de charge que l\'automatisation peut réduire.',
+    3: 'Vous savez que le processus est très manuel. Vos chiffres le montrent clairement. Voici ce que ça représente.',
+  };
+  document.getElementById('diag-insight').textContent = insights[diagRating];
+}
+function diagCalcResult() {
+  const docs = +document.getElementById('diag-docs').value;
+  const tpd = +document.getElementById('diag-tpd').value;
+  const rr = +document.getElementById('diag-rr').value / 100;
+  const rt = +document.getElementById('diag-rt').value;
+  const rate = +document.getElementById('diag-rate').value;
+  const baseH = docs * tpd / 60;
+  const corrH = docs * rr * rt / 60;
+  const totalOld = baseH + corrH;
+  const optBase = baseH * 0.4;
+  const optCorr = docs * (rr * 0.4) * (rt * 0.7) / 60;
+  const totalNew = optBase + optCorr;
+  const saved = Math.max(0, totalOld - totalNew);
+  document.getElementById('diag-r-bar1-nums').textContent = Math.round(baseH) + 'h → ' + Math.round(optBase) + 'h';
+  document.getElementById('diag-r-bar2-nums').textContent = Math.round(corrH) + 'h → ' + Math.round(optCorr) + 'h';
+  const maxH = Math.max(baseH, corrH, 1);
+  document.getElementById('diag-b1-old').style.width = Math.round(baseH / maxH * 100) + '%';
+  document.getElementById('diag-b1-new').style.width = Math.round(optBase / maxH * 100) + '%';
+  document.getElementById('diag-b2-old').style.width = Math.round(corrH / maxH * 100) + '%';
+  document.getElementById('diag-b2-new').style.width = Math.round(optCorr / maxH * 100) + '%';
+  document.getElementById('diag-r-saved').textContent = Math.round(saved) + 'h';
+  if (diagGoal === 'cap') {
+    const clients = Math.max(1, Math.round(saved / 8));
+    document.getElementById('diag-r-goal-result').textContent = `Cela permettrait de prendre ${clients} client${clients>1?'s':''} supplémentaire${clients>1?'s':''} avec votre équipe actuelle.`;
+  } else {
+    const days = Math.max(1, Math.round(saved / 7));
+    document.getElementById('diag-r-goal-result').textContent = `C'est ${days} journée${days>1?'s':''} de travail récupérée${days>1?'s':''} chaque mois.`;
+  }
+  if (rate > 0) {
+    document.getElementById('diag-r-value-result').textContent = `Valeur estimée: $${Math.round(saved * rate).toLocaleString()}/mois économisés.`;
+  } else {
+    document.getElementById('diag-r-value-result').textContent = '';
+  }
+}
+
+// CONTACT MODAL
+function openContactModal(source) {
+  document.getElementById('contactFormView').style.display = 'block';
+  document.getElementById('contactSuccessView').style.display = 'none';
+  document.getElementById('cm-source').value = source || 'general';
+
+  // Capture diagnostic data if available
+  const savedEl = document.getElementById('diag-r-saved');
+  if (savedEl && savedEl.textContent !== '—') {
+    const docs = document.getElementById('diag-docs').value;
+    const tpd = document.getElementById('diag-tpd').value;
+    const rr = document.getElementById('diag-rr').value;
+    const saved = savedEl.textContent;
+    document.getElementById('cm-diag').value = JSON.stringify({docs, tpd, rr, saved, goal: diagGoal});
+  }
+
+  document.getElementById('contactModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeContactModal() {
+  document.getElementById('contactModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+async function submitContact(e) {
+  e.preventDefault();
+  const btn = document.getElementById('cm-submit');
+  btn.textContent = 'Envoi en cours...';
+  btn.disabled = true;
+
+  const form = document.getElementById('contactForm');
+  const data = new FormData(form);
+  const payload = {};
+  data.forEach((v, k) => payload[k] = v);
+
+  try {
+    const res = await fetch('https://app.otocpa.com/api/contact', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      document.getElementById('contactFormView').style.display = 'none';
+      document.getElementById('contactSuccessView').style.display = 'block';
+    } else {
+      throw new Error('Server error');
+    }
+  } catch (err) {
+    alert('Erreur lors de l\'envoi. Contactez-nous directement: sales@otocpa.com');
+    btn.textContent = 'Envoyer ma demande';
+    btn.disabled = false;
+  }
+}
+
+// Replace all existing mailto: links with contact modal
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a[href^="mailto:sales"]').forEach(a => {
+    a.href = '#contact';
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      openContactModal('cta-button');
+    });
+  });
+});
+</script>
+]
+
+
+<!-- PRICING -->
+<section id="pricing" style="background:var(--dark);">
+  <div style="max-width:1100px;margin:0 auto;">
+    <div class="section-label reveal" id="pricing-label">Tarification</div>
+    <h2 class="section-title reveal" id="pricing-title">Simple, transparent,<br>sans surprise</h2>
+    <p class="section-subtitle reveal" id="pricing-sub">Contactez-nous pour une démo gratuite. Ou souscrivez directement ci-dessous.</p>
+    <div style="margin-top:40px;" class="reveal">
+      <div class="pricing-toggle">
+        <span id="billing-monthly-label">Mensuel</span>
+        <div class="toggle-switch" id="billingToggle" onclick="toggleBilling()"><div class="toggle-knob"></div></div>
+        <span id="billing-yearly-label">Annuel</span>
+        <span class="save-badge" id="save-badge">2 mois gratuits</span>
+      </div>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="plan-name" id="plan-1-name">Démarrage</div>
+          <div class="plan-price" id="price-starter"><sup>$</sup>99<sub id="per-month-1">/mois</sub></div>
+          <p class="plan-desc" id="plan-1-desc">Pour CPAs solo. ~300 reçus/mois. Économies estimées: <strong style="color:var(--green);">~800$/mois</strong> vs saisie manuelle.</p>
+          <ul class="plan-features" id="plan-1-features">
+            <li id="pf-1-1">Clients illimités</li><li id="pf-1-2">Intake WhatsApp</li><li id="pf-1-3">Extraction IA par ligne</li>
+            <li id="pf-1-4">Export QuickBooks</li><li id="pf-1-5">Relevés bancaires Plaid</li><li id="pf-1-6">Support par courriel</li>
+          </ul>
+          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-starter">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/signup/checkout?plan=starter_monthly" class="plan-cta primary" id="buy-starter">💳 Souscrire maintenant</a>
+        </div>
+        <div class="pricing-card featured">
+          <div class="popular-tag" id="popular-tag">⭐ PLUS POPULAIRE</div>
+          <div class="plan-name" id="plan-2-name">Professionnel</div>
+          <div class="plan-price" id="price-pro"><sup>$</sup>299<sub id="per-month-2">/mois</sub></div>
+          <p class="plan-desc" id="plan-2-desc">Pour la plupart des cabinets. ~1 000 reçus/mois. Économies estimées: <strong style="color:var(--green);">~2 500$/mois</strong> vs saisie manuelle.</p>
+          <ul class="plan-features" id="plan-2-features">
+            <li id="pf-2-1">Tout Démarrage, plus:</li><li id="pf-2-2">Tableau de bord avancé</li><li id="pf-2-3">Hiérarchie cabinet → clients</li>
+            <li id="pf-2-4">Codes QR personnalisés</li><li id="pf-2-5">Support prioritaire</li><li id="pf-2-6">Calibration IA</li>
+          </ul>
+          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-pro">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/signup/checkout?plan=pro_monthly" class="plan-cta primary" id="buy-pro">💳 Souscrire maintenant</a>
+        </div>
+        <div class="pricing-card">
+          <div class="plan-name" id="plan-3-name">Cabinet</div>
+          <div class="plan-price" id="price-business"><sup>$</sup>599<sub id="per-month-3">/mois</sub></div>
+          <p class="plan-desc" id="plan-3-desc">Pour les cabinets en croissance. ~5 000 reçus/mois. Économies estimées: <strong style="color:var(--green);">~12 000$/mois</strong> vs saisie manuelle.</p>
+          <ul class="plan-features" id="plan-3-features">
+            <li id="pf-3-1">Tout Professionnel, plus:</li><li id="pf-3-2">Onboarding dédié</li><li id="pf-3-3">SLA garanti</li>
+            <li id="pf-3-4">Support téléphonique</li><li id="pf-3-5">Intégrations personnalisées</li><li id="pf-3-6">Rapport mensuel</li>
+          </ul>
+          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-business">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/signup/checkout?plan=business_monthly" class="plan-cta primary" id="buy-business">💳 Souscrire maintenant</a>
+        </div>
+      </div>
+      <div class="enterprise-card reveal">
+        <div><h3 id="enterprise-title">Entreprise / Enterprise</h3><p id="enterprise-text">Volume illimité · SLA personnalisé · Intégrations sur mesure · Déploiement dédié</p></div>
+        <a href="/contact" class="btn-secondary"><span id="enterprise-cta">Contactez-nous →</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-glow"></div>
+  <div class="section-label" style="position:relative;" id="cta-section-label">Commencez aujourd'hui</div>
+  <h2 id="cta-final-title">OtoCPA — disponible 24/7 pour vous</h2>
+  <p id="cta-final-sub">Contactez-nous — nous vous configurons et accompagnons dès le départ.</p>
+  <div class="hero-actions" style="position:relative;">
+    <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="cta-primary-btn2">📧 Demander une démo →</a>
+    <a href="/contact" class="btn-secondary"><span id="cta-demo-btn">Demander une démo / Contact us</span></a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">
+    <svg width="100" height="30" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" style="display:block;margin-bottom:12px;">
+      <g transform="translate(80,48)"><circle cx="52" cy="118" r="14" fill="url(#logoGreen)"/><circle cx="276" cy="118" r="14" fill="url(#logoGreen)"/><path d="M52 132 C52 165,58 178,78 188 L78 148 C67 144,58 140,52 132Z" fill="url(#logoGreen)"/><path d="M276 132 C276 165,270 178,250 188 L250 148 C261 144,270 140,276 132Z" fill="url(#logoGreen)"/><path d="M92 86 Q160 28 228 86 L228 178 Q228 240 160 284 Q92 240 92 178 Z" fill="url(#logoGreen)"/><path d="M160 53 Q194 54 228 86 L228 178 Q228 240 160 284 Z" fill="#0E8F61" opacity="0.20"/><rect x="120" y="78" width="80" height="64" rx="22" fill="#0B1837"/><circle cx="144" cy="126" r="13" fill="url(#logoGreen)"/><circle cx="184" cy="126" r="13" fill="url(#logoGreen)"/><path d="M152 184 Q160 190 168 184" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/><path d="M62 190 Q160 246 258 190" stroke="#0B1837" stroke-width="10" stroke-linecap="round"/></g>
+      <g transform="translate(400,78)"><text x="0" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="#F4F6F8">Oto</text><text x="250" y="150" font-family="Arial,sans-serif" font-size="150" font-weight="700" letter-spacing="-4" fill="url(#logoGreen)">CPA</text></g>
+    </svg>
+    <p id="footer-tagline">Automatisation comptable pour CPAs québécois.<br>© 2026 OtoCPA Inc. Tous droits réservés.</p>
+  </div>
+  <div class="footer-links">
+    <a href="https://app.otocpa.com/login" id="footer-login">Connexion</a>
+    <a href="https://app.otocpa.com/signup" id="footer-signup">S'inscrire</a>
+    <a href="https://app.otocpa.com/privacy" id="footer-privacy">Confidentialité</a>
+    <a href="mailto:support@otocpa.com">support@otocpa.com</a>
+    <a href="mailto:sales@otocpa.com">sales@otocpa.com</a>
+  </div>
+  <div class="footer-bottom">
+    <p id="footer-bottom-text">Hébergé à Toronto, Canada · Conforme Loi 25 · Données protégées AES-256 · Aucune IA chinoise</p>
+    <div class="law25-badge" id="law25-badge">✓ Loi 25 Québec</div>
+  </div>
+</footer>
+
+<script>
+// BILINGUAL
+const T = {
+  fr: {
+    'hero-badge-text':'Conforme Loi 25 · Données hébergées au Canada',
+    'hero-h1':'Éliminez <em>80%</em> de la<br>saisie comptable.',
+    'hero-sub':'Vos clients envoient une photo. L\'IA extrait chaque ligne, applique les règles TPS/TVQ, et envoie vers QuickBooks.',
+    'hero-proof':'OtoCPA travaille <strong>24h/24, 7j/7</strong> — l\'équivalent d\'un employé à <strong>moins de 10$/heure.</strong>',
+    'cta-primary-btn':'📧 Demander une démo →',
+    'cta-secondary-btn':'Voir comment ça marche',
+    'cta-primary-btn2':'📧 Demander une démo →',
+    'cta-demo-btn':'Demander une démo',
+    'stat-1-label':'Reçu → QuickBooks','stat-2-label':'Précision IA','stat-3-label':'Disponible en tout temps','stat-4-label':'ROI moyen / mois',
+    'ba-section-label':'Avant / Après','ba-section-title':'Ce que vous faisiez.<br>Ce que vous faites maintenant.',
+    'ba-label-before':'😓 Avant OtoCPA','ba-label-after':'✅ Avec OtoCPA',
+    'ba-b1':'Saisie manuelle du reçu','ba-b2':'Vérification TPS/TVQ','ba-b3':'Affectation compte GL','ba-b4':'Saisie dans QuickBooks','ba-b-total':'Total: ~8 min par reçu',
+    'ba-a1':'Client envoie photo WhatsApp','ba-a2':'IA extrait tous les postes','ba-a3':'CPA révise et approuve','ba-a4':'Export automatique QuickBooks','ba-a-total':'Total: ~1 min par reçu',
+    'ba-summary-text':'À 500 reçus/mois: <strong>+65 heures économisées</strong> → valeur de <strong>1 600$ CAD/mois</strong> en coûts de saisie évités. OtoCPA se rembourse en quelques jours.',
+    'ba-cta':'📧 Demander une démo →',
+    'section-how-label':'Comment ça marche','section-how-title':'De la photo au grand livre<br>en moins d\'une minute','section-how-sub':'Aucune installation pour vos clients. Aucune formation. Juste une photo WhatsApp.',
+    'flow-1-title':'Photo WhatsApp','flow-1-text':'Le client envoie une photo de son reçu par WhatsApp ou via code QR',
+    'flow-2-title':'Lecture OCR','flow-2-text':'Google DocAI lit l\'image avec une précision de 98%',
+    'flow-3-title':'Classification IA','flow-3-text':'DeepSeek V3 classifie chaque poste: GL, TPS/TVQ, immobilisation',
+    'flow-4-title':'Révision CPA','flow-4-text':'Vous révisez, corrigez si nécessaire, approuvez en un clic',
+    'flow-5-title':'Export QuickBooks','flow-5-text':'Chaque poste devient une ligne dans QBO. Zéro saisie.',
+    'section-feat-label':'Fonctionnalités','section-feat-title':'Tout ce dont un cabinet CPA<br>a besoin. Rien de plus.',
+    'f1-title':'Intake WhatsApp','f1-text':'Vos clients envoient leurs reçus par WhatsApp. Pas d\'application à installer, pas de formation nécessaire.',
+    'f2-title':'IA par ligne de poste','f2-text':'Chaque article reçoit son propre compte GL et code de taxe. IGA, Costco, Home Depot — chaque format reconnu.',
+    'f3-title':'Règles fiscales québécoises','f3-text':'TPS/TVQ automatiques. Articles détaxés (Z), repas 50% (M), immobilisations >500$. Conforme ARC et Revenu Québec.',
+    'f4-title':'Export QuickBooks Online','f4-text':'Chaque poste devient une ligne distincte dans QBO. Zéro saisie manuelle. Réconciliation parfaite.',
+    'f5-title':'Relevés bancaires Plaid','f5-text':'Connectez les comptes bancaires de vos clients. Transactions importées et réconciliées automatiquement.',
+    'f6-title':'Sécurité & Loi 25','f6-text':'Données hébergées à Toronto. 2FA obligatoire. AES-256. Ententes signées avec tous les tiers. Aucune IA chinoise.',
+    'trust-label':'Conformité & Sécurité','trust-title':'Conçu pour les données<br>financières les plus sensibles',
+    't1-title':'Données au Canada','t1-text':'Hébergement DigitalOcean Toronto. Vos données ne quittent jamais le Canada.',
+    't2-title':'Loi 25 / Bill 64','t2-text':'Évaluation d\'impact vie privée complète. Consentement éclairé. Droit à l\'effacement.',
+    't3-title':'Chiffrement AES-256','t3-text':'Données chiffrées au repos et en transit. TLS 1.2+ pour toutes les communications.',
+    't4-title':'Chaque ligne vérifiée','t4-text':'Aucune écriture automatique sans validation CPA. Contrôle total. Audit complet.',
+    'pricing-label':'Tarification','pricing-title':'Simple, transparent,<br>sans surprise','pricing-sub':'Contactez-nous pour une démo gratuite. Ou souscrivez directement ci-dessous.',
+    'billing-monthly-label':'Mensuel','billing-yearly-label':'Annuel','save-badge':'2 mois gratuits',
+    'plan-1-name':'Démarrage','plan-1-desc':'Pour CPAs solo. ~300 reçus/mois. Économies estimées: <strong style="color:var(--green);">~800$/mois</strong> vs saisie manuelle.',
+    'pf-1-1':'Clients illimités','pf-1-2':'Intake WhatsApp','pf-1-3':'Extraction IA par ligne','pf-1-4':'Export QuickBooks','pf-1-5':'Relevés bancaires Plaid','pf-1-6':'Support par courriel',
+    'popular-tag':'⭐ PLUS POPULAIRE',
+    'plan-2-name':'Professionnel','plan-2-desc':'Pour la plupart des cabinets. ~1 000 reçus/mois. Économies estimées: <strong style="color:var(--green);">~2 500$/mois</strong> vs saisie manuelle.',
+    'pf-2-1':'Tout Démarrage, plus:','pf-2-2':'Tableau de bord avancé','pf-2-3':'Hiérarchie cabinet → clients','pf-2-4':'Codes QR personnalisés','pf-2-5':'Support prioritaire','pf-2-6':'Calibration IA',
+    'plan-3-name':'Cabinet','plan-3-desc':'Pour les cabinets en croissance. ~5 000 reçus/mois. Économies estimées: <strong style="color:var(--green);">~12 000$/mois</strong> vs saisie manuelle.',
+    'pf-3-1':'Tout Professionnel, plus:','pf-3-2':'Onboarding dédié','pf-3-3':'SLA garanti','pf-3-4':'Support téléphonique','pf-3-5':'Intégrations personnalisées','pf-3-6':'Rapport mensuel',
+    'enterprise-title':'Entreprise','enterprise-text':'Volume illimité · SLA personnalisé · Intégrations sur mesure · Déploiement dédié','enterprise-cta':'Contactez-nous →',
+    'cta-section-label':'Commencez aujourd\'hui','cta-final-title':'OtoCPA — disponible 24/7 pour vous','cta-final-sub':'Contactez-nous — on vous configure et vous accompagne dès le départ.',
+    'per-month-1':'/mois','per-month-2':'/mois','per-month-3':'/mois',
+    'nav-how':'Comment ça marche','nav-features':'Fonctionnalités','nav-pricing':'Tarifs','nav-login':'Connexion','nav-cta-text':'Démo gratuite →',
+    'footer-login':'Connexion','footer-signup':'S\'inscrire','footer-privacy':'Confidentialité',
+    'footer-tagline':'Automatisation comptable pour CPAs québécois.<br>© 2026 OtoCPA Inc. Tous droits réservés.',
+    'footer-bottom-text':'Hébergé à Toronto, Canada · Conforme Loi 25 · Données protégées AES-256 · Aucune IA chinoise',
+    'law25-badge':'✓ Loi 25 Québec',
+    'lang-toggle-btn':'EN',
+  },
+  en: {
+    'hero-badge-text':'Law 25 Compliant · Data Hosted in Canada',
+    'hero-h1':'Eliminate <em>80%</em> of manual<br>accounting entry.',
+    'hero-sub':'Your clients send a photo. AI extracts every line item, applies GST/QST rules, and posts to QuickBooks automatically.',
+    'hero-proof':'OtoCPA works <strong>24/7</strong> — the equivalent of a full-time employee at <strong>under $10/hour.</strong>',
+    'cta-primary-btn':'📧 Request a demo →',
+    'cta-secondary-btn':'See how it works',
+    'cta-primary-btn2':'📧 Request a demo →',
+    'cta-demo-btn':'Request a demo',
+    'stat-1-label':'Receipt → QuickBooks','stat-2-label':'AI Accuracy','stat-3-label':'Always available','stat-4-label':'Average ROI / month',
+    'ba-section-label':'Before / After','ba-section-title':'What you used to do.<br>What you do now.',
+    'ba-label-before':'😓 Before OtoCPA','ba-label-after':'✅ With OtoCPA',
+    'ba-b1':'Manual receipt entry','ba-b2':'GST/QST verification','ba-b3':'GL account assignment','ba-b4':'Data entry in QuickBooks','ba-b-total':'Total: ~8 min per receipt',
+    'ba-a1':'Client sends WhatsApp photo','ba-a2':'AI extracts all line items','ba-a3':'CPA reviews and approves','ba-a4':'Automatic QuickBooks export','ba-a-total':'Total: ~1 min per receipt',
+    'ba-summary-text':'At 500 receipts/month: <strong>65+ hours saved</strong> → value of <strong>$1,600 CAD/month</strong> in avoided data entry costs. OtoCPA pays for itself in days.',
+    'ba-cta':'Start for free →',
+    'section-how-label':'How it works','section-how-title':'From photo to ledger<br>in under a minute','section-how-sub':'No installation for your clients. No training. Just a WhatsApp photo.',
+    'flow-1-title':'WhatsApp Photo','flow-1-text':'Client sends a receipt photo via WhatsApp or by scanning their QR code',
+    'flow-2-title':'OCR Reading','flow-2-text':'Google DocAI reads the image with 98% accuracy',
+    'flow-3-title':'AI Classification','flow-3-text':'DeepSeek V3 classifies each line: GL account, GST/QST, capital assets',
+    'flow-4-title':'CPA Review','flow-4-text':'You review, correct if needed, and approve with one click',
+    'flow-5-title':'QuickBooks Export','flow-5-text':'Every line becomes a separate entry in QBO. Zero manual entry.',
+    'section-feat-label':'Features','section-feat-title':'Everything a CPA firm needs.<br>Nothing more.',
+    'f1-title':'WhatsApp Intake','f1-text':'Your clients send receipts via WhatsApp. No app to install, no training required.',
+    'f2-title':'AI per Line Item','f2-text':'Every item gets its own GL account and tax code. IGA, Costco, Home Depot — every format recognized.',
+    'f3-title':'Quebec Tax Rules','f3-text':'Automatic GST/QST. Zero-rated groceries (Z), meals 50% (M), capital assets >$500. CRA and Revenu Québec compliant.',
+    'f4-title':'QuickBooks Online Export','f4-text':'Every item becomes a distinct line in QBO. Zero manual entry. Perfect reconciliation.',
+    'f5-title':'Plaid Bank Feeds','f5-text':'Connect your clients\' bank accounts. Transactions imported and reconciled automatically.',
+    'f6-title':'Security & Law 25','f6-text':'Data hosted in Toronto. Mandatory 2FA. AES-256. Signed agreements with all third parties. No Chinese AI.',
+    'trust-label':'Compliance & Security','trust-title':'Built for the most sensitive<br>financial data',
+    't1-title':'Data in Canada','t1-text':'DigitalOcean Toronto hosting. Your data never leaves Canada.',
+    't2-title':'Law 25 / Bill 64','t2-text':'Complete privacy impact assessment. Informed consent. Right to deletion.',
+    't3-title':'AES-256 Encryption','t3-text':'Data encrypted at rest and in transit. TLS 1.2+ for all communications.',
+    't4-title':'Every Line Verified','t4-text':'No automatic posting without CPA validation. Full control. Complete audit trail.',
+    'pricing-label':'Pricing','pricing-title':'Simple, transparent,<br>no surprises','pricing-sub':'Contact us for a free demo. Or subscribe directly below.',
+    'billing-monthly-label':'Monthly','billing-yearly-label':'Annual','save-badge':'2 months free',
+    'plan-1-name':'Starter','plan-1-desc':'For solo CPAs. ~300 receipts/month. Estimated savings: <strong style="color:var(--green);">~$800/month</strong> vs manual entry.',
+    'pf-1-1':'Unlimited clients','pf-1-2':'WhatsApp intake','pf-1-3':'AI line item extraction','pf-1-4':'QuickBooks export','pf-1-5':'Plaid bank feeds','pf-1-6':'Email support',
+    'popular-tag':'⭐ MOST POPULAR',
+    'plan-2-name':'Professional','plan-2-desc':'For most CPA firms. ~1,000 receipts/month. Estimated savings: <strong style="color:var(--green);">~$2,500/month</strong> vs manual entry.',
+    'pf-2-1':'Everything in Starter, plus:','pf-2-2':'Advanced dashboard','pf-2-3':'Firm → client hierarchy','pf-2-4':'Custom QR codes','pf-2-5':'Priority support','pf-2-6':'AI calibration',
+    'plan-3-name':'Firm','plan-3-desc':'For growing firms. ~5,000 receipts/month. Estimated savings: <strong style="color:var(--green);">~$12,000/month</strong> vs manual entry.',
+    'pf-3-1':'Everything in Professional, plus:','pf-3-2':'Dedicated onboarding','pf-3-3':'Guaranteed SLA','pf-3-4':'Phone support','pf-3-5':'Custom integrations','pf-3-6':'Monthly usage report',
+    'enterprise-title':'Enterprise','enterprise-text':'Unlimited volume · Custom SLA · Tailored integrations · Dedicated deployment','enterprise-cta':'Contact us →',
+    'cta-section-label':'Get started today','cta-final-title':'OtoCPA works<br>24/7 for you.','cta-final-sub':'Contact us first — we set you up and guide you from day one.',
+    'per-month-1':'/mo','per-month-2':'/mo','per-month-3':'/mo',
+    'nav-how':'How it works','nav-features':'Features','nav-pricing':'Pricing','nav-login':'Login','nav-cta-text':'Free demo →',
+    'footer-login':'Login','footer-signup':'Sign up','footer-privacy':'Privacy Policy',
+    'footer-tagline':'Accounting automation for Quebec CPA firms.<br>© 2026 OtoCPA Inc. All rights reserved.',
+    'footer-bottom-text':'Hosted in Toronto, Canada · Law 25 Compliant · AES-256 Protected · No Chinese AI',
+    'law25-badge':'✓ Law 25 Quebec',
+    'lang-toggle-btn':'FR',
+  }
+};
+
+let lang = 'fr';
+
+function setLang(l) {
+  lang = l;
+  const t = T[l];
+  Object.keys(t).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = t[id];
+  });
+  document.documentElement.lang = l;
+  // Update pricing links based on current billing mode
+  updatePricingLinks();
+}
+
+function toggleLang() {
+  setLang(lang === 'fr' ? 'en' : 'fr');
+}
+
+// BILLING TOGGLE
+let isYearly = false;
+const prices = {
+  starter: { monthly: '99', yearly: '990' },
+  pro: { monthly: '299', yearly: '2 990' },
+  business: { monthly: '599', yearly: '5 990' },
+};
+const planKeys = {
+  starter: { monthly: 'starter_monthly', yearly: 'starter_yearly' },
+  pro: { monthly: 'pro_monthly', yearly: 'pro_yearly' },
+  business: { monthly: 'business_monthly', yearly: 'business_yearly' },
+};
+
+function updatePricingLinks() {
+  const mode = isYearly ? 'yearly' : 'monthly';
+  const perMonth = isYearly ? (lang === 'fr' ? '/an' : '/yr') : (lang === 'fr' ? '/mois' : '/mo');
+  ['starter','pro','business'].forEach(plan => {
+    const priceEl = document.getElementById(`price-${plan}`);
+    if (priceEl) priceEl.innerHTML = `<sup>$</sup>${prices[plan][mode]}<sub>${perMonth}</sub>`;
+    const ctaEl = document.getElementById(`cta-${plan}`);
+    const buyEl = document.getElementById('buy-'+plan);
+    if (buyEl) buyEl.href = `https://app.otocpa.com/signup/checkout?plan=${planKeys[plan][mode]}`;
+  });
+}
+
+function toggleBilling() {
+  isYearly = !isYearly;
+  document.getElementById('billingToggle').classList.toggle('on', isYearly);
+  updatePricingLinks();
+}
+
+// SCROLL ANIMATIONS
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// SMOOTH SCROLL
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
+  });
+});
+</script>
+</body>
+</html>
