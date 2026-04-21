@@ -108,6 +108,7 @@ from src.engines.reconciliation_engine import (
     list_reconciliations as recon_list,
     mark_item_cleared as recon_mark_cleared,
 )
+from src.formatting import money, money_signed
 from src.i18n import t
 from src.i18n.ui_labels import ui_t
 from src.agents.core import client_comms as _client_comms
@@ -3711,18 +3712,18 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
                     alloc_rows += (
                         f"<tr>"
                         f"<td>{esc(str(a.get('description', '')))}</td>"
-                        f"<td style='text-align:right;'>${a.get('original_pretax', 0):.2f}</td>"
-                        f"<td style='text-align:right;'>${a.get('deposit_allocated', 0):.2f}</td>"
-                        f"<td style='text-align:right;'>${a.get('net_pretax', 0):.2f}</td>"
-                        f"<td style='text-align:right;'>${a.get('adjusted_gst_recovery', 0):.2f}</td>"
-                        f"<td style='text-align:right;'>${a.get('adjusted_qst_recovery', 0):.2f}</td>"
-                        f"<td style='text-align:right;'>${a.get('adjusted_hst_recovery', 0):.2f}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('original_pretax', 0), lang)}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('deposit_allocated', 0), lang)}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('net_pretax', 0), lang)}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('adjusted_gst_recovery', 0), lang)}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('adjusted_qst_recovery', 0), lang)}</td>"
+                        f"<td style='text-align:right;'>{money(a.get('adjusted_hst_recovery', 0), lang)}</td>"
                         f"</tr>"
                     )
                 deposit_card = f"""
 <div class="card">
   <h3>{esc(t("deposit_allocation_section", lang))}</h3>
-  <p><strong>{esc(t("deposit_total_label", lang))}:</strong> ${float(dep_amt):.2f}</p>
+  <p><strong>{esc(t("deposit_total_label", lang))}:</strong> {money(float(dep_amt), lang)}</p>
   <div style="overflow-x:auto;">
   <table>
     <thead><tr>
@@ -4076,7 +4077,7 @@ def render_revenu_quebec(
             f"<span style='color:#6b7280;font-size:12px;'>{esc(en_label)}</span>"
             f"{note_html}</td>"
             f"<td style='text-align:right;font-family:monospace;font-size:14px;'>"
-            f"${float(value):,.2f}</td>"
+            f"{money(float(value), lang)}</td>"
             f"</tr>"
         )
 
@@ -4240,7 +4241,7 @@ def render_time_summary(
             f"<td>{esc(uname)}</td>"
             f"<td>{total_h:.2f}</td>"
             f"<td>{billable_h:.2f}</td>"
-            f"<td>${est_fee:.2f}</td>"
+            f"<td>{money(est_fee, lang)}</td>"
             f"</tr>"
         )
 
@@ -4250,7 +4251,7 @@ def render_time_summary(
         f'<td>{esc(t("inv_total", lang))}</td>'
         f'<td>{summary["total_hours"]:.2f}</td>'
         f'<td>{summary["billable_hours"]:.2f}</td>'
-        f'<td>${total_fee:.2f}</td>'
+        f'<td>{money(total_fee, lang)}</td>'
         f'</tr>'
     )
 
@@ -4262,7 +4263,7 @@ def render_time_summary(
       <th>{esc(t("time_user", lang))}</th>
       <th>{esc(t("time_total_hours", lang))}</th>
       <th>{esc(t("time_billable_hours", lang))}</th>
-      <th>{esc(t("time_estimated_fee", lang))} (@ ${rate_decimal:.2f}/h)</th>
+      <th>{esc(t("time_estimated_fee", lang))} (@ {money(rate_decimal, lang)}/h)</th>
     </tr></thead>
     <tbody>{by_user_rows}</tbody>
   </table>
@@ -4668,7 +4669,7 @@ def render_troubleshoot(ctx: dict[str, Any], user: dict[str, Any],
       <tr><td>&nbsp;&nbsp;Medium tier</td><td>{_diag_tiers['medium']} docs</td></tr>
       <tr><td>&nbsp;&nbsp;Complex tier</td><td>{_diag_tiers['complex']} docs</td></tr>
       <tr><td>&nbsp;&nbsp;Very complex tier (best model)</td><td>{_diag_tiers['very_complex']} docs</td></tr>
-      <tr><td><strong>Total AI cost this month</strong></td><td>${_diag_cost:.2f}</td></tr>
+      <tr><td><strong>Total AI cost this month</strong></td><td>{money(_diag_cost, lang)}</td></tr>
       <tr><td><strong>Avg confidence with AI</strong></td><td>{avg_ai_conf}%</td></tr>
       <tr><td><strong>Avg confidence without AI</strong></td><td>{avg_no_ai_conf}%</td></tr>
     </tbody>
@@ -5599,9 +5600,9 @@ def render_bank_import(
                 debit = txn.get("debit")
                 credit = txn.get("credit")
                 balance = txn.get("balance")
-                debit_str = f"${debit:,.2f}" if debit is not None else ""
-                credit_str = f"${credit:,.2f}" if credit is not None else ""
-                balance_str = f"${balance:,.2f}" if balance is not None else ""
+                debit_str = f"{money(debit, lang)}" if debit is not None else ""
+                credit_str = f"{money(credit, lang)}" if credit is not None else ""
+                balance_str = f"{money(balance, lang)}" if balance is not None else ""
 
                 doc_id = esc(txn.get("document_id", ""))
 
@@ -5714,10 +5715,10 @@ def render_bank_import(
                         )
                         split_rows += (
                             f"<tr>"
-                            f"<td style='font-weight:600;'>${sp['transaction_amount']:,.2f}</td>"
+                            f"<td style='font-weight:600;'>{money(sp['transaction_amount'], lang)}</td>"
                             f"<td>{inv_list}</td>"
-                            f"<td style='text-align:right;'>${sp['combined_amount']:,.2f}</td>"
-                            f"<td style='text-align:right;color:#6b7280;'>${sp['difference']:,.2f}</td>"
+                            f"<td style='text-align:right;'>{money(sp['combined_amount'], lang)}</td>"
+                            f"<td style='text-align:right;color:#6b7280;'>{money(sp['difference'], lang)}</td>"
                             f"<td>"
                             f"<form method='POST' action='/bank_import/confirm_split' style='display:inline;'>"
                             f"<input type='hidden' name='transaction_id' value='{esc(sp['transaction_id'])}'>"
@@ -6028,9 +6029,9 @@ def render_fixed_assets_list(
             <td>{esc(a.get("asset_name",""))}{warn}</td>
             <td>{esc(_fa.cca_class_display(int(a.get("cca_class",0))))}</td>
             <td>{esc(str(a.get("acquisition_date",""))[:10])}</td>
-            <td style="text-align:right;">${cost:,.2f}</td>
-            <td style="text-align:right;">${ucc:,.2f}</td>
-            <td style="text-align:right;">${float(a.get("accumulated_cca",0)):,.2f}</td>
+            <td style="text-align:right;">{money(cost, lang)}</td>
+            <td style="text-align:right;">{money(ucc, lang)}</td>
+            <td style="text-align:right;">{money(float(a.get("accumulated_cca",0)), lang)}</td>
             <td>{badge}</td>
             <td>{actions}</td>
         </tr>"""
@@ -6102,21 +6103,21 @@ def render_schedule_8(
             <td>{esc(cls["cca_class_display"])}</td>
             <td>{esc(cls["description"])}</td>
             <td>{esc(rate_str)}</td>
-            <td style="text-align:right;">${cls["opening_ucc"]:,.2f}</td>
-            <td style="text-align:right;">${cls["additions"]:,.2f}</td>
-            <td style="text-align:right;">${cls["disposals"]:,.2f}</td>
-            <td style="text-align:right;">${cls["cca_claimed"]:,.2f}</td>
-            <td style="text-align:right;">${cls["closing_ucc"]:,.2f}</td>
+            <td style="text-align:right;">{money(cls["opening_ucc"], lang)}</td>
+            <td style="text-align:right;">{money(cls["additions"], lang)}</td>
+            <td style="text-align:right;">{money(cls["disposals"], lang)}</td>
+            <td style="text-align:right;">{money(cls["cca_claimed"], lang)}</td>
+            <td style="text-align:right;">{money(cls["closing_ucc"], lang)}</td>
         </tr>"""
 
     totals = data.get("totals", {})
     rows_html += f"""<tr style="font-weight:700;border-top:2px solid #111;">
         <td colspan="3">{esc(t("fa_total", lang))}</td>
-        <td style="text-align:right;">${totals.get("opening_ucc",0):,.2f}</td>
-        <td style="text-align:right;">${totals.get("additions",0):,.2f}</td>
-        <td style="text-align:right;">${totals.get("disposals",0):,.2f}</td>
-        <td style="text-align:right;">${totals.get("cca_claimed",0):,.2f}</td>
-        <td style="text-align:right;">${totals.get("closing_ucc",0):,.2f}</td>
+        <td style="text-align:right;">{money(totals.get("opening_ucc",0), lang)}</td>
+        <td style="text-align:right;">{money(totals.get("additions",0), lang)}</td>
+        <td style="text-align:right;">{money(totals.get("disposals",0), lang)}</td>
+        <td style="text-align:right;">{money(totals.get("cca_claimed",0), lang)}</td>
+        <td style="text-align:right;">{money(totals.get("closing_ucc",0), lang)}</td>
     </tr>"""
 
     body = f"""
@@ -6174,12 +6175,12 @@ def _aging_table_html(
         body += f"""<tr>
             <td>{esc(r.get(name_key,""))}</td>
             <td style="text-align:center;">{r.get("invoice_count",0)}</td>
-            <td style="text-align:right;">${r.get("current",0):,.2f}</td>
-            <td style="text-align:right;">${r.get("days_31_60",0):,.2f}</td>
-            <td style="text-align:right;">${r.get("days_61_90",0):,.2f}</td>
-            <td style="text-align:right;">${r.get("days_91_120",0):,.2f}</td>
-            <td style="text-align:right;">${r.get("over_120",0):,.2f}</td>
-            <td style="text-align:right;font-weight:600;">${r.get("total",0):,.2f}</td>
+            <td style="text-align:right;">{money(r.get("current",0), lang)}</td>
+            <td style="text-align:right;">{money(r.get("days_31_60",0), lang)}</td>
+            <td style="text-align:right;">{money(r.get("days_61_90",0), lang)}</td>
+            <td style="text-align:right;">{money(r.get("days_91_120",0), lang)}</td>
+            <td style="text-align:right;">{money(r.get("over_120",0), lang)}</td>
+            <td style="text-align:right;font-weight:600;">{money(r.get("total",0), lang)}</td>
         </tr>"""
         t_current += r.get("current", 0)
         t_31 += r.get("days_31_60", 0)
@@ -6191,12 +6192,12 @@ def _aging_table_html(
     body += f"""<tr style="font-weight:700;border-top:2px solid #111;">
         <td>{esc(t("aging_total_row", lang))}</td>
         <td></td>
-        <td style="text-align:right;">${t_current:,.2f}</td>
-        <td style="text-align:right;">${t_31:,.2f}</td>
-        <td style="text-align:right;">${t_61:,.2f}</td>
-        <td style="text-align:right;">${t_91:,.2f}</td>
-        <td style="text-align:right;">${t_120:,.2f}</td>
-        <td style="text-align:right;">${t_total:,.2f}</td>
+        <td style="text-align:right;">{money(t_current, lang)}</td>
+        <td style="text-align:right;">{money(t_31, lang)}</td>
+        <td style="text-align:right;">{money(t_61, lang)}</td>
+        <td style="text-align:right;">{money(t_91, lang)}</td>
+        <td style="text-align:right;">{money(t_120, lang)}</td>
+        <td style="text-align:right;">{money(t_total, lang)}</td>
     </tr>"""
 
     return hdr + body + "</tbody></table>"
@@ -6243,7 +6244,7 @@ def render_aging_report(
             f'<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;'
             f'padding:12px 16px;min-width:150px;">'
             f'<div style="font-size:12px;color:#6b7280;">{esc(t(label_key, lang))}</div>'
-            f'<div style="font-size:20px;font-weight:700;color:{color};">${value:,.2f}</div></div>'
+            f'<div style="font-size:20px;font-weight:700;color:{color};">{money(value, lang)}</div></div>'
         )
 
     cards_html = ""
@@ -6370,8 +6371,8 @@ def render_ar_list(
             <td>{esc(inv.get("customer_name",""))}</td>
             <td>{esc(str(inv.get("invoice_date",""))[:10])}</td>
             <td>{esc(str(inv.get("due_date",""))[:10])}</td>
-            <td style="text-align:right;">${float(inv.get("total_amount",0)):,.2f}</td>
-            <td style="text-align:right;">${float(inv.get("amount_paid",0)):,.2f}</td>
+            <td style="text-align:right;">{money(float(inv.get("total_amount",0)), lang)}</td>
+            <td style="text-align:right;">{money(float(inv.get("amount_paid",0)), lang)}</td>
             <td>{badge}</td>
             <td>{actions}</td>
         </tr>"""
@@ -6494,7 +6495,7 @@ def render_cashflow(
 
     def _amt(v: float) -> str:
         color = "color:#16a34a;" if v >= 0 else "color:#dc2626;"
-        return f'<span style="{color}font-weight:600;">${v:,.2f}</span>'
+        return f'<span style="{color}font-weight:600;">{money(v, lang)}</span>'
 
     wc = op["working_capital_changes"]
 
@@ -6503,7 +6504,7 @@ def render_cashflow(
     recon_icon = "&#10004;" if recon["reconciled"] else "&#9888;"
     warning_html = ""
     if not recon["reconciled"]:
-        warning_html = f'<div class="flash error">{esc(t("cashflow_recon_warning", lang))} ${recon["difference"]:,.2f}</div>'
+        warning_html = f'<div class="flash error">{esc(t("cashflow_recon_warning", lang))} {money(recon["difference"], lang)}</div>'
 
     body = f"""
     <div class="card">
@@ -6548,14 +6549,14 @@ def render_cashflow(
     <div style="margin-top:20px;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;">
     <table style="width:100%;">
     <tr style="font-weight:700;font-size:1.1em;"><td>{esc(labels["net_change"])}</td><td style="text-align:right;">{_amt(data["net_change_in_cash"])}</td></tr>
-    <tr><td>{esc(labels["opening"])}</td><td style="text-align:right;">${data["opening_cash_balance"]:,.2f}</td></tr>
+    <tr><td>{esc(labels["opening"])}</td><td style="text-align:right;">{money(data["opening_cash_balance"], lang)}</td></tr>
     <tr style="font-weight:700;font-size:1.1em;border-top:2px solid #374151;"><td>{esc(labels["closing"])}</td><td style="text-align:right;">{_amt(data["closing_cash_balance"])}</td></tr>
     </table>
     </div>
 
     <div style="margin-top:12px;padding:12px;border-radius:8px;border:1px solid {'#bbf7d0' if recon['reconciled'] else '#fecaca'};background:{'#f0fdf4' if recon['reconciled'] else '#fef2f2'};">
     <strong style="color:{recon_color};">{recon_icon} {esc(t("cashflow_bank_recon", lang))}</strong>
-    <span style="margin-left:8px;">{esc(t("cashflow_bank_balance", lang))}: ${recon["bank_balance"]:,.2f} | {esc(t("cashflow_difference", lang))}: ${recon["difference"]:,.2f}</span>
+    <span style="margin-left:8px;">{esc(t("cashflow_bank_balance", lang))}: {money(recon["bank_balance"], lang)} | {esc(t("cashflow_difference", lang))}: {money(recon["difference"], lang)}</span>
     </div>
     </div>"""
 
@@ -6604,7 +6605,7 @@ def render_t2(
                 f"<tr>"
                 f"<td><strong>{esc(ln['line'])}</strong></td>"
                 f"<td>{esc(ln['description'])}</td>"
-                f"<td style='text-align:right;font-weight:600;'>${ln['amount']:,.2f}</td>"
+                f"<td style='text-align:right;font-weight:600;'>{money(ln['amount'], lang)}</td>"
                 f"<td style='font-size:11px;color:#6b7280;'>{esc(gl_text)}</td>"
                 f"<td><span style='color:{conf_color};'>&#9679;</span></td>"
                 f"</tr>\n"
@@ -6677,18 +6678,18 @@ def _render_sched8_tab(sched8: dict, lang: str) -> str:
             f"<tr>"
             f"<td>{esc(c.get('cca_class_display', c.get('cca_class', '')))}</td>"
             f"<td>{esc(c.get('description', ''))}</td>"
-            f"<td style='text-align:right;'>${c.get('opening_ucc', 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${c.get('cca_claimed', 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${c.get('closing_ucc', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(c.get('opening_ucc', 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(c.get('cca_claimed', 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(c.get('closing_ucc', 0), lang)}</td>"
             f"</tr>\n"
         )
     totals = sched8.get("totals", {})
     rows += (
         f"<tr style='font-weight:700;border-top:2px solid #374151;'>"
         f"<td colspan='2'>{esc(t('t2_total', lang))}</td>"
-        f"<td style='text-align:right;'>${totals.get('opening_ucc', 0):,.2f}</td>"
-        f"<td style='text-align:right;'>${totals.get('cca_claimed', 0):,.2f}</td>"
-        f"<td style='text-align:right;'>${totals.get('closing_ucc', 0):,.2f}</td>"
+        f"<td style='text-align:right;'>{money(totals.get('opening_ucc', 0), lang)}</td>"
+        f"<td style='text-align:right;'>{money(totals.get('cca_claimed', 0), lang)}</td>"
+        f"<td style='text-align:right;'>{money(totals.get('closing_ucc', 0), lang)}</td>"
         f"</tr>"
     )
     return (
@@ -6713,9 +6714,9 @@ def _render_sched50_tab(sched50: dict, lang: str) -> str:
             f"<tr>"
             f"<td>{esc(sh.get('name', ''))}</td>"
             f"<td style='text-align:right;'>{sh.get('ownership_pct', 0):.1f}%</td>"
-            f"<td style='text-align:right;'>${sh.get('dividends_paid', 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${sh.get('salary_paid', 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${sh.get('loans_to_shareholder', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(sh.get('dividends_paid', 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(sh.get('salary_paid', 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(sh.get('loans_to_shareholder', 0), lang)}</td>"
             f"</tr>\n"
         )
     return (
@@ -6741,7 +6742,7 @@ def _render_co17_tab(co17: dict, lang: str) -> str:
             f"<td>{esc(ln.get('t2_line', ''))}</td>"
             f"<td>{esc(ln.get('co17_line', ''))}</td>"
             f"<td>{esc(ln.get('description', ''))}</td>"
-            f"<td style='text-align:right;font-weight:600;'>${ln.get('amount', 0):,.2f}</td>"
+            f"<td style='text-align:right;font-weight:600;'>{money(ln.get('amount', 0), lang)}</td>"
             f"</tr>\n"
         )
     return (
@@ -6782,7 +6783,7 @@ def render_reconciliation_list(
             label=esc(t(label_key, lang))
         )
         diff = r.get("difference")
-        diff_str = f"${diff:,.2f}" if diff is not None else "—"
+        diff_str = f"{money(diff, lang)}" if diff is not None else "—"
         diff_color = "color:#16a34a;" if diff is not None and abs(diff) <= 0.01 else "color:#dc2626;"
         rows_html += (
             f"<tr>"
@@ -6790,8 +6791,8 @@ def render_reconciliation_list(
             f"{esc(r['client_code'])}</a></td>"
             f"<td>{esc(r.get('account_name', ''))}</td>"
             f"<td>{esc(r.get('period_end_date', ''))}</td>"
-            f"<td style='text-align:right;'>${r.get('statement_ending_balance', 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${r.get('gl_ending_balance', 0):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(r.get('statement_ending_balance', 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(r.get('gl_ending_balance', 0), lang)}</td>"
             f"<td style='text-align:right;{diff_color}'>{diff_str}</td>"
             f"<td>{badge}</td>"
             f"</tr>\n"
@@ -6951,7 +6952,7 @@ def render_reconciliation_detail(
             html += (
                 f"<tr>"
                 f"<td>{esc(it['description'])}</td>"
-                f"<td style='text-align:right;'>${it['amount']:,.2f}</td>"
+                f"<td style='text-align:right;'>{money(it['amount'], lang)}</td>"
                 f"<td>{esc(it.get('transaction_date') or '')}</td>"
                 f"<td>{clear_btn}</td>"
                 f"</tr>"
@@ -6963,7 +6964,7 @@ def render_reconciliation_detail(
         f'<h3>{esc(t("recon_bank_side", lang))}</h3>'
         f'<table style="width:100%;">'
         f'<tr><td>{esc(t("recon_stmt_bal_label", lang))}</td>'
-        f'<td style="text-align:right;font-weight:700;">${bank_side.get("statement_balance", 0):,.2f}</td></tr>'
+        f'<td style="text-align:right;font-weight:700;">{money(bank_side.get("statement_balance", 0), lang)}</td></tr>'
     )
     if dit_items:
         bank_card += (
@@ -6978,7 +6979,7 @@ def render_reconciliation_detail(
         )
         bank_card += (
             f'<tr><td>+ {esc(t("recon_dit", lang))}</td>'
-            f'<td style="text-align:right;">${bank_side.get("deposits_in_transit", 0):,.2f}</td></tr>'
+            f'<td style="text-align:right;">{money(bank_side.get("deposits_in_transit", 0), lang)}</td></tr>'
         )
     if oc_items:
         bank_card += (
@@ -6993,12 +6994,12 @@ def render_reconciliation_detail(
         )
         bank_card += (
             f'<tr><td>- {esc(t("recon_oc", lang))}</td>'
-            f'<td style="text-align:right;">${bank_side.get("outstanding_cheques", 0):,.2f}</td></tr>'
+            f'<td style="text-align:right;">{money(bank_side.get("outstanding_cheques", 0), lang)}</td></tr>'
         )
     bank_card += (
         f'<tr style="border-top:2px solid #111827;">'
         f'<td><strong>{esc(t("recon_adj_bank", lang))}</strong></td>'
-        f'<td style="text-align:right;font-weight:700;">${bank_side.get("adjusted_bank_balance", 0):,.2f}</td></tr>'
+        f'<td style="text-align:right;font-weight:700;">{money(bank_side.get("adjusted_bank_balance", 0), lang)}</td></tr>'
         f'</table></div>'
     )
 
@@ -7012,27 +7013,27 @@ def render_reconciliation_detail(
         f'<h3>{esc(t("recon_book_side", lang))}</h3>'
         f'<table style="width:100%;">'
         f'<tr><td>{esc(t("recon_gl_bal_label", lang))}</td>'
-        f'<td style="text-align:right;font-weight:700;">${book_side.get("gl_balance", 0):,.2f}</td></tr>'
+        f'<td style="text-align:right;font-weight:700;">{money(book_side.get("gl_balance", 0), lang)}</td></tr>'
     )
     if bc_items:
         book_card += (
             f'<tr><td>- {esc(t("recon_bank_charges", lang))}</td>'
-            f'<td style="text-align:right;">${book_side.get("bank_charges", 0):,.2f}</td></tr>'
+            f'<td style="text-align:right;">{money(book_side.get("bank_charges", 0), lang)}</td></tr>'
         )
     if ie_items:
         book_card += (
             f'<tr><td>+ {esc(t("recon_interest", lang))}</td>'
-            f'<td style="text-align:right;">${book_side.get("interest_earned", 0):,.2f}</td></tr>'
+            f'<td style="text-align:right;">{money(book_side.get("interest_earned", 0), lang)}</td></tr>'
         )
     if bke_items:
         book_card += (
             f'<tr><td>+/- {esc(t("recon_book_errors", lang))}</td>'
-            f'<td style="text-align:right;">${book_side.get("book_errors", 0):,.2f}</td></tr>'
+            f'<td style="text-align:right;">{money(book_side.get("book_errors", 0), lang)}</td></tr>'
         )
     book_card += (
         f'<tr style="border-top:2px solid #111827;">'
         f'<td><strong>{esc(t("recon_adj_book", lang))}</strong></td>'
-        f'<td style="text-align:right;font-weight:700;">${book_side.get("adjusted_book_balance", 0):,.2f}</td></tr>'
+        f'<td style="text-align:right;font-weight:700;">{money(book_side.get("adjusted_book_balance", 0), lang)}</td></tr>'
         f'</table></div>'
     )
 
@@ -7041,7 +7042,7 @@ def render_reconciliation_detail(
     diff_card = (
         f'<div class="card" style="text-align:center;">'
         f'<h3>{esc(t("recon_difference", lang))}</h3>'
-        f'<div style="font-size:2rem;font-weight:700;{diff_color}">${difference:,.2f}</div>'
+        f'<div style="font-size:2rem;font-weight:700;{diff_color}">{money(difference, lang)}</div>'
         f'<div style="margin-top:4px;">{status_badge}</div>'
         f'</div>'
     )
@@ -7198,16 +7199,16 @@ def render_ai_costs(
         </tr>
         <tr>
           <td style="padding:8px 4px;"><strong>{esc(total_cost_label)}</strong></td>
-          <td style="text-align:right;padding:8px 4px;" colspan="2"><strong>${cost:.2f}</strong></td>
+          <td style="text-align:right;padding:8px 4px;" colspan="2"><strong>{money(cost, lang)}</strong></td>
         </tr>
         <tr>
           <td style="padding:4px;color:#888;">{esc(est_label)}</td>
-          <td style="text-align:right;padding:4px;color:#888;" colspan="2">${est:.2f}</td>
+          <td style="text-align:right;padding:4px;color:#888;" colspan="2">{money(est, lang)}</td>
         </tr>
         <tr style="background:#1a3a1a;">
           <td style="padding:8px 4px;"><strong>{esc(saved_label)}</strong></td>
           <td style="text-align:right;padding:8px 4px;color:#4ade80;" colspan="2">
-            <strong>${saved:.2f} ({pct:.1f}%)</strong>
+            <strong>{money(saved, lang)} ({pct:.1f}%)</strong>
           </td>
         </tr>
       </table>
@@ -7315,7 +7316,7 @@ def render_analytics(
         for c in clients_data:
             avg_min_str = f"{c['avg_minutes']:.1f}" if c["avg_minutes"] is not None else esc(t("analytics_na", lang))
             hold_str = f"{c['hold_rate']:.1f}%" if c["hold_rate"] is not None else esc(t("analytics_na", lang))
-            fee_str = f"${c['est_fee']:,.2f}" if c.get("est_fee") is not None else esc(t("analytics_na", lang))
+            fee_str = f"{money(c['est_fee'], lang)}" if c.get("est_fee") is not None else esc(t("analytics_na", lang))
             reason_str = esc(c["common_reason"]) if c.get("common_reason") else '<span class="muted">\u2014</span>'
             client_rows_html += (
                 f"<tr>"
@@ -7647,8 +7648,8 @@ def render_calendar(
                 summary = generate_filing_summary(
                     d["client_code"], period_start, period_end, DB_PATH
                 )
-                gst_ready = f'${float(summary.get("itc_available", 0)):,.2f}'
-                qst_ready = f'${float(summary.get("itr_available", 0)):,.2f}'
+                gst_ready = f'{money(float(summary.get("itc_available", 0)), lang)}'
+                qst_ready = f'{money(float(summary.get("itr_available", 0)), lang)}'
                 docs_pending_count = str(summary.get("documents_pending", 0))
             except Exception:
                 gst_ready = qst_ready = docs_pending_count = "—"
@@ -7810,10 +7811,10 @@ def render_working_papers(
 
             rows_html = ""
             for p in papers:
-                bal_books = f"${float(p['balance_per_books']):,.2f}" if p.get("balance_per_books") is not None else '<span class="muted">\u2014</span>'
-                bal_conf  = f"${float(p['balance_confirmed']):,.2f}" if p.get("balance_confirmed") is not None else '<span class="muted">\u2014</span>'
+                bal_books = f"{money(float(p['balance_per_books']), lang)}" if p.get("balance_per_books") is not None else '<span class="muted">\u2014</span>'
+                bal_conf  = f"{money(float(p['balance_confirmed']), lang)}" if p.get("balance_confirmed") is not None else '<span class="muted">\u2014</span>'
                 diff_val  = (float(p.get("balance_per_books") or 0) - float(p.get("balance_confirmed") or 0)) if (p.get("balance_per_books") is not None and p.get("balance_confirmed") is not None) else None
-                diff_html = f"${diff_val:,.2f}" if diff_val is not None else '<span class="muted">\u2014</span>'
+                diff_html = f"{money(diff_val, lang)}" if diff_val is not None else '<span class="muted">\u2014</span>'
                 tested_by = esc(p.get("tested_by") or "")
                 reviewed  = esc(p.get("reviewed_by") or "")
                 # BLOCK 3: Materiality badge
@@ -8204,8 +8205,8 @@ def render_audit_sample(
                 plan_html = (
                     f'<div class="card" style="background:#f0fdf4;border:1px solid #16a34a;">'
                     f'<strong>CAS 530 sample plan (MUS)</strong><br>'
-                    f'Population: {pop_size:,} items / ${pop_dollars:,.2f}<br>'
-                    f'Tolerable: ${tol_m:,.2f} &mdash; Expected: ${exp_m:,.2f} &mdash; Confidence: {int(conf * 100)}%<br>'
+                    f'Population: {pop_size:,} items / {money(pop_dollars, lang)}<br>'
+                    f'Tolerable: {money(tol_m, lang)} &mdash; Expected: {money(exp_m, lang)} &mdash; Confidence: {int(conf * 100)}%<br>'
                     f'Confidence factor: {plan["confidence_factor"]} &mdash; Expansion factor: {plan["expansion_factor"]}<br>'
                     f'Formula: <code>{esc(plan["formula"])}</code><br>'
                     f'<strong>Recommended sample size: {plan["size"]}</strong>'
@@ -8379,13 +8380,13 @@ def render_audit_sample(
                     projection_html = (
                         f'<div class="card" style="border-left:4px solid {badge_color};">'
                         f'<strong>CAS 530 projection</strong><br>'
-                        f'Sample: {len(tested_items):,} items / ${sample_total:,.2f} &mdash; '
-                        f'Population: {len(pop_docs):,} / ${population_total:,.2f}<br>'
+                        f'Sample: {len(tested_items):,} items / {money(sample_total, lang)} &mdash; '
+                        f'Population: {len(pop_docs):,} / {money(population_total, lang)}<br>'
                         f'Errors observed: {result["sample_errors_count"]} '
-                        f'(total ${result["total_error_amount"]:,.2f})<br>'
-                        f'Most-likely error: <strong>${result["most_likely_error"]:,.2f}</strong><br>'
-                        f'Upper error limit (95%): <strong>${result["upper_error_limit"]:,.2f}</strong><br>'
-                        f'Tolerable misstatement: ${tol_m:,.2f}<br>'
+                        f'(total {money(result["total_error_amount"], lang)})<br>'
+                        f'Most-likely error: <strong>{money(result["most_likely_error"], lang)}</strong><br>'
+                        f'Upper error limit (95%): <strong>{money(result["upper_error_limit"], lang)}</strong><br>'
+                        f'Tolerable misstatement: {money(tol_m, lang)}<br>'
                         f'<strong style="color:{badge_color};">Conclusion: '
                         f'{esc(result["conclusion"].upper())}</strong> '
                         f'&mdash; {esc(result["message"])}'
@@ -8441,7 +8442,7 @@ def render_financial_statements_page(
             if val is None:
                 return '<span class="muted">\u2014</span>'
             try:
-                return f"${float(val):,.2f}"
+                return f"{money(float(val), lang)}"
             except (TypeError, ValueError):
                 return esc(str(val))
 
@@ -8457,8 +8458,8 @@ def render_financial_statements_page(
                 f'<div style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;'
                 f'padding:10px 14px;border-radius:8px;margin-bottom:12px;">'
                 f'<strong>⚠ Trial balance is unbalanced.</strong> '
-                f'Debits ${stmts.get("trial_balance_debit_total"):,.2f} '
-                f'≠ credits ${stmts.get("trial_balance_credit_total"):,.2f}. '
+                f'Debits {money(stmts.get("trial_balance_debit_total"), lang)} '
+                f'≠ credits {money(stmts.get("trial_balance_credit_total"), lang)}. '
                 f'Review GL postings for this period before relying on these statements.'
                 f'</div>'
             )
@@ -8467,9 +8468,9 @@ def render_financial_statements_page(
                 f'<div style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;'
                 f'padding:10px 14px;border-radius:8px;margin-bottom:12px;">'
                 f'<strong>⚠ Balance sheet does not tie.</strong> '
-                f'Assets ${bs.get("total_assets"):,.2f} ≠ '
-                f'Liabilities + Equity ${(bs.get("total_liabilities", 0) + bs.get("total_equity", 0)):,.2f} '
-                f'(difference ${bs.get("balance_difference"):,.2f}).'
+                f'Assets {money(bs.get("total_assets"), lang)} ≠ '
+                f'Liabilities + Equity {money((bs.get("total_liabilities", 0) + bs.get("total_equity", 0)), lang)} '
+                f'(difference {money(bs.get("balance_difference"), lang)}).'
                 f'</div>'
             )
 
@@ -8986,11 +8987,11 @@ def render_engagement_detail(
             + (
                 f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
                 f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_planning", lang))}</span><br>'
-                f'<span style="font-weight:600;color:#1e40af;">${float(eng_mat.get("planning_materiality", 0)):,.2f}</span></div>'
+                f'<span style="font-weight:600;color:#1e40af;">{money(float(eng_mat.get("planning_materiality", 0)), lang)}</span></div>'
                 f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_performance", lang))}</span><br>'
-                f'<span style="font-weight:600;color:#92400e;">${float(eng_mat.get("performance_materiality", 0)):,.2f}</span></div>'
+                f'<span style="font-weight:600;color:#92400e;">{money(float(eng_mat.get("performance_materiality", 0)), lang)}</span></div>'
                 f'<div><span style="font-size:12px;color:#6b7280;">{esc(t("cas_mat_trivial", lang))}</span><br>'
-                f'<span style="font-weight:600;color:#166534;">${float(eng_mat.get("clearly_trivial", 0)):,.2f}</span></div>'
+                f'<span style="font-weight:600;color:#166534;">{money(float(eng_mat.get("clearly_trivial", 0)), lang)}</span></div>'
                 f'</div>'
                 if eng_mat else
                 f'<p class="muted" style="margin:0;">{esc(t("cas_mat_no_assessment", lang))}</p>'
@@ -9048,7 +9049,7 @@ def render_engagement_detail(
                 + "".join(
                     f"<tr><td><code>{esc(str(e.get('document_id', '')))}</code></td>"
                     f"<td>{esc(str(e.get('vendor', '')))}</td>"
-                    f"<td style='text-align:right;'>${abs(e.get('amount', 0)):,.2f}</td>"
+                    f"<td style='text-align:right;'>{money(abs(e.get('amount', 0)), lang)}</td>"
                     f"<td>{esc(str(e.get('document_date', '')))}</td>"
                     f"<td><span class='badge' style='background:#fef3c720;color:#92400e;'>"
                     f"{esc(e.get('status', ''))}</span></td></tr>"
@@ -9474,7 +9475,7 @@ def render_related_parties(
         # Tab 2: Transactions
         txn_rows = ""
         for txn in transactions:
-            amt = f'${float(txn.get("amount") or 0):,.2f}'
+            amt = f'{money(float(txn.get("amount") or 0), lang)}'
             meas_key = f'cas_rp_basis_{txn.get("measurement_basis", "exchange_amount")}'
             meas_label = t(meas_key, lang)
             disc = "✅" if txn.get("disclosure_required") else "—"
@@ -9623,13 +9624,13 @@ def render_materiality(
             f'<span style="font-weight:600;">{esc(t("cas_mat_basis", lang))}:</span>'
             f'<span>{esc(basis_labels.get(current_mat.get("basis", ""), current_mat.get("basis", "")))}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_basis_amount", lang))}:</span>'
-            f'<span>${float(current_mat.get("basis_amount", 0)):,.2f}</span>'
+            f'<span>{money(float(current_mat.get("basis_amount", 0)), lang)}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_planning", lang))}:</span>'
-            f'<span style="color:#1e40af;font-weight:600;">${float(current_mat.get("planning_materiality", 0)):,.2f}</span>'
+            f'<span style="color:#1e40af;font-weight:600;">{money(float(current_mat.get("planning_materiality", 0)), lang)}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_performance", lang))}:</span>'
-            f'<span style="color:#92400e;font-weight:600;">${float(current_mat.get("performance_materiality", 0)):,.2f}</span>'
+            f'<span style="color:#92400e;font-weight:600;">{money(float(current_mat.get("performance_materiality", 0)), lang)}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_trivial", lang))}:</span>'
-            f'<span style="color:#166534;font-weight:600;">${float(current_mat.get("clearly_trivial", 0)):,.2f}</span>'
+            f'<span style="color:#166534;font-weight:600;">{money(float(current_mat.get("clearly_trivial", 0)), lang)}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_calculated_by", lang))}:</span>'
             f'<span>{esc(str(current_mat.get("calculated_by", "") or ""))}</span>'
             f'<span style="font-weight:600;">{esc(t("cas_mat_calculated_at", lang))}:</span>'
@@ -15596,10 +15597,10 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f4cb", "severity": "amber",
             "title_fr": "NOTE DE CR\u00c9DIT \u2014 TAXE NON VENTIL\u00c9E",
             "title_en": "Credit Memo \u2014 Tax Not Itemized",
-            "issue_fr": f"La note de cr\u00e9dit de ${abs_amount:,.2f} ne montre pas la TPS/TVQ s\u00e9par\u00e9ment.",
-            "issue_en": f"Credit memo of ${abs_amount:,.2f} does not show GST/QST separately.",
-            "why_fr": f"Sans ventilation, vous ne pouvez pas r\u00e9cup\u00e9rer vos CTI/RTI. Perte potentielle: ${est_gst + est_qst:,.2f}.",
-            "why_en": f"Without breakdown you cannot claim your ITC/ITR. Potential loss: ${est_gst + est_qst:,.2f}.",
+            "issue_fr": f"La note de cr\u00e9dit de {money(abs_amount, lang)} ne montre pas la TPS/TVQ s\u00e9par\u00e9ment.",
+            "issue_en": f"Credit memo of {money(abs_amount, lang)} does not show GST/QST separately.",
+            "why_fr": f"Sans ventilation, vous ne pouvez pas r\u00e9cup\u00e9rer vos CTI/RTI. Perte potentielle: {money(est_gst + est_qst, lang)}.",
+            "why_en": f"Without breakdown you cannot claim your ITC/ITR. Potential loss: {money(est_gst + est_qst, lang)}.",
             "recommended": {
                 "label_fr": f"Appliquer allocation proportionnelle \u2014 TPS: ${est_gst} | TVQ: ${est_qst} | Avant taxes: ${pretax}",
                 "label_en": "Apply proportional allocation",
@@ -15628,8 +15629,8 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f6a8", "severity": "red",
             "title_fr": f"NOUVEAU FOURNISSEUR \u2014 MONTANT \u00c9LEV\u00c9",
             "title_en": "New Vendor \u2014 Large Amount",
-            "issue_fr": f"{vendor} \u2014 premi\u00e8re facture ${abs_amount:,.2f}",
-            "issue_en": f"{vendor} \u2014 first invoice ${abs_amount:,.2f}",
+            "issue_fr": f"{vendor} \u2014 premi\u00e8re facture {money(abs_amount, lang)}",
+            "issue_en": f"{vendor} \u2014 first invoice {money(abs_amount, lang)}",
             "why_fr": "Factures importantes de nouveaux fournisseurs sont une m\u00e9thode de fraude courante.",
             "why_en": "Large invoices from new vendors are a common fraud method.",
             "recommended": {
@@ -15706,12 +15707,12 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f3d7\ufe0f", "severity": "amber",
             "title_fr": "IMMOBILISATION POSSIBLE",
             "title_en": "Possible Capital Asset",
-            "issue_fr": f"Facture: {_desc_lower[:60].strip()} ${abs_amount:,.2f}. Classifi\u00e9 comme: d\u00e9pense.",
-            "issue_en": f"Invoice: ${abs_amount:,.2f} classified as operating expense.",
-            "why_fr": f"Si pass\u00e9 en d\u00e9pense: actifs sous-\u00e9valu\u00e9s de ${abs_amount:,.2f}, charges sur\u00e9valu\u00e9es.",
-            "why_en": f"If expensed: assets understated by ${abs_amount:,.2f}, expenses overstated.",
+            "issue_fr": f"Facture: {_desc_lower[:60].strip()} {money(abs_amount, lang)}. Classifi\u00e9 comme: d\u00e9pense.",
+            "issue_en": f"Invoice: {money(abs_amount, lang)} classified as operating expense.",
+            "why_fr": f"Si pass\u00e9 en d\u00e9pense: actifs sous-\u00e9valu\u00e9s de {money(abs_amount, lang)}, charges sur\u00e9valu\u00e9es.",
+            "why_en": f"If expensed: assets understated by {money(abs_amount, lang)}, expenses overstated.",
             "recommended": {
-                "label_fr": f"Cr\u00e9er immobilisation Classe 8 (20%) \u2014 DPA: ${_cca_deduction:,.2f} | VNI: ${_nbv:,.2f}",
+                "label_fr": f"Cr\u00e9er immobilisation Classe 8 (20%) \u2014 DPA: {money(_cca_deduction, lang)} | VNI: {money(_nbv, lang)}",
                 "label_en": "Create capital asset Class 8 (20%)",
                 "action": "/document/update", "method": "POST",
                 "fields": {"document_id": document_id, "gl_account": "1500",
@@ -15783,12 +15784,12 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f4b3", "severity": "blue",
             "title_fr": "PAIEMENT DE PR\u00caT \u2014 VENTILATION REQUISE",
             "title_en": "Loan Payment \u2014 Split Required",
-            "issue_fr": f"Paiement: ${abs_amount:,.2f} \u00e0 {vendor}. D\u00e9tect\u00e9 comme paiement de pr\u00eat.",
-            "issue_en": f"Payment: ${abs_amount:,.2f} to {vendor}. Detected as loan payment.",
+            "issue_fr": f"Paiement: {money(abs_amount, lang)} \u00e0 {vendor}. D\u00e9tect\u00e9 comme paiement de pr\u00eat.",
+            "issue_en": f"Payment: {money(abs_amount, lang)} to {vendor}. Detected as loan payment.",
             "why_fr": "Capital (GL 2500) et int\u00e9r\u00eats (GL 5480) doivent \u00eatre s\u00e9par\u00e9s. Les int\u00e9r\u00eats sont d\u00e9ductibles.",
             "why_en": "Principal (GL 2500) and interest (GL 5480) must be separated. Interest is deductible.",
             "recommended": {
-                "label_fr": f"Confirmer: Capital ${_est_principal:,.2f} \u2192 GL 2500 | Int\u00e9r\u00eats ${_est_interest:,.2f} \u2192 GL 5480",
+                "label_fr": f"Confirmer: Capital {money(_est_principal, lang)} \u2192 GL 2500 | Int\u00e9r\u00eats {money(_est_interest, lang)} \u2192 GL 5480",
                 "label_en": "Confirm estimated split",
                 "action": "/document/update", "method": "POST",
                 "fields": {"document_id": document_id, "gl_account": "2500",
@@ -15816,8 +15817,8 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\u274c", "severity": "red",
             "title_fr": "FOURNISSEUR NON INSCRIT \u2014 TPS/TVQ INVALIDE",
             "title_en": "Unregistered Supplier \u2014 GST/QST Invalid",
-            "issue_fr": f"{vendor}: TPS factur\u00e9e ${_tax_gst:,.2f} | TVQ factur\u00e9e ${_tax_qst:,.2f}. Num\u00e9ro TPS: Absent.",
-            "issue_en": f"{vendor}: GST charged ${_tax_gst:,.2f} | QST charged ${_tax_qst:,.2f}. GST number: Missing.",
+            "issue_fr": f"{vendor}: TPS factur\u00e9e {money(_tax_gst, lang)} | TVQ factur\u00e9e {money(_tax_qst, lang)}. Num\u00e9ro TPS: Absent.",
+            "issue_en": f"{vendor}: GST charged {money(_tax_gst, lang)} | QST charged {money(_tax_qst, lang)}. GST number: Missing.",
             "why_fr": "Un fournisseur non inscrit ne peut pas facturer la TPS/TVQ. CTI/RTI non r\u00e9clamables.",
             "why_en": "Unregistered supplier cannot charge GST/QST. ITC/ITR not claimable. CRA/RQ audit risk.",
             "recommended": {
@@ -15846,8 +15847,8 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f3e0", "severity": "amber",
             "title_fr": "D\u00c9PENSE PERSONNELLE POSSIBLE",
             "title_en": "Possible Personal Expense",
-            "issue_fr": f"Facture: {_desc_lower[:50].strip()} ${abs_amount:,.2f}. Usage personnel probable.",
-            "issue_en": f"Invoice: ${abs_amount:,.2f}. Likely personal use detected.",
+            "issue_fr": f"Facture: {_desc_lower[:50].strip()} {money(abs_amount, lang)}. Usage personnel probable.",
+            "issue_en": f"Invoice: {money(abs_amount, lang)}. Likely personal use detected.",
             "why_fr": "Les d\u00e9penses personnelles ne sont pas d\u00e9ductibles. CTI/RTI non r\u00e9clamables.",
             "why_en": "Personal expenses are not deductible. ITC/ITR not claimable.",
             "recommended": {
@@ -15876,8 +15877,8 @@ def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
             "icon": "\U0001f504", "severity": "red",
             "title_fr": "FACTURE EN DOUBLE POSSIBLE",
             "title_en": "Possible Duplicate Invoice",
-            "issue_fr": f"{vendor} ${abs_amount:,.2f}. Facture similaire: {_dup_match_id} (similarit\u00e9 {_sim_display}%)",
-            "issue_en": f"{vendor} ${abs_amount:,.2f}. Similar invoice: {_dup_match_id} (similarity {_sim_display}%)",
+            "issue_fr": f"{vendor} {money(abs_amount, lang)}. Facture similaire: {_dup_match_id} (similarit\u00e9 {_sim_display}%)",
+            "issue_en": f"{vendor} {money(abs_amount, lang)}. Similar invoice: {_dup_match_id} (similarity {_sim_display}%)",
             "why_fr": "Payer deux fois la m\u00eame facture = perte directe pour le client.",
             "why_en": "Paying the same invoice twice = direct loss for the client.",
             "recommended": {
@@ -16948,7 +16949,7 @@ def render_journal_entries(
                     f'<td>{esc(e["entry_date"])}</td>'
                     f'<td>{esc(e["debit_account"])}</td>'
                     f'<td>{esc(e["credit_account"])}</td>'
-                    f'<td>${float(e["amount"] or 0):,.2f}</td>'
+                    f'<td>{money(float(e["amount"] or 0), lang)}</td>'
                     f'<td>{esc(e["description"] or "")}</td>'
                     f'<td class="{status_cls}">{esc(e["status"])}</td>'
                     f'<td>{actions}</td>'
@@ -17059,7 +17060,7 @@ def render_audit_anomalies(
         circ_rows = "".join(
             f"<tr><td>{esc(' → '.join(c.get('cycle', [])))}</td>"
             f"<td>{c.get('approval_count', 0)}</td>"
-            f"<td style='text-align:right;'>${float(c.get('total_amount', 0)):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(float(c.get('total_amount', 0)), lang)}</td>"
             f"<td>{_sev_pill(c.get('severity'))}</td></tr>"
             for c in circ[:25]
         ) or "<tr><td colspan='4' class='muted'>No findings.</td></tr>"
@@ -17074,7 +17075,7 @@ def render_audit_anomalies(
         ph_rows = "".join(
             f"<tr><td>{esc(p.get('submitter', ''))}</td>"
             f"<td>{p.get('submission_count', 0)}</td>"
-            f"<td style='text-align:right;'>${float(p.get('total_amount', 0) or 0):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(float(p.get('total_amount', 0) or 0), lang)}</td>"
             f"<td>{esc(p.get('subtype', ''))}</td>"
             f"<td>{_sev_pill(p.get('severity'))}</td></tr>"
             for p in phantom[:25]
@@ -17306,7 +17307,7 @@ def render_tax_planning(
             ncl_balance = float(_tax_edge.get_ncl_balance(conn, client_code))
             cards.append(
                 f'<div class="card"><h3 style="margin-top:0;">Non-Capital Loss Carryforward</h3>'
-                f'<p>Available NCL balance: <strong>${ncl_balance:,.2f}</strong></p>'
+                f'<p>Available NCL balance: <strong>{money(ncl_balance, lang)}</strong></p>'
                 f'<p class="muted">20-year carryforward window per ITA s.111.</p></div>'
             )
 
@@ -17388,8 +17389,8 @@ def render_recon_adjustments(
                 f"<tr><td>{esc(str(a.get('created_at', ''))[:16])}</td>"
                 f"<td>{esc(a.get('adjustment_type', ''))}</td>"
                 f"<td>{esc(a.get('bank_tx_id', ''))}</td>"
-                f"<td style='text-align:right;'>${float(a.get('amount', 0) or 0):,.2f}</td>"
-                f"<td style='text-align:right;'>${float(a.get('fee_amount', 0) or 0):,.2f}</td>"
+                f"<td style='text-align:right;'>{money(float(a.get('amount', 0) or 0), lang)}</td>"
+                f"<td style='text-align:right;'>{money(float(a.get('fee_amount', 0) or 0), lang)}</td>"
                 f"<td>{esc(a.get('reason', ''))}</td></tr>"
             )
     if not rows_html:
@@ -17540,8 +17541,8 @@ def render_sred_detail(
     for e in expenditures:
         exp_rows += (
             f"<tr><td>{esc(e.get('category', ''))}</td>"
-            f"<td style='text-align:right;'>${float(e.get('amount') or 0):,.2f}</td>"
-            f"<td style='text-align:right;'>${float(e.get('qualifying_amount') or e.get('amount') or 0):,.2f}</td>"
+            f"<td style='text-align:right;'>{money(float(e.get('amount') or 0), lang)}</td>"
+            f"<td style='text-align:right;'>{money(float(e.get('qualifying_amount') or e.get('amount') or 0), lang)}</td>"
             f"<td>{esc((e.get('description') or '')[:60])}</td>"
             f"<td><form method='POST' action='/sred/{claim_id}/expenditures/delete' style='display:inline;'>"
             f"<input type='hidden' name='expenditure_id' value='{e.get('id')}'>"
@@ -17575,11 +17576,11 @@ def render_sred_detail(
 
     itc_card = (
         '<div class="card"><h3 style="margin-top:0;">ITC summary</h3>'
-        f'<p><strong>T661 line 350 (qualifying):</strong> ${summary.get("line_350_total_qualifying", 0):,.2f}</p>'
-        f'<p><strong>T661 line 400 (proxy 55%):</strong> ${summary.get("line_400_proxy_uplift", 0):,.2f}</p>'
-        f'<p><strong>T661 line 500 (ITC earned):</strong> ${summary.get("line_500_itc_earned", 0):,.2f}</p>'
-        f'<p><strong>T661 line 530 (refundable):</strong> ${summary.get("line_530_refundable_itc", 0):,.2f}</p>'
-        f'<p><strong>T661 line 540 (non-refundable):</strong> ${summary.get("line_540_non_refundable_itc", 0):,.2f}</p>'
+        f'<p><strong>T661 line 350 (qualifying):</strong> {money(summary.get("line_350_total_qualifying", 0), lang)}</p>'
+        f'<p><strong>T661 line 400 (proxy 55%):</strong> {money(summary.get("line_400_proxy_uplift", 0), lang)}</p>'
+        f'<p><strong>T661 line 500 (ITC earned):</strong> {money(summary.get("line_500_itc_earned", 0), lang)}</p>'
+        f'<p><strong>T661 line 530 (refundable):</strong> {money(summary.get("line_530_refundable_itc", 0), lang)}</p>'
+        f'<p><strong>T661 line 540 (non-refundable):</strong> {money(summary.get("line_540_non_refundable_itc", 0), lang)}</p>'
         f'<p style="margin-top:12px;"><a href="/sred/{claim_id}/t661_pdf" class="btn-primary button-link">{ui_t("download_t661", lang)}</a></p>'
         '</div>'
     )
@@ -20682,13 +20683,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 buf = _io_m.StringIO()
                 buf.write(f"Cash Flow Statement — {fc}\n")
                 buf.write(f"Period: {ps} to {pe}\n\n")
-                buf.write(f"Net income: ${data['operating_activities']['net_income']:,.2f}\n")
-                buf.write(f"Net operating: ${data['operating_activities']['net_cash_from_operating']:,.2f}\n")
-                buf.write(f"Net investing: ${data['investing_activities']['net_investing_activities']:,.2f}\n")
-                buf.write(f"Net financing: ${data['financing_activities']['net_financing_activities']:,.2f}\n")
-                buf.write(f"Net change: ${data['net_change_in_cash']:,.2f}\n")
-                buf.write(f"Opening cash: ${data['opening_cash_balance']:,.2f}\n")
-                buf.write(f"Closing cash: ${data['closing_cash_balance']:,.2f}\n")
+                buf.write(f"Net income: {money(data['operating_activities']['net_income'], lang)}\n")
+                buf.write(f"Net operating: {money(data['operating_activities']['net_cash_from_operating'], lang)}\n")
+                buf.write(f"Net investing: {money(data['investing_activities']['net_investing_activities'], lang)}\n")
+                buf.write(f"Net financing: {money(data['financing_activities']['net_financing_activities'], lang)}\n")
+                buf.write(f"Net change: {money(data['net_change_in_cash'], lang)}\n")
+                buf.write(f"Opening cash: {money(data['opening_cash_balance'], lang)}\n")
+                buf.write(f"Closing cash: {money(data['closing_cash_balance'], lang)}\n")
                 content = buf.getvalue().encode("utf-8")
                 fname = f"cashflow_{fc}_{ps}_{pe}.txt"
                 self.send_response(200)
@@ -20940,7 +20941,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         f'<td><a href="/document?id={urlquote(d["document_id"])}">{esc(d["document_id"])}</a></td>'
                         f'<td>{esc(d["client_code"])}</td>'
                         f'<td>{esc(d.get("vendor") or "")}</td>'
-                        f'<td style="text-align:right;">${float(d.get("amount") or 0):,.2f}</td>'
+                        f'<td style="text-align:right;">{money(float(d.get("amount") or 0), lang)}</td>'
                         f'<td>{esc(d.get("document_date") or "")}</td>'
                         f'<td>{esc(d.get("review_status") or "")}</td>'
                         '</tr>'
@@ -22385,7 +22386,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         _amt = submitted.get("amount") or (before_row.get("amount") if before_row else "")
                         try:
                             _amt_f = float(_amt)
-                            _amt_str = f"${_amt_f:.2f}"
+                            _amt_str = f"{money(_amt_f, lang)}"
                         except (TypeError, ValueError):
                             _amt_str = ""
                         _pieces = [p for p in (_amt_str, f"at {_vendor_txt}" if _vendor_txt else "") if p]
@@ -24098,7 +24099,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 msg_parts = []
                 for a in allocation.get("allocations", [])[:8]:
                     msg_parts.append(
-                        f"{a['partner_name']}: ${a['allocated_income']:,.2f}"
+                        f"{a['partner_name']}: {money(a['allocated_income'], lang)}"
                     )
                 flash_msg = "Allocated " + "; ".join(msg_parts) if msg_parts else "No partners."
                 self._flash_redirect(f"/partnerships/{pid}", flash=flash_msg)
@@ -24136,7 +24137,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._send_json(_cres.to_json(), status=409)
                     return
                 self._flash_redirect(f"/sred/{cid}",
-                                      flash=f"Added {cat} ${amt:.2f}.")
+                                      flash=f"Added {cat} {money(amt, lang)}.")
                 return
 
             if path.startswith("/sred/") and path.endswith("/expenditures/delete"):
@@ -24239,8 +24240,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     price_f, province=province,
                 )
                 msg = (
-                    f"Rebate estimate: federal ${rebate.get('federal_rebate', 0):,.2f} + "
-                    f"provincial ${rebate.get('provincial_rebate', 0):,.2f}"
+                    f"Rebate estimate: federal {money(rebate.get('federal_rebate', 0), lang)} + "
+                    f"provincial {money(rebate.get('provincial_rebate', 0), lang)}"
                 )
                 self._flash_redirect(
                     f"/tax/planning?client_code={urlquote(client_code_redir)}",
@@ -25231,11 +25232,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     result = _fa.dispose_asset(asset_id, disp_date, proceeds or 0, conn)
                 parts = []
                 if result.get("recapture", 0) > 0:
-                    parts.append(f"Recapture: ${result['recapture']:,.2f}")
+                    parts.append(f"Recapture: {money(result['recapture'], lang)}")
                 if result.get("terminal_loss", 0) > 0:
-                    parts.append(f"Terminal loss: ${result['terminal_loss']:,.2f}")
+                    parts.append(f"Terminal loss: {money(result['terminal_loss'], lang)}")
                 if result.get("capital_gain", 0) > 0:
-                    parts.append(f"Capital gain: ${result['capital_gain']:,.2f}")
+                    parts.append(f"Capital gain: {money(result['capital_gain'], lang)}")
                 msg = t("fa_disposed", lang)
                 if parts:
                     msg += " — " + ", ".join(parts)
