@@ -468,6 +468,86 @@ Every commit passes the schema-drift guard. All pushed to `main`.
   environment. The PDF e2e tests are the strongest signal we have
   that a FR client will see FR output.
 
+## Phase 2 follow-up sweep
+
+After the first five-commit Phase 2 batch, a second pass landed three
+more commits that closed most of the documented "still not migrated"
+items:
+
+### FS PDF terminology pinned (commit `f52e173cd`)
+
+New `tests/i18n/test_fs_pdf_terminology.py` renders a real PyMuPDF
+financial-statement PDF (balance sheet + income statement with
+French-named accounts) and asserts the Québec CPA vocabulary:
+
+- FR PDF contains: *Bilan*, *État des résultats*, *Actif à court
+  terme*, *Actif à long terme*, *Passif à court terme*, *Passif à
+  long terme*, *Capitaux propres*, *Total de l'actif*, *Total du
+  passif*, *Total des charges*, *Total des produits*, *Résultat
+  net*, *Charges*, *Produits*.
+- FR PDF does NOT contain: *Balance Sheet*, *Income Statement*,
+  *Current Assets*, *Long-term Liabilities*, *Net Income*, *Total
+  Assets*.
+- EN PDF contains the expected English counterparts.
+- FR currency renders as `50 000,00 $` (and the EN counterpart as
+  `$50,000.00`), verified in the extracted text layer.
+
+### Admin-button sweep round 2 (commit `85a40138f`)
+
+Another 20 English-only button labels migrated to `ui_t`: *Add*,
+*Allocate*, *Assign*, *Back* (15 occurrences), *Back to Diagnostics*,
+*Create* (2), *Delete*, *Disable 2FA*, *Disconnect*, *Enable 2FA*,
+*Estimate*, *Filter* (2), *Load*, *Match*, *Post*, *Refresh*,
+*Remove*, *Reset*, *Reverse* (2), *Sync*. 37 total replacements.
+
+Tool: a tokenize-aware migrator that distinguishes f-string
+`FSTRING_MIDDLE` tokens (replace with `{ui_t("key", lang)}`) from
+plain string literals (replace with `qc + ui_t("key", lang) + qc`
+concatenation). Handles triple-quoted multi-line strings, nested
+`"`/`'`, and expressions with literal quote chars without
+corrupting syntax.
+
+New `tests/i18n/test_admin_buttons_sweep.py` (23 tests) guards
+against regression by scanning the source for the raw `>Label<`
+patterns and by rendering the 2FA settings page in both languages
+(proves the buttons interpolate, not render literally).
+
+### Dashboard currency sweep (commit `dc8c3b499`)
+
+**130+ inline `f"${x:,.2f}"` / `f"${x:+,.2f}"` / `f"${x:,.0f}"` /
+`f"${x:.2f}"` sites** in `scripts/review_dashboard.py` migrated to
+`{money(x, lang)}` / `{money_signed(x, lang)}`. Covers:
+
+- `_aging_table_html` (12)
+- `render_sred_detail` (23)
+- `render_reconciliation_detail` (11)
+- `render_schedule_8` (10)
+- `render_audit_sample` (9)
+- `render_line_items_card` (7)
+- `render_bank_import`, `_render_sched8_tab`, `render_financial_statements_page`, `render_cashflow` (5-6 each)
+- ~20 other CPA-facing render paths.
+
+Only 12 format-spec sites remain, and they are **not currency**
+— they're hours (`{x:.2f}`), percentages, Chi-squared values, and
+file sizes (MB). Those are a separate locale class and are not in
+scope for the currency migration.
+
+New `tests/i18n/test_dashboard_currency_sweep.py` (7 tests): end-to-
+end render of `_aging_table_html` in FR + EN with cross-leak
+assertion, plus regex guards that fail if the `f"${...:,.2f}"`
+anti-pattern creeps back in.
+
+### Phase 2 follow-up tallies
+
+| | Count |
+| --- | ---: |
+| Currency sites migrated (all three passes combined) | **~175** |
+| Strftime user-facing sites migrated | 5 |
+| Admin button labels migrated | 33 |
+| `ui_labels.py` dict entries | 121 |
+| New `tests/i18n/` tests added this sweep | 57 (FS: 27 + buttons: 23 + currency: 7) |
+| Total `tests/i18n/` tests now | **115** (all passing) |
+
 ## Full regression after Phase 2
 
 Full suite with `-m "not slow"`:
