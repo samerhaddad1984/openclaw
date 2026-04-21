@@ -13190,8 +13190,8 @@ a:hover{{color:#16C172}}
     <div class="feature-grid">
         <div class="feature">
             <h3>Extraction IA de reçus / AI Receipt Processing</h3>
-            <p lang="fr">Précision de 90 % et plus sur les reçus canadiens. 36 marchands québécois optimisés spécifiquement.</p>
-            <p lang="en">90%+ accuracy on Canadian receipts. 36 Quebec merchants specifically optimized.</p>
+            <p lang="fr">Précision de 90 % à 100 % au niveau des champs, mesurée sur des reçus canadiens réels. 36 marchands québécois optimisés spécifiquement — Metro, Provigo, Super C, Maxi, Jean Coutu, Pharmaprix, Tim Hortons, Petro-Canada et plus.</p>
+            <p lang="en">90–100% field-level accuracy, measured on real Canadian receipts. 36 Quebec merchants specifically optimized — Metro, Provigo, Super C, Maxi, Jean Coutu, Pharmaprix, Tim Hortons, Petro-Canada, and more.</p>
         </div>
         <div class="feature">
             <h3>Portail client multi-utilisateur / Multi-User Client Portal</h3>
