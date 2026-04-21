@@ -4781,8 +4781,8 @@ def render_cache_admin(
           onsubmit="return confirm('Clear the entire AI response cache? This cannot be undone.');">
       <button class="btn-danger">{ui_t("clear_cache", lang)}</button>
     </form>
-    <a href="/admin/cache" class="button-link btn-secondary">Refresh</a>
-    <a href="/troubleshoot" class="button-link btn-secondary">Back to Diagnostics</a>
+    <a href="/admin/cache" class="button-link btn-secondary">{ui_t('refresh', lang)}</a>
+    <a href="/troubleshoot" class="button-link btn-secondary">{ui_t('back_to_diagnostics', lang)}</a>
   </div>
 </div>"""
 
@@ -11580,7 +11580,7 @@ def render_2fa_settings(user: dict[str, Any], flash: str = "", flash_error: str 
         <p><strong>Status:</strong> <span style="color:#16a34a;">Enabled</span></p>
         <p>Two-factor authentication is active on your account.</p>
         <form method="POST" action="/settings/2fa/disable" style="margin-top:16px;">
-            <button class="btn-primary" type="submit" style="background:#dc2626;">Disable 2FA</button>
+            <button class="btn-primary" type="submit" style="background:#dc2626;">{ui_t('disable_2fa', lang)}</button>
         </form>
         """
     else:
@@ -11599,7 +11599,7 @@ def render_2fa_settings(user: dict[str, Any], flash: str = "", flash_error: str 
             <div class="field"><label>Verification code</label>
                 <input type="text" name="code" inputmode="numeric" pattern="[0-9]{{6}}"
                        maxlength="6" autofocus autocomplete="one-time-code"></div>
-            <button class="btn-primary" type="submit">Enable 2FA</button>
+            <button class="btn-primary" type="submit">{ui_t('enable_2fa', lang)}</button>
         </form>
         """
     inner = f"""
@@ -11766,7 +11766,7 @@ def render_bank_feeds(user: dict[str, Any], connections: list, tx_by_client: dic
             f"<form method='POST' action='/bank/assign' style='display:flex;gap:4px;align-items:center;'>"
             f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
             f"<select name='client_code' style='padding:2px 4px;font-size:12px;'>{client_options}</select>"
-            f"<button type='submit' style='padding:2px 8px;'>Assign</button></form>"
+            f"<button type='submit' style='padding:2px 8px;'>{ui_t('assign', lang)}</button></form>"
         )
         conn_rows += (
             f"<tr><td>{esc(c.get('institution_name') or '')}</td>"
@@ -11776,11 +11776,11 @@ def render_bank_feeds(user: dict[str, Any], connections: list, tx_by_client: dic
             f"<td>"
             f"<form method='POST' action='/bank/sync?client={urlquote(cc)}' style='display:inline;'>"
             f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
-            f"<button type='submit'>Sync</button></form> "
+            f"<button type='submit'>{ui_t('sync', lang)}</button></form> "
             f"<form method='POST' action='/bank/disconnect' style='display:inline;' "
             f"onsubmit=\"return confirm('Disconnect this bank?');\">"
             f"<input type='hidden' name='connection_id' value='{esc(c.get('id',''))}'>"
-            f"<button type='submit' style='background:#e74c3c;color:white;'>Disconnect</button></form>"
+            f"<button type='submit' style='background:#e74c3c;color:white;'>{ui_t('disconnect', lang)}</button></form>"
             f"</td></tr>"
         )
 
@@ -11799,7 +11799,7 @@ def render_bank_feeds(user: dict[str, Any], connections: list, tx_by_client: dic
                     f"<input type='hidden' name='tx_id' value='{esc(tx.get('id',''))}'>"
                     f"<input type='text' name='document_id' placeholder='document_id' "
                     f"style='padding:2px 6px;width:120px;'>"
-                    f"<button type='submit' style='padding:2px 8px;'>Match</button></form>"
+                    f"<button type='submit' style='padding:2px 8px;'>{ui_t('match', lang)}</button></form>"
                 )
             try:
                 amt_str = f"{float(tx.get('amount') or 0):.2f}"
@@ -16864,7 +16864,7 @@ def render_vendor_aliases(
                     f'<td><form method="POST" action="/admin/vendor_aliases" style="display:inline">'
                     f'<input type="hidden" name="action" value="delete_alias">'
                     f'<input type="hidden" name="alias_id" value="{a["alias_id"]}">'
-                    f'<button type="submit" class="btn btn-sm btn-danger">Delete</button>'
+                    f'<button type="submit" class="btn btn-sm btn-danger">{ui_t("delete", lang)}</button>'
                     f'</form></td></tr>'
                 )
     except Exception:
@@ -16926,18 +16926,18 @@ def render_journal_entries(
                         f'<form method="POST" action="/journal_entries" style="display:inline">'
                         f'<input type="hidden" name="action" value="post">'
                         f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
-                        f'<button type="submit" class="btn btn-sm">Post</button></form> '
+                        f'<button type="submit" class="btn btn-sm">{ui_t("post", lang)}</button></form> '
                         f'<form method="POST" action="/journal_entries" style="display:inline">'
                         f'<input type="hidden" name="action" value="reverse">'
                         f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
-                        f'<button type="submit" class="btn btn-sm btn-danger">Reverse</button></form>'
+                        f'<button type="submit" class="btn btn-sm btn-danger">{ui_t("reverse", lang)}</button></form>'
                     )
                 elif e["status"] == "posted":
                     actions = (
                         f'<form method="POST" action="/journal_entries" style="display:inline">'
                         f'<input type="hidden" name="action" value="reverse">'
                         f'<input type="hidden" name="entry_id" value="{esc(e["entry_id"])}">'
-                        f'<button type="submit" class="btn btn-sm btn-danger">Reverse</button></form>'
+                        f'<button type="submit" class="btn btn-sm btn-danger">{ui_t("reverse", lang)}</button></form>'
                     )
 
                 rows_html += (
@@ -17155,7 +17155,7 @@ def render_audit_anomalies(
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">Audit Anomalies (CAS 240 / 315)</h2>'
-        f'<a href="/" class="btn-secondary button-link">Back</a></div>'
+        f'<a href="/" class="btn-secondary button-link">{ui_t("back", lang)}</a></div>'
         f'{filter_form}'
         f'{"".join(cards) if cards else "<div class=\"card muted\">Enter a client code to run detectors.</div>"}'
     )
@@ -17207,13 +17207,13 @@ def render_partnerships(
         '<div><label style="font-size:13px;font-weight:600;">Tax year end</label><br>'
         '<input type="text" name="tax_year_end" placeholder="2025-12-31" '
         'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
-        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Create</button></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">' + ui_t("create", lang) + '</button></div>'
         '</form></div>'
     )
     body = (
         '<div class="topbar" style="margin-bottom:16px;">'
         '<h2 style="margin:0;">Partnerships (T5013)</h2>'
-        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        '<a href="/" class="btn-secondary button-link">' + ui_t("back", lang) + '</a></div>'
         f'{create_form}'
         '<div class="card"><h3 style="margin-top:0;">Existing partnerships</h3>'
         '<table><thead><tr><th>Name</th><th>Client</th><th>Type</th>'
@@ -17270,19 +17270,19 @@ def render_sred(
         'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
         '<option value="traditional">Traditional</option>'
         '<option value="proxy">Proxy (55%)</option></select></div>'
-        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Create</button></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">' + ui_t("create", lang) + '</button></div>'
         '</form></div>'
     )
     body = (
         '<div class="topbar" style="margin-bottom:16px;">'
         '<h2 style="margin:0;">SR&amp;ED Claims (T661)</h2>'
-        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        '<a href="/" class="btn-secondary button-link">' + ui_t("back", lang) + '</a></div>'
         f'{create_form}'
         '<div class="card"><h3 style="margin-top:0;">Existing claims</h3>'
         f'<form method="GET" action="/sred" style="margin-bottom:8px;">'
         f'<input type="text" name="client_code" value="{esc(client_code)}" '
         f'placeholder="Client code" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
-        f'<button type="submit" class="btn-secondary" style="padding:7px 14px;margin-left:6px;">Filter</button>'
+        f'<button type="submit" class="btn-secondary" style="padding:7px 14px;margin-left:6px;">{ui_t("filter", lang)}</button>'
         f'</form>'
         '<table><thead><tr><th>Year</th><th>Project</th><th>Method</th>'
         '<th>Status</th><th>Action</th></tr></thead>'
@@ -17343,7 +17343,7 @@ def render_tax_planning(
                 'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">'
                 '<option value="QC">QC</option><option value="ON">ON</option>'
                 '<option value="AB">AB</option></select></div>'
-                '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Estimate</button></div>'
+                '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">' + ui_t("estimate", lang) + '</button></div>'
                 '</form></div>'
             )
 
@@ -17353,13 +17353,13 @@ def render_tax_planning(
         f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
         f'<input type="text" name="client_code" value="{esc(client_code)}" '
         f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Load</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{ui_t("load", lang)}</button></div>'
         f'</form></div>\n'
     )
     body = (
         '<div class="topbar" style="margin-bottom:16px;">'
         '<h2 style="margin:0;">Tax Planning Dashboard</h2>'
-        '<a href="/" class="btn-secondary button-link">Back</a></div>'
+        '<a href="/" class="btn-secondary button-link">' + ui_t("back", lang) + '</a></div>'
         f'{filter_form}'
         f'{"".join(cards) if cards else "<div class=\"card muted\">Enter a client code to load planning.</div>"}'
     )
@@ -17402,7 +17402,7 @@ def render_recon_adjustments(
     body = (
         '<div class="topbar" style="margin-bottom:16px;">'
         '<h2 style="margin:0;">Reconciliation Adjustments</h2>'
-        '<a href="/reconciliation" class="btn-secondary button-link">Back</a></div>'
+        '<a href="/reconciliation" class="btn-secondary button-link">' + ui_t("back", lang) + '</a></div>'
         '<div class="card"><form method="GET" action="/reconciliation/adjustments" '
         'style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
         f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
@@ -17410,7 +17410,7 @@ def render_recon_adjustments(
         f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
         f'<div><label style="font-size:13px;font-weight:600;">Type</label><br>'
         f'<select name="adjustment_type" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;">{type_opts}</select></div>'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Filter</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{ui_t("filter", lang)}</button></div>'
         f'</form></div>'
         '<div class="card"><table><thead><tr><th>Date</th><th>Type</th>'
         '<th>Bank Tx</th><th style="text-align:right;">Amount</th>'
@@ -17435,7 +17435,7 @@ def render_partnership_detail(
             return page_layout(
                 "Partnership",
                 '<div class="card"><p class="error">Partnership not found.</p>'
-                '<p><a href="/partnerships">Back</a></p></div>',
+                '<p><a href="/partnerships">' + ui_t("back", lang) + '</a></p></div>',
                 user=user, lang=lang,
             )
         partners = _partnership.list_partners(conn, partnership_id)
@@ -17451,7 +17451,7 @@ def render_partnership_detail(
             f"<td><form method='POST' action='/partnerships/{partnership_id}/partners/delete' style='display:inline;'>"
             f"<input type='hidden' name='partner_id' value='{pa.get('id')}'>"
             f"<button type='submit' class='btn-secondary' style='padding:2px 8px;font-size:11px;' "
-            f"onclick=\"return confirm('Remove partner?');\">Remove</button></form></td></tr>"
+            f"onclick=\"return confirm('Remove partner?');\">{ui_t('remove', lang)}</button></form></td></tr>"
         )
     if not partner_rows:
         partner_rows = "<tr><td colspan='6' class='muted'>No partners yet.</td></tr>"
@@ -17492,7 +17492,7 @@ def render_partnership_detail(
         '<div><label style="font-size:13px;font-weight:600;">Total partnership income</label><br>'
         '<input type="number" name="partnership_income" step="0.01" required '
         'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
-        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Allocate</button></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">' + ui_t("allocate", lang) + '</button></div>'
         f'<div><a href="/partnerships/{partnership_id}/t5013_pdf" class="btn-secondary button-link">{ui_t("t5013_pdf", lang)}</a></div>'
         '</form></div>'
     )
@@ -17500,7 +17500,7 @@ def render_partnership_detail(
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">{esc(p.get("partnership_name", ""))}</h2>'
-        f'<a href="/partnerships" class="btn-secondary button-link">Back</a></div>'
+        f'<a href="/partnerships" class="btn-secondary button-link">{ui_t("back", lang)}</a></div>'
         f'<div class="card"><p><strong>Client:</strong> {esc(p.get("client_code", ""))} '
         f'&nbsp; <strong>Type:</strong> {esc(p.get("partnership_type", ""))} '
         f'&nbsp; <strong>Year end:</strong> {esc(p.get("tax_year_end", "") or "—")}</p></div>'
@@ -17530,7 +17530,7 @@ def render_sred_detail(
             return page_layout(
                 "SR&ED",
                 '<div class="card"><p class="error">Claim not found.</p>'
-                '<p><a href="/sred">Back</a></p></div>',
+                '<p><a href="/sred">' + ui_t("back", lang) + '</a></p></div>',
                 user=user, lang=lang,
             )
         expenditures = _sred.get_expenditures(conn, claim_id)
@@ -17546,7 +17546,7 @@ def render_sred_detail(
             f"<td><form method='POST' action='/sred/{claim_id}/expenditures/delete' style='display:inline;'>"
             f"<input type='hidden' name='expenditure_id' value='{e.get('id')}'>"
             f"<button type='submit' class='btn-secondary' style='padding:2px 8px;font-size:11px;' "
-            f"onclick=\"return confirm('Remove?');\">Remove</button></form></td></tr>"
+            f"onclick=\"return confirm('Remove?');\">{ui_t('remove', lang)}</button></form></td></tr>"
         )
     if not exp_rows:
         exp_rows = "<tr><td colspan='5' class='muted'>No expenditures yet.</td></tr>"
@@ -17569,7 +17569,7 @@ def render_sred_detail(
         '<div><label style="font-size:12px;font-weight:600;">Description</label><br>'
         '<input type="text" name="description" '
         'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;width:240px;"></div>'
-        '<div><button type="submit" class="btn-primary" style="padding:6px 14px;">Add</button></div>'
+        '<div><button type="submit" class="btn-primary" style="padding:6px 14px;">' + ui_t("add", lang) + '</button></div>'
         '</form>'
     )
 
@@ -17603,7 +17603,7 @@ def render_sred_detail(
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
         f'<h2 style="margin:0;">SR&amp;ED Claim — {esc(claim.get("project_name", ""))}</h2>'
-        f'<a href="/sred?client_code={urlquote(claim.get("client_code", ""))}" class="btn-secondary button-link">Back</a></div>'
+        f'<a href="/sred?client_code={urlquote(claim.get("client_code", ""))}" class="btn-secondary button-link">{ui_t("back", lang)}</a></div>'
         f'<div class="card"><p><strong>Client:</strong> {esc(claim.get("client_code", ""))} '
         f'&nbsp; <strong>Year:</strong> {esc(str(claim.get("tax_year", "")))} '
         f'&nbsp; <strong>Method:</strong> {esc(claim.get("claim_type", ""))}</p></div>'
@@ -18911,7 +18911,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     logging.exception("stripe checkout failed")
                     self._send_html(
                         f"<h1>Billing unavailable</h1><p>{html.escape(str(e))}</p>"
-                        f"<p><a href='/signup'>Back</a></p>", status=500)
+                        f"<p><a href='/signup'>{ui_t('back', lang)}</a></p>", status=500)
                 return
 
             if path == "/signup/success":
@@ -20096,7 +20096,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._send_html(page_layout(
                         "Rep letter unavailable",
                         f'<div class="card"><p class="error">{esc(str(err))}</p>'
-                        f'<p><a href="/audit/rep_letter?engagement_id={urlquote(pdf_eng_id)}">Back</a></p></div>',
+                        f'<p><a href="/audit/rep_letter?engagement_id={urlquote(pdf_eng_id)}">{ui_t("back", lang)}</a></p></div>',
                         user=user, lang=lang), status=400)
                     return
                 fname = f"rep_letter_{pdf_eng_id}.pdf"
@@ -20773,7 +20773,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     self._send_html(page_layout(
                         "T2 unavailable",
                         f'<div class="card"><p class="error">{esc(str(err))}</p>'
-                        f'<p><a href="/t2">Back</a></p></div>',
+                        f'<p><a href="/t2">{ui_t("back", lang)}</a></p></div>',
                         user=user, lang=lang,
                     ), status=400)
                     return
@@ -20829,7 +20829,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         t("err_forbidden", lang),
                         f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
                         f'<p>Owner access required.</p>'
-                        f'<p><a href="/">Back</a></p></div>',
+                        f'<p><a href="/">{ui_t("back", lang)}</a></p></div>',
                         user=user, lang=lang), status=403)
                     return
                 self._send_html(render_learning_page(ctx, user, lang=lang))
@@ -21116,7 +21116,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             else:
                 body = ('<div class="card"><h2>Internal Server Error</h2>'
                         '<p>Something went wrong. The error has been logged.</p>'
-                        '<p><a href="/">Back</a></p></div>')
+                        '<p><a href="/">' + ui_t("back", lang) + '</a></p></div>')
             self._send_html(page_layout("Error", body), status=500)
 
     def do_OPTIONS(self) -> None:
@@ -23396,7 +23396,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                             f"<input type='hidden' name='vendor' value='{vid}'>"
                             f"<input type='hidden' name='client_code' value='{cid}'>"
                             f"<button type='submit' class='btn btn-danger btn-sm' "
-                            f"onclick=\"return confirm('Reset this vendor?')\">Reset</button></form></td></tr>"
+                            f"onclick=\"return confirm('Reset this vendor?')\">{ui_t('reset', lang)}</button></form></td></tr>"
                         )
                     rows_html += "</table>"
                 body = f"<div class='card'><h2>Vendor Memory Patterns</h2>{rows_html}</div>"
@@ -25733,7 +25733,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             except Exception:
                 logging.exception("gap_dispatch.dispatch_post failed")
 
-            self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
+            self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">' + ui_t("back", lang) + '</a></p></div>', user=user), status=404)
 
         except Exception as exc:
             dest = f"/document?id={urlquote(document_id)}" if document_id else "/"
