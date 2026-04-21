@@ -20756,6 +20756,126 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
                 return
 
+            # Cleanup Item 1: per-uploader reports (CPA view).
+            if path in ("/reports/by_uploader", "/reports/by_uploader.csv",
+                         "/reports/by_uploader/drill"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import uploader_reports as _ur
+                # Params
+                start = qs.get("start", [""])[0] or None
+                end = qs.get("end", [""])[0] or None
+                client_code = qs.get("client_code", [""])[0].strip() or None
+                sort_by = qs.get("sort_by", ["document_count"])[0]
+                if sort_by not in _ur.VALID_SORT_COLUMNS:
+                    sort_by = 'document_count'
+                sort_dir = qs.get("sort_dir", ["desc"])[0]
+                if sort_dir not in ('asc', 'desc'):
+                    sort_dir = 'desc'
+                _firm = (ctx.get("firm_code")
+                         if ctx.get("role") != "owner" else None)
+                if client_code and not _require_client_in_firm(client_code, ctx):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        '<p>Client not in your firm.</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                rows = _ur.aggregate(
+                    DB_PATH, firm_code=_firm, client_code=client_code,
+                    start=start, end=end,
+                    sort_by=sort_by, sort_dir=sort_dir,
+                )
+                if path == "/reports/by_uploader.csv":
+                    body_b = _ur.render_csv(rows)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/csv; charset=utf-8")
+                    self.send_header(
+                        "Content-Disposition",
+                        "attachment; filename=\"uploader_report.csv\"",
+                    )
+                    self.send_header("Content-Length", str(len(body_b)))
+                    self.end_headers()
+                    self.wfile.write(body_b)
+                    return
+                if path == "/reports/by_uploader/drill":
+                    drill_email = qs.get("uploader_email", [""])[0].strip()
+                    docs = _ur.documents_for_uploader(
+                        DB_PATH, firm_code=_firm,
+                        uploader_email=drill_email,
+                        client_code=client_code,
+                        start=start, end=end,
+                    )
+                    row_items = ''.join(
+                        f'<tr>'
+                        f'<td><a href="/document?id={urlquote(d["document_id"])}">{esc(d["document_id"])}</a></td>'
+                        f'<td>{esc(d["client_code"])}</td>'
+                        f'<td>{esc(d.get("vendor") or "")}</td>'
+                        f'<td style="text-align:right;">${float(d.get("amount") or 0):,.2f}</td>'
+                        f'<td>{esc(d.get("document_date") or "")}</td>'
+                        f'<td>{esc(d.get("review_status") or "")}</td>'
+                        '</tr>'
+                        for d in docs
+                    )
+                    body = (
+                        '<div class="card" style="max-width:900px;margin:1rem auto;">'
+                        f'<h2>Drill-down: {esc(drill_email)}</h2>'
+                        f'<p>{len(docs)} documents between {esc(start or "—")} '
+                        f'and {esc(end or "—")}.</p>'
+                        '<table style="width:100%;border-collapse:collapse;">'
+                        '<thead><tr><th>ID</th><th>Client</th><th>Vendor</th>'
+                        '<th>Amount</th><th>Date</th><th>Status</th></tr></thead>'
+                        f'<tbody>{row_items or "<tr><td colspan=6>No documents.</td></tr>"}</tbody>'
+                        '</table>'
+                        '<p><a href="/reports/by_uploader">'
+                        '&larr; Back to report</a></p></div>'
+                    )
+                    self._send_html(page_layout(
+                        "Uploader drill-down", body,
+                        user=user, lang=lang,
+                    ))
+                    return
+                # Default: report page
+                with open_db() as _rconn:
+                    if _firm:
+                        client_rows = _rconn.execute(
+                            "SELECT client_code, COALESCE(client_name,'') "
+                            "AS client_name FROM clients WHERE firm_code=? "
+                            "ORDER BY client_code",
+                            (_firm,),
+                        ).fetchall()
+                    else:
+                        client_rows = _rconn.execute(
+                            "SELECT client_code, COALESCE(client_name,'') "
+                            "AS client_name FROM clients ORDER BY client_code"
+                        ).fetchall()
+                # aggregate() may have defaulted empty start/end; re-derive
+                # to show the resolved range in the form.
+                if not start:
+                    start = datetime.now(timezone.utc).date().replace(day=1).isoformat()
+                if not end:
+                    today = datetime.now(timezone.utc).date()
+                    if today.month == 12:
+                        _nm = today.replace(year=today.year+1, month=1, day=1)
+                    else:
+                        _nm = today.replace(month=today.month+1, day=1)
+                    end = (_nm - timedelta(days=1)).isoformat()
+                report_body = _ur.render_report_page(
+                    rows=rows, start=start, end=end,
+                    firm_code=_firm, client_code=client_code,
+                    clients_available=[dict(r) for r in client_rows],
+                    sort_by=sort_by, sort_dir=sort_dir,
+                )
+                self._send_html(page_layout(
+                    "Uploader report", report_body,
+                    user=user, lang=lang,
+                ))
+                return
+
             # Cleanup Item 7: owner-only cross-firm broadcast.
             if path == "/owner/broadcast":
                 if user.get("role") != "owner":
