@@ -1024,6 +1024,53 @@ def render_user_portal_admin(
     )
 
 
+def render_invitation_email(
+    *, recipient_name: str, inviter_name: str,
+    client_display: str, accept_url: str, lang: str = 'en',
+) -> tuple[str, str]:
+    """Return (subject, html_body) for the invitation email.
+
+    Bilingual — explicit lang wins; callers should derive lang from the
+    session (portal_user.language), an explicit ``lang=`` form field,
+    or a fallback to the request's Accept-Language header."""
+    lang_key = 'fr' if (lang or '').lower().startswith('fr') else 'en'
+    safe_recipient = _esc(recipient_name or 'there')
+    safe_inviter = _esc(inviter_name or 'A colleague')
+    safe_client = _esc(client_display or '')
+    safe_url = _esc(accept_url or '')
+    if lang_key == 'fr':
+        subject = (
+            f'{inviter_name or "Un collègue"} vous invite à soumettre '
+            'des reçus sur OtoCPA'
+        )
+        body = (
+            f'<p>Bonjour {safe_recipient},</p>'
+            f'<p><strong>{safe_inviter}</strong> vous a invité(e) à soumettre '
+            f'reçus et factures pour <strong>{safe_client}</strong> '
+            'sur OtoCPA.</p>'
+            '<p>Acceptez l\'invitation (expire dans 14 jours) :</p>'
+            f'<p><a href="{safe_url}">{safe_url}</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:2rem;">'
+            'Si vous n\'attendiez pas ce courriel, ignorez-le.</p>'
+        )
+    else:
+        subject = (
+            f'{inviter_name or "A colleague"} invited you to submit '
+            'receipts on OtoCPA'
+        )
+        body = (
+            f'<p>Hi {safe_recipient},</p>'
+            f'<p><strong>{safe_inviter}</strong> has invited you to submit '
+            f'receipts and invoices for <strong>{safe_client}</strong> '
+            'on OtoCPA.</p>'
+            '<p>Accept the invitation (expires in 14 days):</p>'
+            f'<p><a href="{safe_url}">{safe_url}</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:2rem;">'
+            'If you were not expecting this email, you can ignore it.</p>'
+        )
+    return subject, body
+
+
 def render_accept_invitation_page(
     inv: dict[str, Any], *, client_name: str,
     firm_name: str = '',

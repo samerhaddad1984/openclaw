@@ -18256,29 +18256,51 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._user_portal_redirect(user_token, "admin",
                                          error=str(exc))
             return True
-        # Fire-and-forget email. A failure doesn't block invitation;
-        # the admin can re-send manually via the user portal.
+        # Queue the invitation email rather than sending directly so a
+        # transient SMTP/Gmail failure auto-retries from the cron path.
         try:
             host = self.headers.get("Host", "")
             scheme = "https" if _is_https(self) else "http"
             base = f"{scheme}://{host}" if host else ""
             link = f'{base}/invite/{inv["token"]}'
-            from src.integrations.email_client import send_email
-            subject = (f'{portal_user.get("full_name") or "A colleague"} '
-                        f'invited you to submit receipts to OtoCPA')
-            body = (
-                f'<p>Hi,</p>'
-                f'<p><strong>{portal_user.get("full_name") or portal_user["email"]}</strong> '
-                f'has invited you to submit receipts for '
-                f'<strong>{client.get("client_name") or client.get("client_code")}</strong>.</p>'
-                f'<p>Accept the invitation (expires in 14 days):</p>'
-                f'<p><a href="{link}">{link}</a></p>'
+            from src.integrations import (
+                multi_user_portal as _mup_for_email,
             )
-            send_email(email, subject, body)
+            from src.integrations.notification_sender import (
+                enqueue_single_notification,
+            )
+            subject, body = _mup_for_email.render_invitation_email(
+                recipient_name=full_name,
+                inviter_name=(portal_user.get("full_name")
+                                or portal_user["email"]),
+                client_display=(client.get("client_name")
+                                  or client.get("client_code")),
+                accept_url=link,
+                lang='fr' if (self.headers.get(
+                    "Accept-Language", "").lower().startswith("fr")
+                ) else 'en',
+            )
+            enqueue_single_notification(
+                DB_PATH,
+                firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+                recipient_email=email,
+                recipient_name=full_name,
+                subject=subject, body=body,
+                kind='portal_invitation',
+                priority=6,
+                metadata={
+                    'invitation_id': inv.get('id'),
+                    'invited_by': portal_user.get('email'),
+                    'invited_role': role,
+                },
+            )
         except Exception:
-            logging.exception("invitation email failed")
-        self._user_portal_redirect(user_token, "admin",
-                                     flash=f"Invited {email}")
+            logging.exception("invitation email enqueue failed")
+        self._user_portal_redirect(
+            user_token, "admin",
+            flash=f"Invited {email} (email will be sent within 5 min)",
+        )
         return True
 
     def _handle_user_portal_user_action(self, section, raw, ct, client,
