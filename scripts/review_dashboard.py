@@ -9928,7 +9928,7 @@ def render_qr_page(
         '<div class="card" style="background:#fff7ed;border:1px solid #fed7aa;'
         'color:#9a3412;margin-bottom:16px;">'
         '<strong>&#9888; Attention / Warning:</strong> '
-        'Ces codes QR donnent acc&egrave;s au portail client &mdash; '
+        'Ces codes QR donnent accès au portail client &mdash; '
         'traitez-les comme confidentiels. '
         'These QR codes give access to the client portal &mdash; '
         'treat as confidential.'
@@ -10824,7 +10824,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
             groups.append(_dnav("/health/page", "health_nav_link"))
 
         groups.append(_group_label(f"\U0001f464 {esc(profil_label)}"))
-        groups.append(_dlink("/settings/2fa", "2FA / S&eacute;curit&eacute;"))
+        groups.append(_dlink("/settings/2fa", "2FA / Sécurité"))
         groups.append(_dlink("/settings/profile", esc(profil_label)))
 
         sidebar_nav_html = (
@@ -11141,7 +11141,7 @@ footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid #ddd; color:
 
 <div id="french">
 <h1>Politique de confidentialité</h1>
-<p><strong>OtoCPA Inc.</strong> | Dernière mise à jour : ''' + __import__('datetime').date.today().strftime('%d %B %Y') + '''</p>
+<p><strong>OtoCPA Inc.</strong> | Dernière mise à jour : ''' + __import__('src.formatting', fromlist=['format_date']).format_date(__import__('datetime').date.today(), 'fr') + '''</p>
 <p>OtoCPA Inc. (« OtoCPA ») s\'engage à protéger la vie privée des utilisateurs et des clients conformément à la <strong>Loi 25 du Québec</strong> (Loi modernisant des dispositions législatives en matière de protection des renseignements personnels).</p>
 
 <h2>1. Informations collectées</h2>
@@ -11207,7 +11207,7 @@ Courriel : <a href="mailto:privacy@otocpa.com">privacy@otocpa.com</a></p>
 
 <div id="english">
 <h1>Privacy Policy</h1>
-<p><strong>OtoCPA Inc.</strong> | Last updated: ''' + __import__('datetime').date.today().strftime('%B %d, %Y') + '''</p>
+<p><strong>OtoCPA Inc.</strong> | Last updated: ''' + __import__('src.formatting', fromlist=['format_date']).format_date(__import__('datetime').date.today(), 'en') + '''</p>
 <p>OtoCPA Inc. ("OtoCPA") is committed to protecting the privacy of users and clients in accordance with <strong>Quebec Law 25</strong> (Act to Modernize Legislative Provisions Respecting the Protection of Personal Information).</p>
 
 <h2>1. Information We Collect</h2>
@@ -12047,13 +12047,13 @@ th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #f3f4f6;}
 def _portal_status_badge(status: str) -> str:
     s = (status or "").strip().casefold()
     if s in {"new", ""}:
-        return '<span class="badge badge-new">New / Re&ccedil;u</span>'
+        return '<span class="badge badge-new">New / Reçu</span>'
     if s in {"needsreview", "needs review", "exception", "on hold", "hold"}:
-        return '<span class="badge badge-review">In Review / En r&eacute;vision</span>'
+        return '<span class="badge badge-review">In Review / En révision</span>'
     if s in {"posted"}:
-        return '<span class="badge badge-posted">Posted / Valid&eacute;</span>'
+        return '<span class="badge badge-posted">Posted / Validé</span>'
     if s in {"ready", "ready to post"}:
-        return '<span class="badge badge-ready">Ready / Pr&ecirc;t</span>'
+        return '<span class="badge badge-ready">Ready / Prêt</span>'
     return f'<span class="badge badge-review">{esc(status)}</span>'
 
 
@@ -12085,8 +12085,8 @@ def render_portal_invalid_page() -> str:
         f"<style>{_PORTAL_STYLE}</style></head><body>"
         "<div class='wrap'><div class='card' style='margin-top:48px;text-align:center;'>"
         "<h2 style='color:#991b1b;'>&#x26A0;&#xFE0F; Lien invalide / Invalid link</h2>"
-        "<p class='muted'>Ce lien de portail client n'est pas valide ou a &eacute;t&eacute; "
-        "remplac&eacute;. Veuillez contacter votre cabinet comptable pour obtenir un nouveau lien.</p>"
+        "<p class='muted'>Ce lien de portail client n'est pas valide ou a été "
+        "remplacé. Veuillez contacter votre cabinet comptable pour obtenir un nouveau lien.</p>"
         "<p class='muted' lang='en'>This client portal link is not valid or has been rotated. "
         "Please contact your accounting firm for a new link.</p>"
         "</div></div></body></html>"
@@ -12130,7 +12130,7 @@ def render_portal_upload(client: dict, token: str,
             <input type="file" id="fi" name="files" multiple
                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
             <label class="muted">Note (optional)</label>
-            <textarea name="note" rows="2" placeholder="Ex: facture d'&eacute;picerie / grocery invoice"></textarea>
+            <textarea name="note" rows="2" placeholder="Ex: facture d'épicerie / grocery invoice"></textarea>
             <button type="submit" id="pbtn" style="margin-top:10px;width:100%;">
                 &#9989; Envoyer / Upload
             </button>
@@ -12226,7 +12226,7 @@ def render_portal_bank(client: dict, token: str,
         body = f"""
         <div class="card">
             <h2>&#127970; Compte bancaire / Bank account</h2>
-            <p class="muted">Connect&eacute; via Plaid. Votre CPA voit les transactions mais pas vos identifiants bancaires.</p>
+            <p class="muted">Connecté via Plaid. Votre CPA voit les transactions mais pas vos identifiants bancaires.</p>
             {items}
         </div>
         """
@@ -12234,7 +12234,7 @@ def render_portal_bank(client: dict, token: str,
         body = f"""
         <div class="card">
             <h2>&#127970; Connectez votre banque / Connect your bank</h2>
-            <p class="muted">Connectez votre compte bancaire de fa&ccedil;on s&eacute;curis&eacute;e via Plaid.
+            <p class="muted">Connectez votre compte bancaire de façon sécurisée via Plaid.
             Votre CPA peut lire les transactions sans voir vos mots de passe.</p>
             <button id="plaid-link-btn" class="btn" style="margin-top:10px;">
                 &#127970; Connecter / Connect bank
@@ -12315,7 +12315,7 @@ def render_portal_messages(client: dict, token: str,
     if not thread_html:
         thread_html = (
             '<p class="muted" style="text-align:center;">Aucun message. '
-            'Envoyez un message &agrave; votre CPA ci-dessous. / '
+            'Envoyez un message à votre CPA ci-dessous. / '
             'No messages yet. Send one below.</p>'
         )
     body = f"""
@@ -12324,7 +12324,7 @@ def render_portal_messages(client: dict, token: str,
         <div class="thread">{thread_html}</div>
         <form method="POST" action="/c/{esc(token)}/messages" style="margin-top:14px;">
             <textarea name="body" rows="3" required
-                placeholder="&Eacute;crivez &agrave; votre CPA... / Write to your CPA..."></textarea>
+                placeholder="Écrivez à votre CPA... / Write to your CPA..."></textarea>
             <button type="submit" style="margin-top:8px;">&#128228; Envoyer / Send</button>
         </form>
     </div>
@@ -12364,7 +12364,7 @@ def render_portal_whatsapp(client: dict, token: str) -> str:
     <div class="card">
         <h2>&#128241; WhatsApp</h2>
         {'<p>Texter / Text: <strong>' + esc(wa_number) + '</strong></p>' if wa_number else
-         '<p class="muted">Votre CPA n\'a pas encore activ&eacute; WhatsApp. / Your CPA hasn\'t enabled WhatsApp yet.</p>'}
+         '<p class="muted">Votre CPA n\'a pas encore activé WhatsApp. / Your CPA hasn\'t enabled WhatsApp yet.</p>'}
         {qr_html}
     </div>
     """
@@ -12573,7 +12573,7 @@ button:disabled{{opacity:.6;}}
     {firm_line}
     <div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;
                 padding:10px 12px;border-radius:8px;margin:14px 0;font-size:13px;">
-        &#9888; Ce lien est d&eacute;pr&eacute;ci&eacute;. Demandez &agrave; votre CPA votre nouveau lien de portail.
+        &#9888; Ce lien est déprécié. Demandez à votre CPA votre nouveau lien de portail.
         <br>This link is deprecated. Ask your CPA for your new portal link.
     </div>
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
@@ -12787,16 +12787,16 @@ def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
         created = lead.get("created_at") or ""
         status_badge = (
             '<span style="background:rgba(39,174,96,0.15);color:#2ecc71;border:1px solid rgba(39,174,96,0.4);'
-            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x2705; Contact&eacute;</span>'
+            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x2705; Contacté</span>'
             if contacted
             else '<span style="background:rgba(241,196,15,0.15);color:#f1c40f;border:1px solid rgba(241,196,15,0.4);'
-            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x1F7E1; &Agrave; contacter</span>'
+            'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;">&#x1F7E1; À contacter</span>'
         )
         if archived:
             status_badge += (
                 ' <span style="background:rgba(127,140,141,0.15);color:#95a5a6;border:1px solid rgba(127,140,141,0.4);'
                 'padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-left:6px;">'
-                '&#x1F5C3;&#xFE0F; Archiv&eacute;</span>'
+                '&#x1F5C3;&#xFE0F; Archivé</span>'
             )
 
         clients_badge = ""
@@ -12850,7 +12850,7 @@ def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
                     '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:12px;color:#c8d8e8;">'
                     f'<div>Documents/mois: <strong style="color:white;">{esc(str(docs))}</strong></div>'
                     f'<div>Temps/doc: <strong style="color:white;">{esc(str(tpd))} min</strong></div>'
-                    f'<div>Heures &eacute;conomis&eacute;es: <strong style="color:white;">{esc(str(saved))}</strong></div>'
+                    f'<div>Heures économisées: <strong style="color:white;">{esc(str(saved))}</strong></div>'
                     f'<div>Objectif: <strong style="color:white;">{esc(str(goal))}</strong></div>'
                     "</div></div>"
                 )
@@ -12865,7 +12865,7 @@ def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
             "gagner du temps.\n\n"
             "Quelle plage horaire vous convient cette semaine ?\n\n"
             "Cordialement,\n"
-            "L'&eacute;quipe OtoCPA"
+            "L'équipe OtoCPA"
         )
         mailto = (
             f'mailto:{esc(lead.get("email") or "")}'
@@ -12887,7 +12887,7 @@ def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
                 f'<input type="hidden" name="filter" value="{esc(filter_mode)}">'
                 '<button type="submit" style="background:#27ae60;color:white;border:none;'
                 'padding:7px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">'
-                '&#x2713; Marquer contact&eacute;</button></form>'
+                '&#x2713; Marquer contacté</button></form>'
             )
         else:
             actions_html += (
@@ -12974,7 +12974,7 @@ def render_leads_page(ctx: dict[str, Any], user: dict[str, Any],
     inbox_reminder = (
         '<div style="background:rgba(52,152,219,0.08);border:1px solid rgba(52,152,219,0.3);'
         'border-radius:10px;padding:10px 14px;margin-bottom:16px;color:#c8d8e8;font-size:13px;">'
-        '&#x1F4A1; Vous recevez aussi chaque lead par courriel &agrave; '
+        '&#x1F4A1; Vous recevez aussi chaque lead par courriel à '
         '<a href="mailto:sales@otocpa.com" style="color:#3498db;">sales@otocpa.com</a>'
         "</div>"
     )
@@ -13128,6 +13128,26 @@ a:hover{{color:#16C172}}
 .public-footer .sep{{margin:0 8px;color:#1a2d45}}
 .public-footer .login-line{{margin-top:10px}}
 .public-footer .login-line a{{color:#7AD66A;font-weight:600;text-decoration:none}}
+.features, .comparison, .faq{{max-width:1100px;margin:0 auto 56px;padding:0 24px}}
+.features h2, .comparison h2, .faq h2{{text-align:center;font-size:28px;margin:0 0 28px;color:#e8f0f7}}
+.feature-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}}
+.feature{{background:#0d1b2a;border:1px solid #1a2d45;border-radius:12px;padding:20px}}
+.feature h3{{margin:0 0 10px;font-size:16px;color:#7AD66A}}
+.feature p{{margin:0 0 6px;color:#c0d0e0;font-size:14px;line-height:1.45}}
+.feature p[lang="en"]{{color:#6b8099;font-size:13px;font-style:italic}}
+.table-wrap{{overflow-x:auto}}
+.comparison-table{{width:100%;border-collapse:collapse;background:#0d1b2a;border-radius:12px;overflow:hidden;font-size:14px}}
+.comparison-table th, .comparison-table td{{padding:12px 14px;border-bottom:1px solid #1a2d45;text-align:left;color:#c0d0e0}}
+.comparison-table th{{background:#101e30;color:#e8f0f7;font-weight:700}}
+.comparison-table td:first-child{{max-width:360px}}
+.comparison-table tr:last-child td{{border-bottom:none}}
+.faq details{{background:#0d1b2a;border:1px solid #1a2d45;border-radius:10px;margin-bottom:10px;padding:14px 18px}}
+.faq summary{{cursor:pointer;color:#e8f0f7;font-weight:600;list-style:none}}
+.faq summary::-webkit-details-marker{{display:none}}
+.faq summary::before{{content:'▸ ';color:#7AD66A;margin-right:6px}}
+.faq details[open] summary::before{{content:'▾ '}}
+.faq p{{margin:10px 0 4px;color:#c0d0e0;line-height:1.5}}
+.faq p[lang="en"]{{color:#6b8099;font-size:13px;font-style:italic}}
 [data-billing="yearly"] .m-only{{display:none}}
 [data-billing="monthly"] .y-only{{display:none}}
 @media (max-width:940px){{
@@ -13141,8 +13161,8 @@ a:hover{{color:#16C172}}
 <header class="site-header">{LOGO_SVG_LARGE}</header>
 
 <div class="hero">
-    <h1>Automatisation comptable pour les cabinets <span class="accent">CPA</span></h1>
-    <p>Automatisation comptable pour les cabinets CPA du Qu&eacute;bec.<br>Accounting automation for Quebec CPA firms.</p>
+    <h1>La plateforme comptable la plus avancée du Québec, propulsée par l'<span class="accent">IA</span></h1>
+    <p>La plateforme comptable la plus avancée du Québec, propulsée par l'IA, pour cabinets de CPA.<br>Quebec's most advanced AI-powered accounting platform for CPA firms.</p>
     <div class="toggle-wrap">
         <div class="toggle" role="tablist">
             <button id="btn-monthly" class="active" onclick="setBilling('monthly')">Mensuel / Monthly</button>
@@ -13151,21 +13171,111 @@ a:hover{{color:#16C172}}
     </div>
 </div>
 
+<section class="features" aria-labelledby="features-heading">
+    <h2 id="features-heading">Ce qui est inclus / What's included</h2>
+    <div class="feature-grid">
+        <div class="feature">
+            <h3>Extraction IA de reçus / AI Receipt Processing</h3>
+            <p lang="fr">Précision de 90 % et plus sur les reçus canadiens. 36 marchands québécois optimisés spécifiquement.</p>
+            <p lang="en">90%+ accuracy on Canadian receipts. 36 Quebec merchants specifically optimized.</p>
+        </div>
+        <div class="feature">
+            <h3>Portail client multi-utilisateur / Multi-User Client Portal</h3>
+            <p lang="fr">L'équipe comptable complète de vos clients peut téléverser. Chaque membre reçoit son propre accès sécurisé. Révocation instantanée lorsqu'un employé quitte. Piste d'audit complète.</p>
+            <p lang="en">Your clients' entire accounting team can upload. Each team member gets their own secure login. Instant revocation when employees leave. Full audit trail.</p>
+        </div>
+        <div class="feature">
+            <h3>Synchronisation QuickBooks bidirectionnelle / Bidirectional QuickBooks Sync</h3>
+            <p lang="fr">Synchronisation bidirectionnelle avec QuickBooks en ligne. Importez les données existantes, poussez les mises à jour, résolvez les conflits automatiquement. Compatible avec les clients déjà sur QBO.</p>
+            <p lang="en">Two-way sync with QuickBooks Online. Pull existing data, push updates, resolve conflicts automatically. Works with clients already on QBO.</p>
+        </div>
+        <div class="feature">
+            <h3>Routage bancaire intelligent / Smart Bank Data</h3>
+            <p lang="fr">Si le client a sa banque connectée à QuickBooks, OtoCPA en tire les données. Aucune connexion Plaid supplémentaire requise.</p>
+            <p lang="en">If your client has bank connected to QuickBooks, OtoCPA pulls from there. No redundant Plaid connection needed.</p>
+        </div>
+        <div class="feature">
+            <h3>Assistant de clôture mensuelle / Month-End Close Wizard</h3>
+            <p lang="fr">Processus de clôture guidé en 6 étapes avec examen des écritures de régularisation ligne par ligne.</p>
+            <p lang="en">Guided 6-step close process with line-level accrual review.</p>
+        </div>
+        <div class="feature">
+            <h3>Flux d'audit conformes aux NCA / CAS-Compliant Audit Workflows</h3>
+            <p lang="fr">Conçu pour les normes d'audit canadiennes : importance relative, évaluation des risques, échantillonnage statistique, lettres d'affirmation.</p>
+            <p lang="en">Built for Canadian auditing standards: materiality, risk assessment, statistical sampling, representation letters.</p>
+        </div>
+        <div class="feature">
+            <h3>Conçu d'abord pour le Québec / Quebec-First Design</h3>
+            <p lang="fr">Bilingue complet FR/EN. Gestion native TPS/TVQ. Conçu par des Québécois pour des Québécois.</p>
+            <p lang="en">Full bilingual FR/EN. Native TPS/TVQ handling. Built by Quebecois for Quebecois.</p>
+        </div>
+        <div class="feature">
+            <h3>Sécurité et conformité / Security + Compliance</h3>
+            <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada. Piste d'audit prête SOC 2. Rétention de 7 ans.</p>
+            <p lang="en">2FA enforced. All data in Canada. SOC 2-ready audit trail. 7-year retention.</p>
+        </div>
+    </div>
+</section>
+
+<section class="comparison" aria-labelledby="comparison-heading">
+    <h2 id="comparison-heading">Comparaison / vs. Competitors</h2>
+    <div class="table-wrap">
+        <table class="comparison-table">
+            <thead>
+                <tr><th>Capacité / Feature</th><th>OtoCPA</th><th>Dext</th><th>Receipt Bank</th><th>Hubdoc</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Précision reçus canadiens / AI accuracy Canadian receipts</td><td>90 %+</td><td>80 %</td><td>75 %</td><td>70 %</td></tr>
+                <tr><td>Interface FR + marchands québécois / French UI + Quebec merchants</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Portail client multi-utilisateur / Multi-user client portal</td><td>✓</td><td>✓</td><td>✓</td><td>Partiel / Partial</td></tr>
+                <tr><td>Sync QBO bidirectionnelle / Bidirectional QBO sync</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Routage bancaire intelligent / Smart bank routing (QBO or Plaid)</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Régularisations ligne par ligne / Line-level accrual review</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Flux d'audit NCA / CAS audit workflows</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="faq" aria-labelledby="faq-heading">
+    <h2 id="faq-heading">Questions fréquentes / FAQ</h2>
+    <details>
+        <summary>Mon client doit-il connecter sa banque séparément? / Does my client need to connect their bank separately?</summary>
+        <p lang="fr"><strong>Non.</strong> Si votre client utilise déjà QuickBooks Online avec ses flux bancaires, OtoCPA en tire automatiquement les données. Sinon, il peut se connecter via Plaid dans un portail sécurisé.</p>
+        <p lang="en"><strong>No.</strong> If your client already uses QuickBooks Online with bank feeds, OtoCPA pulls that data automatically. If they don't, they connect via Plaid through a secure portal.</p>
+    </details>
+    <details>
+        <summary>Plusieurs personnes chez mon client peuvent-elles téléverser? / Can multiple people at my client's company upload receipts?</summary>
+        <p lang="fr"><strong>Oui.</strong> Activez le mode multi-utilisateur pour le client, et son administrateur peut inviter toute son équipe comptable. Chaque personne reçoit son propre accès sécurisé, et chaque téléversement est identifié par l'auteur.</p>
+        <p lang="en"><strong>Yes.</strong> Enable multi-user mode for the client, and their admin can invite their entire accounting team. Each person gets their own secure login, and every upload is tagged with the uploader's identity.</p>
+    </details>
+    <details>
+        <summary>Que se passe-t-il si un employé du client quitte? / What happens if my client's employee leaves the company?</summary>
+        <p lang="fr">L'administrateur du client peut révoquer instantanément l'accès de cet employé. Ses téléversements passés sont conservés à des fins d'audit, mais il ne peut plus accéder au portail ni téléverser de nouveaux documents.</p>
+        <p lang="en">The client admin can instantly revoke that employee's access. Their past uploads are preserved for audit purposes, but they can no longer access the portal or upload new documents.</p>
+    </details>
+    <details>
+        <summary>Est-ce réellement en français? / Is it really in French?</summary>
+        <p lang="fr">Chaque page, chaque bouton, chaque courriel, chaque PDF. Support français complet, pas seulement la traduction des menus.</p>
+        <p lang="en">Every page, every button, every email, every PDF. Full French support, not just menu translation.</p>
+    </details>
+</section>
+
 <div class="plans">
     <div class="plan">
-        <h2>D&eacute;marrage</h2>
+        <h2>Démarrage</h2>
         <p class="desc">Pour les CPAs solo et petits cabinets</p>
         <div class="price m-only">$99<span>/mois</span></div>
         <div class="price y-only">$990<span>/an</span></div>
         <div class="savings m-only">&nbsp;</div>
-        <div class="savings y-only">&#128176; &Eacute;conomisez $198/an</div>
+        <div class="savings y-only">&#128176; Économisez $198/an</div>
         <ul>
-            <li>~300 re&ccedil;us/mois</li>
-            <li>Clients illimit&eacute;s</li>
+            <li>~300 reçus/mois</li>
+            <li>Clients illimités</li>
             <li>Extraction IA automatique</li>
             <li>WhatsApp intake</li>
             <li>Export QuickBooks</li>
-            <li>Relev&eacute;s bancaires</li>
+            <li>Relevés bancaires</li>
             <li>Support par courriel</li>
         </ul>
         <a href="/signup/checkout?plan=starter_monthly" class="btn btn-outline m-only">Commencer / Start</a>
@@ -13179,16 +13289,16 @@ a:hover{{color:#16C172}}
         <div class="price m-only">$299<span>/mois</span></div>
         <div class="price y-only">$2,990<span>/an</span></div>
         <div class="savings m-only">&nbsp;</div>
-        <div class="savings y-only">&#128176; &Eacute;conomisez $598/an</div>
+        <div class="savings y-only">&#128176; Économisez $598/an</div>
         <ul>
-            <li>~1,000 re&ccedil;us/mois</li>
-            <li>Clients illimit&eacute;s</li>
+            <li>~1,000 reçus/mois</li>
+            <li>Clients illimités</li>
             <li>Extraction IA automatique</li>
             <li>WhatsApp intake</li>
             <li>Export QuickBooks</li>
-            <li>Relev&eacute;s bancaires</li>
+            <li>Relevés bancaires</li>
             <li>Support prioritaire</li>
-            <li>Tableau de bord avanc&eacute;</li>
+            <li>Tableau de bord avancé</li>
         </ul>
         <a href="/signup/checkout?plan=pro_monthly" class="btn m-only">Commencer / Start</a>
         <a href="/signup/checkout?plan=pro_yearly" class="btn y-only">Commencer / Start</a>
@@ -13200,16 +13310,16 @@ a:hover{{color:#16C172}}
         <div class="price m-only">$599<span>/mois</span></div>
         <div class="price y-only">$5,990<span>/an</span></div>
         <div class="savings m-only">&nbsp;</div>
-        <div class="savings y-only">&#128176; &Eacute;conomisez $1,198/an</div>
+        <div class="savings y-only">&#128176; Économisez $1,198/an</div>
         <ul>
-            <li>~5,000 re&ccedil;us/mois</li>
-            <li>Clients illimit&eacute;s</li>
+            <li>~5,000 reçus/mois</li>
+            <li>Clients illimités</li>
             <li>Extraction IA automatique</li>
             <li>WhatsApp intake</li>
             <li>Export QuickBooks</li>
-            <li>Relev&eacute;s bancaires</li>
+            <li>Relevés bancaires</li>
             <li>Support prioritaire</li>
-            <li>Onboarding d&eacute;di&eacute;</li>
+            <li>Onboarding dédié</li>
             <li>SLA garanti</li>
         </ul>
         <a href="/signup/checkout?plan=business_monthly" class="btn btn-outline m-only">Commencer / Start</a>
@@ -13223,8 +13333,8 @@ a:hover{{color:#16C172}}
 </div>
 
 <footer class="public-footer">
-    <p>&copy; 2026 OtoCPA Inc. <span class="sep">|</span> <a href="/privacy">Politique de confidentialit&eacute;</a> <span class="sep">|</span> Conforme Loi 25 <span class="sep">|</span> Donn&eacute;es h&eacute;berg&eacute;es au Canada</p>
-    <p class="login-line">D&eacute;j&agrave; client? <a href="/login">Connexion &rarr;</a></p>
+    <p>&copy; 2026 OtoCPA Inc. <span class="sep">|</span> <a href="/privacy">Politique de confidentialité</a> <span class="sep">|</span> Conforme Loi 25 <span class="sep">|</span> Données hébergées au Canada</p>
+    <p class="login-line">Déjà client? <a href="/login">Connexion &rarr;</a></p>
 </footer>
 
 <script>
@@ -13249,11 +13359,11 @@ def render_signup_success(firm_code: str, admin_username: str,
     if email_sent:
         email_block = f"""
         <div class="notice" style="background:rgba(22,193,114,0.08);border-color:rgba(22,193,114,0.35);color:#7AD66A;">
-            &#128231; Un lien de configuration a &eacute;t&eacute; envoy&eacute; &agrave; <strong>{email_esc}</strong>.<br>
+            &#128231; Un lien de configuration a été envoyé à <strong>{email_esc}</strong>.<br>
             A setup link was sent to <strong>{email_esc}</strong>.
         </div>
         <details style="margin-top:14px;color:#c0d0e0;font-size:13px;">
-            <summary style="cursor:pointer;">Courriel non re&ccedil;u? / Didn't receive the email?</summary>
+            <summary style="cursor:pointer;">Courriel non reçu? / Didn't receive the email?</summary>
             <p style="margin:10px 0 6px;">Copiez ce lien (expire dans 72h) / Copy this link (expires in 72h):</p>
             <div style="word-break:break-all;padding:10px;background:#081633;border:1px solid #1a2d45;border-radius:8px;font-family:monospace;font-size:12px;color:#7AD66A;">{url_esc}</div>
             <form method="POST" action="/signup/resend-setup" style="margin-top:10px;">
@@ -13265,7 +13375,7 @@ def render_signup_success(firm_code: str, admin_username: str,
     else:
         email_block = f"""
         <div class="notice">
-            &#9888; Livraison courriel &eacute;chou&eacute;e / Email delivery failed.<br>
+            &#9888; Livraison courriel échouée / Email delivery failed.<br>
             Utilisez ce lien pour configurer votre mot de passe (expire dans 72h) / Use this link to set your password (expires in 72h):
         </div>
         <div style="word-break:break-all;margin:12px 0;padding:12px;background:#081633;border:1px solid #1a2d45;border-radius:8px;font-family:monospace;font-size:12px;color:#7AD66A;">{url_esc}</div>
@@ -13324,8 +13434,8 @@ def render_signup_success(firm_code: str, admin_username: str,
                 <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#081633" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </div>
-        <h1>&#10003; Abonnement confirm&eacute; / Subscription confirmed</h1>
-        <p class="sub">Votre cabinet est pr&ecirc;t / Your firm is ready</p>
+        <h1>&#10003; Abonnement confirmé / Subscription confirmed</h1>
+        <p class="sub">Votre cabinet est prêt / Your firm is ready</p>
         <div class="cred-row"><span class="cred-label">Firm code</span><span class="cred-val">{fc}</span></div>
         <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">{un}</span></div>
         {email_block}
@@ -13392,12 +13502,12 @@ def render_signup_existing(firm_code: str, admin_username: str) -> str:
                 <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#081633" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </div>
-        <h1>Paiement confirm&eacute; / Payment confirmed</h1>
-        <p class="sub">Vous avez d&eacute;j&agrave; un compte OtoCPA. Connectez-vous avec vos identifiants existants.<br>
+        <h1>Paiement confirmé / Payment confirmed</h1>
+        <p class="sub">Vous avez déjà un compte OtoCPA. Connectez-vous avec vos identifiants existants.<br>
         You already have an OtoCPA account. Please log in with your existing credentials.</p>
         <div class="cred-row"><span class="cred-label">Cabinet / Firm</span><span class="cred-val">{fc}</span></div>
         <div class="cred-row"><span class="cred-label">Username</span><span class="cred-val">{un}</span></div>
-        <div class="notice">&#9888; Si vous avez oubli&eacute; votre mot de passe, contactez support@otocpa.com.</div>
+        <div class="notice">&#9888; Si vous avez oublié votre mot de passe, contactez support@otocpa.com.</div>
         <div style="margin-top:24px;"><a class="btn-green" href="/login">Se connecter / Log in &rarr;</a></div>
     </div>
     <div class="public-footer">&copy; 2026 OtoCPA Inc. &middot; Conforme Loi 25</div>
@@ -13420,7 +13530,7 @@ def render_set_password_page(token: str, flash_error: str = "") -> str:
     <div class="brand-top">{LOGO_SVG_LARGE}</div>
     <div class="auth-card">
         <h1>Configurer votre mot de passe / Set your password</h1>
-        <p class="sub">Minimum 10 caract&egrave;res, au moins 1 chiffre et 1 lettre.<br>
+        <p class="sub">Minimum 10 caractères, au moins 1 chiffre et 1 lettre.<br>
         Minimum 10 characters, at least 1 digit and 1 letter.</p>
         {err}
         <form method="POST" action="/set-password" autocomplete="off">
@@ -13453,7 +13563,7 @@ def render_set_password_invalid() -> str:
 <div class="public-wrap">
     <div class="brand-top">{LOGO_SVG_LARGE}</div>
     <div class="auth-card">
-        <h1>Lien invalide ou expir&eacute; / Invalid or expired link</h1>
+        <h1>Lien invalide ou expiré / Invalid or expired link</h1>
         <p class="sub">Ce lien n'est plus valide. Demandez un nouveau lien.<br>
         This link is no longer valid. Request a new one.</p>
         <div style="margin-top:22px;"><a class="btn-green" href="/forgot">Demander un nouveau lien / Request new link &rarr;</a></div>
@@ -13465,7 +13575,7 @@ def render_set_password_invalid() -> str:
 
 def render_forgot_password_page(flash: str = "", flash_error: str = "",
                                 lang: str = "fr") -> str:
-    msg_fr = "Entrez votre courriel ou nom d'utilisateur. Si un compte existe, vous recevrez un lien de r&eacute;initialisation."
+    msg_fr = "Entrez votre courriel ou nom d'utilisateur. Si un compte existe, vous recevrez un lien de réinitialisation."
     msg_en = "Enter your email or username. If an account exists, you'll receive a reset link."
     flash_html = f'<div class="flash info">{html.escape(flash)}</div>' if flash else ""
     err_html = f'<div class="flash error">{html.escape(flash_error)}</div>' if flash_error else ""
@@ -13473,14 +13583,14 @@ def render_forgot_password_page(flash: str = "", flash_error: str = "",
 <html lang="{lang}">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mot de passe oubli&eacute; / Forgot password</title>
+<title>Mot de passe oublié / Forgot password</title>
 <style>{PUBLIC_CSS}</style>
 </head>
 <body>
 <div class="public-wrap">
     <div class="brand-top">{LOGO_SVG_LARGE}</div>
     <div class="auth-card">
-        <h1>Mot de passe oubli&eacute; / Forgot password</h1>
+        <h1>Mot de passe oublié / Forgot password</h1>
         <p class="sub">{msg_fr}<br>{msg_en}</p>
         {flash_html}{err_html}
         <form method="POST" action="/forgot" autocomplete="on">
@@ -13517,7 +13627,7 @@ def render_billing_page(ctx: dict[str, Any], user: dict[str, Any],
     trial_end = html.escape(row.get("trial_ends_at") or "")
     has_customer = bool(row.get("stripe_customer_id"))
     portal_btn = (
-        '<a href="/billing/portal" class="btn">G&eacute;rer mon abonnement / Manage billing</a>'
+        '<a href="/billing/portal" class="btn">Gérer mon abonnement / Manage billing</a>'
         if has_customer
         else '<a href="/signup" class="btn">Choisir un plan / Choose a plan</a>'
     )
@@ -14557,7 +14667,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
     return page_layout("Clients", f"""
     <div style="padding:24px;">
         <a href="/" style="color:#aaa;text-decoration:none;margin-bottom:16px;display:inline-block;">
-            &larr; Retour &agrave; la file / Back to queue
+            &larr; Retour à la file / Back to queue
         </a>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <h2 style="color:white;">&#x1F465; Clients</h2>
@@ -14704,13 +14814,13 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                 </form>
             </div>"""
         if not wa_items_html:
-            wa_items_html = '<div style="color:#888;padding:6px 0;">Aucun num&eacute;ro / No numbers</div>'
+            wa_items_html = '<div style="color:#888;padding:6px 0;">Aucun numéro / No numbers</div>'
 
         wa_section = f"""
         <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
-            <h3 style="color:white;margin-top:0;">&#x1F4F1; Num&eacute;ros WhatsApp / WhatsApp Numbers</h3>
+            <h3 style="color:white;margin-top:0;">&#x1F4F1; Numéros WhatsApp / WhatsApp Numbers</h3>
             <p style="color:#888;font-size:12px;margin:0 0 12px 0;">
-                Plusieurs num&eacute;ros peuvent &ecirc;tre associ&eacute;s &agrave; ce client.
+                Plusieurs numéros peuvent être associés à ce client.
                 / Multiple numbers can be linked to this client.
             </p>
             {wa_items_html}
@@ -14859,7 +14969,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                         </a>
                     </div>
                     <p style="color:#f39c12;font-size:11px;margin-top:10px;">
-                        &#9888; Ce lien donne acc&egrave;s direct au portail &mdash; gardez-le confidentiel.
+                        &#9888; Ce lien donne accès direct au portail &mdash; gardez-le confidentiel.
                     </p>
                 </div>
             </div>
@@ -18000,14 +18110,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 if is_async:
                     self._send_json({"ok": False, "error": "No file uploaded"}, status=400)
                     return True
-                self._portal_redirect(token, "", error="No file uploaded")
+                self._portal_redirect(token, "", error="Aucun fichier téléversé / No file uploaded")
                 return True
             fields, files = _parse_multipart_files(raw, ct)
             if not files:
                 if is_async:
                     self._send_json({"ok": False, "error": "No file selected"}, status=400)
                     return True
-                self._portal_redirect(token, "", error="No file selected")
+                self._portal_redirect(token, "", error="Aucun fichier sélectionné / No file selected")
                 return True
             limit_err = _batch_limit_error(files)
             if limit_err:
@@ -18042,9 +18152,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "failed": fail_count,
                 })
                 return True
-            msg = f"{len(document_ids)} document(s) queued for processing"
+            msg = (f"{len(document_ids)} document(s) en file de traitement / "
+                   f"{len(document_ids)} document(s) queued for processing")
             if fail_count:
-                msg += f", {fail_count} failed to queue"
+                msg += f", {fail_count} échec(s) / failed to queue"
             self._portal_redirect(token, "documents", flash=msg)
             return True
 
@@ -18128,7 +18239,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             form = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
             body_txt = (form.get("body", [""])[0] or "").strip()
             if not body_txt:
-                self._portal_redirect(token, "messages", error="Empty message")
+                self._portal_redirect(token, "messages", error="Message vide / Empty message")
                 return True
             try:
                 with open_db() as conn:
@@ -18141,10 +18252,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     )
                     conn.commit()
             except Exception:
-                self._portal_redirect(token, "messages", error="Save failed")
+                self._portal_redirect(token, "messages", error="Échec de l'enregistrement / Save failed")
                 return True
             log_portal_access(client_code, firm_code, token, self, "message_sent")
-            self._portal_redirect(token, "messages", flash="Message envoy&eacute; / Message sent")
+            self._portal_redirect(token, "messages", flash="Message envoyé / Message sent")
             return True
 
         self._portal_send_invalid()
@@ -18331,7 +18442,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             )
             self._user_portal_redirect(
                 user_token, "upload",
-                flash="Welcome! Your first upload can go here.",
+                flash="Bienvenue! Votre premier téléversement se fait ici. / Welcome! Your first upload can go here.",
             )
             return True
 
@@ -18364,12 +18475,12 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return True
         if "multipart/form-data" not in ct:
             self._user_portal_redirect(user_token, "",
-                                         error="No file uploaded")
+                                         error="Aucun fichier téléversé / No file uploaded")
             return True
         fields, files = _parse_multipart_files(raw, ct)
         if not files:
             self._user_portal_redirect(user_token, "",
-                                         error="No file selected")
+                                         error="Aucun fichier sélectionné / No file selected")
             return True
         from src.engines.upload_queue import save_and_queue_document
         note = (fields.get("note") or "").strip()
@@ -18412,10 +18523,11 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 ip=_get_client_ip(self),
                 user_agent=self.headers.get("User-Agent", ""),
             )
-        msg = (f'Thanks {portal_user.get("full_name") or portal_user.get("email")}! '
-                f'{len(ids)} document(s) queued.')
+        _uname = portal_user.get("full_name") or portal_user.get("email")
+        msg = (f'Merci {_uname}! {len(ids)} document(s) en file. / '
+                f'Thanks {_uname}! {len(ids)} document(s) queued.')
         if failed:
-            msg += f' {failed} failed.'
+            msg += f' {failed} échec(s) / failed.'
         self._user_portal_redirect(user_token, "documents", flash=msg)
         return True
 
@@ -18426,7 +18538,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         body_txt = (form.get("body", [""])[0] or "").strip()
         if not body_txt:
             self._user_portal_redirect(user_token, "messages",
-                                         error="Empty message")
+                                         error="Message vide / Empty message")
             return True
         try:
             with open_db() as conn:
@@ -18444,10 +18556,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         except Exception:
             logging.exception("multi-user message send failed")
             self._user_portal_redirect(user_token, "messages",
-                                         error="Save failed")
+                                         error="Échec de l'enregistrement / Save failed")
             return True
         self._user_portal_redirect(user_token, "messages",
-                                     flash="Message sent")
+                                     flash="Message envoyé / Message sent")
         return True
 
     def _handle_user_portal_invite(self, raw, ct, client, portal_user,
@@ -18463,7 +18575,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         if not _mup.invite_rate_allowed(portal_user['id']):
             self._user_portal_redirect(
                 user_token, "admin",
-                error="Too many invitations — please wait a minute and try again.",
+                error="Trop d'invitations — attendez une minute et réessayez. / Too many invitations — please wait a minute and try again.",
             )
             return True
         form = urllib.parse.parse_qs(raw.decode("utf-8"),
@@ -18476,7 +18588,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         ).strip() or None
         if not email or role not in ('admin', 'contributor'):
             self._user_portal_redirect(user_token, "admin",
-                                         error="Email + role required")
+                                         error="Courriel et rôle requis / Email + role required")
             return True
         try:
             inv = _mup.create_invitation(
@@ -18558,13 +18670,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         parts = section.split('/')
         if len(parts) != 3:
             self._user_portal_redirect(user_token, "admin",
-                                         error="Bad request")
+                                         error="Requête invalide / Bad request")
             return True
         try:
             target_id = int(parts[1])
         except ValueError:
             self._user_portal_redirect(user_token, "admin",
-                                         error="Bad user id")
+                                         error="Identifiant utilisateur invalide / Bad user id")
             return True
         action = parts[2]
         # Self-remove guard: admins can't remove themselves via their
@@ -18572,7 +18684,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         if action == 'remove' and target_id == portal_user['id']:
             self._user_portal_redirect(
                 user_token, "admin",
-                error="You cannot remove yourself; ask your CPA.",
+                error="Vous ne pouvez pas vous retirer vous-même ; demandez à votre CPA. / You cannot remove yourself; ask your CPA.",
             )
             return True
         try:
@@ -18607,7 +18719,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._user_portal_redirect(user_token, "admin", error=str(exc))
             return True
         self._user_portal_redirect(user_token, "admin",
-                                     error="Unknown action")
+                                     error="Action inconnue / Unknown action")
         return True
 
     def _handle_invite_get(self, path: str, qs: dict, flash: str,
@@ -21611,9 +21723,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         "failed": fail_count,
                     })
                     return
-                msg = f"{len(document_ids)} document(s) queued for processing"
+                msg = (f"{len(document_ids)} document(s) en file de traitement / "
+                       f"{len(document_ids)} document(s) queued for processing")
                 if fail_count:
-                    msg += f", {fail_count} failed to queue"
+                    msg += f", {fail_count} échec(s) / failed to queue"
                 self._flash_redirect(
                     f"/upload?client_code={urlquote(pub_client)}",
                     flash=msg,
@@ -21635,7 +21748,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 code = form.get("code", "").strip()
                 if not secret or not verify_totp_code(secret, code):
                     self._send_html(render_2fa_settings(
-                        user, flash_error="Invalid code — try again.",
+                        user, flash_error=("Code invalide — réessayez." if lang == "fr" else "Invalid code — try again."),
                         setup_secret=secret, lang=lang))
                     return
                 with open_db() as conn:
@@ -21644,7 +21757,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (secret, user["username"]),
                     )
                     conn.commit()
-                self._flash_redirect("/settings/2fa", flash="Two-factor authentication enabled.")
+                self._flash_redirect("/settings/2fa", flash=("Authentification à deux facteurs activée." if lang == "fr" else "Two-factor authentication enabled."))
                 return
 
             # --- Profile save ---
@@ -21674,7 +21787,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         })
                         self._send_html(render_profile_page(
                             profile_user,
-                            flash_error="Current password is required and must be correct.",
+                            flash_error=("Le mot de passe actuel est requis et doit être correct." if lang == "fr" else "Current password is required and must be correct."),
                             lang=lang))
                         return
 
@@ -21683,13 +21796,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         if new_pw != confirm_pw:
                             self._send_html(render_profile_page(
                                 dict(row),
-                                flash_error="New password and confirmation do not match.",
+                                flash_error=("Le nouveau mot de passe et la confirmation ne correspondent pas." if lang == "fr" else "New password and confirmation do not match."),
                                 lang=lang))
                             return
                         if len(new_pw) < 8:
                             self._send_html(render_profile_page(
                                 dict(row),
-                                flash_error="New password must be at least 8 characters.",
+                                flash_error=("Le nouveau mot de passe doit comporter au moins 8 caractères." if lang == "fr" else "New password must be at least 8 characters."),
                                 lang=lang))
                             return
                         new_hash = hash_password(new_pw)
@@ -21701,7 +21814,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                          whatsapp_number or None, new_hash, user["username"]),
                     )
                     conn.commit()
-                self._flash_redirect("/settings/profile", flash="Profile updated.")
+                self._flash_redirect("/settings/profile", flash=("Profil mis à jour." if lang == "fr" else "Profile updated."))
                 return
 
             # --- 2FA disable ---
@@ -21712,7 +21825,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         (user["username"],),
                     )
                     conn.commit()
-                self._flash_redirect("/settings/2fa", flash="Two-factor authentication disabled.")
+                self._flash_redirect("/settings/2fa", flash=("Authentification à deux facteurs désactivée." if lang == "fr" else "Two-factor authentication disabled."))
                 return
 
             # --- Bank: exchange public token and save connection ---
@@ -22214,9 +22327,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         "failed": fail_count,
                     })
                     return
-                msg = f"{len(document_ids)} document(s) queued for processing"
+                msg = (f"{len(document_ids)} document(s) en file de traitement / "
+                       f"{len(document_ids)} document(s) queued for processing")
                 if fail_count:
-                    msg += f", {fail_count} failed to queue"
+                    msg += f", {fail_count} échec(s) / failed to queue"
                 if skip_count:
                     msg += f" — {skip_count} déjà téléversé(s) / already uploaded"
                 self._flash_redirect("/", flash=msg)

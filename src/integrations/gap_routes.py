@@ -203,7 +203,7 @@ def render_onboarding_quick_setup(
         '<label>Default language<br>'
         '<select name="default_lang" style="padding:8px;">'
         f'<option value="en"{" selected" if default_lang=="en" else ""}>English</option>'
-        f'<option value="fr"{" selected" if default_lang=="fr" else ""}>Fran&ccedil;ais</option>'
+        f'<option value="fr"{" selected" if default_lang=="fr" else ""}>Français</option>'
         '</select></label>'
         '<label>Fiscal year end (MM-DD)<br>'
         f'<input type="text" name="fiscal_year_end" value="{fye}" '

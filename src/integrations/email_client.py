@@ -2,8 +2,10 @@ import base64
 import html
 import logging
 import os
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 # google.auth / googleapiclient are only needed for the Gmail send path and are
 # imported lazily inside _get_gmail_service so this module can be imported in
@@ -47,11 +49,14 @@ def send_email(to_email: str, subject: str, html_body: str,
         return False
     try:
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
+        # Explicit UTF-8 so French accents render correctly in every client
+        # (Gmail, Outlook, Apple Mail). Without an explicit charset on the
+        # Subject header, non-ASCII subjects show up as mojibake in Outlook.
+        msg['Subject'] = Header(subject, 'utf-8')
         msg['To'] = to_email
         sender = os.environ.get('GMAIL_SENDER', 'haddadsamer1984@gmail.com')
-        msg['From'] = f'{from_name} <{sender}>'
-        msg.attach(MIMEText(html_body, 'html'))
+        msg['From'] = formataddr((str(Header(from_name, 'utf-8')), sender))
+        msg.attach(MIMEText(html_body, 'html', _charset='utf-8'))
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
         service.users().messages().send(userId='me', body={'raw': raw}).execute()
         logger.info('Gmail API sent to %s (%s)', to_email, subject)
@@ -73,10 +78,10 @@ def send_welcome_email(to_email: str, firm_name: str, username: str,
 <h2 style="color:#16C172;">Bienvenue chez OtoCPA, {fn}!</h2>
 <p>Votre abonnement au plan <strong>{pl}</strong> est actif.</p>
 <p><strong>Nom d'utilisateur:</strong> {un}</p>
-<p>Pour configurer votre compte, cr&eacute;ez votre mot de passe:</p>
+<p>Pour configurer votre compte, créez votre mot de passe:</p>
 <p><a href="{url}" style="background:#16C172;color:#000;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">Configurer mon compte &rarr;</a></p>
 <p style="color:#666;font-size:13px;">Ce lien expire dans 72 heures.</p>
-<p style="color:#666;font-size:13px;">Si vous n'avez pas demand&eacute; ceci, ignorez ce courriel.</p>
+<p style="color:#666;font-size:13px;">Si vous n'avez pas demandé ceci, ignorez ce courriel.</p>
 <hr style="border:none;border-top:1px solid #ddd;">
 <h2 style="color:#16C172;">Welcome to OtoCPA, {fn}!</h2>
 <p>Your <strong>{pl}</strong> subscription is active.</p>
@@ -102,12 +107,12 @@ def send_password_reset_email(to_email: str, username: str,
 
     html_body = f"""<!DOCTYPE html>
 <html><body style="font-family:Arial,sans-serif;max-width:600px;margin:20px auto;">
-<h2 style="color:#16C172;">R&eacute;initialisation de mot de passe OtoCPA</h2>
+<h2 style="color:#16C172;">Réinitialisation de mot de passe OtoCPA</h2>
 <p><strong>Nom d'utilisateur:</strong> {un}</p>
-<p>Cliquez pour d&eacute;finir un nouveau mot de passe:</p>
-<p><a href="{url}" style="background:#16C172;color:#000;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">R&eacute;initialiser mon mot de passe &rarr;</a></p>
+<p>Cliquez pour définir un nouveau mot de passe:</p>
+<p><a href="{url}" style="background:#16C172;color:#000;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">Réinitialiser mon mot de passe &rarr;</a></p>
 <p style="color:#666;font-size:13px;">Ce lien expire dans 72 heures.</p>
-<p style="color:#666;font-size:13px;">Si vous n'avez pas demand&eacute; ceci, ignorez ce courriel.</p>
+<p style="color:#666;font-size:13px;">Si vous n'avez pas demandé ceci, ignorez ce courriel.</p>
 <hr style="border:none;border-top:1px solid #ddd;">
 <h2 style="color:#16C172;">OtoCPA password reset</h2>
 <p><strong>Username:</strong> {un}</p>

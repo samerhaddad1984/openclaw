@@ -133,7 +133,7 @@ def test_portal_invalid_link_page_is_bilingual(app):
     t = body.decode("utf-8", errors="replace")
     # Both FR and EN markers present.
     t_lower = t.lower()
-    assert ("invalide" in t_lower or "&eacute;t&eacute;" in t_lower), (
+    assert ("invalide" in t_lower or "été" in t_lower), (
         "portal invalid-link page missing French text"
     )
     assert ("invalid" in t_lower and "link" in t_lower), (

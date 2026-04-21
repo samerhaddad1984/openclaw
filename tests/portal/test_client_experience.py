@@ -339,7 +339,7 @@ class TestLanguageToggle:
         text = body.decode("utf-8", errors="replace")
         # Upload tab / button must have FR + EN.
         assert "Upload" in text
-        assert "Envoyer" in text or "Téléverser" in text or "&eacute;" in text, (
+        assert "Envoyer" in text or "Téléverser" in text, (
             "portal body has no French label at all — bilingual contract broken"
         )
 
@@ -348,7 +348,7 @@ class TestLanguageToggle:
         languages — they may not know which one is theirs."""
         import scripts.review_dashboard as rd
         html = rd.render_portal_invalid_page()
-        assert "invalide" in html.lower() or "&eacute;" in html.lower(), (
+        assert "invalide" in html.lower(), (
             "invalid-page French text missing"
         )
         assert "invalid" in html.lower() and "link" in html.lower(), (
@@ -473,7 +473,7 @@ class TestBidirectionalMessaging:
         assert status == 200
         text = html.decode("utf-8", errors="replace")
         assert "Bonjour" in text, "client's own inbound message not shown"
-        assert "Re" in text and ("çu" in text or "&ccedil;u" in text), (
+        assert "Reçu" in text, (
             "CPA's outbound reply not shown to client"
         )
         # Order: inbound (client) should appear before outbound (CPA)
