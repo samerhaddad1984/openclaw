@@ -20439,6 +20439,46 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
                 return
 
+            # Multi-user portal: CPA-side read + override of the client's
+            # portal users. Scoped by firm_code via _require_client_in_firm.
+            if path == "/clients/portal_users":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                pu_code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(pu_code, ctx):
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
+                with open_db() as _conn:
+                    client_row = _conn.execute(
+                        "SELECT * FROM clients WHERE client_code=?",
+                        (pu_code,),
+                    ).fetchone()
+                from src.integrations import multi_user_portal as _mup_view
+                firm = ctx.get("firm_code") or "OWNER"
+                users = _mup_view.list_users(
+                    DB_PATH, firm_code=firm, client_code=pu_code,
+                    include_removed=True,
+                )
+                invites = _mup_view.list_invitations(
+                    DB_PATH, firm_code=firm, client_code=pu_code,
+                    status=None,
+                )
+                body = _mup_view.render_cpa_portal_users(
+                    client=dict(client_row) if client_row else {'client_code': pu_code},
+                    users=users, invitations=invites,
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    f'Portal users — {pu_code}', body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
+                return
+
             # Sprint 4: CPA-side messages thread for a client
             if path == "/clients/messages":
                 if not _can_do(ctx, "view_all_clients"):
@@ -24745,6 +24785,39 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/edit?code={urlquote(rt_code)}",
                     flash="Portal token rotated — the old QR code no longer works.",
+                )
+                return
+
+            # --- Multi-user portal: CPA force-remove a client's portal user
+            if path == "/clients/portal_users/remove":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                pu_code = normalize_text(form.get("client_code", "")).strip()
+                try:
+                    pu_user_id = int(form.get("user_id", "0") or 0)
+                except ValueError:
+                    pu_user_id = 0
+                if not pu_user_id or not _require_client_in_firm(pu_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
+                from src.integrations import multi_user_portal as _mup_rm
+                try:
+                    _mup_rm.set_user_status(
+                        DB_PATH, firm_code=ctx.get("firm_code") or "OWNER",
+                        client_code=pu_code, user_id=pu_user_id,
+                        status="removed",
+                        actor_email=user.get("username") or "",
+                    )
+                except (LookupError, ValueError) as exc:
+                    self._flash_redirect(
+                        f"/clients/portal_users?code={urlquote(pu_code)}",
+                        error=str(exc),
+                    )
+                    return
+                self._flash_redirect(
+                    f"/clients/portal_users?code={urlquote(pu_code)}",
+                    flash="User removed.",
                 )
                 return
 

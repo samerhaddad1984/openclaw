@@ -720,6 +720,95 @@ def render_invalid_token() -> str:
     )
 
 
+def render_cpa_portal_users(
+    *, client: dict[str, Any],
+    users: list[dict[str, Any]],
+    invitations: list[dict[str, Any]] | None = None,
+    flash: str = '', flash_error: str = '',
+) -> str:
+    """CPA-side view of the client's portal users. Read + mutate."""
+    code = _esc(client.get('client_code') or '')
+    name = _esc(client.get('client_name') or code)
+    mode = _esc(client.get('portal_mode') or 'single')
+    flash_html = ''
+    if flash:
+        flash_html = (
+            f'<div class="flash success">{_esc(flash)}</div>'
+        )
+    if flash_error:
+        flash_html += (
+            f'<div class="flash error">{_esc(flash_error)}</div>'
+        )
+
+    rows = ''
+    for u in users:
+        role = _esc(u.get('role') or '')
+        status = _esc(u.get('status') or '')
+        actions = ''
+        if status != 'removed':
+            actions = (
+                f'<form method="POST" action="/clients/portal_users/remove" '
+                'style="display:inline;" '
+                'onsubmit="return confirm(\'Force-remove this user? Their uploads are preserved but token stops working.\');">'
+                f'<input type="hidden" name="client_code" value="{code}">'
+                f'<input type="hidden" name="user_id" value="{u["id"]}">'
+                '<button type="submit" '
+                'style="background:#dc2626;color:white;">Force remove</button>'
+                '</form>'
+            )
+        rows += (
+            f'<tr><td>{_esc(u.get("full_name") or "")}</td>'
+            f'<td>{_esc(u.get("email") or "")}</td>'
+            f'<td>{role}</td><td>{status}</td>'
+            f'<td>{int(u.get("upload_count") or 0)}</td>'
+            f'<td>{_esc(u.get("last_active_at") or "never")}</td>'
+            f'<td>{actions}</td></tr>'
+        )
+
+    inv_rows = ''
+    for inv in (invitations or []):
+        inv_rows += (
+            f'<tr><td>{_esc(inv.get("email") or "")}</td>'
+            f'<td>{_esc(inv.get("invited_role") or "")}</td>'
+            f'<td>{_esc(inv.get("status") or "")}</td>'
+            f'<td>{_esc(inv.get("invited_by") or "")}</td>'
+            f'<td>{_esc(inv.get("expires_at") or "")}</td></tr>'
+        )
+
+    mode_switch = (
+        '<form method="POST" action="/clients/portal_mode" '
+        'style="display:inline;">'
+        f'<input type="hidden" name="client_code" value="{code}">'
+        f'<input type="hidden" name="mode" value="'
+        f'{"single" if mode == "multi" else "multi"}">'
+        '<button type="submit">'
+        f'Switch to {"single" if mode == "multi" else "multi"}-user mode'
+        '</button></form>'
+    )
+
+    return (
+        '<div class="card" style="max-width:900px;margin:1rem auto;">'
+        f'<h2>{name} — portal users</h2>'
+        f'<p>Current mode: <strong>{mode}</strong> {mode_switch}</p>'
+        f'{flash_html}'
+        '<h3>Users</h3>'
+        '<table style="width:100%;border-collapse:collapse;">'
+        '<thead><tr><th>Name</th><th>Email</th><th>Role</th>'
+        '<th>Status</th><th>Uploads</th><th>Last active</th>'
+        '<th>CPA override</th></tr></thead>'
+        f'<tbody>{rows or "<tr><td colspan=7>No users yet.</td></tr>"}</tbody>'
+        '</table>'
+        '<h3>Pending invitations</h3>'
+        '<table style="width:100%;border-collapse:collapse;">'
+        '<thead><tr><th>Email</th><th>Role</th><th>Status</th>'
+        '<th>Invited by</th><th>Expires</th></tr></thead>'
+        f'<tbody>{inv_rows or "<tr><td colspan=5>None.</td></tr>"}</tbody>'
+        '</table>'
+        '<p><a href="/clients">&larr; Back to clients</a></p>'
+        '</div>'
+    )
+
+
 def render_user_portal_admin(
     *, client: dict[str, Any], user_token: str,
     users: list[dict[str, Any]],
