@@ -2740,10 +2740,21 @@ def _build_documents_where(
     include_ignored: bool = False,
     only_my_queue: bool = False,
     only_unassigned: bool = False,
+    uploader_emails: list[str] | None = None,
 ) -> tuple[str, list[Any]]:
     """Build the shared WHERE clause for document queries."""
     where: list[str] = []
     params: list[Any] = []
+    # Uploader filter (polish Item 1): caller supplies emails + the
+    # magic '__anonymous__' sentinel for NULL/blank uploads.
+    if uploader_emails:
+        from src.integrations.queue_filters import (
+            build_uploader_where_fragment as _uq_frag,
+        )
+        frag, frag_params = _uq_frag(uploader_emails)
+        if frag:
+            where.append(frag)
+            params.extend(frag_params)
 
     if not include_ignored:
         where.append("(d.review_status IS NULL OR d.review_status != 'Ignored')")
@@ -2807,10 +2818,12 @@ def count_documents(
     include_ignored: bool = False,
     only_my_queue: bool = False,
     only_unassigned: bool = False,
+    uploader_emails: list[str] | None = None,
 ) -> int:
     where_sql, params = _build_documents_where(
         ctx=ctx, status=status, q=q, include_ignored=include_ignored,
         only_my_queue=only_my_queue, only_unassigned=only_unassigned,
+        uploader_emails=uploader_emails,
     )
     if where_sql == "WHERE 1=0":
         return 0
@@ -2831,10 +2844,12 @@ def get_documents(
     limit: int = 500,
     per_page: int | None = None,
     offset: int = 0,
+    uploader_emails: list[str] | None = None,
 ) -> list[dict]:
     where_sql, params = _build_documents_where(
         ctx=ctx, status=status, q=q, include_ignored=include_ignored,
         only_my_queue=only_my_queue, only_unassigned=only_unassigned,
+        uploader_emails=uploader_emails,
     )
     if where_sql == "WHERE 1=0":
         return []
@@ -2849,6 +2864,7 @@ def get_documents(
             d.assigned_to AS document_assigned_to,
             d.manual_hold_reason, d.manual_hold_by, d.manual_hold_at,
             d.fraud_flags, d.substance_flags,
+            d.uploaded_by_portal_user_id, d.uploader_name, d.uploader_email,
             COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
             da.assigned_by, da.assigned_at, da.note AS assignment_note,
             pj.posting_id, pj.posting_status, pj.approval_state,
@@ -14869,19 +14885,46 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
 def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 flash: str, flash_error: str, include_ignored: bool,
                 only_my_queue: bool, only_unassigned: bool, lang: str = "fr",
-                page: int = 1, per_page: int = 50) -> str:
+                page: int = 1, per_page: int = 50,
+                uploader_emails: list[str] | None = None) -> str:
     # SQL-level pagination — fetch only the rows needed for this page
     total_rows = count_documents(ctx=ctx, status=status, q=q,
                                  include_ignored=include_ignored,
                                  only_my_queue=only_my_queue,
-                                 only_unassigned=only_unassigned)
+                                 only_unassigned=only_unassigned,
+                                 uploader_emails=uploader_emails)
     total_pages = max(1, (total_rows + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
     offset = (page - 1) * per_page
     rows = get_documents(ctx=ctx, status=status, q=q, include_ignored=include_ignored,
                          only_my_queue=only_my_queue, only_unassigned=only_unassigned,
-                         per_page=per_page, offset=offset)
+                         per_page=per_page, offset=offset,
+                         uploader_emails=uploader_emails)
     counts = get_status_counts(ctx)
+
+    # Item 1: uploader filter dropdown. Scoped to the user's firm so
+    # an owner sees every uploader across all firms; firm_admin sees
+    # only their own firm's counts.
+    uploader_filter_html = ''
+    try:
+        from src.integrations.queue_filters import (
+            uploader_filter_options as _upl_options,
+            render_uploader_filter_dropdown as _upl_dropdown,
+        )
+        _scope_firm = (ctx.get('firm_code')
+                       if ctx.get('role') != 'owner' else None)
+        options = _upl_options(DB_PATH, firm_code=_scope_firm)
+        preserve = {'status': status, 'q': q, 'queue_mode': (
+            'mine' if only_my_queue else 'unassigned' if only_unassigned else 'all'
+        ), 'page': '1'}
+        if include_ignored:
+            preserve['include_ignored'] = '1'
+        uploader_filter_html = _upl_dropdown(
+            options, selected_keys=uploader_emails or [],
+            form_action='/', preserve_params=preserve,
+        )
+    except Exception:
+        logging.exception("uploader filter render failed")
 
     portfolio_btn = (
         f'<a class="button-link btn-dark" href="/portfolios">{esc(t("btn_manage_portfolios", lang))}</a>'
@@ -15114,6 +15157,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         for v in ["Needs Review", "On Hold", "Ready to Post", "Posted", "Ignored"]
     )
     filters_html = f"""
+    {uploader_filter_html}
     <form method="GET" action="/">
         <div class="action-bar">
             <div class="search-wrap"><input type="text" name="q" value="{esc(q)}" placeholder="{esc(t("filter_search_ph", lang))}"></div>
@@ -15196,9 +15240,19 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 pass
 
         _doc_url = f"/document?id={urlquote(row['document_id'])}"
+        # Item 1: small coloured chip for the uploader.
+        try:
+            from src.integrations.queue_filters import (
+                render_uploader_badge as _render_upl_badge,
+            )
+            _uploader_badge_html = _render_upl_badge(
+                row.get("uploader_name"), row.get("uploader_email"),
+            )
+        except Exception:
+            _uploader_badge_html = ""
         row_html.append(f"""<tr class="data-row" onclick="toggleRowDetail('{_detail_id}')">
             <td class="file-cell"><a class="doc-link" href="{_doc_url}" onclick="event.stopPropagation()">{esc(row["file_name"])}</a>
-                <div class="doc-sub">{esc(row["document_id"])}</div></td>
+                <div class="doc-sub">{esc(row["document_id"])} {_uploader_badge_html}</div></td>
             <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td>
             <td class="vendor-cell">{esc(row["vendor"])}</td>
             <td class="amount-cell">{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
@@ -18921,6 +18975,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 q = qs.get("q", [""])[0]
                 include_ignored = qs.get("include_ignored", ["0"])[0] == "1"
                 queue_mode = qs.get("queue_mode", ["all"])[0]
+                # Item 1: accept ?uploader=a,b,c (also repeated keys)
+                _upl_raw = qs.get("uploader", [])
+                from src.integrations.queue_filters import (
+                    parse_uploader_filter_qs as _parse_upl,
+                )
+                uploader_emails: list[str] = []
+                for v in _upl_raw:
+                    uploader_emails.extend(_parse_upl(v))
                 try:
                     page = max(1, int(qs.get("page", ["1"])[0]))
                 except (ValueError, TypeError):
@@ -18928,7 +18990,8 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_home(ctx, user, status, q, flash, flash_error,
                                             include_ignored, queue_mode == "mine",
                                             queue_mode == "unassigned", lang=lang,
-                                            page=page))
+                                            page=page,
+                                            uploader_emails=uploader_emails))
                 return
 
             if path == "/change_password":
