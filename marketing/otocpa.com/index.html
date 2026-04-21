@@ -309,6 +309,43 @@ footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;di
   </div>
 </section>
 
+<!-- FAQ -->
+<section id="faq" style="background:var(--dark);">
+  <div style="max-width:820px;margin:0 auto;">
+    <div class="section-label reveal" style="text-align:center;" id="faq-label">Questions fréquentes</div>
+    <h2 class="section-title reveal" style="text-align:center;" id="faq-title">Ce que les cabinets<br>nous demandent le plus.</h2>
+    <div class="reveal" style="margin-top:48px;display:grid;gap:12px;">
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q1-sum">Mon client a-t-il besoin de Plaid s'il utilise déjà QuickBooks?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q1-ans">Non. OtoCPA détecte les flux bancaires QBO existants et en tire les données automatiquement. Aucune connexion Plaid redondante.</p>
+      </details>
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q2-sum">Plusieurs employés du client peuvent-ils téléverser des reçus?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q2-ans">Oui. Le portail multi-utilisateurs permet à l'administrateur du client d'inviter son équipe comptable. Chaque personne a son propre accès avec suivi d'identité par téléversement.</p>
+      </details>
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q3-sum">Que se passe-t-il si un employé du client quitte?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q3-ans">L'administrateur du client peut révoquer l'accès instantanément. Les téléversements passés sont préservés pour l'audit; la personne ne peut plus accéder au portail.</p>
+      </details>
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q4-sum">Quelle est la précision de l'IA sur les reçus canadiens?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q4-ans">Précision de 90-100% au niveau des champs mesurée sur de vrais reçus canadiens. 36 marchands québécois spécifiquement optimisés (Metro, Provigo, Jean Coutu, Tim Hortons, Petro-Canada, etc.).</p>
+      </details>
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q5-sum">Mes données sont-elles au Canada?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q5-ans">Oui. Serveurs à Toronto. Aucun transfert transfrontalier de données. Piste d'audit conservée 7 ans.</p>
+      </details>
+      <details class="faq-item" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;">
+        <summary style="cursor:pointer;color:var(--white);font-weight:600;font-size:16px;list-style:none;" id="faq-q6-sum">OtoCPA est-il conforme à la Loi 25 et à la LPRPDE?</summary>
+        <p style="margin-top:12px;color:var(--text);font-size:15px;line-height:1.7;" id="faq-q6-ans">Oui, conçu pour la conformité dès le premier jour. Évaluation d'impact vie privée complète, chiffrement AES-256, consentement éclairé.</p>
+      </details>
+    </div>
+    <p class="reveal" style="text-align:center;margin-top:32px;color:var(--muted);font-size:14px;" id="faq-more">
+      Autre question? <a href="https://app.otocpa.com/contact" style="color:var(--green);font-weight:600;">Écrivez-nous →</a>
+    </p>
+  </div>
+</section>
+
 <!-- ============================================
      DIAGNOSTIC TOOL (finisher opens contact modal)
      ============================================ -->
@@ -843,6 +880,20 @@ const T = {
     'f10-title':'Tableau de bord admin','f10-text':'Visibilité complète du cabinet : revenus, activité des clients, état du système. Imitation en lecture seule pour le support.','f10-tag':'Lecture seule · audité',
     'f11-title':'Conception axée sur le Québec','f11-text':'TPS/TVQ natives. Français canadien. Terminologie ARC + Revenu Québec.','f11-tag':'Québec-natif',
     'f12-title':'Sécurité et conformité','f12-text':'2FA. Données hébergées au Canada. Piste d\'audit avec rétention de 7 ans. Conforme LPRPDE et Loi 25.','f12-tag':'LPRPDE + Loi 25',
+    'faq-label':'Questions fréquentes','faq-title':'Ce que les cabinets<br>nous demandent le plus.',
+    'faq-q1-sum':'Mon client a-t-il besoin de Plaid s\'il utilise déjà QuickBooks?',
+    'faq-q1-ans':'Non. OtoCPA détecte les flux bancaires QBO existants et en tire les données automatiquement. Aucune connexion Plaid redondante.',
+    'faq-q2-sum':'Plusieurs employés du client peuvent-ils téléverser des reçus?',
+    'faq-q2-ans':'Oui. Le portail multi-utilisateurs permet à l\'administrateur du client d\'inviter son équipe comptable. Chaque personne a son propre accès avec suivi d\'identité par téléversement.',
+    'faq-q3-sum':'Que se passe-t-il si un employé du client quitte?',
+    'faq-q3-ans':'L\'administrateur du client peut révoquer l\'accès instantanément. Les téléversements passés sont préservés pour l\'audit; la personne ne peut plus accéder au portail.',
+    'faq-q4-sum':'Quelle est la précision de l\'IA sur les reçus canadiens?',
+    'faq-q4-ans':'Précision de 90-100% au niveau des champs mesurée sur de vrais reçus canadiens. 36 marchands québécois spécifiquement optimisés (Metro, Provigo, Jean Coutu, Tim Hortons, Petro-Canada, etc.).',
+    'faq-q5-sum':'Mes données sont-elles au Canada?',
+    'faq-q5-ans':'Oui. Serveurs à Toronto. Aucun transfert transfrontalier de données. Piste d\'audit conservée 7 ans.',
+    'faq-q6-sum':'OtoCPA est-il conforme à la Loi 25 et à la LPRPDE?',
+    'faq-q6-ans':'Oui, conçu pour la conformité dès le premier jour. Évaluation d\'impact vie privée complète, chiffrement AES-256, consentement éclairé.',
+    'faq-more':'Autre question? <a href="https://app.otocpa.com/contact" style="color:var(--green);font-weight:600;">Écrivez-nous →</a>',
     'trust-label':'Conformité & Sécurité','trust-title':'Conçu pour les données<br>financières les plus sensibles',
     't1-title':'Données au Canada','t1-text':'Hébergement DigitalOcean Toronto. Vos données ne quittent jamais le Canada.',
     't2-title':'Loi 25 / Bill 64','t2-text':'Évaluation d\'impact vie privée complète. Consentement éclairé. Droit à l\'effacement.',
@@ -902,6 +953,20 @@ const T = {
     'f10-title':'Admin Dashboard','f10-text':'Full firm visibility: revenue, client activity, system health. Read-only impersonation for support.','f10-tag':'Read-only · audited',
     'f11-title':'Quebec-First Design','f11-text':'Native GST/QST. Canadian French. CRA + Revenu Québec terminology.','f11-tag':'Quebec-native',
     'f12-title':'Security + Compliance','f12-text':'2FA. Data hosted in Canada. Audit trail with 7-year retention. PIPEDA + Law 25 compliant.','f12-tag':'PIPEDA + Law 25',
+    'faq-label':'FAQ','faq-title':'What firms<br>ask us most.',
+    'faq-q1-sum':'Does my client need Plaid if they already use QuickBooks?',
+    'faq-q1-ans':'No. OtoCPA detects existing QBO bank feeds and pulls from there automatically. No redundant Plaid connection.',
+    'faq-q2-sum':'Can multiple employees at a client upload receipts?',
+    'faq-q2-ans':'Yes. The multi-user portal lets a client\'s admin invite their accounting team. Each person gets their own login with per-upload identity tracking.',
+    'faq-q3-sum':'What if a client employee leaves?',
+    'faq-q3-ans':'The client admin can revoke access instantly. Past uploads are preserved for audit; the person can no longer access the portal.',
+    'faq-q4-sum':'How accurate is the AI on Canadian receipts?',
+    'faq-q4-ans':'90-100% field-level accuracy, measured on real Canadian receipts. 36 Quebec merchants specifically optimized (Metro, Provigo, Jean Coutu, Tim Hortons, Petro-Canada, etc.).',
+    'faq-q5-sum':'Is my data in Canada?',
+    'faq-q5-ans':'Yes. Servers in Toronto. No cross-border data transfer. Audit trail retained for 7 years.',
+    'faq-q6-sum':'Is OtoCPA compliant with Law 25 and PIPEDA?',
+    'faq-q6-ans':'Yes, designed for compliance from day one. Full privacy impact assessment, AES-256 encryption, informed consent.',
+    'faq-more':'Another question? <a href="https://app.otocpa.com/contact" style="color:var(--green);font-weight:600;">Write to us →</a>',
     'trust-label':'Compliance & Security','trust-title':'Built for the most sensitive<br>financial data',
     't1-title':'Data in Canada','t1-text':'DigitalOcean Toronto hosting. Your data never leaves Canada.',
     't2-title':'Law 25 / Bill 64','t2-text':'Complete privacy impact assessment. Informed consent. Right to deletion.',
