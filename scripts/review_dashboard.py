@@ -109,6 +109,7 @@ from src.engines.reconciliation_engine import (
     mark_item_cleared as recon_mark_cleared,
 )
 from src.i18n import t
+from src.i18n.ui_labels import ui_t
 from src.agents.core import client_comms as _client_comms
 from src.agents.core.filing_calendar import (
     ensure_filing_tables as _ensure_filing_tables,
@@ -4778,7 +4779,7 @@ def render_cache_admin(
   <div class="actions" style="margin-top:1rem;">
     <form method="POST" action="/admin/cache/clear"
           onsubmit="return confirm('Clear the entire AI response cache? This cannot be undone.');">
-      <button class="btn-danger">Clear Cache</button>
+      <button class="btn-danger">{ui_t("clear_cache", lang)}</button>
     </form>
     <a href="/admin/cache" class="button-link btn-secondary">Refresh</a>
     <a href="/troubleshoot" class="button-link btn-secondary">Back to Diagnostics</a>
@@ -8175,7 +8176,7 @@ def render_audit_sample(
         f'<div><label style="font-size:13px;font-weight:600;">Override n</label><br>'
         f'<input type="number" name="sample_size" value="{sample_size}" min="1" max="1000" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;width:80px;"></div>'
         f'{"<input type=hidden name=paper_id value=" + repr(esc(paper_id)) + ">" if paper_id else ""}'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Calculate &amp; sample</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{ui_t("calculate_sample", lang)}</button></div>'
         f'</form>'
         f'</div>\n'
     )
@@ -8557,7 +8558,7 @@ def render_financial_statements_page(
             f'<div class="card" style="margin-top:16px;">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;">'
             f'<h3 style="margin:0;">Statement of Changes in Equity</h3>'
-            f'<a href="{soce_pdf}" class="btn-secondary button-link" style="font-size:13px;">SOCE PDF</a>'
+            f'<a href="{soce_pdf}" class="btn-secondary button-link" style="font-size:13px;">{ui_t("soce_pdf", lang)}</a>'
             f'</div>'
             f'<div style="display:flex;justify-content:space-between;padding:6px 0;">'
             f'<span>Opening equity (period start)</span><span>{_fmt(soce.get("total_opening_equity"))}</span></div>'
@@ -9184,7 +9185,7 @@ def render_rep_letter(
     if engagement_id:
         pdf_btn = (
             f' <a href="/audit/rep_letter/pdf?engagement_id={urlquote(engagement_id)}" '
-            f'class="btn-secondary button-link" style="margin-left:8px;">PDF (CAS 580)</a>'
+            f'class="btn-secondary button-link" style="margin-left:8px;">{ui_t("pdf_cas_580", lang)}</a>'
         )
     body = (
         f'<div class="topbar" style="margin-bottom:16px;">'
@@ -9219,7 +9220,7 @@ def render_control_tests(
     if engagement_id:
         ml_btn = (
             f' <a href="/audit/management_letter/pdf?engagement_id={urlquote(engagement_id)}" '
-            f'class="btn-secondary button-link" style="margin-left:8px;">Management letter (CAS 265)</a>'
+            f'class="btn-secondary button-link" style="margin-left:8px;">{ui_t("management_letter", lang)}</a>'
         )
     select_form = (
         f'<div class="card">'
@@ -11651,7 +11652,7 @@ def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str 
             <div class="field"><label>Confirm new password</label>
                 <input type="password" name="confirm_password" minlength="8" autocomplete="new-password"></div>
 
-            <button class="btn-primary" type="submit" style="margin-top:16px;">Save changes</button>
+            <button class="btn-primary" type="submit" style="margin-top:16px;">{ui_t("save_changes", lang)}</button>
         </form>
     </div>
 
@@ -11697,11 +11698,11 @@ def render_bank_connect(user: dict[str, Any], flash: str = "", flash_error: str 
 
     inner = f"""
     <div class="card">
-        <h2>Connect Bank Account{client_label}</h2>
+        <h2>{ui_t("connect_bank", lang)}{client_label}</h2>
         {flash_html}{err_html}
         <p>Connect a bank account via Plaid to automatically import transactions.</p>
         {selector_html}
-        <button id="connect-btn" class="btn-primary" style="margin-top:12px;">Connect Bank Account</button>
+        <button id="connect-btn" class="btn-primary" style="margin-top:12px;">{ui_t("connect_bank", lang)}</button>
         <p style="margin-top:20px;">{back_link}</p>
     </div>
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
@@ -17146,7 +17147,7 @@ def render_audit_anomalies(
         f'<div><label style="font-size:13px;font-weight:600;">Client</label><br>'
         f'<input type="text" name="client_code" value="{esc(client_code)}" '
         f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
-        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Run all detectors</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">{ui_t("run_all_detectors", lang)}</button></div>'
         f'<div style="margin-left:auto;font-size:12px;color:#6b7280;">{"Dernière exécution" if lang == "fr" else "Last run"}: {esc(last_run)}</div>'
         f'</form></div>\n'
     )
@@ -17477,7 +17478,7 @@ def render_partnership_detail(
         '<div><label style="font-size:12px;font-weight:600;">End (opt.)</label><br>'
         '<input type="date" name="end_date" '
         'style="padding:5px 8px;border:1px solid #d1d5db;border-radius:4px;"></div>'
-        '<div><button type="submit" class="btn-primary" style="padding:6px 14px;">Add partner</button></div>'
+        f'<div><button type="submit" class="btn-primary" style="padding:6px 14px;">{ui_t("add_partner", lang)}</button></div>'
         '</form>'
     )
 
@@ -17492,7 +17493,7 @@ def render_partnership_detail(
         '<input type="number" name="partnership_income" step="0.01" required '
         'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
         '<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Allocate</button></div>'
-        f'<div><a href="/partnerships/{partnership_id}/t5013_pdf" class="btn-secondary button-link">T5013 PDF</a></div>'
+        f'<div><a href="/partnerships/{partnership_id}/t5013_pdf" class="btn-secondary button-link">{ui_t("t5013_pdf", lang)}</a></div>'
         '</form></div>'
     )
 
@@ -17579,7 +17580,7 @@ def render_sred_detail(
         f'<p><strong>T661 line 500 (ITC earned):</strong> ${summary.get("line_500_itc_earned", 0):,.2f}</p>'
         f'<p><strong>T661 line 530 (refundable):</strong> ${summary.get("line_530_refundable_itc", 0):,.2f}</p>'
         f'<p><strong>T661 line 540 (non-refundable):</strong> ${summary.get("line_540_non_refundable_itc", 0):,.2f}</p>'
-        f'<p style="margin-top:12px;"><a href="/sred/{claim_id}/t661_pdf" class="btn-primary button-link">Download T661 PDF</a></p>'
+        f'<p style="margin-top:12px;"><a href="/sred/{claim_id}/t661_pdf" class="btn-primary button-link">{ui_t("download_t661", lang)}</a></p>'
         '</div>'
     )
 
@@ -17595,7 +17596,7 @@ def render_sred_detail(
         '<p><label style="font-weight:600;">Work performed</label><br>'
         f'<textarea name="work_performed" rows="3" style="width:100%;padding:6px;">'
         f'{esc(claim.get("work_performed") or "")}</textarea></p>'
-        '<button type="submit" class="btn-primary" style="padding:6px 14px;">Save narrative</button>'
+        f'<button type="submit" class="btn-primary" style="padding:6px 14px;">{ui_t("save_narrative", lang)}</button>'
         '</form></div>'
     )
 
