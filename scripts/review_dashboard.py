@@ -147,6 +147,23 @@ from src.integrations.qr_generator import (
     _build_upload_url,
     build_portal_url,
 )
+from src.integrations import gap_dispatch as _gap_dispatch
+from src.integrations import gap_routes as _gap_routes
+from src.integrations import impersonation as _imp_module
+from src.integrations import onboarding_checklist as _onb_checklist
+
+# Thread-local stash for the current request's impersonation session so
+# page_layout can render the read-only banner without being passed the
+# handler. Set in do_GET / do_POST before calling render_* helpers.
+_IMP_TLS = threading.local()
+
+
+def _set_impersonation_context(handler) -> None:
+    """Populate _IMP_TLS.session for the current thread based on cookie."""
+    try:
+        _IMP_TLS.session = _gap_routes.current_impersonation(DB_PATH, handler)
+    except Exception:
+        _IMP_TLS.session = None
 
 
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
@@ -1661,6 +1678,14 @@ def bootstrap_schema() -> None:
             # Don't block startup on version-migration errors; the
             # versioned helpers have their own lazy fallbacks.
             pass
+
+    # Gap 1-5 schemas: onboarding, review workflow, close wizard,
+    # client status/messaging, impersonation audit, notification queue,
+    # and feedback. Each helper is idempotent.
+    try:
+        _gap_routes.ensure_all_gap_schemas(DB_PATH)
+    except Exception:
+        logging.exception("ensure_all_gap_schemas failed")
 
 
 # ---------------------------------------------------------------------------
@@ -10399,6 +10424,65 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
     if flash_error:
         flash_html += f'<div class="flash error">{esc(flash_error)}</div>'
 
+    # Gap 1/3 banners: impersonation banner, welcome modal (first login),
+    # getting-started checklist widget. All three are best-effort; a
+    # render failure must not break the page.
+    gap_banners_html = ""
+    if user:
+        try:
+            uname = user.get("username") or ""
+            firm_code = user.get("firm_code") or "OWNER"
+            # Stamp first_login_at once; no-op after the first call.
+            try:
+                _onb_checklist.record_first_login(DB_PATH, username=uname)
+            except Exception:
+                pass
+            # Welcome modal — only on very first login
+            try:
+                if _onb_checklist.should_show_welcome(DB_PATH, username=uname):
+                    gap_banners_html += _onb_checklist.render_welcome_modal(lang=lang)
+            except Exception:
+                pass
+            # Checklist widget on every authenticated page
+            try:
+                if _onb_checklist.should_show(DB_PATH, username=uname):
+                    items = _onb_checklist.compute_checklist(
+                        DB_PATH, firm_code=firm_code, username=uname,
+                    )
+                    gap_banners_html += _onb_checklist.render_checklist_widget(
+                        items, lang=lang,
+                    )
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # Gap 3: impersonation banner — shown on every page while an owner
+    # is impersonating a firm.
+    try:
+        _sess_imp = None
+        _imp_cookie = ""
+        cookie_hdr = ""
+        # No direct access to handler from page_layout; rely on a thread-
+        # local stash set by the dispatcher when impersonating.
+        _sess_imp = getattr(_IMP_TLS, "session", None)
+        if _sess_imp:
+            firm_row = None
+            try:
+                with open_db() as _conn:
+                    firm_row = _conn.execute(
+                        "SELECT name FROM firms WHERE firm_code=?",
+                        (_sess_imp.get("impersonated_firm_code"),),
+                    ).fetchone()
+            except Exception:
+                firm_row = None
+            firm_name = firm_row["name"] if firm_row and "name" in firm_row.keys() else None
+            gap_banners_html = _imp_module.render_banner(
+                _sess_imp.get("impersonated_firm_code", ""), firm_name,
+            ) + gap_banners_html
+    except Exception:
+        pass
+
     user_pill = ""
     right_controls = ""
     if user:
@@ -10596,6 +10680,7 @@ def page_layout(title: str, body_html: str, user: dict[str, Any] | None = None,
         <script>function toggleNav(){{const n=document.querySelector('.nav-bar');n.classList.toggle('open');}}</script>
         <main class="workspace">
             {flash_html}
+            {gap_banners_html}
             {body_html}
         </main>
         <footer style="text-align:center;padding:16px;font-size:11px;color:#6b7280;border-top:1px solid #e5e7eb;margin-top:24px;background:#fff;">
@@ -17554,6 +17639,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._portal_send_invalid()
             return
         section = section.strip("/").lower()
+        # Gap 5 sections (status/activity) live in gap_dispatch; hand
+        # off before our legacy section switch.
+        if section in ("status", "activity"):
+            try:
+                if _gap_dispatch.dispatch_get(
+                    self,
+                    db_path=DB_PATH,
+                    user=None, ctx=None,
+                    path=path, qs=qs, lang="en",
+                    flash=flash, flash_error=flash_error,
+                    page_layout=page_layout,
+                ):
+                    return
+            except Exception:
+                logging.exception("gap_dispatch portal GET failed")
+            self._portal_send_invalid()
+            return
         if section in ("", "upload"):
             log_portal_access(client["client_code"], client["firm_code"], token, self, "view_upload")
             html_str = render_portal_upload(dict(client), token, flash, flash_error)
@@ -17700,6 +17802,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "id": conn_id})
             return True
 
+        if section in ("messages/send", "messages/mark_read"):
+            try:
+                form_dict = parse_form_body(raw)
+                try:
+                    form_dict.setdefault('__raw__', raw.decode('utf-8'))
+                except Exception:
+                    pass
+                if _gap_dispatch.dispatch_post(
+                    self,
+                    db_path=DB_PATH,
+                    user=None, ctx=None,
+                    path=path, form=form_dict, qs=qs,
+                    lang="en", raw=raw,
+                ):
+                    return True
+            except Exception:
+                logging.exception("gap_dispatch portal POST failed")
+            self._portal_send_invalid()
+            return True
+
         if section == "messages":
             form = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
             body_txt = (form.get("body", [""])[0] or "").strip()
@@ -17740,6 +17862,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         try:
+            _set_impersonation_context(self)
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
             qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
@@ -19790,6 +19913,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                     lang=lang))
                 return
 
+            # ------------------------------------------------------------------
+            # Gap 1-5 route dispatch (onboarding / tour / review / owner /
+            # close wizard / portal status). Returns True when handled.
+            # ------------------------------------------------------------------
+            try:
+                if _gap_dispatch.dispatch_get(
+                    self,
+                    db_path=DB_PATH,
+                    user=user, ctx=ctx,
+                    path=path, qs=qs, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                    page_layout=page_layout,
+                ):
+                    return
+            except Exception:
+                logging.exception("gap_dispatch.dispatch_get failed")
+
             self._send_html(page_layout(
                 t("err_not_found", lang),
                 f'<div class="card"><h2>{esc(t("err_not_found", lang))}</h2>'
@@ -19823,6 +19963,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         document_id = ""
         try:
+            _set_impersonation_context(self)
             parsed_url = urllib.parse.urlparse(self.path)
             path = parsed_url.path
 
@@ -24219,6 +24360,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                         error=f"Failed to delete: {exc}",
                     )
                 return
+
+            # ------------------------------------------------------------------
+            # Gap 1-5 POST dispatch (onboarding save, review actions,
+            # owner impersonation, close wizard, portal messages).
+            # ------------------------------------------------------------------
+            try:
+                # Squash the raw body onto the form dict so dispatch can
+                # recover repeated values (checkbox groups, select multiples).
+                _form_with_raw = dict(form)
+                try:
+                    _form_with_raw.setdefault('__raw__', raw.decode('utf-8'))
+                except Exception:
+                    pass
+                if _gap_dispatch.dispatch_post(
+                    self,
+                    db_path=DB_PATH,
+                    user=user, ctx=ctx,
+                    path=path, form=_form_with_raw, qs=qs,
+                    lang=lang, raw=raw,
+                ):
+                    return
+            except Exception:
+                logging.exception("gap_dispatch.dispatch_post failed")
 
             self._send_html(page_layout("Unknown Route", '<div class="card"><h2>Unknown route</h2><p><a href="/">Back</a></p></div>', user=user), status=404)
 

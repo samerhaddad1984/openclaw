@@ -294,22 +294,267 @@ def suggest_accruals(
     db_path: Path | str, *,
     firm_code: str, client_code: str, period: str,
 ) -> list[dict[str, Any]]:
-    """Return deterministic standard-accrual suggestions. The caller
-    decides which to post. Kept pure so tests + UI both call it."""
+    """Return standard-accrual suggestions with computed CAD amounts.
+
+    - Depreciation: pulled from the fixed_assets/accrual engine (one entry
+      per active asset at cost * cca_rate / 12).
+    - Wage accrual: estimated as the average monthly payroll from the
+      previous 2 months of payroll_entries.
+    - Prepaid amort: 1/12 of the sum of active prepaid balances.
+
+    Every suggestion includes ``amount_cad`` (0.0 when the engine has no
+    data to compute a real number — the UI should render that as
+    'not enough data' rather than post a zero JE)."""
+    try:
+        from datetime import datetime as _dt
+        period_end = _dt.strptime(period + '-01', '%Y-%m-%d').date()
+        # Use engine to get real-period end:
+        if period_end.month == 12:
+            from datetime import date as _d
+            period_end = _d(period_end.year, 12, 31)
+        else:
+            from datetime import date as _d, timedelta as _td
+            period_end = _d(period_end.year, period_end.month + 1, 1) - _td(days=1)
+    except Exception:
+        period_end = None
+
+    depreciation_total = 0.0
+    depreciation_details: list[dict[str, Any]] = []
+    try:
+        from src.engines.accrual_engine import (
+            generate_period_accruals,
+        )
+        if period_end is not None:
+            result = generate_period_accruals(
+                client_code, period_end, firm_code=firm_code,
+                db_path=Path(db_path), persist=False,
+            )
+            for d in result.get('drafts', []) or []:
+                if d.get('accrual_type') == 'depreciation':
+                    depreciation_total += float(d.get('amount', 0.0) or 0.0)
+                    depreciation_details.append(d)
+    except Exception as exc:
+        log.warning('accrual engine unavailable: %s', exc)
+
+    wage_total = _average_recent_payroll(db_path, client_code, period)
+    prepaid_total = _prepaid_month_amort(db_path, client_code)
+
     return [
         {'kind': 'wage_accrual',
          'description': 'Wage accrual for pay period spanning close',
          'debit_account': '5100', 'credit_account': '2150',
-         'amount_hint': 'Estimate based on prior 2 periods'},
+         'amount_cad': round(wage_total, 2),
+         'source': 'avg_last_2_months_payroll',
+         'amount_hint': ('Estimate based on prior 2 periods'
+                          if wage_total > 0 else
+                          'No payroll history — enter manually')},
         {'kind': 'depreciation',
          'description': f'Monthly depreciation for {period}',
          'debit_account': '5500', 'credit_account': '1500',
-         'amount_hint': 'From fixed_assets_engine schedule'},
+         'amount_cad': round(depreciation_total, 2),
+         'source': 'fixed_assets_engine',
+         'detail_count': len(depreciation_details),
+         'amount_hint': ('From fixed_assets_engine schedule'
+                          if depreciation_total > 0 else
+                          'No active fixed assets found')},
         {'kind': 'prepaid_amort',
          'description': 'Prepaid expense amortisation',
          'debit_account': '5400', 'credit_account': '1300',
-         'amount_hint': '1/12 of prepaid balance'},
+         'amount_cad': round(prepaid_total, 2),
+         'source': 'prepaid_balance/12',
+         'amount_hint': ('1/12 of prepaid balance'
+                          if prepaid_total > 0 else
+                          'No prepaid balance on file')},
     ]
+
+
+def _average_recent_payroll(db_path: Path | str, client_code: str,
+                              period: str) -> float:
+    """Average total gross payroll from the two months preceding `period`.
+
+    Reads `payroll_entries.gross_pay` when the table exists; returns 0.0
+    when no history is available. Pure SQL, no engine dependency."""
+    try:
+        yy, mm = int(period[:4]), int(period[5:7])
+    except ValueError:
+        return 0.0
+    prev_months = []
+    for _ in range(2):
+        mm -= 1
+        if mm == 0:
+            mm = 12
+            yy -= 1
+        prev_months.append(f'{yy:04d}-{mm:02d}')
+    with _open(db_path) as conn:
+        if not _table_exists(conn, 'payroll_entries'):
+            return 0.0
+        total = 0.0
+        count = 0
+        for m in prev_months:
+            try:
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(gross_pay), 0) AS g, "
+                    "       COUNT(*) AS n "
+                    "FROM payroll_entries "
+                    "WHERE client_code=? "
+                    "  AND COALESCE(pay_period,'') LIKE ?",
+                    (client_code, f'{m}%'),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return 0.0
+            if row and (row['n'] or 0) > 0:
+                total += float(row['g'] or 0.0)
+                count += 1
+    if count == 0:
+        return 0.0
+    return total / count
+
+
+def _prepaid_month_amort(db_path: Path | str, client_code: str) -> float:
+    """Return one-twelfth of active prepaid balances.
+
+    Scans `prepaid_expenses` when present; returns 0.0 otherwise so the
+    UI renders this as 'no data' instead of posting a bogus zero JE."""
+    with _open(db_path) as conn:
+        if not _table_exists(conn, 'prepaid_expenses'):
+            return 0.0
+        try:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(balance), 0) AS b FROM prepaid_expenses "
+                "WHERE client_code=? AND COALESCE(status,'active')='active'",
+                (client_code,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return 0.0
+    return float((row[0] if row else 0.0) or 0.0) / 12.0
+
+
+def post_suggested_accruals(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, period: str,
+    accepted_kinds: list[str], actor_email: str,
+) -> dict[str, Any]:
+    """Persist the accepted accruals as draft JEs via accrual_engine.
+
+    Returns {ok, posted, kinds, errors}. Called by wizard step 4 when the
+    operator clicks "Post all suggested accruals"."""
+    suggestions = suggest_accruals(
+        db_path, firm_code=firm_code, client_code=client_code, period=period,
+    )
+    wanted = {s['kind']: s for s in suggestions if s['kind'] in accepted_kinds}
+
+    posted: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+
+    if not wanted:
+        return {'ok': True, 'posted': [], 'errors': [],
+                 'message': 'No accruals accepted.'}
+
+    # Depreciation posts via generate_period_accruals (engine handles the
+    # per-asset split). Wage + prepaid post as single aggregate JEs.
+    if 'depreciation' in wanted:
+        try:
+            from datetime import date as _d, datetime as _dt, timedelta as _td
+            period_end = _dt.strptime(period + '-01', '%Y-%m-%d').date()
+            if period_end.month == 12:
+                period_end = _d(period_end.year, 12, 31)
+            else:
+                period_end = _d(period_end.year, period_end.month + 1, 1) - _td(days=1)
+            from src.engines.accrual_engine import generate_period_accruals
+            result = generate_period_accruals(
+                client_code, period_end, firm_code=firm_code,
+                db_path=Path(db_path), persist=True,
+            )
+            dep_drafts = [d for d in (result.get('drafts') or [])
+                           if d.get('accrual_type') == 'depreciation']
+            posted.extend(dep_drafts)
+        except Exception as exc:
+            errors.append({'kind': 'depreciation', 'error': str(exc)})
+
+    if 'wage_accrual' in wanted:
+        amt = float(wanted['wage_accrual'].get('amount_cad') or 0.0)
+        if amt > 0:
+            je_id = _post_manual_je(
+                db_path, client_code=client_code, period=period,
+                debit_account='5100', credit_account='2150',
+                amount=amt, description='Wage accrual (month-end)',
+                prepared_by=actor_email, auto_reverse=1,
+                accrual_type='wage_accrual',
+            )
+            if je_id:
+                posted.append({'entry_id': je_id, 'kind': 'wage_accrual',
+                                'amount': amt})
+            else:
+                errors.append({'kind': 'wage_accrual',
+                                'error': 'post_manual_je_failed'})
+        else:
+            errors.append({'kind': 'wage_accrual',
+                            'error': 'no_history_to_estimate'})
+
+    if 'prepaid_amort' in wanted:
+        amt = float(wanted['prepaid_amort'].get('amount_cad') or 0.0)
+        if amt > 0:
+            je_id = _post_manual_je(
+                db_path, client_code=client_code, period=period,
+                debit_account='5400', credit_account='1300',
+                amount=amt, description='Prepaid expense amortisation',
+                prepared_by=actor_email, auto_reverse=0,
+                accrual_type='prepaid_amort',
+            )
+            if je_id:
+                posted.append({'entry_id': je_id, 'kind': 'prepaid_amort',
+                                'amount': amt})
+            else:
+                errors.append({'kind': 'prepaid_amort',
+                                'error': 'post_manual_je_failed'})
+        else:
+            errors.append({'kind': 'prepaid_amort',
+                            'error': 'no_prepaid_balance'})
+
+    return {'ok': not errors or bool(posted), 'posted': posted,
+             'errors': errors,
+             'kinds': [p.get('kind') or p.get('accrual_type') for p in posted]}
+
+
+def _post_manual_je(
+    db_path: Path | str, *,
+    client_code: str, period: str,
+    debit_account: str, credit_account: str, amount: float,
+    description: str, prepared_by: str,
+    auto_reverse: int = 0, accrual_type: str | None = None,
+) -> str | None:
+    """Insert a draft manual_journal_entries row. Returns the entry_id
+    or None if the table/columns aren't available (very early DBs)."""
+    import secrets
+    entry_id = f'ACR-{secrets.token_hex(6)}'
+    period_end = _period_end_date(period)
+    with _open(db_path) as conn:
+        if not _table_exists(conn, 'manual_journal_entries'):
+            return None
+        try:
+            conn.execute(
+                "INSERT INTO manual_journal_entries "
+                "(entry_id, client_code, period, entry_date, prepared_by, "
+                "debit_account, credit_account, amount, description, "
+                "source, status, auto_reverse, accrual_type) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (entry_id, client_code, period, period_end, prepared_by,
+                 debit_account, credit_account, amount, description,
+                 'month_end_close', 'draft', auto_reverse, accrual_type),
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            return None
+    return entry_id
+
+
+def _period_end_date(period: str) -> str:
+    """period='YYYY-MM' → 'YYYY-MM-DD' (last day of month)."""
+    from datetime import date as _d, datetime as _dt, timedelta as _td
+    dt = _dt.strptime(period + '-01', '%Y-%m-%d').date()
+    if dt.month == 12:
+        return _d(dt.year, 12, 31).isoformat()
+    return (_d(dt.year, dt.month + 1, 1) - _td(days=1)).isoformat()
 
 
 def complete_step_4_accruals(
