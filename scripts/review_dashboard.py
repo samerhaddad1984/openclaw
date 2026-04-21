@@ -13224,6 +13224,11 @@ a:hover{{color:#16C172}}
             <p lang="en">Full bilingual FR/EN in Canadian French — not European French. Native TPS/TVQ handling, CRA and Revenu Québec terminology. Built by Quebecois for Quebecois.</p>
         </div>
         <div class="feature">
+            <h3>Flux de file d'examen / Review Queue Workflow</h3>
+            <p lang="fr">L'employé fait le travail, le propriétaire ou l'administrateur de cabinet l'examine et l'approuve. Marqueur d'escalade pour les cas complexes et piste d'audit complète de chaque décision.</p>
+            <p lang="en">Employee does the work, owner or firm admin reviews and approves. Escalation flag for complex cases and full audit trail of every decision.</p>
+        </div>
+        <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
             <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada (Toronto). Piste d'audit avec rétention de 7 ans. Conforme à la LPRPDE et à la Loi 25 du Québec.</p>
             <p lang="en">2FA enforced. All data hosted in Canada (Toronto). Audit trail with 7-year retention. PIPEDA and Quebec Law 25 compliant.</p>
