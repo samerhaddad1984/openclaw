@@ -24748,6 +24748,64 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            # --- Multi-user portal: flip a client between single and multi ---
+            if path == "/clients/portal_mode":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                pm_code = normalize_text(form.get("client_code", "")).strip()
+                pm_mode = normalize_text(form.get("mode", "single")).strip()
+                if pm_mode not in ("single", "multi"):
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(pm_code)}",
+                        error="Invalid mode.",
+                    )
+                    return
+                if not _require_client_in_firm(pm_code, ctx):
+                    self._flash_redirect("/clients", error=t("err_forbidden", lang))
+                    return
+                from src.integrations import multi_user_portal as _mup
+                try:
+                    _mup.set_portal_mode(
+                        DB_PATH, firm_code=ctx.get("firm_code") or "OWNER",
+                        client_code=pm_code, mode=pm_mode,
+                        actor_email=user.get("username") or "",
+                    )
+                except (PermissionError, LookupError, ValueError) as exc:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(pm_code)}",
+                        error=str(exc),
+                    )
+                    return
+                # On switch to multi: promote the client's contact_email
+                # (if present) to the first admin so the CPA has an admin
+                # token to hand off. Skipped when contact_email is blank.
+                if pm_mode == "multi":
+                    with open_db() as _conn:
+                        _row = _conn.execute(
+                            "SELECT contact_email, client_name FROM clients "
+                            "WHERE client_code=?", (pm_code,),
+                        ).fetchone()
+                    if _row and _row.get("contact_email"):
+                        try:
+                            _mup.create_user_direct(
+                                DB_PATH,
+                                firm_code=ctx.get("firm_code") or "OWNER",
+                                client_code=pm_code,
+                                email=_row["contact_email"],
+                                full_name=_row.get("client_name") or _row["contact_email"],
+                                role="admin",
+                                invited_by=user.get("username") or "cpa",
+                                status="active",
+                            )
+                        except Exception:
+                            logging.exception("seed first admin failed")
+                self._flash_redirect(
+                    f"/clients/edit?code={urlquote(pm_code)}",
+                    flash=f"Portal mode set to {pm_mode}.",
+                )
+                return
+
             # --- Sprint 4: Send portal link to client by email ---
             if path == "/clients/send-portal-link":
                 if not _can_do(ctx, "view_all_clients"):
