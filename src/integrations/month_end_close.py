@@ -294,78 +294,302 @@ def suggest_accruals(
     db_path: Path | str, *,
     firm_code: str, client_code: str, period: str,
 ) -> list[dict[str, Any]]:
-    """Return standard-accrual suggestions with computed CAD amounts.
+    """Return flat-summary suggestions (legacy shape).
 
-    - Depreciation: pulled from the fixed_assets/accrual engine (one entry
-      per active asset at cost * cca_rate / 12).
-    - Wage accrual: estimated as the average monthly payroll from the
-      previous 2 months of payroll_entries.
-    - Prepaid amort: 1/12 of the sum of active prepaid balances.
+    Kept for backward compatibility with callers that want a single
+    amount per kind; the wizard UI + JE-posting path now use the
+    richer :func:`suggest_accruals_detailed` output which includes
+    per-line breakdown the CPA can edit before posting."""
+    detailed = suggest_accruals_detailed(
+        db_path, firm_code=firm_code,
+        client_code=client_code, period=period,
+    )
+    out: list[dict[str, Any]] = []
+    for kind in ('wage_accrual', 'depreciation', 'prepaid_amort'):
+        section = detailed.get(kind) or {}
+        summary = section.get('summary') or {}
+        lines = section.get('lines') or []
+        hint = section.get('hint') or ''
+        out.append({
+            'kind': kind,
+            'description': section.get('description') or '',
+            'debit_account': section.get('default_debit_account') or '',
+            'credit_account': section.get('default_credit_account') or '',
+            'amount_cad': round(float(summary.get('total_amount_cad') or 0.0), 2),
+            'source': section.get('source') or '',
+            'detail_count': len(lines),
+            'amount_hint': hint,
+        })
+    return out
 
-    Every suggestion includes ``amount_cad`` (0.0 when the engine has no
-    data to compute a real number — the UI should render that as
-    'not enough data' rather than post a zero JE)."""
+
+def suggest_accruals_detailed(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, period: str,
+) -> dict[str, Any]:
+    """Return the rich per-line accrual suggestions.
+
+    Shape::
+
+        {
+          'period': 'YYYY-MM',
+          'depreciation': {
+              'summary': {'total_amount_cad': 4567.89, 'line_count': 12,
+                            'currency': 'CAD'},
+              'lines': [
+                {'line_key': 'asset:42', 'asset_id': 42,
+                 'asset_name': 'Ford F-150 2024', 'class': '10',
+                 'ucc_start': 45000.00, 'rate': 0.30, 'proration': 1.0,
+                 'amount_cad': 6750.00,
+                 'account_debit': '5580', 'account_credit': '1250',
+                 'editable': True, 'source': 'accrual_engine',
+                 'reason': 'class 10 @ 30% / 12 on cost 45000'},
+                ...
+              ],
+              'source': 'accrual_engine',
+              'default_debit_account': '5580',
+              'default_credit_account': '1250',
+              'hint': 'From fixed_assets_engine schedule',
+              'description': 'Monthly depreciation for <period>',
+          },
+          'wage_accrual': {...},
+          'prepaid_amort': {...},
+        }
+
+    Each line carries a stable ``line_key`` so the wizard can correlate
+    the CPA's overrides back to the right row on POST."""
+    period_end = _safe_period_end_date(period)
+
+    # --- Depreciation: one line per active fixed asset -------------------
+    dep_lines: list[dict[str, Any]] = []
     try:
-        from datetime import datetime as _dt
-        period_end = _dt.strptime(period + '-01', '%Y-%m-%d').date()
-        # Use engine to get real-period end:
-        if period_end.month == 12:
-            from datetime import date as _d
-            period_end = _d(period_end.year, 12, 31)
-        else:
-            from datetime import date as _d, timedelta as _td
-            period_end = _d(period_end.year, period_end.month + 1, 1) - _td(days=1)
-    except Exception:
-        period_end = None
-
-    depreciation_total = 0.0
-    depreciation_details: list[dict[str, Any]] = []
-    try:
-        from src.engines.accrual_engine import (
-            generate_period_accruals,
-        )
+        from src.engines.accrual_engine import generate_period_accruals
         if period_end is not None:
             result = generate_period_accruals(
                 client_code, period_end, firm_code=firm_code,
                 db_path=Path(db_path), persist=False,
             )
-            for d in result.get('drafts', []) or []:
-                if d.get('accrual_type') == 'depreciation':
-                    depreciation_total += float(d.get('amount', 0.0) or 0.0)
-                    depreciation_details.append(d)
+            for d in result.get('accruals', []) or result.get('drafts', []) or []:
+                if d.get('accrual_type') != 'depreciation':
+                    continue
+                entry_id = d.get('entry_id') or ''
+                desc = d.get('description') or ''
+                # engine description looks like
+                # "Monthly depreciation — Ford F-150 (asset A-42, class 10, rate 30.0%)"
+                asset_id = None
+                # Prefer parsed form; fall back to the raw entry id.
+                import re as _re
+                m = _re.search(r'asset ([A-Za-z0-9_-]+)', desc)
+                if m:
+                    asset_id = m.group(1)
+                dep_lines.append({
+                    'line_key': f'dep:{asset_id or entry_id}',
+                    'asset_id': asset_id,
+                    'asset_name': _extract_asset_name(desc),
+                    'description': desc,
+                    'amount_cad': round(float(d.get('amount', 0.0) or 0.0), 2),
+                    'account_debit': d.get('debit_account') or '5580',
+                    'account_credit': d.get('credit_account') or '1890',
+                    'editable': True,
+                    'source': 'accrual_engine',
+                    'reason': desc,
+                })
     except Exception as exc:
-        log.warning('accrual engine unavailable: %s', exc)
+        log.warning('depreciation engine unavailable: %s', exc)
 
-    wage_total = _average_recent_payroll(db_path, client_code, period)
-    prepaid_total = _prepaid_month_amort(db_path, client_code)
+    # --- Wages: one line per employee, amounts from recent pay history ---
+    wage_lines = _per_employee_wage_lines(db_path, client_code, period)
 
-    return [
-        {'kind': 'wage_accrual',
-         'description': 'Wage accrual for pay period spanning close',
-         'debit_account': '5100', 'credit_account': '2150',
-         'amount_cad': round(wage_total, 2),
-         'source': 'avg_last_2_months_payroll',
-         'amount_hint': ('Estimate based on prior 2 periods'
-                          if wage_total > 0 else
-                          'No payroll history — enter manually')},
-        {'kind': 'depreciation',
-         'description': f'Monthly depreciation for {period}',
-         'debit_account': '5500', 'credit_account': '1500',
-         'amount_cad': round(depreciation_total, 2),
-         'source': 'fixed_assets_engine',
-         'detail_count': len(depreciation_details),
-         'amount_hint': ('From fixed_assets_engine schedule'
-                          if depreciation_total > 0 else
-                          'No active fixed assets found')},
-        {'kind': 'prepaid_amort',
-         'description': 'Prepaid expense amortisation',
-         'debit_account': '5400', 'credit_account': '1300',
-         'amount_cad': round(prepaid_total, 2),
-         'source': 'prepaid_balance/12',
-         'amount_hint': ('1/12 of prepaid balance'
-                          if prepaid_total > 0 else
-                          'No prepaid balance on file')},
-    ]
+    # --- Prepaid: one line per active prepaid balance --------------------
+    prepaid_lines = _per_prepaid_lines(db_path, client_code)
+
+    return {
+        'period': period,
+        'firm_code': firm_code,
+        'client_code': client_code,
+        'depreciation': {
+            'summary': {
+                'total_amount_cad': round(
+                    sum(float(l['amount_cad']) for l in dep_lines), 2
+                ),
+                'line_count': len(dep_lines),
+                'currency': 'CAD',
+            },
+            'lines': dep_lines,
+            'source': 'accrual_engine',
+            'default_debit_account': '5580',
+            'default_credit_account': '1890',
+            'description': f'Monthly depreciation for {period}',
+            'hint': (
+                'From fixed_assets_engine schedule'
+                if dep_lines else 'No active fixed assets found'
+            ),
+        },
+        'wage_accrual': {
+            'summary': {
+                'total_amount_cad': round(
+                    sum(float(l['amount_cad']) for l in wage_lines), 2
+                ),
+                'line_count': len(wage_lines),
+                'currency': 'CAD',
+            },
+            'lines': wage_lines,
+            'source': 'payroll_entries_avg_2mo',
+            'default_debit_account': '5100',
+            'default_credit_account': '2150',
+            'description': 'Wage accrual for pay period spanning close',
+            'hint': (
+                'Average of prior 2 months of payroll per employee'
+                if wage_lines else 'No payroll history — enter manually'
+            ),
+        },
+        'prepaid_amort': {
+            'summary': {
+                'total_amount_cad': round(
+                    sum(float(l['amount_cad']) for l in prepaid_lines), 2
+                ),
+                'line_count': len(prepaid_lines),
+                'currency': 'CAD',
+            },
+            'lines': prepaid_lines,
+            'source': 'prepaid_expenses/12',
+            'default_debit_account': '5400',
+            'default_credit_account': '1300',
+            'description': 'Prepaid expense amortisation',
+            'hint': (
+                '1/12 of each active prepaid balance'
+                if prepaid_lines else 'No prepaid balance on file'
+            ),
+        },
+    }
+
+
+def _safe_period_end_date(period: str):
+    """'YYYY-MM' → last-day-of-month date (or None on parse error)."""
+    try:
+        from datetime import date as _d, datetime as _dt, timedelta as _td
+        dt = _dt.strptime(period + '-01', '%Y-%m-%d').date()
+        if dt.month == 12:
+            return _d(dt.year, 12, 31)
+        return _d(dt.year, dt.month + 1, 1) - _td(days=1)
+    except Exception:
+        return None
+
+
+def _extract_asset_name(desc: str) -> str:
+    """Pull the asset display name out of the engine's description line."""
+    import re as _re
+    m = _re.search(r'depreciation\s+[—-]+\s+(.+?)\s+\(asset', desc)
+    if m:
+        return m.group(1).strip()
+    return ''
+
+
+def _per_employee_wage_lines(
+    db_path: Path | str, client_code: str, period: str,
+) -> list[dict[str, Any]]:
+    """Build one wage-accrual line per employee based on the avg of the
+    prior 2 months' gross_pay. Returns [] when payroll_entries is empty
+    or absent so the UI renders 'no history'.
+
+    Each line has a stable ``line_key`` of ``wage:<employee_id>``."""
+    try:
+        yy, mm = int(period[:4]), int(period[5:7])
+    except ValueError:
+        return []
+    prev_months: list[str] = []
+    for _ in range(2):
+        mm -= 1
+        if mm == 0:
+            mm = 12
+            yy -= 1
+        prev_months.append(f'{yy:04d}-{mm:02d}')
+
+    with _open(db_path) as conn:
+        if not _table_exists(conn, 'payroll_entries'):
+            return []
+        try:
+            placeholders = ','.join('?' * len(prev_months))
+            like_clauses = ' OR '.join(
+                "COALESCE(pay_period,'') LIKE ?"
+                for _ in prev_months
+            )
+            args: list[Any] = [client_code]
+            args += [f'{m}%' for m in prev_months]
+            rows = conn.execute(
+                f"SELECT employee_id, "
+                f"       MAX(COALESCE(employee_name,'')) AS name, "
+                f"       AVG(gross_pay) AS avg_gross, "
+                f"       COUNT(*) AS n "
+                f"FROM payroll_entries "
+                f"WHERE client_code=? AND ({like_clauses}) "
+                f"GROUP BY employee_id "
+                f"ORDER BY employee_id",
+                args,
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    lines: list[dict[str, Any]] = []
+    for r in rows:
+        avg = float(r['avg_gross'] or 0.0)
+        if avg <= 0:
+            continue
+        emp_id = r['employee_id']
+        name = r['name'] or f'Employee {emp_id}'
+        lines.append({
+            'line_key': f'wage:{emp_id}',
+            'employee_id': emp_id,
+            'employee_name': name,
+            'description': f'Wage accrual — {name}',
+            'amount_cad': round(avg, 2),
+            'account_debit': '5100',
+            'account_credit': '2150',
+            'editable': True,
+            'source': 'avg_last_2_months_payroll',
+            'reason': f'Avg of {r["n"]} payroll entries in {",".join(prev_months)}',
+        })
+    return lines
+
+
+def _per_prepaid_lines(
+    db_path: Path | str, client_code: str,
+) -> list[dict[str, Any]]:
+    """One amortisation line per active prepaid balance."""
+    with _open(db_path) as conn:
+        if not _table_exists(conn, 'prepaid_expenses'):
+            return []
+        try:
+            rows = conn.execute(
+                "SELECT id, COALESCE(description,'') AS description, "
+                "       COALESCE(balance,0) AS balance, "
+                "       COALESCE(debit_account,'') AS debit_account, "
+                "       COALESCE(credit_account,'') AS credit_account "
+                "FROM prepaid_expenses "
+                "WHERE client_code=? AND COALESCE(status,'active')='active' "
+                "ORDER BY id",
+                (client_code,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    lines: list[dict[str, Any]] = []
+    for r in rows:
+        bal = float(r['balance'] or 0.0)
+        if bal <= 0:
+            continue
+        amort = round(bal / 12.0, 2)
+        lines.append({
+            'line_key': f'prepaid:{r["id"]}',
+            'prepaid_id': r['id'],
+            'description': r['description'] or 'Prepaid amortisation',
+            'balance': round(bal, 2),
+            'amount_cad': amort,
+            'account_debit': r['debit_account'] or '5400',
+            'account_credit': r['credit_account'] or '1300',
+            'editable': True,
+            'source': 'prepaid_balance/12',
+            'reason': f'1/12 of balance {bal:.2f}',
+        })
+    return lines
 
 
 def _average_recent_payroll(db_path: Path | str, client_code: str,
@@ -429,91 +653,198 @@ def _prepaid_month_amort(db_path: Path | str, client_code: str) -> float:
     return float((row[0] if row else 0.0) or 0.0) / 12.0
 
 
+def _ensure_accrual_override_schema(db_path: Path | str) -> None:
+    """Audit table for per-line CPA overrides at close time.
+
+    Written idempotently from `post_suggested_accruals_lines`. Each row
+    records the suggested amount, the override amount the CPA entered,
+    the include/exclude flag, and the actor."""
+    with _open(db_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS accrual_line_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                line_key TEXT NOT NULL,
+                suggested_amount REAL,
+                final_amount REAL,
+                included INTEGER NOT NULL,
+                actor_email TEXT,
+                notes TEXT,
+                entry_id TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_accrual_overrides_scope "
+            "ON accrual_line_overrides(firm_code, client_code, period)"
+        )
+        conn.commit()
+
+
 def post_suggested_accruals(
     db_path: Path | str, *,
     firm_code: str, client_code: str, period: str,
     accepted_kinds: list[str], actor_email: str,
 ) -> dict[str, Any]:
-    """Persist the accepted accruals as draft JEs via accrual_engine.
+    """Legacy shape: accept all suggested lines for the kinds listed.
 
-    Returns {ok, posted, kinds, errors}. Called by wizard step 4 when the
-    operator clicks "Post all suggested accruals"."""
-    suggestions = suggest_accruals(
-        db_path, firm_code=firm_code, client_code=client_code, period=period,
+    Internally calls :func:`post_suggested_accruals_lines` with every
+    line in each accepted kind marked ``include=True`` and no override
+    amounts, so the behaviour from before the line-level detail refactor
+    is preserved."""
+    detailed = suggest_accruals_detailed(
+        db_path, firm_code=firm_code,
+        client_code=client_code, period=period,
     )
-    wanted = {s['kind']: s for s in suggestions if s['kind'] in accepted_kinds}
+    line_decisions: list[dict[str, Any]] = []
+    for kind in accepted_kinds:
+        section = detailed.get(kind) or {}
+        for l in section.get('lines') or []:
+            line_decisions.append({
+                'kind': kind,
+                'line_key': l['line_key'],
+                'include': True,
+                'amount': float(l['amount_cad']),
+                'account_debit': l.get('account_debit'),
+                'account_credit': l.get('account_credit'),
+                'description': l.get('description'),
+                'notes': None,
+            })
+    return post_suggested_accruals_lines(
+        db_path, firm_code=firm_code, client_code=client_code,
+        period=period, line_decisions=line_decisions,
+        actor_email=actor_email,
+    )
+
+
+def post_suggested_accruals_lines(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, period: str,
+    line_decisions: list[dict[str, Any]],
+    actor_email: str,
+) -> dict[str, Any]:
+    """Post accrual JEs from per-line CPA decisions.
+
+    ``line_decisions`` is a list of::
+
+        {'kind': 'depreciation'|'wage_accrual'|'prepaid_amort',
+         'line_key': 'dep:A-42',
+         'include': True|False,
+         'amount': 6750.00,       # CAD, may differ from suggested
+         'account_debit': '5580', # optional override
+         'account_credit': '1890',
+         'description': '...',    # optional override
+         'notes': 'CPA: adjusted for half-year rule'  # audit string
+        }
+
+    Every decision lands in ``accrual_line_overrides`` whether or not
+    it was included, so the audit trail is complete. Included lines
+    with amount > 0 produce a draft ``manual_journal_entries`` row.
+
+    Returns ``{ok, posted: [...], skipped: [...], errors: [...]}``."""
+    _ensure_accrual_override_schema(db_path)
+    detailed = suggest_accruals_detailed(
+        db_path, firm_code=firm_code,
+        client_code=client_code, period=period,
+    )
+    suggested_by_key: dict[str, dict[str, Any]] = {}
+    for kind in ('depreciation', 'wage_accrual', 'prepaid_amort'):
+        for l in (detailed.get(kind) or {}).get('lines') or []:
+            suggested_by_key[l['line_key']] = {
+                'kind': kind,
+                'amount_cad': float(l['amount_cad']),
+                'account_debit': l.get('account_debit'),
+                'account_credit': l.get('account_credit'),
+                'description': l.get('description'),
+            }
 
     posted: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
 
-    if not wanted:
-        return {'ok': True, 'posted': [], 'errors': [],
-                 'message': 'No accruals accepted.'}
+    AUTO_REVERSE = {
+        'depreciation': 0,
+        'wage_accrual': 1,
+        'prepaid_amort': 0,
+    }
 
-    # Depreciation posts via generate_period_accruals (engine handles the
-    # per-asset split). Wage + prepaid post as single aggregate JEs.
-    if 'depreciation' in wanted:
+    for dec in line_decisions:
+        key = dec.get('line_key') or ''
+        suggested = suggested_by_key.get(key, {})
+        kind = dec.get('kind') or suggested.get('kind') or ''
+        suggested_amount = float(suggested.get('amount_cad') or 0.0)
+        final_amount = float(dec.get('amount', suggested_amount) or 0.0)
+        included = bool(dec.get('include', False))
+        notes = dec.get('notes')
+
+        entry_id = None
+        if included and final_amount > 0 and kind in AUTO_REVERSE:
+            debit = dec.get('account_debit') or suggested.get('account_debit') or ''
+            credit = dec.get('account_credit') or suggested.get('account_credit') or ''
+            description = (
+                dec.get('description')
+                or suggested.get('description')
+                or f'{kind} accrual'
+            )
+            entry_id = _post_manual_je(
+                db_path, client_code=client_code, period=period,
+                debit_account=debit or '9999',
+                credit_account=credit or '9999',
+                amount=final_amount, description=description,
+                prepared_by=actor_email,
+                auto_reverse=AUTO_REVERSE[kind],
+                accrual_type=kind,
+            )
+            if entry_id:
+                posted.append({
+                    'entry_id': entry_id,
+                    'kind': kind,
+                    'line_key': key,
+                    'amount': final_amount,
+                    'suggested': suggested_amount,
+                    'override': abs(final_amount - suggested_amount) > 0.005,
+                })
+            else:
+                errors.append({
+                    'kind': kind, 'line_key': key,
+                    'error': 'post_manual_je_failed',
+                })
+        else:
+            skipped.append({
+                'kind': kind, 'line_key': key,
+                'reason': ('not_included' if not included
+                            else 'zero_or_missing_amount'),
+                'amount': final_amount,
+            })
+
+        # Audit every line's decision, whether or not it was posted.
         try:
-            from datetime import date as _d, datetime as _dt, timedelta as _td
-            period_end = _dt.strptime(period + '-01', '%Y-%m-%d').date()
-            if period_end.month == 12:
-                period_end = _d(period_end.year, 12, 31)
-            else:
-                period_end = _d(period_end.year, period_end.month + 1, 1) - _td(days=1)
-            from src.engines.accrual_engine import generate_period_accruals
-            result = generate_period_accruals(
-                client_code, period_end, firm_code=firm_code,
-                db_path=Path(db_path), persist=True,
-            )
-            dep_drafts = [d for d in (result.get('drafts') or [])
-                           if d.get('accrual_type') == 'depreciation']
-            posted.extend(dep_drafts)
-        except Exception as exc:
-            errors.append({'kind': 'depreciation', 'error': str(exc)})
+            with _open(db_path) as conn:
+                conn.execute(
+                    "INSERT INTO accrual_line_overrides "
+                    "(firm_code, client_code, period, kind, line_key, "
+                    " suggested_amount, final_amount, included, actor_email, "
+                    " notes, entry_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (firm_code, client_code, period, kind, key,
+                     suggested_amount, final_amount,
+                     1 if included else 0, actor_email, notes, entry_id),
+                )
+                conn.commit()
+        except sqlite3.OperationalError as exc:
+            errors.append({'kind': kind, 'line_key': key,
+                            'error': f'audit_write_failed: {exc}'})
 
-    if 'wage_accrual' in wanted:
-        amt = float(wanted['wage_accrual'].get('amount_cad') or 0.0)
-        if amt > 0:
-            je_id = _post_manual_je(
-                db_path, client_code=client_code, period=period,
-                debit_account='5100', credit_account='2150',
-                amount=amt, description='Wage accrual (month-end)',
-                prepared_by=actor_email, auto_reverse=1,
-                accrual_type='wage_accrual',
-            )
-            if je_id:
-                posted.append({'entry_id': je_id, 'kind': 'wage_accrual',
-                                'amount': amt})
-            else:
-                errors.append({'kind': 'wage_accrual',
-                                'error': 'post_manual_je_failed'})
-        else:
-            errors.append({'kind': 'wage_accrual',
-                            'error': 'no_history_to_estimate'})
-
-    if 'prepaid_amort' in wanted:
-        amt = float(wanted['prepaid_amort'].get('amount_cad') or 0.0)
-        if amt > 0:
-            je_id = _post_manual_je(
-                db_path, client_code=client_code, period=period,
-                debit_account='5400', credit_account='1300',
-                amount=amt, description='Prepaid expense amortisation',
-                prepared_by=actor_email, auto_reverse=0,
-                accrual_type='prepaid_amort',
-            )
-            if je_id:
-                posted.append({'entry_id': je_id, 'kind': 'prepaid_amort',
-                                'amount': amt})
-            else:
-                errors.append({'kind': 'prepaid_amort',
-                                'error': 'post_manual_je_failed'})
-        else:
-            errors.append({'kind': 'prepaid_amort',
-                            'error': 'no_prepaid_balance'})
-
-    return {'ok': not errors or bool(posted), 'posted': posted,
-             'errors': errors,
-             'kinds': [p.get('kind') or p.get('accrual_type') for p in posted]}
+    return {
+        'ok': not errors or bool(posted),
+        'posted': posted,
+        'skipped': skipped,
+        'errors': errors,
+        'kinds': sorted({p['kind'] for p in posted}),
+    }
 
 
 def _post_manual_je(

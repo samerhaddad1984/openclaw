@@ -657,14 +657,61 @@ def _handle_wizard_advance(handler, db_path, user, ctx, form) -> bool:
     if step == 4:
         pairs = urllib.parse.parse_qsl(form.get('__raw__', ''),
                                          keep_blank_values=True)
-        kinds = [v for k, v in pairs if k == 'accepted_kinds']
-        if not kinds and form.get('accepted_kinds'):
-            kinds = [form['accepted_kinds']]
-        # Auto-compute + post the accepted accruals.
-        posted = _close.post_suggested_accruals(
-            db_path, firm_code=firm_code, client_code=client_code,
-            period=period, accepted_kinds=kinds, actor_email=actor,
-        )
+        # Detect per-line submission: include:<line_key> checkboxes +
+        # amount:<line_key> + notes:<line_key>. Fall back to the legacy
+        # 'accepted_kinds' shape if no per-line keys are present so any
+        # tests / callers still on the old form keep working.
+        line_keys_checked: set[str] = set()
+        amounts: dict[str, float] = {}
+        notes: dict[str, str] = {}
+        for k, v in pairs:
+            if k.startswith('include:'):
+                line_keys_checked.add(k[len('include:'):])
+            elif k.startswith('amount:'):
+                try:
+                    amounts[k[len('amount:'):]] = float(v)
+                except ValueError:
+                    pass
+            elif k.startswith('notes:'):
+                notes[k[len('notes:'):]] = v
+
+        line_decisions: list[dict[str, Any]] = []
+        if amounts or line_keys_checked:
+            # Build a decision per line key we saw in the form.
+            all_keys = set(amounts) | line_keys_checked
+            # Amounts submitted for unchecked rows still get audited as
+            # "not_included" so we can see the CPA reviewed them.
+            detailed = _close.suggest_accruals_detailed(
+                db_path, firm_code=firm_code, client_code=client_code,
+                period=period,
+            )
+            kind_by_key: dict[str, str] = {}
+            for k in ('depreciation', 'wage_accrual', 'prepaid_amort'):
+                for l in (detailed.get(k) or {}).get('lines') or []:
+                    kind_by_key[l['line_key']] = k
+            for key in sorted(all_keys):
+                line_decisions.append({
+                    'kind': kind_by_key.get(key, ''),
+                    'line_key': key,
+                    'include': key in line_keys_checked,
+                    'amount': amounts.get(key, 0.0),
+                    'notes': notes.get(key, '') or None,
+                })
+            posted = _close.post_suggested_accruals_lines(
+                db_path, firm_code=firm_code, client_code=client_code,
+                period=period, line_decisions=line_decisions,
+                actor_email=actor,
+            )
+            kinds = sorted({d['kind'] for d in line_decisions
+                            if d['include'] and d['kind']})
+        else:
+            kinds = [v for k, v in pairs if k == 'accepted_kinds']
+            if not kinds and form.get('accepted_kinds'):
+                kinds = [form['accepted_kinds']]
+            posted = _close.post_suggested_accruals(
+                db_path, firm_code=firm_code, client_code=client_code,
+                period=period, accepted_kinds=kinds, actor_email=actor,
+            )
         r = _close.complete_step_4_accruals(
             db_path, firm_code=firm_code, client_code=client_code,
             period=period, accepted_kinds=kinds, actor_email=actor,

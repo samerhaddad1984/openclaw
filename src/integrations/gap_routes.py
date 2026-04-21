@@ -1154,35 +1154,12 @@ def _render_wizard_step(
             '</form>'
         )
     if step_n == 4:
-        suggestions = _close.suggest_accruals(
+        detailed = _close.suggest_accruals_detailed(
             db_path, firm_code=firm_code, client_code=client_code,
             period=period,
         )
-        rows = ''.join(
-            '<tr>'
-            f'<td><input type="checkbox" name="accepted_kinds" value="{_esc(s["kind"])}"'
-            f'{" checked" if float(s.get("amount_cad") or 0)>0 else ""}></td>'
-            f'<td>{_esc(s["kind"])}</td>'
-            f'<td>{_esc(s["description"])}</td>'
-            f'<td>${float(s.get("amount_cad") or 0):,.2f}</td>'
-            f'<td style="color:#888;font-size:12px;">{_esc(s.get("amount_hint") or "")}</td>'
-            '</tr>'
-            for s in suggestions
-        )
-        return (
-            '<h3>Step 4 — accruals</h3>'
-            '<p>Tick the accruals you want posted as draft JEs. '
-            'Amounts are computed from your current data — zero means '
-            'not enough history to suggest one.</p>'
-            '<form method="POST" action="/close/wizard/advance">'
-            f'{hidden}'
-            '<table style="width:100%;border-collapse:collapse;">'
-            '<thead><tr><th></th><th>Kind</th><th>Description</th>'
-            '<th>Amount (CAD)</th><th>Source</th></tr></thead>'
-            f'<tbody>{rows}</tbody></table>'
-            '<button type="submit" class="primary" style="margin-top:10px;">'
-            'Post all suggested accruals &rarr;</button>'
-            '</form>'
+        return _render_wizard_step4_accruals(
+            detailed=detailed, hidden=hidden,
         )
     if step_n == 5:
         return (
@@ -1209,6 +1186,119 @@ def _render_wizard_step(
             'Lock period</button></form>'
         )
     return '<p>Unknown step.</p>'
+
+
+def _render_wizard_step4_accruals(
+    *, detailed: dict[str, Any], hidden: str,
+) -> str:
+    """Render step 4 with per-line checkboxes and editable amounts.
+
+    Each line is a row in an expandable <details> block grouped by kind.
+    Submitting batches every checked line into the JE post; unchecked
+    lines are audited as 'not_included'."""
+    sections: list[str] = []
+    grand_total = 0.0
+    grand_count = 0
+    for kind in ('depreciation', 'wage_accrual', 'prepaid_amort'):
+        section = detailed.get(kind) or {}
+        lines = section.get('lines') or []
+        summary = section.get('summary') or {}
+        kind_total = float(summary.get('total_amount_cad') or 0.0)
+        hint = section.get('hint') or ''
+        description = section.get('description') or kind
+        grand_total += kind_total
+        grand_count += len(lines)
+
+        if not lines:
+            sections.append(
+                '<div style="border:1px solid #e5e7eb;border-radius:6px;'
+                'padding:10px;margin-bottom:10px;background:#f9fafb;">'
+                f'<strong>{_esc(kind)}</strong> — '
+                f'<span style="color:#6b7280;">{_esc(hint)}</span></div>'
+            )
+            continue
+
+        line_rows = []
+        for l in lines:
+            key = _esc(l['line_key'])
+            amt = float(l.get('amount_cad') or 0.0)
+            debit = _esc(l.get('account_debit') or '')
+            credit = _esc(l.get('account_credit') or '')
+            reason = _esc(l.get('reason') or '')
+            display_name = (
+                l.get('asset_name') or l.get('employee_name')
+                or l.get('description') or l.get('line_key') or ''
+            )
+            line_rows.append(
+                '<tr>'
+                '<td style="text-align:center;">'
+                f'<input type="checkbox" name="include:{key}" value="1" checked>'
+                '</td>'
+                f'<td>{_esc(display_name)}</td>'
+                f'<td style="text-align:right;">'
+                f'<input type="number" step="0.01" min="0" '
+                f'name="amount:{key}" value="{amt:.2f}" '
+                'style="width:110px;text-align:right;padding:4px;">'
+                '</td>'
+                f'<td>{debit}&nbsp;/&nbsp;{credit}</td>'
+                f'<td style="color:#6b7280;font-size:12px;">{reason}</td>'
+                f'<td><input type="text" name="notes:{key}" '
+                'placeholder="Override note (optional)" '
+                'style="width:100%;padding:4px;"></td>'
+                '</tr>'
+            )
+        sections.append(
+            '<details open style="border:1px solid #e5e7eb;'
+            'border-radius:6px;margin-bottom:12px;background:white;">'
+            '<summary style="padding:10px 12px;font-weight:bold;'
+            'cursor:pointer;display:flex;justify-content:space-between;">'
+            f'<span>{_esc(description)}</span>'
+            f'<span style="font-weight:normal;color:#374151;">'
+            f'{len(lines)} line(s) — <strong>${kind_total:,.2f}</strong>'
+            '</span></summary>'
+            '<div style="padding:10px 14px;color:#6b7280;'
+            f'font-size:13px;">{_esc(hint)}</div>'
+            '<table style="width:100%;border-collapse:collapse;'
+            'margin-bottom:4px;">'
+            '<thead><tr>'
+            '<th style="width:40px;">Post</th>'
+            '<th>Line</th>'
+            '<th style="width:120px;text-align:right;">Amount (CAD)</th>'
+            '<th style="width:130px;">DR / CR</th>'
+            '<th>Source</th>'
+            '<th style="width:180px;">Override note</th>'
+            '</tr></thead>'
+            f'<tbody>{"".join(line_rows)}</tbody></table>'
+            '</details>'
+        )
+
+    summary_html = (
+        '<div style="background:#eff6ff;border:1px solid #1e40af;'
+        'border-radius:6px;padding:10px;margin-top:10px;">'
+        f'<strong>{grand_count}</strong> total line(s) suggested across '
+        f'{len([k for k in ("depreciation","wage_accrual","prepaid_amort") if (detailed.get(k) or {}).get("lines")])} '
+        f'accrual kind(s); proposed total '
+        f'<strong>${grand_total:,.2f}</strong>. Uncheck rows you do not '
+        'want posted; edit the amount inline and add a note for the '
+        'audit trail when you override.'
+        '</div>'
+    )
+
+    return (
+        '<h3>Step 4 &mdash; accruals</h3>'
+        '<p>Review each suggested accrual line. Every row is checked '
+        'by default; uncheck to skip and adjust the amount if needed. '
+        'Each check-in gets one draft JE; the audit trail records '
+        'the suggestion vs. your override.</p>'
+        '<form method="POST" action="/close/wizard/advance">'
+        f'{hidden}'
+        + ''.join(sections)
+        + summary_html
+        + '<button type="submit" class="primary" style="margin-top:12px;'
+          'padding:10px 22px;background:#1e40af;color:white;">'
+          'Post selected accrual lines &rarr;</button>'
+          '</form>'
+    )
 
 
 def _advance_button(hidden: str, *, done: bool, label: str) -> str:
