@@ -1684,6 +1684,18 @@ def bootstrap_schema() -> None:
             "ON client_portal_invitations(firm_code, client_code, status)"
         )
 
+        # Item 2 (final cleanup): per-user UI filter preferences.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_ui_preferences (
+                user_email TEXT NOT NULL,
+                firm_code TEXT NOT NULL,
+                preference_key TEXT NOT NULL,
+                preference_value TEXT,
+                updated_at TEXT,
+                PRIMARY KEY (user_email, firm_code, preference_key)
+            )
+        """)
+
         # Per-user rate limit + audit log (Phase 7).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS client_portal_user_audit (
@@ -19029,6 +19041,42 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 uploader_emails: list[str] = []
                 for v in _upl_raw:
                     uploader_emails.extend(_parse_upl(v))
+                # Item 2 (final cleanup): URL wins + updates stored
+                # preference, so reload remembers the filter. Missing
+                # param falls back to stored preference; Clear
+                # (?uploader= with empty value) deletes the preference.
+                try:
+                    from src.integrations import ui_preferences as _uip
+                    _uip_key = _uip.PREF_QUEUE_UPLOADER
+                    _uip_user = user.get("username") or ""
+                    _uip_firm = ctx.get("firm_code") or ""
+                    if "uploader" in qs:
+                        # URL param present (even empty) → persist / clear
+                        joined = ",".join(e for e in uploader_emails if e)
+                        if joined:
+                            _uip.set_preference(
+                                DB_PATH, user_email=_uip_user,
+                                firm_code=_uip_firm,
+                                preference_key=_uip_key,
+                                preference_value=joined,
+                            )
+                        else:
+                            _uip.clear_preference(
+                                DB_PATH, user_email=_uip_user,
+                                firm_code=_uip_firm,
+                                preference_key=_uip_key,
+                            )
+                    elif not uploader_emails:
+                        # No URL param → fall back to stored preference.
+                        stored = _uip.get_preference(
+                            DB_PATH, user_email=_uip_user,
+                            firm_code=_uip_firm,
+                            preference_key=_uip_key,
+                        )
+                        if stored:
+                            uploader_emails = _parse_upl(stored)
+                except Exception:
+                    logging.exception("ui preference resolve failed")
                 try:
                     page = max(1, int(qs.get("page", ["1"])[0]))
                 except (ValueError, TypeError):
