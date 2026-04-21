@@ -12156,6 +12156,10 @@ def render_portal_upload(client: dict, token: str,
 
 
 def render_portal_documents(client: dict, token: str) -> str:
+    from src.formatting import format_date_short, money
+    client_lang = (client.get("language") or "fr").strip().lower()
+    if client_lang not in ("fr", "en"):
+        client_lang = "fr"
     with open_db() as conn:
         rows = conn.execute(
             "SELECT document_id, file_name, review_status, created_at, "
@@ -12173,10 +12177,14 @@ def render_portal_documents(client: dict, token: str) -> str:
         return _portal_page_shell(client, token, "documents", body)
     items = ""
     for r in rows:
-        date = (r["created_at"] or "")[:10]
+        raw_date = (r["created_at"] or "")[:10]
+        try:
+            date = format_date_short(raw_date, client_lang) if raw_date else ""
+        except ValueError:
+            date = raw_date
         vendor = r["vendor"] or ""
         amt = r["amount"]
-        amt_str = f"${amt:.2f}" if amt is not None else ""
+        amt_str = money(amt, client_lang) if amt is not None else ""
         reason = r["manual_hold_reason"] or ""
         reason_html = f'<div class="muted">{esc(reason)}</div>' if reason else ""
         items += (
@@ -17042,7 +17050,9 @@ def render_audit_anomalies(
                 bank_audit = []
 
         from datetime import datetime as _dt
-        last_run = _dt.now().strftime("%Y-%m-%d %H:%M")
+        from src.formatting import format_date_short as _fds, format_time as _ft
+        _now = _dt.now()
+        last_run = f"{_fds(_now, lang)} {_ft(_now, lang)}"
 
         # Circular approvals
         circ_rows = "".join(
@@ -17137,7 +17147,7 @@ def render_audit_anomalies(
         f'<input type="text" name="client_code" value="{esc(client_code)}" '
         f'style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;"></div>'
         f'<div><button type="submit" class="btn-primary" style="padding:7px 16px;">Run all detectors</button></div>'
-        f'<div style="margin-left:auto;font-size:12px;color:#6b7280;">Last run: {esc(last_run)}</div>'
+        f'<div style="margin-left:auto;font-size:12px;color:#6b7280;">{"Dernière exécution" if lang == "fr" else "Last run"}: {esc(last_run)}</div>'
         f'</form></div>\n'
     )
 
@@ -17907,7 +17917,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         with open_db() as conn:
             ensure_client_config_table(conn)
             prefill = compute_prefill(client_code, period_start, period_end, conn)
-        generated_at = utc_now().strftime("%Y-%m-%d %H:%M UTC")
+        from src.formatting import format_date_short as _fds, format_time as _ft
+        _utc_now = utc_now()
+        generated_at = f"{_fds(_utc_now, lang)} {_ft(_utc_now, lang)} UTC"
         pdf_bytes = generate_revenu_quebec_pdf(
             client_code=client_code,
             period_start=period_start,

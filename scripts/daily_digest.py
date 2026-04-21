@@ -38,6 +38,8 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
+from src.formatting import format_date
+
 ROOT_DIR    = Path(__file__).resolve().parent.parent
 DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
 CONFIG_PATH = ROOT_DIR / "otocpa.config.json"
@@ -268,7 +270,7 @@ def build_plain_text(
     recipient_name: str,
     filing_deadlines: list[dict[str, Any]] | None = None,
 ) -> str:
-    today      = date.today().strftime("%d %B %Y")
+    today      = format_date(date.today(), lang)
     nr         = summary["needs_review"]
     oh         = summary["on_hold"]
     rtp        = summary["ready_to_post"]
@@ -396,7 +398,7 @@ def build_html_body(
     recipient_name: str,
     filing_deadlines: list[dict[str, Any]] | None = None,
 ) -> str:
-    today = date.today().strftime("%d %B %Y")
+    today = format_date(date.today(), lang)
     nr    = summary["needs_review"]
     oh    = summary["on_hold"]
     rtp   = summary["ready_to_post"]
