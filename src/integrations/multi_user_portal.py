@@ -676,6 +676,99 @@ def reset_rate_limits() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Suspicious-activity detection (Phase 7)
+# ---------------------------------------------------------------------------
+
+
+SUSPICIOUS_RAPID_UPLOADS = 40    # per minute
+SUSPICIOUS_IP_COUNT = 3          # distinct IPs in a 1-hour window
+SUSPICIOUS_FAILED_ATTEMPTS = 5   # failed accesses in 10 minutes
+
+
+def log_access_attempt(
+    db_path: Path | str, *, firm_code: str, client_code: str,
+    portal_user_id: int | None, actor_email: str, action: str,
+    ip: str = '', user_agent: str = '', detail: str = '',
+) -> None:
+    """Generic audit writer used by the dashboard for 'login' attempts
+    (i.e. any access of a /cp/ route whether it succeeded or not)."""
+    audit_log(
+        db_path, firm_code=firm_code, client_code=client_code,
+        actor_email=actor_email, action=action,
+        portal_user_id=portal_user_id, detail=detail,
+        ip=ip, user_agent=user_agent,
+    )
+
+
+def detect_suspicious_activity(
+    db_path: Path | str, *, portal_user_id: int,
+    window_hours: int = 1,
+) -> list[dict[str, Any]]:
+    """Scan the audit log for this user over the last `window_hours`.
+
+    Emits one dict per signal; empty list when nothing unusual found.
+    Runs in O(rows-in-window) — cheap enough for on-demand admin views."""
+    alerts: list[dict[str, Any]] = []
+    with _open(db_path) as conn:
+        rows = conn.execute(
+            "SELECT action, ip, created_at, detail FROM client_portal_user_audit "
+            "WHERE portal_user_id=? "
+            "AND datetime(created_at) >= datetime('now', ?)",
+            (portal_user_id, f'-{window_hours} hours'),
+        ).fetchall()
+    rows = [dict(r) for r in rows]
+    if not rows:
+        return alerts
+
+    # Distinct IPs
+    ips = {r.get('ip') for r in rows if r.get('ip')}
+    if len(ips) >= SUSPICIOUS_IP_COUNT:
+        alerts.append({
+            'kind': 'multi_ip',
+            'detail': f'{len(ips)} distinct IPs in last {window_hours}h',
+            'ips': sorted(ips),
+        })
+    # Rapid uploads (>40 / minute)
+    import collections
+    per_min = collections.Counter()
+    for r in rows:
+        if r.get('action') != 'upload':
+            continue
+        ts = (r.get('created_at') or '')[:16]  # YYYY-MM-DDTHH:MM
+        per_min[ts] += 1
+    for minute, count in per_min.items():
+        # Each upload row records count=N in detail; sum that too.
+        if count >= 5:
+            alerts.append({
+                'kind': 'rapid_uploads',
+                'detail': (f'{count} upload events in minute {minute}'),
+            })
+    # Failed access attempts — already scoped to the window by the SQL.
+    failed = [r for r in rows if r.get('action') == 'access_rejected']
+    if len(failed) >= SUSPICIOUS_FAILED_ATTEMPTS:
+        alerts.append({
+            'kind': 'failed_access_burst',
+            'detail': f'{len(failed)} rejected accesses in last 10 min',
+        })
+    return alerts
+
+
+def suspicious_summary(
+    db_path: Path | str, *, firm_code: str, client_code: str,
+) -> list[dict[str, Any]]:
+    """Scan every active user in the client and return any detected
+    signals. Used by admin dashboard widget."""
+    out = []
+    for u in list_users(db_path, firm_code=firm_code,
+                           client_code=client_code):
+        alerts = detect_suspicious_activity(db_path, portal_user_id=u['id'])
+        if alerts:
+            out.append({'user_id': u['id'],
+                         'email': u['email'], 'alerts': alerts})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Render helpers (self-contained so gap_routes/dispatch can just emit HTML)
 # ---------------------------------------------------------------------------
 
