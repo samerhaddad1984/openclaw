@@ -304,6 +304,137 @@ def notify_review_assigned(
     )
 
 
+def enqueue_single_notification(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str,
+    recipient_email: str,
+    subject: str,
+    body: str,
+    kind: str = 'single',
+    channel: str = 'email',
+    recipient_phone: str | None = None,
+    recipient_name: str | None = None,
+    priority: int = 5,
+    send_at: str | None = None,
+    document_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> int:
+    """Canonical single-recipient enqueue with metadata.
+
+    Layers under `enqueue`; accepts a `metadata` dict that gets JSON-
+    serialised into the title when non-empty so downstream can group
+    related notifications (e.g. batch_id from a fanout). Keeping the
+    payload in ``title`` avoids a schema migration."""
+    md = ''
+    if metadata:
+        import json as _json
+        md = f' [meta={_json.dumps(metadata, separators=(",", ":"), default=str)}]'
+    display_title = f'{subject}{md}'
+    return enqueue(
+        db_path, client_code=client_code, kind=kind,
+        title=display_title, body=body, channel=channel,
+        recipient_email=recipient_email,
+        recipient_phone=recipient_phone,
+        subject=subject, priority=priority,
+        send_at=send_at, document_id=document_id,
+    )
+
+
+def enqueue_notification_to_group(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str,
+    group_type: str,
+    subject: str,
+    body: str,
+    kind: str = 'group',
+    priority: int = 5,
+    document_id: str | None = None,
+    target_user_id: int | None = None,
+) -> dict[str, Any]:
+    """Fan out one notification to every recipient in a named group.
+
+    ``group_type`` is one of:
+
+    - ``'all_admins'``         — every active portal user with role='admin'
+    - ``'all_contributors'``   — every active portal user with role='contributor'
+    - ``'all_portal_users'``   — every active portal user
+    - ``'specific_user'``      — single user identified by ``target_user_id``
+
+    Returns ``{'fanout_count': N, 'batch_id': 'b_xxx',
+    'recipients': [emails], 'group_type': ...}``. A warning is logged
+    when the resolved group is empty (the caller may still want to
+    know that nothing was dispatched, e.g. to surface "no admins
+    configured" in the UI)."""
+    import secrets as _secrets
+    from src.integrations import multi_user_portal as _mup
+
+    batch_id = f'b_{_secrets.token_hex(8)}'
+
+    if group_type == 'specific_user':
+        if target_user_id is None:
+            raise ValueError(
+                "group_type='specific_user' requires target_user_id"
+            )
+        user = _mup.get_user(db_path, user_id=target_user_id)
+        if user is None or user.get('status') != 'active':
+            log.warning(
+                'fanout(specific_user=%s): user not active; skipping',
+                target_user_id,
+            )
+            return {'fanout_count': 0, 'batch_id': batch_id,
+                     'recipients': [], 'group_type': group_type}
+        recipients = [user]
+    elif group_type in ('all_admins', 'all_contributors', 'all_portal_users'):
+        users = _mup.list_users(
+            db_path, firm_code=firm_code, client_code=client_code,
+        )
+        # list_users filters out 'removed'; apply status + role filters.
+        if group_type == 'all_admins':
+            recipients = [u for u in users
+                           if u.get('status') == 'active'
+                           and u.get('role') == 'admin']
+        elif group_type == 'all_contributors':
+            recipients = [u for u in users
+                           if u.get('status') == 'active'
+                           and u.get('role') == 'contributor']
+        else:  # all_portal_users
+            recipients = [u for u in users if u.get('status') == 'active']
+    else:
+        raise ValueError(f'unknown group_type: {group_type!r}')
+
+    if not recipients:
+        log.warning(
+            'fanout(%s) resolved to zero recipients for %s/%s',
+            group_type, firm_code, client_code,
+        )
+        return {'fanout_count': 0, 'batch_id': batch_id,
+                 'recipients': [], 'group_type': group_type}
+
+    emails: list[str] = []
+    for r in recipients:
+        email = r.get('email')
+        if not email:
+            continue
+        # Personalise body with recipient name when present.
+        body_for_r = body
+        name = r.get('full_name') or ''
+        if name and '{name}' in body_for_r:
+            body_for_r = body_for_r.replace('{name}', name)
+        enqueue_single_notification(
+            db_path, firm_code=firm_code, client_code=client_code,
+            recipient_email=email, recipient_name=name,
+            subject=subject, body=body_for_r,
+            kind=kind, priority=priority,
+            document_id=document_id,
+            metadata={'group_type': group_type,
+                        'batch_id': batch_id,
+                        'portal_user_id': r.get('id')},
+        )
+        emails.append(email)
+    return {'fanout_count': len(emails), 'batch_id': batch_id,
+             'recipients': emails, 'group_type': group_type}
+
+
 def notify_feedback_submitted(
     db_path: Path | str, *, feedback_id: int, owner_email: str,
     firm_code: str, subject: str, body: str,
