@@ -1033,6 +1033,19 @@ def bootstrap_schema() -> None:
                     "updated_at", "vendor", "client_code"):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} TEXT")
+        # Multi-user portal uploader tracking.
+        for col, ddl in (
+            ("uploaded_by_portal_user_id", "INTEGER"),
+            ("uploader_name",              "TEXT"),
+            ("uploader_email",             "TEXT"),
+        ):
+            if col not in existing:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE documents ADD COLUMN {col} {ddl}"
+                    )
+                except sqlite3.OperationalError:
+                    pass
         conn.commit()
 
         # Add must_reset_password / language columns to dashboard_users if missing
@@ -1165,6 +1178,11 @@ def bootstrap_schema() -> None:
             ("portal_token_created_at",     "TEXT"),
             ("portal_token_rotated_count",  "INTEGER DEFAULT 0"),
             ("created_at",                  "TEXT"),
+            # Multi-user portal: dual-mode flag. 'single' keeps the
+            # existing anonymous QR/link flow; 'multi' opts the client
+            # into invitation-based personal links (see
+            # client_portal_users + client_portal_invitations below).
+            ("portal_mode",                 "TEXT DEFAULT 'single'"),
         ):
             if _ccol not in client_cols:
                 try:
@@ -1523,9 +1541,28 @@ def bootstrap_schema() -> None:
                 body TEXT NOT NULL,
                 related_document_id TEXT,
                 read_at TEXT,
+                sender_portal_user_id INTEGER,
+                target_portal_user_id INTEGER,
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Multi-user: add identity columns to legacy rows too.
+        _cm_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(client_messages)").fetchall()}
+        if "sender_portal_user_id" not in _cm_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_messages ADD COLUMN sender_portal_user_id INTEGER"
+                )
+            except sqlite3.OperationalError:
+                pass
+        if "target_portal_user_id" not in _cm_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_messages ADD COLUMN target_portal_user_id INTEGER"
+                )
+            except sqlite3.OperationalError:
+                pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_client_messages_client "
             "ON client_messages(client_code)"
@@ -1542,6 +1579,85 @@ def bootstrap_schema() -> None:
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+
+        # Multi-user portal: personal user accounts per client.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_portal_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                email TEXT NOT NULL,
+                full_name TEXT,
+                role TEXT NOT NULL,
+                user_token TEXT UNIQUE NOT NULL,
+                status TEXT DEFAULT 'invited',
+                invited_by TEXT,
+                invited_at TEXT,
+                accepted_at TEXT,
+                last_active_at TEXT,
+                upload_count INTEGER DEFAULT 0,
+                suspended_at TEXT,
+                removed_at TEXT,
+                version INTEGER DEFAULT 1,
+                UNIQUE(firm_code, client_code, email)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cpu_token "
+            "ON client_portal_users(user_token)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cpu_client "
+            "ON client_portal_users(firm_code, client_code, status)"
+        )
+
+        # Pending invitations (separate from users: a user row only exists
+        # once someone has accepted; an invitation is the signed link sent
+        # to an email before acceptance).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_portal_invitations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code TEXT NOT NULL,
+                client_code TEXT NOT NULL,
+                email TEXT NOT NULL,
+                full_name TEXT,
+                invited_role TEXT NOT NULL,
+                invitation_token TEXT UNIQUE NOT NULL,
+                invited_by TEXT,
+                invited_at TEXT,
+                expires_at TEXT,
+                accepted_at TEXT,
+                status TEXT DEFAULT 'pending'
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cpi_token "
+            "ON client_portal_invitations(invitation_token)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cpi_client "
+            "ON client_portal_invitations(firm_code, client_code, status)"
+        )
+
+        # Per-user rate limit + audit log (Phase 7).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_portal_user_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                portal_user_id INTEGER,
+                firm_code TEXT,
+                client_code TEXT,
+                actor_email TEXT,
+                action TEXT NOT NULL,
+                detail TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cpu_audit_user "
+            "ON client_portal_user_audit(portal_user_id, created_at)"
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_portal_access_client "
             "ON client_portal_access(client_code, created_at)"
