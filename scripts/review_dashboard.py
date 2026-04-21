@@ -13259,13 +13259,19 @@ a:hover{{color:#16C172}}
                 <tr><th>Capacité / Feature</th><th>OtoCPA</th><th>Dext</th><th>Receipt Bank</th><th>Hubdoc</th></tr>
             </thead>
             <tbody>
-                <tr><td>Précision reçus canadiens / AI accuracy Canadian receipts</td><td>90 %+</td><td>80 %</td><td>75 %</td><td>70 %</td></tr>
+                <tr><td>Précision reçus canadiens / AI accuracy Canadian receipts</td><td>90–100 %</td><td>80 %</td><td>75 %</td><td>70 %</td></tr>
                 <tr><td>Interface FR + marchands québécois / French UI + Quebec merchants</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
                 <tr><td>Portail client multi-utilisateur / Multi-user client portal</td><td>✓</td><td>✓</td><td>✓</td><td>Partiel / Partial</td></tr>
                 <tr><td>Sync QBO bidirectionnelle / Bidirectional QBO sync</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
                 <tr><td>Routage bancaire intelligent / Smart bank routing (QBO or Plaid)</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
                 <tr><td>Régularisations ligne par ligne / Line-level accrual review</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>File d'examen avec approbation / Review queue with approval</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
                 <tr><td>Flux d'audit NCA / CAS audit workflows</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Déclarations T2 / TPS-TVQ / T5013 / T661</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>États financiers (TB, IS, BS, CF, SCE)</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>Tableau de bord admin / Admin dashboard</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
+                <tr><td>2FA + hébergement canadien (Toronto) / 2FA + Canadian hosting (Toronto)</td><td>✓</td><td>Partiel / Partial</td><td>Partiel / Partial</td><td>Partiel / Partial</td></tr>
+                <tr><td>Conforme LPRPDE + Loi 25 / PIPEDA + Quebec Law 25 compliant</td><td>✓</td><td>✗</td><td>✗</td><td>✗</td></tr>
             </tbody>
         </table>
     </div>
