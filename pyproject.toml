@@ -8,3 +8,8 @@ select = ["E9", "F63", "F7", "F82", "I"]
 [tool.pytest.ini_options]
 testpaths = ["skills"]
 python_files = ["test_*.py"]
+markers = [
+    "slow: tests that take >30s to run (deselect with -m 'not slow')",
+    "external: tests that hit external services (deselect with -m 'not external')",
+    "memory_leak: long-running memory/leak tests (deselect with -m 'not memory_leak')",
+]
