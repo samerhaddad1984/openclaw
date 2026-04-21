@@ -18205,11 +18205,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             except Exception:
                 firm_row = None
             firm_display = firm_row["name"] if firm_row else portal_user['firm_code']
+            client_display = client.get('client_name') or client.get('client_code') or ''
             html_str = _mup.render_portal_user_tour(
                 step_n,
                 user_name=portal_user.get('full_name') or portal_user['email'],
                 firm_name=firm_display,
                 user_token=user_token, lang=tour_lang,
+                role=portal_user.get('role') or 'contributor',
+                firm_client_display=(
+                    f"{client_display} at {firm_display}"
+                    if client_display and firm_display
+                    else firm_display
+                ),
             )
             self._send_html(html_str)
             return

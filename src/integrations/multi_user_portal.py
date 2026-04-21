@@ -1041,7 +1041,42 @@ def render_user_portal_admin(
     )
 
 
-PORTAL_USER_TOUR_TOTAL = 3
+PORTAL_USER_TOUR_TOTAL_CONTRIBUTOR = 3
+PORTAL_USER_TOUR_TOTAL_ADMIN = 4
+
+# Backwards-compat: callers that don't know the role yet default to
+# the contributor length. `render_portal_user_tour` now accepts
+# `role=...` and injects the admin screen when role=='admin'.
+PORTAL_USER_TOUR_TOTAL = PORTAL_USER_TOUR_TOTAL_CONTRIBUTOR
+
+
+_PORTAL_USER_TOUR_ADMIN_SCREEN = {
+    'en': {
+        'title': 'Manage your team',
+        'subtitle': 'You can invite colleagues and set their role.',
+        'body': (
+            "As an admin for {firm_client}, the admin page "
+            "(/cp/.../admin) lets you invite bookkeepers, the office "
+            "manager, or any other uploader. Each invitee gets a "
+            "personal email with a 14-day link. You can suspend, "
+            "reactivate, or remove someone later if needed — their "
+            "past uploads stay attributed to them."
+        ),
+    },
+    'fr': {
+        'title': 'Gérez votre équipe',
+        'subtitle': "Vous pouvez inviter des collègues et leur attribuer un rôle.",
+        'body': (
+            "En tant qu'admin pour {firm_client}, la page admin "
+            "(/cp/.../admin) vous permet d'inviter comptables, adjoint(e)s "
+            "administratif(ves), ou tout autre utilisateur. Chaque "
+            "invité reçoit un courriel personnel avec un lien de 14 "
+            "jours. Vous pouvez suspendre, réactiver ou retirer "
+            "quelqu'un plus tard si nécessaire — ses anciens "
+            "téléversements lui restent attribués."
+        ),
+    },
+}
 
 
 _PORTAL_USER_TOUR_CONTENT = [
@@ -1136,23 +1171,62 @@ def _portal_tour_labels(lang: str) -> dict[str, str]:
     return fr if lang == 'fr' else en
 
 
+def portal_tour_total_for_role(role: str) -> int:
+    """Admins see the team-management screen; contributors don't."""
+    return (PORTAL_USER_TOUR_TOTAL_ADMIN if (role or '').lower() == 'admin'
+            else PORTAL_USER_TOUR_TOTAL_CONTRIBUTOR)
+
+
+def _portal_tour_screen_for_step(step: int, role: str) -> dict:
+    """Resolve which screen content-block a given 1-based step maps to.
+
+    Contributor: [welcome, upload, messages] = 3 screens in order.
+    Admin: [welcome, upload, messages, manage-team] = 4 screens;
+    the manage-team block is a separate dict rather than an extra
+    entry in _PORTAL_USER_TOUR_CONTENT so contributor paths stay
+    untouched."""
+    is_admin = (role or '').lower() == 'admin'
+    total = portal_tour_total_for_role(role)
+    step = max(1, min(total, step))
+    # For both roles, steps 1..3 come from _PORTAL_USER_TOUR_CONTENT.
+    if step <= 3:
+        return {'source': 'base', 'block': _PORTAL_USER_TOUR_CONTENT[step - 1],
+                'step': step, 'total': total, 'admin_screen': False}
+    # step == 4 only exists for admin.
+    return {'source': 'admin', 'block': _PORTAL_USER_TOUR_ADMIN_SCREEN,
+            'step': step, 'total': total, 'admin_screen': True}
+
+
 def render_portal_user_tour(
     step: int, *,
     user_name: str,
     firm_name: str,
     user_token: str,
     lang: str = 'en',
+    role: str = 'contributor',
+    firm_client_display: str | None = None,
 ) -> str:
-    """Three-screen bilingual tour shown on first login after invite."""
+    """Bilingual tour shown on first login after invite.
+
+    Contributors get 3 screens; admins get 4 (the extra one covers
+    managing teammates). ``role`` is the portal user's role;
+    ``firm_client_display`` is shown in the admin screen body to
+    ground them (e.g. 'Construction Tremblay at Sam CPA')."""
     lang_key = 'fr' if (lang or '').lower().startswith('fr') else 'en'
-    total = PORTAL_USER_TOUR_TOTAL
-    step = max(1, min(total, step))
-    screen = _PORTAL_USER_TOUR_CONTENT[step - 1][lang_key]
+    resolved = _portal_tour_screen_for_step(step, role)
+    total = resolved['total']
+    step = resolved['step']
+    screen = resolved['block'][lang_key]
     labels = _portal_tour_labels(lang_key)
 
-    title = screen['title'].format(name=_esc(user_name or ''))
-    subtitle = screen['subtitle'].format(firm=_esc(firm_name or ''))
-    body_text = screen['body'].format(firm=_esc(firm_name or ''))
+    title_kwargs = {'name': _esc(user_name or '')}
+    subtitle_kwargs = {'firm': _esc(firm_name or '')}
+    body_kwargs = {'firm': _esc(firm_name or ''),
+                    'firm_client': _esc(firm_client_display or firm_name or '')}
+
+    title = screen['title'].format(**{**title_kwargs, **body_kwargs})
+    subtitle = screen['subtitle'].format(**{**subtitle_kwargs, **body_kwargs})
+    body_text = screen['body'].format(**body_kwargs)
     step_label = labels['step_of'].format(n=step, total=total)
 
     prev_html = ''
@@ -1200,6 +1274,23 @@ def render_portal_user_tour(
         f'{_esc(labels["other"])}</a>'
     )
 
+    # Admin-only CTA: deep-link to the invite page so the admin can
+    # invite their first colleague without leaving the tour.
+    invite_cta = ''
+    if resolved['admin_screen']:
+        invite_label_en = 'Invite your first colleague'
+        invite_label_fr = 'Inviter votre premier(ère) collègue'
+        invite_label = invite_label_fr if lang_key == 'fr' else invite_label_en
+        invite_cta = (
+            f'<p style="margin-top:1.2rem;">'
+            f'<a href="/cp/{_esc(user_token)}/admin" '
+            'class="tour-invite-cta" '
+            'style="display:inline-block;background:#f3f4f6;'
+            'border:1px solid #1e40af;color:#1e40af;padding:10px 20px;'
+            'border-radius:4px;text-decoration:none;font-weight:bold;">'
+            f'{_esc(invite_label)} &rarr;</a></p>'
+        )
+
     return (
         '<!DOCTYPE html><html lang="' + lang_key + '">'
         '<head><meta charset="utf-8">'
@@ -1209,12 +1300,15 @@ def render_portal_user_tour(
         '.card{background:white;border:1px solid #e5e7eb;padding:2rem;'
         'border-radius:8px;position:relative;}</style></head><body>'
         '<div class="card" data-tour-screen="portal_user" '
-        f'data-tour-step="{step}" data-tour-lang="{lang_key}">'
+        f'data-tour-step="{step}" data-tour-total="{total}" '
+        f'data-tour-role="{_esc(role)}" '
+        f'data-tour-lang="{lang_key}">'
         f'{switcher}'
         f'<div style="color:#9ca3af;font-size:13px;">{step_label}</div>'
         f'<h2 style="margin:6px 0 4px;">{title}</h2>'
         f'<div style="color:#6b7280;margin-bottom:1rem;">{subtitle}</div>'
         f'<p style="line-height:1.6;">{body_text}</p>'
+        f'{invite_cta}'
         '<div style="margin-top:2rem;text-align:right;">'
         f'{prev_html}{next_btn}{skip}'
         '</div></div></body></html>'
