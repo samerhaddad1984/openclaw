@@ -122,8 +122,14 @@ def dispatch_get(
             step = int(qs.get('step', ['1'])[0])
         except ValueError:
             step = 1
-        body = _gr.render_tour_screens(step, lang=lang)
-        _send_layout(handler, page_layout, 'Tour', body, user=user, lang=lang)
+        # Explicit ?lang=fr|en overrides the session lang so the
+        # language switcher on the tour page works even when the
+        # user's profile is set to the other language.
+        tour_lang_qs = (qs.get('lang', [''])[0] or '').strip()
+        tour_lang = tour_lang_qs if tour_lang_qs in ('fr', 'en') else lang
+        body = _gr.render_tour_screens(step, lang=tour_lang)
+        _send_layout(handler, page_layout, 'Tour', body, user=user,
+                     lang=tour_lang)
         return True
 
     # -------------------- Gap 2: review queue --------------------

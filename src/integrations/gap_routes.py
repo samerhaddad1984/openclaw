@@ -215,53 +215,417 @@ def render_onboarding_quick_setup(
     )
 
 
+TOUR_TOTAL_STEPS = 5
+
+
+# Five tour screens. Each screen has FR + EN strings, a visual aid
+# (inline SVG so no external assets / CSP headaches), and an optional
+# "try it" link to the relevant page. The strings live here rather
+# than in a separate i18n file so the tour module stays self-contained.
+_TOUR_CONTENT: list[dict[str, dict[str, str]]] = [
+    # Step 1 — welcome + overview
+    {
+        'en': {
+            'title': 'Welcome to OtoCPA',
+            'subtitle': 'A 2-minute walkthrough of how the product is wired.',
+            'body': (
+                "You are the CPA. Clients send you receipts and invoices, "
+                "you review them, post to QuickBooks, and close each month. "
+                "OtoCPA does the OCR, learns your vendor mappings, and "
+                "keeps the audit trail so you stop copy-pasting numbers."
+            ),
+            'bullets': [
+                'One queue for every client — filter by status or priority.',
+                'Receipts OCR\'d automatically; you just confirm + post.',
+                'Month-end close wizard bundles the checks into 6 steps.',
+            ],
+            'try_label': 'Open the dashboard',
+            'try_href': '/',
+        },
+        'fr': {
+            'title': 'Bienvenue sur OtoCPA',
+            'subtitle': 'Survol de 2 minutes du fonctionnement du produit.',
+            'body': (
+                "Vous êtes le comptable. Vos clients envoient reçus et "
+                "factures, vous les révisez, passez l'écriture dans "
+                "QuickBooks et fermez chaque mois. OtoCPA fait l'OCR, "
+                "apprend vos mappages fournisseurs et maintient la piste "
+                "d'audit pour que vous cessiez de recopier des chiffres."
+            ),
+            'bullets': [
+                'Une seule file pour tous les clients — filtrage par statut ou priorité.',
+                "Les reçus sont OCR'sés automatiquement ; vous confirmez + passez l'écriture.",
+                'Assistant de fin de mois en 6 étapes.',
+            ],
+            'try_label': 'Ouvrir le tableau de bord',
+            'try_href': '/',
+        },
+        'svg': (
+            '<svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" '
+            'role="img" aria-label="Overview diagram" '
+            'style="width:100%;max-width:320px;height:auto;">'
+            '<rect x="10" y="15" width="80" height="40" rx="6" fill="#dbeafe" stroke="#1e40af"/>'
+            '<text x="50" y="40" text-anchor="middle" font-size="10" fill="#1e40af">Client</text>'
+            '<path d="M92 35 L140 35" stroke="#6b7280" marker-end="url(#arrow)"/>'
+            '<rect x="142" y="15" width="80" height="40" rx="6" fill="#d1fae5" stroke="#16C172"/>'
+            '<text x="182" y="30" text-anchor="middle" font-size="10" fill="#166534">OtoCPA</text>'
+            '<text x="182" y="42" text-anchor="middle" font-size="9" fill="#166534">OCR + Queue</text>'
+            '<path d="M224 35 L272 35" stroke="#6b7280" marker-end="url(#arrow)"/>'
+            '<rect x="274" y="15" width="44" height="40" rx="6" fill="#fef3c7" stroke="#ca8a04"/>'
+            '<text x="296" y="40" text-anchor="middle" font-size="9" fill="#854d0e">QBO</text>'
+            '<text x="160" y="90" text-anchor="middle" font-size="9" fill="#6b7280">Receipts → Review → Posted</text>'
+            '<text x="160" y="108" text-anchor="middle" font-size="9" fill="#6b7280">Month-end close wizard runs here</text>'
+            '<defs><marker id="arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#6b7280"/></marker></defs>'
+            '</svg>'
+        ),
+    },
+    # Step 2 — client management
+    {
+        'en': {
+            'title': 'Clients + portals',
+            'subtitle': 'Give each client a way to send you receipts.',
+            'body': (
+                "Every client gets a personal portal link. Share it by "
+                "email or QR; they upload receipts, you receive them in "
+                "your queue. For shops with multiple uploaders (bookkeeper, "
+                "office manager, owner), switch the client to "
+                "multi-user mode to invite each person separately."
+            ),
+            'bullets': [
+                'Add a client — portal token auto-generated.',
+                'Multi-user clients: admin invites contributors by email.',
+                'Every upload is attributed to the uploader.',
+            ],
+            'try_label': 'Go to clients',
+            'try_href': '/clients',
+        },
+        'fr': {
+            'title': 'Clients et portails',
+            'subtitle': 'Donnez à chaque client un moyen simple d\'envoyer des reçus.',
+            'body': (
+                "Chaque client reçoit un lien de portail personnel. Partagez-le "
+                "par courriel ou code QR ; vos clients téléversent leurs reçus, "
+                "vous les voyez dans votre file. Pour les entreprises avec "
+                "plusieurs utilisateurs (comptable, adjointe, dirigeant), "
+                "passez le client en mode multi-utilisateurs pour inviter "
+                "chaque personne séparément."
+            ),
+            'bullets': [
+                'Ajoutez un client — le jeton de portail est généré automatiquement.',
+                'Client multi-utilisateurs : l\'admin invite les contributeurs par courriel.',
+                'Chaque téléversement est attribué à son auteur.',
+            ],
+            'try_label': 'Voir les clients',
+            'try_href': '/clients',
+        },
+        'svg': (
+            '<svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" '
+            'role="img" aria-label="Clients diagram" '
+            'style="width:100%;max-width:320px;height:auto;">'
+            '<rect x="20" y="20" width="90" height="30" rx="4" fill="#eef2ff" stroke="#4338ca"/>'
+            '<text x="65" y="39" text-anchor="middle" font-size="10" fill="#4338ca">Sole-prop</text>'
+            '<rect x="20" y="58" width="90" height="30" rx="4" fill="#eef2ff" stroke="#4338ca"/>'
+            '<text x="65" y="77" text-anchor="middle" font-size="10" fill="#4338ca">Multi-user</text>'
+            '<path d="M112 35 L160 35" stroke="#6b7280" marker-end="url(#a2)"/>'
+            '<path d="M112 73 L160 73" stroke="#6b7280" marker-end="url(#a2)"/>'
+            '<rect x="162" y="15" width="100" height="80" rx="6" fill="#fff" stroke="#1e40af"/>'
+            '<text x="212" y="35" text-anchor="middle" font-size="10" fill="#1e40af">/c/{token}</text>'
+            '<text x="212" y="55" text-anchor="middle" font-size="9" fill="#6b7280">(single link)</text>'
+            '<line x1="170" y1="65" x2="254" y2="65" stroke="#e5e7eb"/>'
+            '<text x="212" y="80" text-anchor="middle" font-size="10" fill="#1e40af">/cp/{user_token}</text>'
+            '<text x="212" y="92" text-anchor="middle" font-size="9" fill="#6b7280">(per invite)</text>'
+            '<defs><marker id="a2" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#6b7280"/></marker></defs>'
+            '</svg>'
+        ),
+    },
+    # Step 3 — document workflow
+    {
+        'en': {
+            'title': 'Review + post',
+            'subtitle': 'Your employees submit, you approve.',
+            'body': (
+                "Receipts land in New → OCR'd to Processing → flip to "
+                "NeedsReview when the OCR isn't sure. Your staff picks "
+                "them up, fills the gaps, and submits for review. Owners "
+                "and firm admins approve. Approved items post to QBO "
+                "(or Acomba / Sage) automatically."
+            ),
+            'bullets': [
+                'Assign each document to a specific employee.',
+                'Submit → review_queue → Approve/Reject with notes.',
+                'Bulk approve multiple at once when you are confident.',
+            ],
+            'try_label': 'Open my tasks',
+            'try_href': '/my_tasks',
+        },
+        'fr': {
+            'title': 'Réviser et passer l\'écriture',
+            'subtitle': 'Vos employés soumettent, vous approuvez.',
+            'body': (
+                "Les reçus arrivent à New → OCR\'sés en Processing → passent "
+                "à NeedsReview quand l\'OCR doute. Votre équipe les prend, "
+                "complète les champs et les soumet pour révision. Les "
+                "propriétaires et firm_admins approuvent. Les items approuvés "
+                "sont passés dans QBO (ou Acomba / Sage) automatiquement."
+            ),
+            'bullets': [
+                'Assignez chaque document à un employé.',
+                'Soumettre → file de révision → Approuver/Refuser avec notes.',
+                'Approbation en lot quand vous êtes certain.',
+            ],
+            'try_label': 'Ouvrir mes tâches',
+            'try_href': '/my_tasks',
+        },
+        'svg': (
+            '<svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" '
+            'role="img" aria-label="Workflow diagram" '
+            'style="width:100%;max-width:320px;height:auto;">'
+            '<rect x="8"   y="50" width="50" height="40" rx="4" fill="#fef3c7" stroke="#ca8a04"/>'
+            '<text x="33"  y="75" text-anchor="middle" font-size="9">New</text>'
+            '<rect x="70"  y="50" width="60" height="40" rx="4" fill="#dbeafe" stroke="#1e40af"/>'
+            '<text x="100" y="75" text-anchor="middle" font-size="9">NeedsReview</text>'
+            '<rect x="142" y="50" width="60" height="40" rx="4" fill="#ddd6fe" stroke="#6d28d9"/>'
+            '<text x="172" y="75" text-anchor="middle" font-size="9">Submitted</text>'
+            '<rect x="214" y="50" width="50" height="40" rx="4" fill="#d1fae5" stroke="#16C172"/>'
+            '<text x="239" y="75" text-anchor="middle" font-size="9">Approved</text>'
+            '<rect x="276" y="50" width="40" height="40" rx="4" fill="#cffafe" stroke="#0891b2"/>'
+            '<text x="296" y="75" text-anchor="middle" font-size="9">Posted</text>'
+            '<path d="M58  70 L70  70" stroke="#6b7280" marker-end="url(#a3)"/>'
+            '<path d="M130 70 L142 70" stroke="#6b7280" marker-end="url(#a3)"/>'
+            '<path d="M202 70 L214 70" stroke="#6b7280" marker-end="url(#a3)"/>'
+            '<path d="M264 70 L276 70" stroke="#6b7280" marker-end="url(#a3)"/>'
+            '<defs><marker id="a3" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#6b7280"/></marker></defs>'
+            '</svg>'
+        ),
+    },
+    # Step 4 — financial statements + close
+    {
+        'en': {
+            'title': 'Close the month',
+            'subtitle': 'Six steps, one lock.',
+            'body': (
+                "When the month is done, run the close wizard. It walks "
+                "you through selecting the period, confirming every "
+                "document is posted, reconciling the bank, reviewing "
+                "proposed accruals (with per-asset depreciation and "
+                "per-employee wage lines you can edit), generating "
+                "statements, then locking the period."
+            ),
+            'bullets': [
+                'Prior periods must be closed first — enforced.',
+                'Accrual step shows each line with an editable amount.',
+                'Lock is reversible by the owner only, with audit.',
+            ],
+            'try_label': 'Open close wizard',
+            'try_href': '/close/wizard',
+        },
+        'fr': {
+            'title': 'Fermer le mois',
+            'subtitle': 'Six étapes, un verrou.',
+            'body': (
+                "Quand le mois est terminé, lancez l'assistant de fermeture. "
+                "Il vous guide : choisir la période, confirmer que tous les "
+                "documents sont passés, réconcilier la banque, réviser les "
+                "charges à payer suggérées (dépréciation par actif, salaires "
+                "par employé — chaque ligne modifiable), générer les états, "
+                "puis verrouiller la période."
+            ),
+            'bullets': [
+                'Les périodes antérieures doivent être fermées d\'abord.',
+                'L\'étape accruals affiche chaque ligne avec montant modifiable.',
+                'Le verrou n\'est levable que par le propriétaire, avec audit.',
+            ],
+            'try_label': 'Ouvrir l\'assistant de fermeture',
+            'try_href': '/close/wizard',
+        },
+        'svg': (
+            '<svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" '
+            'role="img" aria-label="Close wizard steps" '
+            'style="width:100%;max-width:320px;height:auto;">'
+            '<g font-size="9">'
+            '<rect x="8"   y="40" width="46" height="30" rx="4" fill="#d1fae5" stroke="#16C172"/>'
+            '<text x="31" y="58" text-anchor="middle">1 Period</text>'
+            '<rect x="58"  y="40" width="50" height="30" rx="4" fill="#d1fae5" stroke="#16C172"/>'
+            '<text x="83" y="58" text-anchor="middle">2 Docs</text>'
+            '<rect x="112" y="40" width="50" height="30" rx="4" fill="#d1fae5" stroke="#16C172"/>'
+            '<text x="137" y="58" text-anchor="middle">3 Bank</text>'
+            '<rect x="166" y="40" width="58" height="30" rx="4" fill="#dbeafe" stroke="#1e40af"/>'
+            '<text x="195" y="58" text-anchor="middle">4 Accruals</text>'
+            '<rect x="228" y="40" width="48" height="30" rx="4" fill="#fff" stroke="#9ca3af"/>'
+            '<text x="252" y="58" text-anchor="middle">5 Stmts</text>'
+            '<rect x="280" y="40" width="36" height="30" rx="4" fill="#fff" stroke="#9ca3af"/>'
+            '<text x="298" y="58" text-anchor="middle">6 Lock</text>'
+            '</g>'
+            '<text x="160" y="100" text-anchor="middle" font-size="9" fill="#6b7280">Done steps stay green; current step blue; later steps grey.</text>'
+            '</svg>'
+        ),
+    },
+    # Step 5 — next steps + help
+    {
+        'en': {
+            'title': 'You are set up',
+            'subtitle': 'A few places to go from here.',
+            'body': (
+                "The getting-started checklist on the right of every page "
+                "tracks the first six things to do. It ticks itself as you "
+                "complete each item. When the checklist is all done the "
+                "widget hides itself. Reach for /owner/dashboard for "
+                "firm-wide rollups when you are ready."
+            ),
+            'bullets': [
+                'Getting-started checklist auto-completes as you act.',
+                'Owner dashboard: revenue, firm health, alerts.',
+                'Help? See docs/ADMIN_GUIDE.md or hit /health for status.',
+            ],
+            'try_label': 'Back to dashboard',
+            'try_href': '/',
+        },
+        'fr': {
+            'title': 'Vous êtes prêt',
+            'subtitle': 'Quelques endroits où aller maintenant.',
+            'body': (
+                "La liste de démarrage à droite de chaque page suit les six "
+                "premières choses à faire. Elle se coche toute seule au fur "
+                "et à mesure que vous agissez. Une fois tout coché, le "
+                "widget se cache. Pour les tableaux récapitulatifs du "
+                "cabinet, ouvrez /owner/dashboard."
+            ),
+            'bullets': [
+                'La liste de démarrage s\'auto-complète à mesure que vous agissez.',
+                'Tableau propriétaire : revenus, santé du cabinet, alertes.',
+                'Besoin d\'aide ? Voir docs/ADMIN_GUIDE.md ou /health.',
+            ],
+            'try_label': 'Retour au tableau de bord',
+            'try_href': '/',
+        },
+        'svg': (
+            '<svg viewBox="0 0 320 140" xmlns="http://www.w3.org/2000/svg" '
+            'role="img" aria-label="Getting started checklist" '
+            'style="width:100%;max-width:320px;height:auto;">'
+            '<rect x="40" y="15" width="240" height="110" rx="6" fill="#fffef5" stroke="#d4cfa8"/>'
+            '<text x="160" y="32" text-anchor="middle" font-size="11" font-weight="bold">Getting started</text>'
+            '<g font-size="9" fill="#333">'
+            '<text x="55" y="52">&#10003; Complete firm profile</text>'
+            '<text x="55" y="68">&#10003; Add first client</text>'
+            '<text x="55" y="84">&#10003; Send portal link</text>'
+            '<text x="55" y="100">&#9744; Upload test receipt</text>'
+            '<text x="55" y="116">&#9744; Review getting-started guide</text>'
+            '</g>'
+            '</svg>'
+        ),
+    },
+]
+
+
+def _tour_label(lang: str, key: str) -> str:
+    labels = {
+        'en': {
+            'step_of': 'Step {n} of {total}',
+            'back': '&larr; Back',
+            'next': 'Next &rarr;',
+            'finish': 'Finish tour',
+            'skip': 'Skip tour',
+            'try_it': 'Try it:',
+        },
+        'fr': {
+            'step_of': 'Étape {n} sur {total}',
+            'back': '&larr; Retour',
+            'next': 'Suivant &rarr;',
+            'finish': 'Terminer la visite',
+            'skip': 'Ignorer la visite',
+            'try_it': 'Essayez :',
+        },
+    }
+    return labels.get(lang if lang in labels else 'en', labels['en']).get(key, key)
+
+
 def render_tour_screens(step: int, lang: str = 'en') -> str:
-    steps = [
-        ('Welcome to your queue',
-         'The home page lists documents awaiting action. Filter by status, '
-         'assign to staff, or submit for review — all in one place.'),
-        ('Upload receipts',
-         'Drop files on the upload page, email them to your ingest address, '
-         'or let your clients upload directly through the portal link.'),
-        ('Review + approve',
-         'Employees submit finished work; owners / firm admins approve or '
-         'reject with notes. Approved items post straight to QuickBooks.'),
-        ('Close the month',
-         'The close wizard walks through six checks and locks the period. '
-         'Save and continue later — state persists between sessions.'),
-        ('You are all set',
-         'Head to the getting-started checklist on the right of every page. '
-         'Each item ticks itself when the underlying action is complete.'),
-    ]
-    total = len(steps)
+    """Render one of the 5 tour screens.
+
+    The content pool lives in _TOUR_CONTENT (EN + FR + SVG per screen).
+    Language falls back to EN when the requested lang isn't known; this
+    matches the rest of the portal."""
+    total = TOUR_TOTAL_STEPS
     step = max(1, min(total, step))
-    title, body = steps[step - 1]
-    next_href = f'/tour?step={step+1}' if step < total else '/tour/complete'
-    next_label = 'Next' if step < total else 'Finish'
+    content = _TOUR_CONTENT[step - 1]
+    lang_key = 'fr' if lang == 'fr' else 'en'
+    block = content.get(lang_key) or content['en']
+    svg = content.get('svg') or ''
+
+    bullets_html = ''.join(
+        f'<li>{_esc(b)}</li>' for b in block.get('bullets', [])
+    )
+
+    # Navigation
     prev_html = ''
     if step > 1:
-        prev_html = f'<a href="/tour?step={step-1}" style="margin-right:8px;">&larr; Back</a>'
-    skip_html = '<a href="/tour/complete" style="color:#888;margin-left:12px;">Skip tour</a>'
-    finish_submit = ''
-    if next_label == 'Finish':
-        finish_submit = (
-            '<form method="POST" action="/tour/complete" style="display:inline;">'
-            '<button type="submit" class="primary" style="padding:8px 20px;">Finish</button>'
-            '</form>'
+        prev_html = (
+            f'<a href="/tour?step={step-1}&lang={lang_key}" '
+            'style="margin-right:12px;color:#4b5563;">'
+            f'{_tour_label(lang_key, "back")}</a>'
         )
-        next_btn = finish_submit
+
+    if step < total:
+        next_btn = (
+            f'<a href="/tour?step={step+1}&lang={lang_key}" '
+            'style="background:#1e40af;color:white;padding:10px 22px;'
+            'border-radius:4px;text-decoration:none;font-weight:bold;">'
+            f'{_tour_label(lang_key, "next")}</a>'
+        )
     else:
         next_btn = (
-            f'<a href="{next_href}" class="primary" '
-            'style="background:#1e40af;color:white;padding:8px 20px;'
-            'border-radius:4px;text-decoration:none;">Next &rarr;</a>'
+            '<form method="POST" action="/tour/complete" '
+            'style="display:inline;margin:0;">'
+            f'<input type="hidden" name="lang" value="{_esc(lang_key)}">'
+            '<button type="submit" '
+            'style="background:#16C172;color:black;padding:10px 22px;'
+            'border:none;border-radius:4px;font-weight:bold;cursor:pointer;">'
+            f'{_tour_label(lang_key, "finish")}</button></form>'
         )
+    skip_html = (
+        '<form method="POST" action="/tour/complete" '
+        'style="display:inline;margin-left:16px;">'
+        f'<input type="hidden" name="lang" value="{_esc(lang_key)}">'
+        '<button type="submit" '
+        'style="background:none;border:none;color:#9ca3af;cursor:pointer;'
+        'text-decoration:underline;padding:0;">'
+        f'{_tour_label(lang_key, "skip")}</button></form>'
+    )
+
+    try_html = ''
+    if block.get('try_label') and block.get('try_href'):
+        try_html = (
+            f'<p style="margin-top:1rem;">'
+            f'<strong>{_esc(_tour_label(lang_key, "try_it"))}</strong> '
+            f'<a href="{_esc(block["try_href"])}" '
+            'style="color:#1e40af;">'
+            f'{_esc(block["try_label"])}</a></p>'
+        )
+
+    other_lang = 'fr' if lang_key == 'en' else 'en'
+    lang_switcher = (
+        f'<a href="/tour?step={step}&lang={other_lang}" '
+        'style="position:absolute;top:10px;right:14px;color:#9ca3af;'
+        'font-size:13px;">'
+        f'{"Français" if other_lang == "fr" else "English"}</a>'
+    )
+
+    step_label = _tour_label(lang_key, 'step_of').format(n=step, total=total)
+
     return (
-        '<div class="card" style="max-width:600px;margin:2rem auto;text-align:center;">'
-        f'<div style="color:#888;">Step {step} of {total}</div>'
-        f'<h2>{_esc(title)}</h2>'
-        f'<p style="line-height:1.6;font-size:16px;">{_esc(body)}</p>'
-        '<div style="margin-top:2rem;">'
+        '<div class="card" data-tour-step="' + str(step) + '" '
+        'data-tour-lang="' + lang_key + '" '
+        'style="max-width:640px;margin:2rem auto;padding:2rem;'
+        'position:relative;background:white;">'
+        f'{lang_switcher}'
+        f'<div style="color:#9ca3af;font-size:13px;">{step_label}</div>'
+        f'<h2 style="margin:6px 0 4px 0;">{_esc(block["title"])}</h2>'
+        f'<div style="color:#6b7280;margin-bottom:1rem;">{_esc(block["subtitle"])}</div>'
+        f'<div style="text-align:center;margin:1rem 0;">{svg}</div>'
+        f'<p style="line-height:1.6;">{_esc(block["body"])}</p>'
+        f'<ul style="margin:0.5rem 0;line-height:1.6;">{bullets_html}</ul>'
+        f'{try_html}'
+        '<div style="margin-top:2rem;text-align:right;">'
         f'{prev_html}{next_btn}{skip_html}'
         '</div></div>'
     )
