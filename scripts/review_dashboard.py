@@ -11625,7 +11625,7 @@ def render_profile_page(user: dict[str, Any], flash: str = "", flash_error: str 
     totp_btn_label = "Manage 2FA" if totp_on else "Enable 2FA"
     inner = f"""
     <div class="card">
-        <h2>Profile</h2>
+        <h2>{ui_t("profile", lang)}</h2>
         {flash_html}{err_html}
         <form method="POST" action="/settings/profile/save">
             <div class="field"><label>Username (read-only)</label>
@@ -12345,6 +12345,9 @@ def render_portal_messages(client: dict, token: str,
 
 def render_portal_whatsapp(client: dict, token: str) -> str:
     # Try a configured WhatsApp number; fall back to a guidance note.
+    client_lang = (client.get("language") or "fr").strip().lower()
+    if client_lang not in ("fr", "en"):
+        client_lang = "fr"
     with open_db() as conn:
         wa_rows = []
         try:
@@ -12369,7 +12372,7 @@ def render_portal_whatsapp(client: dict, token: str) -> str:
             f'<div style="text-align:center;margin:12px 0;">'
             f'<img src="data:image/png;base64,{b64}" alt="WhatsApp QR" '
             f'style="width:220px;height:220px;">'
-            f'<div><a class="btn" href="{esc(wa_url)}">Open chat</a></div></div>'
+            f'<div><a class="btn" href="{esc(wa_url)}">{ui_t("open_chat", client_lang)}</a></div></div>'
         )
     body = f"""
     <div class="card">
@@ -13964,7 +13967,7 @@ def render_firm_form(ctx: dict[str, Any], user: dict[str, Any],
                 <button type="submit" style="background:#2ecc71;color:white;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;">
                     ✅ Create firm
                 </button>
-                <a href="/firms" style="background:#64748b;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">Cancel</a>
+                <a href="/firms" style="background:#64748b;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">{ui_t("cancel", lang)}</a>
             </div>
         </form>
     </div>
@@ -14759,7 +14762,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                     <input type="hidden" name="connection_id" value="{esc(bc.get('id',''))}">
                     <button type="submit"
                             style="background:#3498db;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">
-                        Sync
+                        {ui_t("sync", lang)}
                     </button>
                 </form>
                 <form method="POST" action="/bank/disconnect" style="margin:0;"
@@ -14768,7 +14771,7 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                     <input type="hidden" name="client_code" value="{esc(client['client_code'])}">
                     <button type="submit"
                             style="background:#e74c3c;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;">
-                        Disconnect
+                        {ui_t("disconnect", lang)}
                     </button>
                 </form>
             </div>"""
