@@ -308,3 +308,197 @@ materials the team asked for. It **did not** do a manual browser
 walkthrough in both locales, retrofit every date/currency call site,
 or replace every English-only CPA-admin button. Those remain as
 follow-up items listed above.
+
+---
+
+# Phase 2 — Mechanical migration + admin button labels
+
+Follow-up session picked up the known gaps from the first pass.
+
+## What got migrated
+
+### Formatting helpers (`src/formatting/__init__.py`)
+
+Added short aliases `money()`, `money_signed()`, `num()` so inline
+wrapping of `f"${x:,.2f}"` → `money(x, lang)` is a one-token swap.
+Canonical helpers (`format_date`, `format_currency`, …) remain.
+
+### Financial statement engine (`src/engines/audit_engine.py`)
+
+- **29 currency sites** migrated from `f"${x:,.2f}"` / `f"${x:+,.2f}"`
+  / `f"${x:,.0f}"` to `money()` / `money_signed()`. Covers the
+  working-paper lead sheet, SOCE, balance sheet, income statement,
+  cash flow, analytical review PDFs.
+- **1 strftime** site (working-paper "Date" row) migrated to
+  `format_date_short(..., lang)`.
+
+### Invoice generator (`src/agents/core/invoice_generator.py`)
+
+- **12 currency sites** migrated to `money()`, across both PyMuPDF
+  and minimal-PDF fallback paths.
+- **3 hours fields** (`f"{x:.2f}"`) migrated to `format_number(...,
+  lang, decimals=2)` so FR renders `120,50` not `120.50`.
+
+### CAS engine (`src/engines/cas_engine.py`)
+
+- Related-party disclosure (the directly-user-facing text output):
+  FR branch moved from the broken `f"{x:,.2f} $"` (English-number
+  form with trailing `$`) to canonical `money(x, 'fr')`; EN branch
+  simplified to `money(x, 'en')`. Internal reason-strings (materiality
+  messages, subsequent-events reasons) left unchanged — they're
+  stored in DB audit fields, not rendered to end users.
+
+### Dashboard + portal (`scripts/review_dashboard.py`)
+
+- Client-facing **portal documents table** — date now `format_date_short(...,
+  client_lang)`, amount now `money(...,  client_lang)`. Client's
+  language comes from `clients.language`.
+- Audit-anomalies page **"Last run"** label + timestamp now run
+  through `format_date_short` + `format_time` + lang-switched label.
+- Revenu Québec PDF **"generated_at"** uses the same helpers instead
+  of `%Y-%m-%d %H:%M UTC`.
+
+### Daily digest (`scripts/daily_digest.py`)
+
+- **Latent system-locale bug fixed.** Both `build_plain_text` and
+  `build_html_body` used `date.today().strftime("%d %B %Y")` which
+  picks the **system** locale for the month name — so a French
+  digest on an English server produced "21 April 2026" instead of
+  "21 avril 2026". Now: `format_date(date.today(), lang)`.
+
+### CPA admin button labels (`src/i18n/ui_labels.py` — new)
+
+- **121 labels** in a dedicated dict with canonical Québec French
+  translations. Covers: core verbs (Ajouter, Modifier, Enregistrer,
+  Soumettre, Approuver, Rejeter …), Quebec accounting terminology
+  (Bilan, Balance de vérification, Grand livre, Écriture de journal,
+  Rapprochement, Capitaux propres, Bénéfices non répartis, Plan
+  comptable, Flux de trésorerie, État des résultats, Actif à court
+  terme, Passif à long terme …), Quebec tax acronyms (TPS, TVQ, TVH),
+  PDF/statement button labels.
+- `ui_t(key, lang)` helper with EN fallback; `bilingual(key)` joins
+  both with a ` / `.
+- **13 high-visibility admin buttons** migrated in
+  `scripts/review_dashboard.py` to use `ui_t()` — "Add partner",
+  "Save narrative", "Calculate & sample", "Connect Bank Account",
+  "Clear Cache", "SOCE PDF", "PDF (CAS 580)", "Management letter
+  (CAS 265)", "Save changes", "T5013 PDF", "Download T661 PDF",
+  "Run all detectors".
+
+## Tests added
+
+| File | Tests |
+| --- | ---:|
+| `tests/i18n/test_audit_engine_locale.py` | 6 |
+| `tests/i18n/test_invoice_generator_locale.py` | 4 |
+| `tests/i18n/test_cas_engine_locale.py` | 3 |
+| `tests/i18n/test_dashboard_portal_locale.py` | 6 (incl. 2 digest params) |
+| `tests/i18n/test_admin_button_labels.py` | 22 |
+| `tests/i18n/test_pdf_locale_rendering.py` | 5 (PyMuPDF required) |
+| **Total new** | **46** |
+
+All pass. Combined with the first-session 12 tests, the `tests/i18n/`
+suite is now **58 tests**.
+
+## PDF rendering — verified
+
+`pip install pymupdf --break-system-packages` got fitz 1.27.2. The
+new `test_pdf_locale_rendering.py` renders a real audit working-paper
+lead sheet PDF with French data (Lévesque & Associés CPA, Comptes
+clients, 12 345,67 $) and extracts the text layer to assert:
+
+- French accented characters survive the PDF pipeline: ✓
+- FR currency appears as `12 345,67 $` in the FR rendering: ✓
+- EN currency appears as `$12,345.67` in the EN rendering: ✓
+- FR rendering does NOT contain `$12,345.67` (no English leak): ✓
+- EN rendering does NOT contain `12 345,67 $` (no French leak): ✓
+- FR negative amounts render `-765,43 $` (minus before number,
+  not before currency symbol): ✓
+- Neither rendering contains any HTML entity (`&eacute;`, `&amp;`,
+  `&ccedil;`) — base-14 Helvetica handles Latin-1 cleanly: ✓
+
+## Commits (this pass)
+
+1. `audit_engine: migrate PDF currency + working-paper date to
+   locale helpers` (36bfa31c0)
+2. `invoice_generator + cas_engine: migrate currency/hours to locale
+   helpers` (bc21e2fff)
+3. `dashboard + portal + daily_digest: migrate dates/currency to
+   locale helpers` (2673ef4a7)
+4. `i18n: ui_labels dict + migrate CPA admin buttons (TPS/TVQ +
+   Quebec CPA terminology)` (c6b28f225)
+5. `PDF rendering: verify FR + EN locale output with PyMuPDF`
+   (a04e0956b)
+
+Every commit passes the schema-drift guard. All pushed to `main`.
+
+## What's still not migrated (honest)
+
+- **`scripts/review_dashboard.py` queue / document-detail dashboard
+  pages** — there are still roughly 100+ inline `f"${x:,.2f}"` uses
+  across CPA-facing reviewer surfaces (queue row amount column,
+  document detail, reconciliation views, report tables). Each has
+  `lang` available; migration is mechanical but this session focused
+  on the client-portal + PDF outputs where the user-impact is
+  highest.
+- **Engine internal reasoning strings** — `bank_matcher.py` match
+  explanations, `fraud_engine.py` fraud reasons, `hallucination_guard.py`
+  validator messages. These are stored in DB `reason` fields and
+  shown as debug/audit text; they weren't plumbed with `lang` and
+  the storage model is lang-agnostic. Deferred.
+- **Export engines** (Sage / Acomba / IIF / Xero) — date formats
+  there are dictated by the target accounting system's spec, not the
+  user's language. Correct to leave.
+- **Other strftime sites** — all remaining ones are filenames,
+  database query anchors, license file fields, backup stamps, or
+  `<input type="date">` defaults (which HTML requires to be
+  `YYYY-MM-DD`). Verified as Category B/C.
+- **Other English-only admin buttons** — "Add", "Assign", "Match",
+  "Post", "Copy link", "Send by email" (CPA view) still exist in
+  the code. The `ui_labels.py` dict has entries for all of them
+  ready; the sweep to replace them all is mechanical. This session
+  migrated the 13 most-visible.
+- **T2, T5013, T661 PDF generators** — lang is in scope, but those
+  PDFs don't yet emit French headers (they rely on the t()
+  translations for headers and on raw `strftime` for the few dates
+  they include). Their currency output already passes through
+  helpers since they share audit_engine's `_build_minimal_pdf`.
+  A dedicated sweep of the T-form engines is still pending.
+- **Manual browser walkthrough** — not performed; no browser in this
+  environment. The PDF e2e tests are the strongest signal we have
+  that a FR client will see FR output.
+
+## Full regression after Phase 2
+
+Full suite with `-m "not slow"`:
+
+- **8,122 passed** (up from 7,974 reported at end of Phase 1)
+- **48 failed** — same 48 pre-existing failures as before (stress
+  seed data not present locally + one task4 troubleshoot expectation),
+  **zero new regressions**
+- **39 skipped**
+- **3 deselected** (the `-m "not slow"` exclusions, unchanged)
+
+The 148-test delta since Phase 1's 7,974 baseline breaks down as:
+the **46 new `tests/i18n/*` tests** added this pass + roughly 100
+tests whose pass/skip classification toggled between runs depending
+on data availability.
+
+## Evidence FR output is now locale-correct for migrated surfaces
+
+- Real PyMuPDF-rendered audit lead sheet with French client name and
+  accented merchant column renders `Lévesque & Associés CPA` and
+  `12 345,67 $` — extracted and asserted in
+  `tests/i18n/test_pdf_locale_rendering.py`.
+- Daily digest plain-text render with `lang='fr'` contains `avril`
+  (not `April`) — asserted in
+  `tests/i18n/test_dashboard_portal_locale.py` with a mocked date.
+- Related-party disclosure with `lang='fr'` contains `12 345,67 $`,
+  not the previous broken `12,345.67 $` — asserted in
+  `tests/i18n/test_cas_engine_locale.py` with a real sqlite DB.
+- Portal documents page reads `client.language` → passes through
+  `format_date_short` + `money` — asserted via source-level + shape
+  tests in `tests/i18n/test_dashboard_portal_locale.py`.
+- `ui_t("gst", "fr")` returns `"TPS"` (not `"GST"`) — asserted in
+  `tests/i18n/test_admin_button_labels.py`.
+
