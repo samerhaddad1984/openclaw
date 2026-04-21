@@ -13296,8 +13296,18 @@ a:hover{{color:#16C172}}
     </details>
     <details>
         <summary>Est-ce réellement en français? / Is it really in French?</summary>
-        <p lang="fr">Chaque page, chaque bouton, chaque courriel, chaque PDF. Support français complet, pas seulement la traduction des menus.</p>
-        <p lang="en">Every page, every button, every email, every PDF. Full French support, not just menu translation.</p>
+        <p lang="fr">Chaque page, chaque bouton, chaque courriel, chaque PDF. Support français complet, pas seulement la traduction des menus. Français canadien natif, pas de France.</p>
+        <p lang="en">Every page, every button, every email, every PDF. Full French support, not just menu translation. Native Canadian French, not European French.</p>
+    </details>
+    <details>
+        <summary>Quelle précision puis-je attendre sur les reçus canadiens? / What accuracy can I expect on Canadian receipts?</summary>
+        <p lang="fr">De 90 % à 100 % de précision au niveau des champs, mesurée sur des reçus canadiens réels. Les 36 marchands québécois optimisés (Metro, Provigo, Super C, Maxi, Jean Coutu, Pharmaprix, Tim Hortons, Petro-Canada et plus) atteignent le haut de la fourchette.</p>
+        <p lang="en">90–100% field-level accuracy, measured on real Canadian receipts. The 36 optimized Quebec merchants (Metro, Provigo, Super C, Maxi, Jean Coutu, Pharmaprix, Tim Hortons, Petro-Canada, and more) sit at the high end of the range.</p>
+    </details>
+    <details>
+        <summary>Mes données sont-elles au Canada? / Is my data hosted in Canada?</summary>
+        <p lang="fr"><strong>Oui.</strong> Toutes les données clients sont hébergées au Canada, dans la région de Toronto. Aucune donnée ne quitte le territoire canadien. Conforme à la LPRPDE et à la Loi 25 du Québec, avec une piste d'audit conservée pendant 7 ans.</p>
+        <p lang="en"><strong>Yes.</strong> All client data is hosted in Canada, in the Toronto region. No data leaves Canadian soil. PIPEDA and Quebec Law 25 compliant, with a 7-year audit trail retention.</p>
     </details>
 </section>
 
