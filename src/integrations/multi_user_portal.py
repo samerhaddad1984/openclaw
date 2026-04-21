@@ -1041,6 +1041,49 @@ def render_user_portal_admin(
     )
 
 
+def render_target_user_dropdown(
+    users: list[dict[str, Any]], *,
+    selected_id: int | None = None,
+    broadcast_label: str = 'All (broadcast)',
+) -> str:
+    """Return the HTML ``<select>`` for the CPA message-send form.
+
+    Expects an already-filtered list (caller applied ``include_removed=False``).
+    Active users are selectable; suspended users are shown greyed-out
+    (disabled); removed users are filtered out before they reach here."""
+    if not users:
+        return ''
+    options = [
+        f'<option value=""{"" if selected_id else " selected"}>'
+        f'&mdash; {_esc(broadcast_label)} &mdash;</option>'
+    ]
+    for u in users:
+        uid = u.get('id')
+        status = (u.get('status') or '').lower()
+        if status == 'removed':
+            continue
+        role = (u.get('role') or '').capitalize()
+        label_name = u.get('full_name') or u.get('email') or ''
+        last_active = u.get('last_active_at') or 'never'
+        disabled = ''
+        prefix = ''
+        if status == 'suspended':
+            disabled = ' disabled'
+            prefix = '[suspended] '
+        sel = ' selected' if selected_id and uid == selected_id else ''
+        options.append(
+            f'<option value="{uid}"{disabled}{sel} '
+            f'title="last active {_esc(last_active)}">'
+            f'{_esc(prefix)}{_esc(label_name)} ({_esc(role)})'
+            '</option>'
+        )
+    return (
+        '<select name="target_portal_user_id">'
+        + ''.join(options)
+        + '</select>'
+    )
+
+
 def render_invitation_email(
     *, recipient_name: str, inviter_name: str,
     client_display: str, accept_url: str, lang: str = 'en',

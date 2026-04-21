@@ -12365,6 +12365,58 @@ def render_cpa_messages(ctx: dict[str, Any], user: dict[str, Any],
             '<p style="color:#888;text-align:center;padding:20px;">'
             'No messages yet. Send one below.</p>'
         )
+
+    # Item 2: replace the raw target-ID field with a dropdown of the
+    # client's portal users. In single-mode clients there are no portal
+    # users so we skip the dropdown entirely.
+    target_select = ""
+    try:
+        with open_db() as _conn:
+            _client_row = _conn.execute(
+                "SELECT portal_mode FROM clients WHERE client_code=?",
+                (client_code,),
+            ).fetchone()
+        is_multi = (_client_row and (_client_row.get("portal_mode") or "single") == "multi")
+    except Exception:
+        is_multi = False
+    if is_multi:
+        try:
+            from src.integrations.multi_user_portal import list_users as _mup_list
+            firm_code_ctx = ctx.get("firm_code") or "OWNER"
+            portal_users = _mup_list(
+                DB_PATH, firm_code=firm_code_ctx, client_code=client_code,
+                include_removed=False,
+            )
+        except Exception:
+            portal_users = []
+        if portal_users:
+            options = ['<option value="">&mdash; All (broadcast) &mdash;</option>']
+            for u in portal_users:
+                role_label = (u.get('role') or '').capitalize()
+                status = (u.get('status') or '').lower()
+                label_name = u.get('full_name') or u.get('email') or ''
+                last_active = u.get('last_active_at') or 'never'
+                prefix = ''
+                disabled = ''
+                if status == 'suspended':
+                    prefix = '[suspended] '
+                    disabled = ' disabled'
+                options.append(
+                    f'<option value="{u["id"]}"{disabled} '
+                    f'title="last active {esc(last_active)}">'
+                    f'{esc(prefix)}{esc(label_name)} ({esc(role_label)})'
+                    '</option>'
+                )
+            target_select = (
+                '<label style="color:#cbd5e1;font-size:13px;">Send to: '
+                '<select name="target_portal_user_id" '
+                'style="background:#0d1b2a;color:white;border:1px solid #2c3e50;'
+                'padding:6px;border-radius:6px;margin-top:4px;width:100%;'
+                'box-sizing:border-box;">'
+                + ''.join(options)
+                + '</select></label>'
+            )
+
     body = f"""
     <div style="padding:24px;max-width:820px;">
         <a href="/clients" style="color:#aaa;text-decoration:none;">&larr; Clients</a>
@@ -12375,6 +12427,7 @@ def render_cpa_messages(ctx: dict[str, Any], user: dict[str, Any],
         </div>
         <form method="POST" action="/clients/messages" style="margin-top:16px;display:flex;gap:8px;flex-direction:column;">
             <input type="hidden" name="client_code" value="{esc(client_code)}">
+            {target_select}
             <textarea name="body" rows="3" required
                       placeholder="Write to client..."
                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:10px;border-radius:6px;width:100%;box-sizing:border-box;"></textarea>
