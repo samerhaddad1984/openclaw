@@ -1983,6 +1983,11 @@ def _csrf_path_exempt(path: str) -> bool:
     # Portal routes (/c/<token>/...) — the URL-embedded token is the auth.
     if path.startswith("/c/"):
         return True
+    # Multi-user portal personal links (/cp/<user_token>/...) and
+    # invitation acceptance (/invite/<token>) use the same URL-token
+    # auth model as /c/*, so CSRF check doesn't add protection.
+    if path.startswith("/cp/") or path.startswith("/invite/"):
+        return True
     return False
 
 
@@ -17754,6 +17759,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         if not client:
             self._portal_send_invalid()
             return
+        # Multi-user mode intercepts the shared /c/ link so contributors
+        # don't accidentally upload anonymously — send them to a page
+        # explaining they need their personal invited link.
+        if (client.get("portal_mode") or "single") == "multi":
+            from src.integrations.multi_user_portal import (
+                render_use_personal_link as _mup_render_redirect,
+            )
+            self._send_html(_mup_render_redirect(dict(client)))
+            return
         section = section.strip("/").lower()
         # Gap 5 sections (status/activity) live in gap_dispatch; hand
         # off before our legacy section switch.
@@ -17803,6 +17817,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return True
         if not client:
             self._portal_send_invalid()
+            return True
+        # Multi-mode client: reject shared-link POSTs outright so nobody
+        # uploads as "anonymous" into a multi-user client.
+        if (client.get("portal_mode") or "single") == "multi":
+            from src.integrations.multi_user_portal import (
+                render_use_personal_link as _mup_render_redirect,
+            )
+            self._send_html(_mup_render_redirect(dict(client)), status=403)
             return True
         client_code = client["client_code"]
         firm_code = client["firm_code"] or "OWNER"
@@ -17976,6 +17998,401 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             location += sep + "error=" + urlquote(error)
         self._redirect(location, extra_headers=self._portal_headers(token))
 
+    # ---- Multi-user portal routes ----
+
+    def _user_portal_parse(self, path: str) -> tuple[str, str] | None:
+        if not path.startswith("/cp/"):
+            return None
+        tail = path[4:]
+        if not tail:
+            return None
+        parts = tail.split("/", 1)
+        return (parts[0], parts[1] if len(parts) > 1 else "")
+
+    def _user_portal_redirect(self, user_token: str, section: str,
+                               flash: str = "", error: str = "") -> None:
+        base = (f"/cp/{user_token}" if not section else
+                f"/cp/{user_token}/{section}")
+        sep = "?"
+        location = base
+        if flash:
+            location += sep + "flash=" + urlquote(flash)
+            sep = "&"
+        if error:
+            location += sep + "error=" + urlquote(error)
+        self._redirect(location)
+
+    def _handle_user_portal_get(self, path: str, qs: dict, flash: str,
+                                 flash_error: str) -> None:
+        from src.integrations import multi_user_portal as _mup
+        from src.integrations import gap_routes as _gr
+        parsed = self._user_portal_parse(path)
+        if not parsed:
+            self._send_html(_mup.render_invalid_token(), status=404)
+            return
+        user_token, section = parsed
+        mode, client, portal_user = _mup.resolve_portal_access(
+            DB_PATH, token=user_token,
+        )
+        if mode != 'multi' or portal_user is None:
+            self._send_html(_mup.render_invalid_token(), status=404)
+            return
+        _mup.mark_active(DB_PATH, user_id=portal_user['id'])
+        section = section.strip("/").lower()
+
+        # Default landing = upload
+        if section in ("", "upload"):
+            html_str = render_portal_upload(dict(client), user_token,
+                                              flash, flash_error)
+            self._send_html(html_str)
+            return
+        if section == "documents":
+            html_str = render_portal_documents(dict(client), user_token)
+            self._send_html(html_str)
+            return
+        if section == "messages":
+            html_str = render_portal_messages(dict(client), user_token,
+                                                flash, flash_error)
+            self._send_html(html_str)
+            return
+        if section == "status":
+            html_str = _gr.render_portal_status_page(
+                DB_PATH, client=dict(client), token=user_token,
+            )
+            self._send_html(html_str)
+            return
+        if section == "activity":
+            from src.integrations.client_status import recent_activity
+            events = recent_activity(DB_PATH,
+                                       client_code=client['client_code'])
+            self._send_json({"events": events})
+            return
+        if section == "admin":
+            if (portal_user.get('role') or '') != 'admin':
+                self._send_html(
+                    '<h1>Forbidden</h1>'
+                    '<p>Only admin users can access this page.</p>',
+                    status=403,
+                )
+                return
+            from src.integrations.multi_user_portal import (
+                list_users as _mup_list, list_invitations as _mup_invites,
+            )
+            users = _mup_list(DB_PATH, firm_code=portal_user['firm_code'],
+                                client_code=portal_user['client_code'])
+            invites = _mup_invites(
+                DB_PATH, firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+            )
+            from src.integrations.multi_user_portal import (
+                render_user_portal_admin as _mup_render_admin,
+            )
+            html_str = _mup_render_admin(
+                client=dict(client), user_token=user_token,
+                users=users, invitations=invites,
+                flash=flash, flash_error=flash_error,
+            )
+            self._send_html(html_str)
+            return
+
+        self._send_html(_mup.render_invalid_token(), status=404)
+
+    def _handle_user_portal_post(self, path: str, raw: bytes, ct: str,
+                                   qs: dict) -> bool:
+        from src.integrations import multi_user_portal as _mup
+        parsed = self._user_portal_parse(path)
+        if not parsed:
+            return False
+        user_token, section = parsed
+        mode, client, portal_user = _mup.resolve_portal_access(
+            DB_PATH, token=user_token,
+        )
+        if mode != 'multi' or portal_user is None:
+            self._send_html(_mup.render_invalid_token(), status=404)
+            return True
+        section = section.strip("/").lower()
+
+        if section == "upload":
+            return self._handle_user_portal_upload(
+                raw, ct, client, portal_user, user_token,
+            )
+        if section in ("messages/send", "messages"):
+            return self._handle_user_portal_message_send(
+                raw, ct, client, portal_user, user_token,
+            )
+        if section == "invite":
+            return self._handle_user_portal_invite(
+                raw, ct, client, portal_user, user_token,
+            )
+        if section.startswith("users/"):
+            return self._handle_user_portal_user_action(
+                section, raw, ct, client, portal_user, user_token,
+            )
+
+        self._send_html(_mup.render_invalid_token(), status=404)
+        return True
+
+    def _handle_user_portal_upload(self, raw, ct, client, portal_user,
+                                     user_token):
+        from src.integrations import multi_user_portal as _mup
+        if not _mup.upload_rate_allowed(portal_user['id']):
+            self._send_json({"ok": False, "error": "rate_limited"},
+                             status=429)
+            return True
+        if "multipart/form-data" not in ct:
+            self._user_portal_redirect(user_token, "",
+                                         error="No file uploaded")
+            return True
+        fields, files = _parse_multipart_files(raw, ct)
+        if not files:
+            self._user_portal_redirect(user_token, "",
+                                         error="No file selected")
+            return True
+        from src.engines.upload_queue import save_and_queue_document
+        note = (fields.get("note") or "").strip()
+        ids: list[str] = []
+        failed = 0
+        for fname, fbytes in files:
+            try:
+                doc_id = save_and_queue_document(
+                    fbytes, fname,
+                    client_code=client["client_code"],
+                    ingest_source="portal_multi",
+                    client_note=note,
+                    db_path=DB_PATH,
+                )
+                ids.append(doc_id)
+            except Exception:
+                logging.exception("multi-user upload failed for %s", fname)
+                failed += 1
+        # Stamp identity on every uploaded document.
+        if ids:
+            with open_db() as conn:
+                placeholders = ",".join("?" * len(ids))
+                conn.execute(
+                    f"UPDATE documents SET uploaded_by_portal_user_id=?, "
+                    f"uploader_name=?, uploader_email=? "
+                    f"WHERE document_id IN ({placeholders})",
+                    (portal_user['id'], portal_user.get('full_name'),
+                     portal_user.get('email'), *ids),
+                )
+                conn.commit()
+            _mup.increment_upload_count(
+                DB_PATH, user_id=portal_user['id'], n=len(ids),
+            )
+            _mup.audit_log(
+                DB_PATH, firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+                actor_email=portal_user['email'], action='upload',
+                portal_user_id=portal_user['id'],
+                detail=f'count={len(ids)} failed={failed}',
+                ip=_get_client_ip(self),
+                user_agent=self.headers.get("User-Agent", ""),
+            )
+        msg = (f'Thanks {portal_user.get("full_name") or portal_user.get("email")}! '
+                f'{len(ids)} document(s) queued.')
+        if failed:
+            msg += f' {failed} failed.'
+        self._user_portal_redirect(user_token, "documents", flash=msg)
+        return True
+
+    def _handle_user_portal_message_send(self, raw, ct, client, portal_user,
+                                           user_token):
+        form = urllib.parse.parse_qs(raw.decode("utf-8"),
+                                       keep_blank_values=True)
+        body_txt = (form.get("body", [""])[0] or "").strip()
+        if not body_txt:
+            self._user_portal_redirect(user_token, "messages",
+                                         error="Empty message")
+            return True
+        try:
+            with open_db() as conn:
+                conn.execute(
+                    "INSERT INTO client_messages "
+                    "(client_code, firm_code, direction, sender_name, "
+                    " sender_type, body, sender_portal_user_id) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (portal_user['client_code'], portal_user['firm_code'],
+                     "inbound",
+                     portal_user.get('full_name') or portal_user['email'],
+                     "client", body_txt, portal_user['id']),
+                )
+                conn.commit()
+        except Exception:
+            logging.exception("multi-user message send failed")
+            self._user_portal_redirect(user_token, "messages",
+                                         error="Save failed")
+            return True
+        self._user_portal_redirect(user_token, "messages",
+                                     flash="Message sent")
+        return True
+
+    def _handle_user_portal_invite(self, raw, ct, client, portal_user,
+                                     user_token):
+        """Admin-only: invite a new colleague from inside the portal."""
+        from src.integrations import multi_user_portal as _mup
+        if (portal_user.get('role') or '') != 'admin':
+            self._send_html(
+                '<h1>Forbidden</h1><p>Only admin users can invite.</p>',
+                status=403)
+            return True
+        form = urllib.parse.parse_qs(raw.decode("utf-8"),
+                                       keep_blank_values=True)
+        email = (form.get("email", [""])[0] or "").strip()
+        full_name = (form.get("full_name", [""])[0] or "").strip()
+        role = (form.get("role", ["contributor"])[0] or "contributor").strip()
+        if not email or role not in ('admin', 'contributor'):
+            self._user_portal_redirect(user_token, "admin",
+                                         error="Email + role required")
+            return True
+        try:
+            inv = _mup.create_invitation(
+                DB_PATH, firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+                email=email, full_name=full_name, role=role,
+                invited_by=portal_user['email'],
+            )
+        except ValueError as exc:
+            self._user_portal_redirect(user_token, "admin",
+                                         error=str(exc))
+            return True
+        # Fire-and-forget email. A failure doesn't block invitation;
+        # the admin can re-send manually via the user portal.
+        try:
+            host = self.headers.get("Host", "")
+            scheme = "https" if _is_https(self) else "http"
+            base = f"{scheme}://{host}" if host else ""
+            link = f'{base}/invite/{inv["token"]}'
+            from src.integrations.email_client import send_email
+            subject = (f'{portal_user.get("full_name") or "A colleague"} '
+                        f'invited you to submit receipts to OtoCPA')
+            body = (
+                f'<p>Hi,</p>'
+                f'<p><strong>{portal_user.get("full_name") or portal_user["email"]}</strong> '
+                f'has invited you to submit receipts for '
+                f'<strong>{client.get("client_name") or client.get("client_code")}</strong>.</p>'
+                f'<p>Accept the invitation (expires in 14 days):</p>'
+                f'<p><a href="{link}">{link}</a></p>'
+            )
+            send_email(email, subject, body)
+        except Exception:
+            logging.exception("invitation email failed")
+        self._user_portal_redirect(user_token, "admin",
+                                     flash=f"Invited {email}")
+        return True
+
+    def _handle_user_portal_user_action(self, section, raw, ct, client,
+                                          portal_user, user_token):
+        """Admin-only: suspend / reactivate / remove / change-role a teammate."""
+        from src.integrations import multi_user_portal as _mup
+        if (portal_user.get('role') or '') != 'admin':
+            self._send_html(
+                '<h1>Forbidden</h1><p>Only admins can manage users.</p>',
+                status=403)
+            return True
+        # section = 'users/<id>/<action>'
+        parts = section.split('/')
+        if len(parts) != 3:
+            self._user_portal_redirect(user_token, "admin",
+                                         error="Bad request")
+            return True
+        try:
+            target_id = int(parts[1])
+        except ValueError:
+            self._user_portal_redirect(user_token, "admin",
+                                         error="Bad user id")
+            return True
+        action = parts[2]
+        # Self-remove guard: admins can't remove themselves via their
+        # own admin panel; only the CPA dashboard can do that.
+        if action == 'remove' and target_id == portal_user['id']:
+            self._user_portal_redirect(
+                user_token, "admin",
+                error="You cannot remove yourself; ask your CPA.",
+            )
+            return True
+        try:
+            if action in ('suspend', 'reactivate', 'remove'):
+                status_map = {'suspend': 'suspended',
+                               'reactivate': 'active',
+                               'remove': 'removed'}
+                _mup.set_user_status(
+                    DB_PATH, firm_code=portal_user['firm_code'],
+                    client_code=portal_user['client_code'],
+                    user_id=target_id, status=status_map[action],
+                    actor_email=portal_user['email'],
+                )
+                self._user_portal_redirect(user_token, "admin",
+                                             flash=f"User {action}d")
+                return True
+            if action in ('make_admin', 'make_contributor'):
+                role = 'admin' if action == 'make_admin' else 'contributor'
+                _mup.set_user_role(
+                    DB_PATH, firm_code=portal_user['firm_code'],
+                    client_code=portal_user['client_code'],
+                    user_id=target_id, role=role,
+                    actor_email=portal_user['email'],
+                )
+                self._user_portal_redirect(user_token, "admin",
+                                             flash=f"Role set to {role}")
+                return True
+        except PermissionError as exc:
+            self._user_portal_redirect(user_token, "admin", error=str(exc))
+            return True
+        except (LookupError, ValueError) as exc:
+            self._user_portal_redirect(user_token, "admin", error=str(exc))
+            return True
+        self._user_portal_redirect(user_token, "admin",
+                                     error="Unknown action")
+        return True
+
+    def _handle_invite_get(self, path: str, qs: dict, flash: str,
+                            flash_error: str) -> None:
+        from src.integrations import multi_user_portal as _mup
+        tail = path[len("/invite/"):].strip("/")
+        parts = tail.split("/", 1)
+        token = parts[0]
+        sub = parts[1] if len(parts) > 1 else ""
+        inv = _mup.get_invitation(DB_PATH, token=token)
+        if inv is None:
+            self._send_html(_mup.render_invalid_token(), status=404)
+            return
+        with open_db() as conn:
+            client = conn.execute(
+                "SELECT client_name FROM clients WHERE client_code=?",
+                (inv['client_code'],),
+            ).fetchone()
+            firm = conn.execute(
+                "SELECT name FROM firms WHERE firm_code=?",
+                (inv['firm_code'],),
+            ).fetchone()
+        client_name = client["client_name"] if client else inv['client_code']
+        firm_name = firm["name"] if firm else inv['firm_code']
+        self._send_html(_mup.render_accept_invitation_page(
+            inv, client_name=client_name, firm_name=firm_name,
+        ))
+
+    def _handle_invite_post(self, path: str, raw: bytes, ct: str,
+                              qs: dict) -> bool:
+        from src.integrations import multi_user_portal as _mup
+        tail = path[len("/invite/"):].strip("/")
+        parts = tail.split("/", 1)
+        token = parts[0]
+        sub = parts[1] if len(parts) > 1 else ""
+        if sub != "accept":
+            self._send_html(_mup.render_invalid_token(), status=404)
+            return True
+        result = _mup.accept_invitation(DB_PATH, token=token)
+        if not result.get('ok'):
+            self._send_html(
+                f'<h1>Cannot accept</h1><p>{html.escape(result.get("error",""))}</p>',
+                status=400,
+            )
+            return True
+        user_tok = result['user']['user_token']
+        self._redirect(f'/cp/{user_tok}/upload?flash=Invitation+accepted')
+        return True
+
     def do_GET(self) -> None:
         try:
             _set_impersonation_context(self)
@@ -18047,6 +18464,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # Sprint 4: Client portal via QR token — /c/{token}[/section]
             if path.startswith("/c/"):
                 self._handle_portal_get(path, qs, flash, flash_error)
+                return
+
+            # Multi-user portal: per-user personal link /cp/{user_token}[/section]
+            if path.startswith("/cp/"):
+                self._handle_user_portal_get(path, qs, flash, flash_error)
+                return
+
+            # Multi-user portal: invitation accept landing page
+            if path.startswith("/invite/"):
+                self._handle_invite_get(path, qs, flash, flash_error)
                 return
 
             # Public client upload page — no login. Scanned from client QR code.
@@ -20569,6 +20996,18 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             if path.startswith("/c/"):
                 ct_hdr = self.headers.get("Content-Type", "")
                 if self._handle_portal_post(path, raw, ct_hdr, qs):
+                    return
+
+            # --- Multi-user portal: /cp/{user_token}/* (no session auth) ---
+            if path.startswith("/cp/"):
+                ct_hdr = self.headers.get("Content-Type", "")
+                if self._handle_user_portal_post(path, raw, ct_hdr, qs):
+                    return
+
+            # --- Invitation acceptance (no session auth) ---
+            if path.startswith("/invite/"):
+                ct_hdr = self.headers.get("Content-Type", "")
+                if self._handle_invite_post(path, raw, ct_hdr, qs):
                     return
 
             # Public client upload (no login). Accepts documents when the
