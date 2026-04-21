@@ -13239,6 +13239,11 @@ a:hover{{color:#16C172}}
             <p lang="en">Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Statement of Changes in Equity — generated from the general ledger, bilingual, ready to export.</p>
         </div>
         <div class="feature">
+            <h3>Tableau de bord admin / Admin Dashboard</h3>
+            <p lang="fr">Visibilité complète du cabinet : indicateurs de revenu, productivité de l'équipe et mode emprunt d'identité en lecture seule et vérifié pour le soutien client.</p>
+            <p lang="en">Full firm visibility: revenue metrics, team productivity, and a read-only, audited impersonation mode for customer support.</p>
+        </div>
+        <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
             <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada (Toronto). Piste d'audit avec rétention de 7 ans. Conforme à la LPRPDE et à la Loi 25 du Québec.</p>
             <p lang="en">2FA enforced. All data hosted in Canada (Toronto). Audit trail with 7-year retention. PIPEDA and Quebec Law 25 compliant.</p>
