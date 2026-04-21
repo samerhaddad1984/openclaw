@@ -13229,6 +13229,11 @@ a:hover{{color:#16C172}}
             <p lang="en">Employee does the work, owner or firm admin reviews and approves. Escalation flag for complex cases and full audit trail of every decision.</p>
         </div>
         <div class="feature">
+            <h3>Déclarations fiscales canadiennes / Canadian Tax Returns</h3>
+            <p lang="fr">Impôt des sociétés T2, déclarations de TPS/TVQ, sociétés de personnes T5013 et RS&amp;DE T661 — tout au même endroit, avec les formulaires ARC et Revenu Québec à jour.</p>
+            <p lang="en">T2 corporate income tax, GST/QST returns, T5013 partnership, and T661 SR&amp;ED — all in one place, with current CRA and Revenu Québec forms.</p>
+        </div>
+        <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
             <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada (Toronto). Piste d'audit avec rétention de 7 ans. Conforme à la LPRPDE et à la Loi 25 du Québec.</p>
             <p lang="en">2FA enforced. All data hosted in Canada (Toronto). Audit trail with 7-year retention. PIPEDA and Quebec Law 25 compliant.</p>
