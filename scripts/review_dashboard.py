@@ -8625,7 +8625,8 @@ def render_analytical(
             if v is None:
                 return esc(t("analytics_na", lang))
             try:
-                return f"{float(v):,.2f}"
+                from src.formatting import format_number
+                return format_number(float(v), lang, decimals=2)
             except (TypeError, ValueError):
                 return esc(str(v))
 

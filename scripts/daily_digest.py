@@ -38,7 +38,7 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
-from src.formatting import format_date
+from src.formatting import format_date, money
 
 ROOT_DIR    = Path(__file__).resolve().parent.parent
 DB_PATH     = ROOT_DIR / "data" / "otocpa_agent.db"
@@ -322,7 +322,7 @@ def build_plain_text(
                     f"  {fd['client_code']:12s}  Période {fd['period_label']:10s}"
                     f"  Échéance {fd['deadline']}  ({fd['days_until']}j)"
                     f"  Docs en attente: {fd['docs_pending']}"
-                    f"  TPS: ${fd['gst_amount']:,.2f}  TVQ: ${fd['qst_amount']:,.2f}"
+                    f"  TPS: {money(fd['gst_amount'], 'fr')}  TVQ: {money(fd['qst_amount'], 'fr')}"
                 )
             lines.append("")
 
@@ -376,7 +376,7 @@ def build_plain_text(
                     f"  {fd['client_code']:12s}  Period {fd['period_label']:10s}"
                     f"  Due {fd['deadline']}  ({fd['days_until']}d)"
                     f"  Pending docs: {fd['docs_pending']}"
-                    f"  GST: ${fd['gst_amount']:,.2f}  QST: ${fd['qst_amount']:,.2f}"
+                    f"  GST: {money(fd['gst_amount'], 'en')}  QST: {money(fd['qst_amount'], 'en')}"
                 )
             lines.append("")
 
@@ -486,8 +486,8 @@ def build_html_body(
                 f'<td style="padding:6px 8px;">{fd["period_label"]}</td>'
                 f'<td style="padding:6px 8px;">{fd["deadline"]}</td>'
                 f'<td style="padding:6px 8px;text-align:right;">{fd["docs_pending"]}</td>'
-                f'<td style="padding:6px 8px;text-align:right;">${fd["gst_amount"]:,.2f}</td>'
-                f'<td style="padding:6px 8px;text-align:right;">${fd["qst_amount"]:,.2f}</td>'
+                f'<td style="padding:6px 8px;text-align:right;">{money(fd["gst_amount"], lang)}</td>'
+                f'<td style="padding:6px 8px;text-align:right;">{money(fd["qst_amount"], lang)}</td>'
                 f'</tr>'
             )
 
