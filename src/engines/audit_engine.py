@@ -25,6 +25,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
+from src.formatting import format_date_short, money, money_signed
+
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
@@ -860,7 +862,7 @@ def _lead_sheet_pymupdf(papers, client_code, period, engagement_type,
         (t("wp_engagement_type", lang), engagement_type.capitalize()),
         (t("wp_prepared_by", lang), prepared_by),
         (t("wp_reviewed_by", lang), reviewed_by_firm),
-        (t("wp_date", lang), datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        (t("wp_date", lang), format_date_short(datetime.now(timezone.utc), lang)),
     ]:
         page.insert_text((50, y), f"{label}:", fontsize=9, fontname="hebo")
         page.insert_text((180, y), str(val), fontsize=9)
@@ -901,9 +903,9 @@ def _lead_sheet_pymupdf(papers, client_code, period, engagement_type,
             color = (0.0, 0.0, 0.0)
         acct = f"{wp['account_code']} {wp['account_name']}"[:32]
         page.insert_text((50, y), acct, fontsize=8, color=color)
-        page.insert_text((210, y), f"${float(bpb):,.2f}", fontsize=8)
-        page.insert_text((300, y), f"${float(bc):,.2f}", fontsize=8)
-        page.insert_text((390, y), f"${float(diff):+,.2f}", fontsize=8)
+        page.insert_text((210, y), money(float(bpb), lang), fontsize=8)
+        page.insert_text((300, y), money(float(bc), lang), fontsize=8)
+        page.insert_text((390, y), money_signed(float(diff), lang), fontsize=8)
         page.insert_text((450, y), status, fontsize=8, color=color)
         page.insert_text((510, y), sign_off, fontsize=8)
         y += 12
@@ -913,8 +915,8 @@ def _lead_sheet_pymupdf(papers, client_code, period, engagement_type,
     page.draw_line((50, y), (562, y), color=(0.08, 0.16, 0.44), width=0.8)
     y += 12
     page.insert_text((50, y), t("wp_totals", lang), fontsize=9, fontname="hebo")
-    page.insert_text((210, y), f"${float(total_bpb):,.2f}", fontsize=9, fontname="hebo")
-    page.insert_text((300, y), f"${float(total_bc):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((210, y), money(float(total_bpb), lang), fontsize=9, fontname="hebo")
+    page.insert_text((300, y), money(float(total_bc), lang), fontsize=9, fontname="hebo")
     if exceptions:
         y += 16
         page.insert_text((50, y),
@@ -2407,35 +2409,35 @@ def _soce_pdf_reportlab(soce: dict, firm_name: str, lang: str) -> bytes:
     for m in soce["account_movements"]:
         rows.append([
             f"{m['account_code']} — {m['account_name']}",
-            f"${float(m['opening']):,.2f}",
-            f"${float(m['movement']):,.2f}",
-            f"${float(m['closing']):,.2f}",
+            money(float(m['opening']), lang),
+            money(float(m['movement']), lang),
+            money(float(m['closing']), lang),
         ])
     rows.append([
         "Net income for period",
         "",
-        f"${float(soce['net_income']):,.2f}",
+        money(float(soce['net_income']), lang),
         "",
     ])
     if soce["dividends_paid"]:
         rows.append([
             "Dividends paid",
             "",
-            f"(${float(soce['dividends_paid']):,.2f})",
+            f"({money(float(soce['dividends_paid']), lang)})",
             "",
         ])
     if soce["share_issuance"]:
         rows.append([
             "Share capital changes",
             "",
-            f"${float(soce['share_issuance']):,.2f}",
+            money(float(soce['share_issuance']), lang),
             "",
         ])
     rows.append([
         "TOTAL EQUITY",
-        f"${float(soce['total_opening_equity']):,.2f}",
-        f"${float(soce['total_change_in_equity']):,.2f}",
-        f"${float(soce['total_closing_equity']):,.2f}",
+        money(float(soce['total_opening_equity']), lang),
+        money(float(soce['total_change_in_equity']), lang),
+        money(float(soce['total_closing_equity']), lang),
     ])
 
     tbl = Table(rows, colWidths=[3.2 * inch, 1.3 * inch, 1.3 * inch, 1.3 * inch])
@@ -2455,11 +2457,11 @@ def _soce_pdf_reportlab(soce: dict, firm_name: str, lang: str) -> bytes:
 
 def _soce_pdf_minimal(soce: dict, firm_name: str, lang: str) -> bytes:
     body = [firm_name, f"Statement of Changes in Equity - {soce['client_code']} - {soce['period']}", ""]
-    body.append(f"Total opening equity: ${float(soce['total_opening_equity']):,.2f}")
-    body.append(f"Net income: ${float(soce['net_income']):,.2f}")
-    body.append(f"Dividends: ${float(soce['dividends_paid']):,.2f}")
-    body.append(f"Share issuance: ${float(soce['share_issuance']):,.2f}")
-    body.append(f"Total closing equity: ${float(soce['total_closing_equity']):,.2f}")
+    body.append(f"Total opening equity: {money(float(soce['total_opening_equity']), lang)}")
+    body.append(f"Net income: {money(float(soce['net_income']), lang)}")
+    body.append(f"Dividends: {money(float(soce['dividends_paid']), lang)}")
+    body.append(f"Share issuance: {money(float(soce['share_issuance']), lang)}")
+    body.append(f"Total closing equity: {money(float(soce['total_closing_equity']), lang)}")
     text = "\n".join(body)
     return f"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n{text}".encode()
 
@@ -2519,7 +2521,7 @@ def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
                 break
             label = f"  {item['account_code']} {item['account_name']}"[:50]
             page.insert_text((60, y), label, fontsize=8)
-            page.insert_text((450, y), f"${float(item['amount']):,.2f}", fontsize=8)
+            page.insert_text((450, y), money(float(item['amount']), lang), fontsize=8)
             y += 11
 
     page.insert_text((50, y), t("fs_balance_sheet", lang), fontsize=11, fontname="hebo",
@@ -2528,12 +2530,12 @@ def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
     _section(t("fs_current_assets", lang), bs["assets"]["current"])
     _section(t("fs_non_current_assets", lang), bs["assets"]["non_current"])
     page.insert_text((50, y), t("fs_total_assets", lang), fontsize=9, fontname="hebo")
-    page.insert_text((450, y), f"${float(bs['assets']['total']):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((450, y), money(float(bs['assets']['total']), lang), fontsize=9, fontname="hebo")
     y += 14
     _section(t("fs_current_liabilities", lang), bs["liabilities"]["current"])
     _section(t("fs_long_term_liabilities", lang), bs["liabilities"]["long_term"])
     page.insert_text((50, y), t("fs_total_liabilities", lang), fontsize=9, fontname="hebo")
-    page.insert_text((450, y), f"${float(bs['liabilities']['total']):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((450, y), money(float(bs['liabilities']['total']), lang), fontsize=9, fontname="hebo")
     y += 14
     _section(t("fs_equity", lang), bs["equity"]["items"])
     page.insert_text((50, y), t("fs_total_equity", lang), fontsize=9, fontname="hebo")
@@ -2548,7 +2550,7 @@ def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
     )
     if _eq_total is None:
         _eq_total = bs.get("equity_total", 0)
-    page.insert_text((450, y), f"${float(_eq_total):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((450, y), money(float(_eq_total), lang), fontsize=9, fontname="hebo")
     y += 20
     page.draw_line((50, y), (562, y), color=(0.75, 0.75, 0.75), width=0.5)
     y += 14
@@ -2566,17 +2568,17 @@ def _fs_pdf_pymupdf(stmts, firm_name, lang, t) -> bytes:
         _exp_items = []
     _section(t("fs_revenue", lang), _rev_items)
     page.insert_text((50, y), t("fs_total_revenue", lang), fontsize=9, fontname="hebo")
-    page.insert_text((450, y), f"${float(is_['total_revenue']):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((450, y), money(float(is_['total_revenue']), lang), fontsize=9, fontname="hebo")
     y += 12
     _section(t("fs_expenses", lang), _exp_items)
     page.insert_text((50, y), t("fs_total_expenses", lang), fontsize=9, fontname="hebo")
-    page.insert_text((450, y), f"${float(is_['total_expenses']):,.2f}", fontsize=9, fontname="hebo")
+    page.insert_text((450, y), money(float(is_['total_expenses']), lang), fontsize=9, fontname="hebo")
     y += 14
     page.draw_line((50, y), (562, y), color=(0.08, 0.16, 0.44), width=0.8)
     y += 12
     page.insert_text((50, y), t("fs_net_income", lang), fontsize=11, fontname="hebo",
                      color=(0.08, 0.16, 0.44))
-    page.insert_text((450, y), f"${float(is_['net_income']):,.2f}", fontsize=11, fontname="hebo",
+    page.insert_text((450, y), money(float(is_['net_income']), lang), fontsize=11, fontname="hebo",
                      color=(0.08, 0.16, 0.44))
     pdf_bytes: bytes = doc.tobytes()
     doc.close()
@@ -2858,8 +2860,8 @@ def _analytical_pdf_pymupdf(results, firm_name, lang, t) -> bytes:
         color = (0.8, 0.2, 0.2) if v["flagged"] else (0.0, 0.0, 0.0)
         acct = f"{v['account_code']} {v['account_name']}"[:28]
         page.insert_text((50, y), acct, fontsize=7, color=color)
-        page.insert_text((200, y), f"${float(v['current']):,.0f}", fontsize=7)
-        page.insert_text((280, y), f"${float(v['prior']):,.0f}", fontsize=7)
+        page.insert_text((200, y), money(float(v['current']), lang), fontsize=7)
+        page.insert_text((280, y), money(float(v['prior']), lang), fontsize=7)
         page.insert_text((360, y), f"${float(v['difference']):+,.0f}", fontsize=7, color=color)
         page.insert_text((440, y), f"{v['pct_change']}%", fontsize=7)
         page.insert_text((490, y), "!" if v["flagged"] else "ok", fontsize=7, color=color)
@@ -3139,7 +3141,7 @@ def _engagement_pdf_pymupdf(eng, papers, progress, firm_name, lang, t) -> bytes:
                          fontsize=8, color=color)
         page.insert_text((380, y), status_str, fontsize=8, color=color)
         page.insert_text((440, y), so, fontsize=8)
-        page.insert_text((470, y), f"${float(_to_decimal(wp.get('balance_per_books'))):,.2f}", fontsize=8)
+        page.insert_text((470, y), money(float(_to_decimal(wp.get('balance_per_books'))), lang), fontsize=8)
         y += 11
     if progress["open_exceptions"]:
         y += 10
