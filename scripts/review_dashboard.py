@@ -20756,6 +20756,32 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
                 return
 
+            # Cleanup Item 7: owner-only cross-firm broadcast.
+            if path == "/owner/broadcast":
+                if user.get("role") != "owner":
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
+                        f'<p>Owner only.</p></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import broadcast as _bcast
+                with open_db() as _bconn:
+                    firm_rows = _bconn.execute(
+                        "SELECT firm_code, COALESCE(name,'') AS name "
+                        "FROM firms ORDER BY firm_code"
+                    ).fetchall()
+                body = _bcast.render_broadcast_page(
+                    DB_PATH,
+                    firm_codes_available=[dict(r) for r in firm_rows],
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    "Broadcast", body, user=user, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                ))
+                return
+
             # Multi-user portal: CPA-side read + override of the client's
             # portal users. Scoped by firm_code via _require_client_in_firm.
             if path == "/clients/portal_users":
@@ -25135,6 +25161,70 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/portal_users?code={urlquote(pu_code)}",
                     flash="User removed.",
+                )
+                return
+
+            # Cleanup Item 7: /owner/broadcast (owner only).
+            if path == "/owner/broadcast":
+                if user.get("role") != "owner":
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                pairs = urllib.parse.parse_qsl(
+                    raw.decode("utf-8"), keep_blank_values=True,
+                )
+                firm_codes = [v for k, v in pairs
+                              if k == "firm_codes" and v]
+                action = form.get("action", "preview")
+                audience = (form.get("audience", "") or "").strip()
+                plan_tier = (form.get("plan_tier", "") or "").strip() or None
+                subject_en = form.get("subject_en", "")
+                subject_fr = form.get("subject_fr", "")
+                body_en = form.get("body_en", "")
+                body_fr = form.get("body_fr", "")
+                scheduled_for = (form.get("scheduled_for", "") or "").strip() or None
+                from src.integrations import broadcast as _bcast
+                if action == "preview":
+                    try:
+                        preview = _bcast.preview_recipient_count(
+                            DB_PATH, audience=audience,
+                            firm_codes=firm_codes, plan_tier=plan_tier,
+                        )
+                    except ValueError as exc:
+                        self._flash_redirect("/owner/broadcast",
+                                              error=str(exc))
+                        return
+                    with open_db() as _bconn:
+                        firm_rows = _bconn.execute(
+                            "SELECT firm_code, COALESCE(name,'') AS name "
+                            "FROM firms ORDER BY firm_code"
+                        ).fetchall()
+                    body = _bcast.render_broadcast_page(
+                        DB_PATH,
+                        firm_codes_available=[dict(r) for r in firm_rows],
+                        preview=preview,
+                    )
+                    self._send_html(page_layout(
+                        "Broadcast preview", body, user=user, lang=lang,
+                    ))
+                    return
+                # action=send
+                try:
+                    result = _bcast.broadcast(
+                        DB_PATH, audience=audience,
+                        subject_en=subject_en, subject_fr=subject_fr,
+                        body_en=body_en, body_fr=body_fr,
+                        from_user=user.get("username") or "",
+                        firm_codes=firm_codes, plan_tier=plan_tier,
+                        scheduled_for=scheduled_for,
+                    )
+                except ValueError as exc:
+                    self._flash_redirect("/owner/broadcast",
+                                          error=str(exc))
+                    return
+                self._flash_redirect(
+                    "/owner/broadcast",
+                    flash=(f"Broadcast {result['batch_id']} queued for "
+                            f"{result['recipient_count']} recipient(s)."),
                 )
                 return
 
