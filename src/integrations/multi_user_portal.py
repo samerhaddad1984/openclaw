@@ -462,13 +462,15 @@ def create_invitation(
     db_path: Path | str, *,
     firm_code: str, client_code: str,
     email: str, full_name: str, role: str,
-    invited_by: str,
+    invited_by: str, lang: str | None = None,
 ) -> dict[str, Any]:
     """Create or replace a pending invitation for (client, email).
 
     Role must be 'admin' or 'contributor'. If an older pending
     invitation exists for the same email it gets superseded (status
     flips to 'cancelled') so resending doesn't orphan invite tokens.
+    ``lang='fr'|'en'`` is remembered on the row so the accept page +
+    email render in the same language the inviter chose.
     """
     if role not in VALID_ROLES:
         raise ValueError(f"invalid role {role!r}")
@@ -477,6 +479,9 @@ def create_invitation(
     token = _new_invite_token()
     now = _iso_now()
     expires = _iso_in(INVITE_EXPIRY_DAYS)
+    invited_language = (lang or '').lower()
+    if invited_language not in ('fr', 'en'):
+        invited_language = None
     with _open(db_path) as conn:
         conn.execute(
             "UPDATE client_portal_invitations SET status='cancelled' "
@@ -484,18 +489,30 @@ def create_invitation(
             "AND LOWER(email)=LOWER(?) AND status='pending'",
             (firm_code, client_code, email),
         )
-        cur = conn.execute(
-            "INSERT INTO client_portal_invitations "
-            "(firm_code, client_code, email, full_name, invited_role, "
-            " invitation_token, invited_by, invited_at, expires_at, status) "
-            "VALUES (?,?,?,?,?,?,?,?,?, 'pending')",
-            (firm_code, client_code, email, full_name, role, token,
-             invited_by, now, expires),
-        )
+        try:
+            cur = conn.execute(
+                "INSERT INTO client_portal_invitations "
+                "(firm_code, client_code, email, full_name, invited_role, "
+                " invitation_token, invited_by, invited_at, expires_at, "
+                " status, invited_language) "
+                "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?)",
+                (firm_code, client_code, email, full_name, role, token,
+                 invited_by, now, expires, invited_language),
+            )
+        except sqlite3.OperationalError:
+            # Pre-migration DBs may not yet have invited_language.
+            cur = conn.execute(
+                "INSERT INTO client_portal_invitations "
+                "(firm_code, client_code, email, full_name, invited_role, "
+                " invitation_token, invited_by, invited_at, expires_at, status) "
+                "VALUES (?,?,?,?,?,?,?,?,?, 'pending')",
+                (firm_code, client_code, email, full_name, role, token,
+                 invited_by, now, expires),
+            )
         inv_id = int(cur.lastrowid)
         _audit(conn, firm_code=firm_code, client_code=client_code,
                 actor_email=invited_by, action='invitation_created',
-                detail=f'email={email} role={role}')
+                detail=f'email={email} role={role} lang={invited_language or "auto"}')
         conn.commit()
     return {'id': inv_id, 'token': token, 'email': email,
              'role': role, 'expires_at': expires}
@@ -1071,35 +1088,126 @@ def render_invitation_email(
     return subject, body
 
 
+def resolve_invite_lang(
+    *,
+    qs_lang: str | None = None,
+    accept_language_header: str | None = None,
+    invitation_lang: str | None = None,
+) -> str:
+    """Decide which language to render the /invite/... page in.
+
+    Precedence (highest wins):
+    1. explicit ?lang=fr|en query string,
+    2. invitation row's stored ``invited_language`` when set,
+    3. the browser's first-preferred ``Accept-Language`` fragment,
+    4. English fallback.
+    """
+    if qs_lang and qs_lang.lower() in ('fr', 'en'):
+        return qs_lang.lower()
+    if invitation_lang and invitation_lang.lower() in ('fr', 'en'):
+        return invitation_lang.lower()
+    hdr = (accept_language_header or '').strip().lower()
+    if hdr:
+        first = hdr.split(',', 1)[0].split(';', 1)[0].strip()
+        if first.startswith('fr'):
+            return 'fr'
+        if first.startswith('en'):
+            return 'en'
+    return 'en'
+
+
+_INVITE_STRINGS = {
+    'en': {
+        'title': 'Accept invitation',
+        'heading': 'You are invited to upload receipts to {firm}',
+        'intro': (
+            'Hi {name} — <strong>{client}</strong> uses OtoCPA to submit '
+            'receipts and invoices to <strong>{firm}</strong>. You have '
+            'been invited as <strong>{role}</strong>.'
+        ),
+        'expiry': 'Accept the invitation to get your personal upload link. '
+                   'This invitation expires on {expires}.',
+        'button': 'Accept invitation',
+        'other_lang_label': 'Français',
+        'footer': (
+            "If you were not expecting this invitation, you can safely "
+            "ignore this page."
+        ),
+    },
+    'fr': {
+        'title': "Accepter l'invitation",
+        'heading': 'Vous êtes invité(e) à téléverser des reçus pour {firm}',
+        'intro': (
+            'Bonjour {name} — <strong>{client}</strong> utilise OtoCPA pour '
+            'soumettre reçus et factures à <strong>{firm}</strong>. Vous '
+            'avez été invité(e) en tant que <strong>{role}</strong>.'
+        ),
+        'expiry': 'Acceptez l\'invitation pour obtenir votre lien personnel '
+                   "de téléversement. Cette invitation expire le {expires}.",
+        'button': "Accepter l'invitation",
+        'other_lang_label': 'English',
+        'footer': (
+            "Si vous n'attendiez pas cette invitation, vous pouvez ignorer "
+            "cette page sans risque."
+        ),
+    },
+}
+
+
 def render_accept_invitation_page(
     inv: dict[str, Any], *, client_name: str,
-    firm_name: str = '',
+    firm_name: str = '', lang: str = 'en',
 ) -> str:
+    """Render the public /invite/{token} acceptance page in ``lang``.
+
+    Shows a language toggle top-right so a recipient can flip locales
+    without re-requesting with a new ?lang= arg (the link preserves the
+    invitation_token query)."""
+    lang_key = 'fr' if (lang or '').lower().startswith('fr') else 'en'
+    strings = _INVITE_STRINGS[lang_key]
+    other_lang = 'en' if lang_key == 'fr' else 'fr'
+
     name = _esc(inv.get('full_name') or inv.get('email') or '')
     role = _esc(inv.get('invited_role') or 'contributor')
     client = _esc(client_name or inv.get('client_code') or '')
     firm = _esc(firm_name or inv.get('firm_code') or '')
     tok = _esc(inv.get('invitation_token') or '')
     expires = _esc(inv.get('expires_at') or '')
+
+    heading = strings['heading'].format(firm=firm)
+    intro = strings['intro'].format(name=name, client=client, firm=firm,
+                                       role=role)
+    expiry = strings['expiry'].format(expires=expires)
+    title = strings['title']
+    button = strings['button']
+    other_lang_label = strings['other_lang_label']
+    footer = strings['footer']
+
     return (
-        '<!DOCTYPE html><html><head><meta charset="utf-8">'
-        '<title>Accept invitation</title>'
+        '<!DOCTYPE html><html lang="' + lang_key + '">'
+        '<head><meta charset="utf-8">'
+        f'<title>{_esc(title)}</title>'
         '<style>body{font-family:system-ui,Arial;max-width:560px;'
-        'margin:3rem auto;padding:1rem;}'
+        'margin:3rem auto;padding:1rem;position:relative;}'
         '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1.5rem;'
         'border-radius:8px;}'
         'button.primary{background:#1e40af;color:white;padding:12px 24px;'
         'border:none;border-radius:6px;font-size:16px;cursor:pointer;}'
+        '.lang-toggle{position:absolute;top:8px;right:12px;'
+        'color:#6b7280;font-size:13px;text-decoration:none;}'
+        '.lang-toggle:hover{color:#1e40af;}'
         '</style></head><body>'
-        f'<div class="card">'
-        f'<h1>You are invited to upload receipts to {firm}</h1>'
-        f'<p>Hi {name} — <strong>{client}</strong> uses OtoCPA to submit '
-        f'receipts and invoices to <strong>{firm}</strong>. You have been '
-        f'invited as <strong>{role}</strong>.</p>'
-        f'<p>Accept the invitation to get your personal upload link. '
-        f'This invitation expires on {expires}.</p>'
+        '<a class="lang-toggle" '
+        f'href="/invite/{tok}?lang={other_lang}" '
+        f'data-testid="lang-toggle">{_esc(other_lang_label)}</a>'
+        '<div class="card" data-tour-lang="' + lang_key + '">'
+        f'<h1>{heading}</h1>'
+        f'<p>{intro}</p>'
+        f'<p>{expiry}</p>'
         f'<form method="POST" action="/invite/{tok}/accept">'
-        f'<button class="primary" type="submit">Accept invitation</button>'
-        f'</form></div>'
-        '</body></html>'
+        f'<input type="hidden" name="lang" value="{lang_key}">'
+        f'<button class="primary" type="submit">{_esc(button)}</button>'
+        '</form>'
+        f'<p style="color:#6b7280;font-size:12px;margin-top:1.5rem;">{footer}</p>'
+        '</div></body></html>'
     )

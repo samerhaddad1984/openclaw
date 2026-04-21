@@ -1627,9 +1627,21 @@ def bootstrap_schema() -> None:
                 invited_at TEXT,
                 expires_at TEXT,
                 accepted_at TEXT,
-                status TEXT DEFAULT 'pending'
+                status TEXT DEFAULT 'pending',
+                invited_language TEXT
             )
         """)
+        # Idempotent: old DBs get the invited_language column too.
+        _cpi_cols = {r['name'] for r in conn.execute(
+            "PRAGMA table_info(client_portal_invitations)").fetchall()}
+        if 'invited_language' not in _cpi_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_portal_invitations "
+                    "ADD COLUMN invited_language TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cpi_token "
             "ON client_portal_invitations(invitation_token)"
@@ -18390,8 +18402,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             ).fetchone()
         client_name = client["client_name"] if client else inv['client_code']
         firm_name = firm["name"] if firm else inv['firm_code']
+        # Item 6: resolve render language from query > stored invite lang
+        # > Accept-Language header > EN fallback.
+        qs_lang = (qs.get('lang', [''])[0] or '').strip()
+        lang = _mup.resolve_invite_lang(
+            qs_lang=qs_lang,
+            accept_language_header=self.headers.get("Accept-Language", ""),
+            invitation_lang=inv.get('invited_language'),
+        )
         self._send_html(_mup.render_accept_invitation_page(
-            inv, client_name=client_name, firm_name=firm_name,
+            inv, client_name=client_name, firm_name=firm_name, lang=lang,
         ))
 
     def _handle_invite_post(self, path: str, raw: bytes, ct: str,
