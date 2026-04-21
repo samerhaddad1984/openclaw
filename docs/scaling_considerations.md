@@ -58,6 +58,18 @@ Switch to external backing when **any** of these starts applying:
 - Zero-downtime deploys required (blue/green, rolling restart).
 - Audit requires rate-limit counts survive a process crash.
 
+## Status (2026-04-21)
+
+**Rate limiters: MIGRATED.** `src/security/pg_rate_limiter.py` is
+live; flip `RATE_LIMITER_BACKEND=postgres` in the environment and
+the facade routes calls through the PG-backed `PostgresRateLimiter`
+instead of the in-memory dicts. The per-call CTE (`INSERT ... SELECT
+... WHERE recent_count < limit`) is atomic, so multi-worker deploys
+can't drift. Cleanup cron (Item 6) prunes `rate_limit_events` older
+than 1 hour every 24 hours.
+
+The other single-process assumptions below are still on the list.
+
 ## Migration path
 
 ### Option A — Redis (preferred)

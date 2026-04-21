@@ -65,8 +65,20 @@ def scaling_notes() -> str:
     return __doc__ or ''
 
 
+# Cleanup Item 4: Postgres-backed limiter is now available.
+# RATE_LIMITER_BACKEND=postgres switches get_pg_limiter() on.
+from src.security.pg_rate_limiter import (  # noqa: E402
+    PostgresRateLimiter,
+    get_pg_limiter,
+    get_rate_limiter_backend,
+)
+
+
 __all__ = [
     'portal_user_upload_rate_allowed',
     'reset_portal_user_rate_limits',
     'scaling_notes',
+    'PostgresRateLimiter',
+    'get_pg_limiter',
+    'get_rate_limiter_backend',
 ]
