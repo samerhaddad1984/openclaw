@@ -532,28 +532,43 @@ def create_invitation(
             "AND LOWER(email)=LOWER(?) AND status='pending'",
             (firm_code, client_code, email),
         )
+        # Inspect which optional columns this DB has so we can tailor
+        # the INSERT. Reading PRAGMA once avoids try/except cascades
+        # that accidentally drop invited_language when only
+        # client_request_id is missing.
+        _cpi_cols = {r['name'] for r in conn.execute(
+            "PRAGMA table_info(client_portal_invitations)").fetchall()}
         try:
-            cur = conn.execute(
-                "INSERT INTO client_portal_invitations "
-                "(firm_code, client_code, email, full_name, invited_role, "
-                " invitation_token, invited_by, invited_at, expires_at, "
-                " status, invited_language, client_request_id) "
-                "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?, ?)",
-                (firm_code, client_code, email, full_name, role, token,
-                 invited_by, now, expires, invited_language,
-                 client_request_id),
-            )
-        except sqlite3.OperationalError:
-            # Pre-migration DBs may not yet have invited_language /
-            # client_request_id.
-            cur = conn.execute(
-                "INSERT INTO client_portal_invitations "
-                "(firm_code, client_code, email, full_name, invited_role, "
-                " invitation_token, invited_by, invited_at, expires_at, status) "
-                "VALUES (?,?,?,?,?,?,?,?,?, 'pending')",
-                (firm_code, client_code, email, full_name, role, token,
-                 invited_by, now, expires),
-            )
+            if 'client_request_id' in _cpi_cols and 'invited_language' in _cpi_cols:
+                cur = conn.execute(
+                    "INSERT INTO client_portal_invitations "
+                    "(firm_code, client_code, email, full_name, invited_role, "
+                    " invitation_token, invited_by, invited_at, expires_at, "
+                    " status, invited_language, client_request_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?, ?)",
+                    (firm_code, client_code, email, full_name, role, token,
+                     invited_by, now, expires, invited_language,
+                     client_request_id),
+                )
+            elif 'invited_language' in _cpi_cols:
+                cur = conn.execute(
+                    "INSERT INTO client_portal_invitations "
+                    "(firm_code, client_code, email, full_name, invited_role, "
+                    " invitation_token, invited_by, invited_at, expires_at, "
+                    " status, invited_language) "
+                    "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?)",
+                    (firm_code, client_code, email, full_name, role, token,
+                     invited_by, now, expires, invited_language),
+                )
+            else:
+                cur = conn.execute(
+                    "INSERT INTO client_portal_invitations "
+                    "(firm_code, client_code, email, full_name, invited_role, "
+                    " invitation_token, invited_by, invited_at, expires_at, status) "
+                    "VALUES (?,?,?,?,?,?,?,?,?, 'pending')",
+                    (firm_code, client_code, email, full_name, role, token,
+                     invited_by, now, expires),
+                )
         except sqlite3.IntegrityError:
             # Concurrent double-click race: a sibling request with the
             # same client_request_id won the INSERT. Replay that row.
