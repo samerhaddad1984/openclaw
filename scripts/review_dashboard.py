@@ -13234,6 +13234,11 @@ a:hover{{color:#16C172}}
             <p lang="en">T2 corporate income tax, GST/QST returns, T5013 partnership, and T661 SR&amp;ED — all in one place, with current CRA and Revenu Québec forms.</p>
         </div>
         <div class="feature">
+            <h3>États financiers / Financial Statements</h3>
+            <p lang="fr">Balance de vérification, état des résultats, bilan, état des flux de trésorerie et état des variations des capitaux propres — générés à partir du grand livre, bilingues, prêts à exporter.</p>
+            <p lang="en">Trial Balance, Income Statement, Balance Sheet, Cash Flow, and Statement of Changes in Equity — generated from the general ledger, bilingual, ready to export.</p>
+        </div>
+        <div class="feature">
             <h3>Sécurité et conformité / Security + Compliance</h3>
             <p lang="fr">Authentification à deux facteurs. Données hébergées au Canada (Toronto). Piste d'audit avec rétention de 7 ans. Conforme à la LPRPDE et à la Loi 25 du Québec.</p>
             <p lang="en">2FA enforced. All data hosted in Canada (Toronto). Audit trail with 7-year retention. PIPEDA and Quebec Law 25 compliant.</p>
