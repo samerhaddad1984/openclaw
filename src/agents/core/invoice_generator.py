@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Any
 
 from src.engines.tax_engine import calculate_gst_qst
+from src.formatting import format_number, money
 
 
 def generate_invoice_number() -> str:
@@ -152,9 +153,9 @@ def _pdf_pymupdf(
     # Aggregate line item
     svc_label = f"{t('inv_services', lang)} \u2014 {period_start} / {period_end}"
     page.insert_text((50, y), svc_label, fontsize=9)
-    page.insert_text((380, y), f"{float(billable_hours):.2f}", fontsize=9)
-    page.insert_text((440, y), f"${float(hourly_rate):,.2f}", fontsize=9)
-    page.insert_text((510, y), f"${float(subtotal):,.2f}", fontsize=9)
+    page.insert_text((380, y), format_number(float(billable_hours), lang, decimals=2), fontsize=9)
+    page.insert_text((440, y), money(float(hourly_rate), lang), fontsize=9)
+    page.insert_text((510, y), money(float(subtotal), lang), fontsize=9)
     y += 14
 
     # Individual entry details
@@ -167,7 +168,7 @@ def _pdf_pymupdf(
         e_desc = (e.get("description") or "")[:50]
         line = f"  {e_user}" + (f": {e_desc}" if e_desc else "")
         page.insert_text((50, y), line, fontsize=8, color=(0.5, 0.5, 0.5))
-        page.insert_text((380, y), f"{e_hours:.2f}", fontsize=8, color=(0.5, 0.5, 0.5))
+        page.insert_text((380, y), format_number(e_hours, lang, decimals=2), fontsize=8, color=(0.5, 0.5, 0.5))
         y += 12
 
     y += 6
@@ -177,17 +178,17 @@ def _pdf_pymupdf(
     # Totals (right-aligned)
     lx, rx = 380, 510
     page.insert_text((lx, y), t("inv_subtotal", lang), fontsize=10)
-    page.insert_text((rx, y), f"${float(subtotal):,.2f}", fontsize=10)
+    page.insert_text((rx, y), money(float(subtotal), lang), fontsize=10)
     y += 16
 
     gst_label = f"{t('inv_gst', lang)}  [{t('inv_reg_gst', lang)}: {gst_number}]"
     page.insert_text((lx, y), gst_label, fontsize=9)
-    page.insert_text((rx, y), f"${float(gst_amount):,.2f}", fontsize=9)
+    page.insert_text((rx, y), money(float(gst_amount), lang), fontsize=9)
     y += 14
 
     qst_label = f"{t('inv_qst', lang)}  [{t('inv_reg_qst', lang)}: {qst_number}]"
     page.insert_text((lx, y), qst_label, fontsize=9)
-    page.insert_text((rx, y), f"${float(qst_amount):,.2f}", fontsize=9)
+    page.insert_text((rx, y), money(float(qst_amount), lang), fontsize=9)
     y += 6
 
     page.draw_line((50, y), (562, y), color=(0.08, 0.16, 0.44), width=1.0)
@@ -195,7 +196,7 @@ def _pdf_pymupdf(
 
     page.insert_text((lx, y), t("inv_total", lang), fontsize=12, fontname="hebo",
                      color=(0.08, 0.16, 0.44))
-    page.insert_text((rx, y), f"${float(total):,.2f}", fontsize=12, fontname="hebo",
+    page.insert_text((rx, y), money(float(total), lang), fontsize=12, fontname="hebo",
                      color=(0.08, 0.16, 0.44))
 
     pdf_bytes: bytes = doc.tobytes()
@@ -259,9 +260,9 @@ def _pdf_minimal(
     # Aggregate service line
     svc_label = t("inv_services", lang)
     add(50, y, svc_label, 9)
-    add(370, y, f"{float(billable_hours):.2f}", 9)
-    add(430, y, f"${float(hourly_rate):.2f}/h", 9)
-    add(495, y, f"${float(subtotal):.2f}", 9)
+    add(370, y, format_number(float(billable_hours), lang, decimals=2), 9)
+    add(430, y, f"{money(float(hourly_rate), lang)}/h", 9)
+    add(495, y, money(float(subtotal), lang), 9)
     y -= 12
 
     # Individual entries
@@ -274,27 +275,27 @@ def _pdf_minimal(
         e_desc = (e.get("description") or "")[:35]
         line = f"  {e_user}" + (f": {e_desc}" if e_desc else "")
         add(50, y, line, 8)
-        add(370, y, f"{e_hours:.2f}", 8)
+        add(370, y, format_number(e_hours, lang, decimals=2), 8)
         y -= 11
 
     y -= 10
 
     # Totals
     add(370, y, f"{t('inv_subtotal', lang)}:", 10)
-    add(495, y, f"${float(subtotal):.2f}", 10)
+    add(495, y, money(float(subtotal), lang), 10)
     y -= 14
     add(370, y, f"{t('inv_gst', lang)}:", 9)
-    add(495, y, f"${float(gst_amount):.2f}", 9)
+    add(495, y, money(float(gst_amount), lang), 9)
     y -= 13
     add(370, y, f"  {t('inv_reg_gst', lang)}: {gst_number}", 8)
     y -= 12
     add(370, y, f"{t('inv_qst', lang)}:", 9)
-    add(495, y, f"${float(qst_amount):.2f}", 9)
+    add(495, y, money(float(qst_amount), lang), 9)
     y -= 13
     add(370, y, f"  {t('inv_reg_qst', lang)}: {qst_number}", 8)
     y -= 14
     add(370, y, f"{t('inv_total', lang)}:", 12)
-    add(495, y, f"${float(total):.2f}", 12)
+    add(495, y, money(float(total), lang), 12)
 
     # Registration footer
     y -= 28

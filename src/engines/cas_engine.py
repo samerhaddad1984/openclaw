@@ -17,6 +17,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
+from src.formatting import money
+
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DB_PATH = ROOT_DIR / "data" / "otocpa_agent.db"
 
@@ -1765,8 +1767,8 @@ def generate_related_party_disclosure(
                 amt = _to_decimal(t.get("amount", 0))
                 total += amt
                 desc = t.get("description", "") or ""
-                lines.append(f"  - {t.get('party_name', 'N/A')} : {float(amt):,.2f} $ — {desc}")
-            lines.append(f"\nTotal des opérations entre parties liées : {float(total):,.2f} $")
+                lines.append(f"  - {t.get('party_name', 'N/A')} : {money(float(amt), 'fr')} — {desc}")
+            lines.append(f"\nTotal des opérations entre parties liées : {money(float(total), 'fr')}")
     else:
         lines = [
             f"Financial Statement Note — Related Parties",
@@ -1786,8 +1788,8 @@ def generate_related_party_disclosure(
                 amt = _to_decimal(t.get("amount", 0))
                 total += amt
                 desc = t.get("description", "") or ""
-                lines.append(f"  - {t.get('party_name', 'N/A')}: ${float(amt):,.2f} — {desc}")
-            lines.append(f"\nTotal related party transactions: ${float(total):,.2f}")
+                lines.append(f"  - {t.get('party_name', 'N/A')}: {money(float(amt), 'en')} — {desc}")
+            lines.append(f"\nTotal related party transactions: {money(float(total), 'en')}")
 
     return "\n".join(lines)
 
