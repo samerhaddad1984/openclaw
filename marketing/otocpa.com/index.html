@@ -190,7 +190,7 @@ footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;di
     <li><a href="#pricing" id="nav-pricing">Tarifs</a></li>
     <li><a href="https://app.otocpa.com/login" id="nav-login">Connexion</a></li>
     <li><button class="lang-btn" onclick="toggleLang()" id="lang-toggle-btn">EN</button></li>
-    <li><a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="nav-cta"><span id="nav-cta-text">Démo gratuite →</span></a></li>
+    <li><a href="https://app.otocpa.com/contact" class="nav-cta"><span id="nav-cta-text">Démo gratuite →</span></a></li>
   </ul>
 </nav>
 
@@ -210,7 +210,7 @@ footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;di
     <p class="hero-sub" id="hero-sub">Vos clients envoient une photo. L'IA extrait chaque ligne, applique les règles TPS/TVQ, et envoie vers QuickBooks.</p>
     <p class="hero-proof" id="hero-proof">OtoCPA travaille <strong>24/7</strong> — l'équivalent d'un employé à <strong>moins de 10$/heure</strong></p>
     <div class="hero-actions">
-      <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="cta-primary-btn">📧 Demander une démo →</a>
+      <a href="https://app.otocpa.com/contact" class="btn-primary" id="cta-primary-btn">📧 Demander une démo →</a>
       <a href="#how" class="btn-secondary" id="cta-secondary-btn">Voir comment ça marche</a>
     </div>
   </div>
@@ -252,7 +252,7 @@ footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;di
     </div>
     <div class="ba-summary reveal">
       <p id="ba-summary-text">À 500 reçus/mois: <strong>+65 heures économisées</strong> → valeur de <strong>1 600$ CAD/mois</strong> en coûts de saisie évités. OtoCPA se rembourse en quelques jours.</p>
-      <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="ba-cta" style="white-space:nowrap;">📧 Demander une démo →</a>
+      <a href="https://app.otocpa.com/contact" class="btn-primary" id="ba-cta" style="white-space:nowrap;">📧 Demander une démo →</a>
     </div>
   </div>
 </section>
@@ -303,9 +303,8 @@ footer{background:var(--dark);border-top:1px solid var(--border);padding:48px;di
   </div>
 </section>
 
-[<!-- ============================================
-     DIAGNOSTIC TOOL — Paste this section into
-     otocpa.com landing page (before pricing)
+<!-- ============================================
+     DIAGNOSTIC TOOL (finisher opens contact modal)
      ============================================ -->
 <section style="background:var(--black);padding:100px 48px;">
   <div style="max-width:720px;margin:0 auto;">
@@ -702,18 +701,11 @@ async function submitContact(e) {
   }
 }
 
-// Replace all existing mailto: links with contact modal
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('a[href^="mailto:sales"]').forEach(a => {
-    a.href = '#contact';
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      openContactModal('cta-button');
-    });
-  });
-});
+// CTAs now link directly to https://app.otocpa.com/contact (a real
+// page with a form), so there is nothing left to intercept here.
+// The modal above is still used by the diagnostic "Voir ça avec mes
+// vrais documents" finisher (openContactModal() called explicitly).
 </script>
-]
 
 
 <!-- PRICING -->
@@ -738,7 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <li id="pf-1-1">Clients illimités</li><li id="pf-1-2">Intake WhatsApp</li><li id="pf-1-3">Extraction IA par ligne</li>
             <li id="pf-1-4">Export QuickBooks</li><li id="pf-1-5">Relevés bancaires Plaid</li><li id="pf-1-6">Support par courriel</li>
           </ul>
-          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-starter">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/contact" class="plan-cta outline" style="margin-bottom:10px;" id="cta-starter">📧 Demander une démo</a>
           <a href="https://app.otocpa.com/signup/checkout?plan=starter_monthly" class="plan-cta primary" id="buy-starter">💳 Souscrire maintenant</a>
         </div>
         <div class="pricing-card featured">
@@ -750,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <li id="pf-2-1">Tout Démarrage, plus:</li><li id="pf-2-2">Tableau de bord avancé</li><li id="pf-2-3">Hiérarchie cabinet → clients</li>
             <li id="pf-2-4">Codes QR personnalisés</li><li id="pf-2-5">Support prioritaire</li><li id="pf-2-6">Calibration IA</li>
           </ul>
-          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-pro">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/contact" class="plan-cta outline" style="margin-bottom:10px;" id="cta-pro">📧 Demander une démo</a>
           <a href="https://app.otocpa.com/signup/checkout?plan=pro_monthly" class="plan-cta primary" id="buy-pro">💳 Souscrire maintenant</a>
         </div>
         <div class="pricing-card">
@@ -761,13 +753,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <li id="pf-3-1">Tout Professionnel, plus:</li><li id="pf-3-2">Onboarding dédié</li><li id="pf-3-3">SLA garanti</li>
             <li id="pf-3-4">Support téléphonique</li><li id="pf-3-5">Intégrations personnalisées</li><li id="pf-3-6">Rapport mensuel</li>
           </ul>
-          <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="plan-cta outline" style="margin-bottom:10px;" id="cta-business">📧 Demander une démo</a>
+          <a href="https://app.otocpa.com/contact" class="plan-cta outline" style="margin-bottom:10px;" id="cta-business">📧 Demander une démo</a>
           <a href="https://app.otocpa.com/signup/checkout?plan=business_monthly" class="plan-cta primary" id="buy-business">💳 Souscrire maintenant</a>
         </div>
       </div>
       <div class="enterprise-card reveal">
         <div><h3 id="enterprise-title">Entreprise / Enterprise</h3><p id="enterprise-text">Volume illimité · SLA personnalisé · Intégrations sur mesure · Déploiement dédié</p></div>
-        <a href="/contact" class="btn-secondary"><span id="enterprise-cta">Contactez-nous →</span></a>
+        <a href="https://app.otocpa.com/contact" class="btn-secondary"><span id="enterprise-cta">Contactez-nous →</span></a>
       </div>
     </div>
   </div>
@@ -780,8 +772,8 @@ document.addEventListener('DOMContentLoaded', () => {
   <h2 id="cta-final-title">OtoCPA — disponible 24/7 pour vous</h2>
   <p id="cta-final-sub">Contactez-nous — nous vous configurons et accompagnons dès le départ.</p>
   <div class="hero-actions" style="position:relative;">
-    <a href="mailto:sales@otocpa.com?subject=D%C3%A9mo%20OtoCPA&body=Bonjour%2C%0A%0AJe%20souhaite%20une%20d%C3%A9monstration.%0A%0ANom%20du%20cabinet%3A%20%0ANombre%20de%20clients%3A%20%0AT%C3%A9l%3A%20" class="btn-primary" id="cta-primary-btn2">📧 Demander une démo →</a>
-    <a href="/contact" class="btn-secondary"><span id="cta-demo-btn">Demander une démo / Contact us</span></a>
+    <a href="https://app.otocpa.com/contact" class="btn-primary" id="cta-primary-btn2">📧 Demander une démo →</a>
+    <a href="#pricing" class="btn-secondary"><span id="cta-demo-btn">Voir les tarifs</span></a>
   </div>
 </section>
 
@@ -818,7 +810,7 @@ const T = {
     'cta-primary-btn':'📧 Demander une démo →',
     'cta-secondary-btn':'Voir comment ça marche',
     'cta-primary-btn2':'📧 Demander une démo →',
-    'cta-demo-btn':'Demander une démo',
+    'cta-demo-btn':'Voir les tarifs',
     'stat-1-label':'Reçu → QuickBooks','stat-2-label':'Précision IA','stat-3-label':'Disponible en tout temps','stat-4-label':'ROI moyen / mois',
     'ba-section-label':'Avant / Après','ba-section-title':'Ce que vous faisiez.<br>Ce que vous faites maintenant.',
     'ba-label-before':'😓 Avant OtoCPA','ba-label-after':'✅ Avec OtoCPA',
@@ -871,7 +863,7 @@ const T = {
     'cta-primary-btn':'📧 Request a demo →',
     'cta-secondary-btn':'See how it works',
     'cta-primary-btn2':'📧 Request a demo →',
-    'cta-demo-btn':'Request a demo',
+    'cta-demo-btn':'See pricing',
     'stat-1-label':'Receipt → QuickBooks','stat-2-label':'AI Accuracy','stat-3-label':'Always available','stat-4-label':'Average ROI / month',
     'ba-section-label':'Before / After','ba-section-title':'What you used to do.<br>What you do now.',
     'ba-label-before':'😓 Before OtoCPA','ba-label-after':'✅ With OtoCPA',
