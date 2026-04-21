@@ -13210,8 +13210,8 @@ a:hover{{color:#16C172}}
         </div>
         <div class="feature">
             <h3>Assistant de clôture mensuelle / Month-End Close Wizard</h3>
-            <p lang="fr">Processus de clôture guidé en 6 étapes avec examen des écritures de régularisation ligne par ligne.</p>
-            <p lang="en">Guided 6-step close process with line-level accrual review.</p>
+            <p lang="fr">Processus de clôture guidé en 6 étapes avec examen des écritures de régularisation ligne par ligne. Chaque ligne peut être modifiée ou remplacée manuellement avant l'affichage au GL.</p>
+            <p lang="en">Guided 6-step close process with line-level accrual review. Every line can be edited or overridden manually before posting to the GL.</p>
         </div>
         <div class="feature">
             <h3>Flux d'audit conformes aux NCA / CAS-Compliant Audit Workflows</h3>
