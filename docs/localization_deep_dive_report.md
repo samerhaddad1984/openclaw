@@ -564,6 +564,76 @@ the **46 new `tests/i18n/*` tests** added this pass + roughly 100
 tests whose pass/skip classification toggled between runs depending
 on data availability.
 
+## Phase 3 — the final mile (Sweeps A + B)
+
+A third pass caught the last few high-signal sites that weren't yet
+migrated and added a continuous-evidence harness.
+
+### Sweep A final: daily digest tax amounts + analytical `_fmt`
+
+- **4 GST/QST currency fields** in `scripts/daily_digest.py` (both
+  plain-text and HTML digest bodies) migrated to `money(..., lang)`.
+  Fixed a real latent bug: the FR branch of the plain-text digest
+  was emitting `TPS: $1,234.56` (English currency with French label)
+  — now `TPS: 1 234,56 $`.
+- The **analytical-procedures page `_fmt` helper** in
+  `render_analytical` (line 8628) previously returned
+  `f"{v:,.2f}"` — English comma-thousands. Now dispatches through
+  `format_number(v, lang, decimals=2)`.
+- Source-level guard `tests/i18n/test_final_currency_sweep.py::test_no_stray_user_facing_currency_in_scripts`
+  walks the entire `scripts/` tree and fails if any `${x:,.2f}` /
+  `:+,.2f` / `:,.0f` / `:.2f` anti-pattern appears outside a small
+  curated allowlist (currently just the USD AI-cost admin metric).
+
+### Sweep B: last 6 hardcoded button labels
+
+Migrated: **Sync**, **Disconnect** (bank-feeds card),
+**Profile** (settings page heading), **Cancel** (firm form),
+**Open chat** (portal WhatsApp card).
+
+The portal's WhatsApp card is the one site whose enclosing function
+doesn't take `lang` — it reads `client.get("language")` locally and
+passes that to `ui_t`. Guard in
+`tests/i18n/test_button_label_sweep_b.py::test_portal_whatsapp_open_chat_button_respects_client_lang`.
+
+### Continuous locale-leak evidence
+
+New:
+
+- `scripts/i18n/generate_locale_evidence.py` — renders four
+  locale-sensitive surfaces (audit lead-sheet PDF, FS PDF,
+  CAS related-party disclosure, daily-digest HTML) once in FR and
+  once in EN, then scans each output for:
+  - US-dollar currency strings (`$1,234.56`) in FR output,
+  - French currency strings (`1 234,56 $`) in EN output,
+  - HTML entity leaks,
+  - literal format-spec leakage (`{ui_t(`, `:,.2f}`).
+- `docs/locale_evidence.json` — committed receipt of the latest
+  run. Current counts:
+
+  ```json
+  "_summary": {
+    "fr_cross_locale_leaks": 0,
+    "en_cross_locale_leaks": 0,
+    "surfaces_checked": 4
+  }
+  ```
+
+- `tests/i18n/test_locale_evidence.py` — pytest wrapper that runs
+  the generator in-process and fails on any non-zero leak count.
+  Also asserts every surface produces *some* currency output in
+  its own locale (catches regressions where a fixture stops
+  exercising the money path entirely).
+
+### Phase 3 tallies
+
+| | Count |
+| --- | ---: |
+| Sweep A additional currency sites | 5 (4 digest + 1 analytical) |
+| Sweep B additional button labels | 6 |
+| New tests added this pass | 13 |
+| Total `tests/i18n/` tests | **128** (all passing) |
+
 ## Evidence FR output is now locale-correct for migrated surfaces
 
 - Real PyMuPDF-rendered audit lead sheet with French client name and

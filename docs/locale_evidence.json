@@ -1,0 +1,107 @@
+{
+  "audit_lead_sheet_pdf": {
+    "fr": {
+      "us_currency_count": 0,
+      "us_currency_sample": [],
+      "fr_currency_count": 8,
+      "fr_currency_sample": [
+        "12 345,67 $",
+        "12 345,67 $",
+        "0,00 $"
+      ],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    },
+    "en": {
+      "us_currency_count": 8,
+      "us_currency_sample": [
+        "$12,345.67",
+        "$12,345.67",
+        "$0.00"
+      ],
+      "fr_currency_count": 0,
+      "fr_currency_sample": [],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    }
+  },
+  "financial_statements_pdf": {
+    "fr": {
+      "us_currency_count": 0,
+      "us_currency_sample": [],
+      "fr_currency_count": 13,
+      "fr_currency_sample": [
+        "50 000,00 $",
+        "120 000,00 $",
+        "170 000,00 $"
+      ],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    },
+    "en": {
+      "us_currency_count": 13,
+      "us_currency_sample": [
+        "$50,000.00",
+        "$120,000.00",
+        "$170,000.00"
+      ],
+      "fr_currency_count": 0,
+      "fr_currency_sample": [],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    }
+  },
+  "cas_related_party_disclosure": {
+    "fr": {
+      "us_currency_count": 0,
+      "us_currency_sample": [],
+      "fr_currency_count": 2,
+      "fr_currency_sample": [
+        "12 345,67 $",
+        "12 345,67 $"
+      ],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    },
+    "en": {
+      "us_currency_count": 2,
+      "us_currency_sample": [
+        "$12,345.67",
+        "$12,345.67"
+      ],
+      "fr_currency_count": 0,
+      "fr_currency_sample": [],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    }
+  },
+  "daily_digest_html": {
+    "fr": {
+      "us_currency_count": 0,
+      "us_currency_sample": [],
+      "fr_currency_count": 2,
+      "fr_currency_sample": [
+        "1 234,56 $",
+        "2 345,67 $"
+      ],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    },
+    "en": {
+      "us_currency_count": 2,
+      "us_currency_sample": [
+        "$1,234.56",
+        "$2,345.67"
+      ],
+      "fr_currency_count": 0,
+      "fr_currency_sample": [],
+      "html_entity_leak": 0,
+      "literal_fstring_leak": false
+    }
+  },
+  "_summary": {
+    "fr_cross_locale_leaks": 0,
+    "en_cross_locale_leaks": 0,
+    "surfaces_checked": 4
+  }
+}
