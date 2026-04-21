@@ -24956,13 +24956,22 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     return
                 firm = ctx.get("firm_code") or "OWNER"
                 sender = ctx.get("display_name") or ctx.get("username") or "CPA"
+                # Multi-user target: blank means broadcast to all users.
+                raw_target = (form.get("target_portal_user_id", "") or "").strip()
+                target_id: int | None = None
+                if raw_target:
+                    try:
+                        target_id = int(raw_target)
+                    except ValueError:
+                        target_id = None
                 try:
                     with open_db() as _cmc:
                         _cmc.execute(
                             "INSERT INTO client_messages "
-                            "(client_code, firm_code, direction, sender_name, sender_type, body) "
-                            "VALUES (?,?,?,?,?,?)",
-                            (cm_code, firm, "outbound", sender, "cpa", cm_body),
+                            "(client_code, firm_code, direction, sender_name, sender_type, body, target_portal_user_id) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (cm_code, firm, "outbound", sender, "cpa",
+                             cm_body, target_id),
                         )
                         _cmc.commit()
                 except Exception as _exc:
