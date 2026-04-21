@@ -1284,20 +1284,41 @@ def _render_wizard_step4_accruals(
         '</div>'
     )
 
+    # Idempotency: mint a per-page-load request_id so a double-click
+    # submits the *same* id twice. The backend dedupes via
+    # wizard_posting_attempts so only the first POST executes.
+    import secrets as _secrets
+    request_id = f'wz4_{_secrets.token_hex(16)}'
+
     return (
         '<h3>Step 4 &mdash; accruals</h3>'
         '<p>Review each suggested accrual line. Every row is checked '
         'by default; uncheck to skip and adjust the amount if needed. '
         'Each check-in gets one draft JE; the audit trail records '
         'the suggestion vs. your override.</p>'
-        '<form method="POST" action="/close/wizard/advance">'
+        '<form method="POST" action="/close/wizard/advance" '
+        'id="wizard-step4-form" onsubmit="return _wz4Submit(this);">'
         f'{hidden}'
+        f'<input type="hidden" name="client_request_id" value="{_esc(request_id)}">'
         + ''.join(sections)
         + summary_html
-        + '<button type="submit" class="primary" style="margin-top:12px;'
-          'padding:10px 22px;background:#1e40af;color:white;">'
-          'Post selected accrual lines &rarr;</button>'
+        + '<button type="submit" id="wz4-post-btn" class="primary" '
+          'style="margin-top:12px;padding:10px 22px;background:#1e40af;'
+          'color:white;">Post selected accrual lines &rarr;</button>'
           '</form>'
+          '<script>'
+          'function _wz4Submit(f){'
+          'var b=document.getElementById("wz4-post-btn");'
+          'if(b && b.dataset.submitting==="1"){return false;}'
+          'if(b){b.dataset.submitting="1";b.disabled=true;'
+          'b.style.background="#6b7280";b.style.cursor="wait";'
+          'b.textContent="Posting…";'
+          'setTimeout(function(){b.disabled=false;b.dataset.submitting="";'
+          'b.style.background="#1e40af";b.style.cursor="pointer";'
+          'b.textContent="Post selected accrual lines →";},30000);}'
+          'return true;'
+          '}'
+          '</script>'
     )
 
 

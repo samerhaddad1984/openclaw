@@ -697,11 +697,19 @@ def _handle_wizard_advance(handler, db_path, user, ctx, form) -> bool:
                     'amount': amounts.get(key, 0.0),
                     'notes': notes.get(key, '') or None,
                 })
-            posted = _close.post_suggested_accruals_lines(
-                db_path, firm_code=firm_code, client_code=client_code,
-                period=period, line_decisions=line_decisions,
-                actor_email=actor,
-            )
+            request_id = (form.get('client_request_id', '') or '').strip()
+            if request_id:
+                posted = _close.idempotent_post_accruals_lines(
+                    db_path, firm_code=firm_code, client_code=client_code,
+                    period=period, line_decisions=line_decisions,
+                    actor_email=actor, request_id=request_id,
+                )
+            else:
+                posted = _close.post_suggested_accruals_lines(
+                    db_path, firm_code=firm_code, client_code=client_code,
+                    period=period, line_decisions=line_decisions,
+                    actor_email=actor,
+                )
             kinds = sorted({d['kind'] for d in line_decisions
                             if d['include'] and d['kind']})
         else:

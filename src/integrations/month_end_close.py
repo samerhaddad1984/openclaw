@@ -653,6 +653,101 @@ def _prepaid_month_amort(db_path: Path | str, client_code: str) -> float:
     return float((row[0] if row else 0.0) or 0.0) / 12.0
 
 
+def _ensure_idempotency_schema(db_path: Path | str) -> None:
+    """Per-request cache for wizard Post clicks.
+
+    Double-clicking the Post button in step 4 used to double-post
+    wages/prepaid accruals (depreciation was idempotent via the
+    accrual engine but wage + prepaid manual_journal_entries are
+    not). The frontend now sends a random request_id generated at
+    page-load; we look it up here and replay the cached result
+    instead of re-executing."""
+    with _open(db_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS wizard_posting_attempts (
+                request_id TEXT PRIMARY KEY,
+                firm_code TEXT,
+                client_code TEXT,
+                period_end TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                result_json TEXT
+            )
+        """)
+        conn.commit()
+
+
+def idempotent_post_accruals_lines(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, period: str,
+    line_decisions: list[dict[str, Any]],
+    actor_email: str,
+    request_id: str,
+) -> dict[str, Any]:
+    """Idempotency wrapper around post_suggested_accruals_lines.
+
+    When the caller supplies a ``request_id``:
+    - First request: claim the slot with ``started_at`` (INSERT OR
+      IGNORE on PRIMARY KEY prevents the race); execute the post;
+      cache the JSON-serialised result with ``completed_at``.
+    - Duplicate request_id arriving while the first is still in
+      flight: return a 'pending' stub.
+    - Duplicate request_id after first completed: return the cached
+      result (same posted/skipped/errors as the first call).
+
+    Different request_ids always execute independently."""
+    _ensure_idempotency_schema(db_path)
+    import json as _json
+    now_start = _iso_now()
+
+    # Try to claim. INSERT OR IGNORE means the winner's row persists;
+    # a second caller with the same request_id sees 0 rowcount.
+    with _open(db_path) as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO wizard_posting_attempts "
+            "(request_id, firm_code, client_code, period_end, started_at) "
+            "VALUES (?,?,?,?,?)",
+            (request_id, firm_code, client_code, period, now_start),
+        )
+        claimed = cur.rowcount > 0
+        conn.commit()
+
+    if not claimed:
+        # Someone else already owns this request_id. Return the cached
+        # result when they've finished; otherwise return 'pending'.
+        with _open(db_path) as conn:
+            row = conn.execute(
+                "SELECT completed_at, result_json "
+                "FROM wizard_posting_attempts WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        if row and row['completed_at'] and row['result_json']:
+            cached = _json.loads(row['result_json'])
+            cached['idempotent_replay'] = True
+            return cached
+        return {
+            'ok': True, 'posted': [], 'skipped': [], 'errors': [],
+            'idempotent_replay': True,
+            'idempotent_in_flight': True,
+        }
+
+    # We own the slot; execute + cache result.
+    result = post_suggested_accruals_lines(
+        db_path, firm_code=firm_code, client_code=client_code,
+        period=period, line_decisions=line_decisions,
+        actor_email=actor_email,
+    )
+    result.setdefault('idempotent_replay', False)
+    with _open(db_path) as conn:
+        conn.execute(
+            "UPDATE wizard_posting_attempts "
+            "SET completed_at=?, result_json=? WHERE request_id=?",
+            (_iso_now(), _json.dumps(result, default=str), request_id),
+        )
+        conn.commit()
+    return result
+
+
 def _ensure_accrual_override_schema(db_path: Path | str) -> None:
     """Audit table for per-line CPA overrides at close time.
 
