@@ -17165,8 +17165,159 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     </script>
     {timer_js}"""
 
+    # Hybrid assignment: append the per-document reassign block at the
+    # bottom (kept self-contained so it doesn't perturb the existing
+    # giant render_document body). Owner / firm_admin can reassign any
+    # document; the currently-assigned employee can hand it off to a
+    # colleague (ask-for-help flow).
+    body += _render_document_reassign_block(
+        document_id=document_id, row=row, ctx=ctx, lang=lang,
+    )
+
     return page_layout(f"Document — {normalize_text(row['file_name'])}", body,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _render_document_reassign_block(
+    *, document_id: str, row: dict[str, Any], ctx: dict[str, Any],
+    lang: str = 'fr',
+) -> str:
+    """Per-document assignment + reassign UI.
+
+    Always shows the current assignee + reason (auto vs override) so
+    everyone knows who's on it. Editable when the viewer is owner /
+    firm_admin OR the currently-assigned employee.
+    """
+    firm_code = ctx.get('firm_code') or 'OWNER'
+    role = ctx.get('role') or ''
+    ctx_email = (ctx.get('email') or '').strip()
+
+    # Read current workflow state + last audit row.
+    current_email = ''
+    last_action = ''
+    last_actor = ''
+    last_notes = ''
+    last_at = ''
+    try:
+        with open_db() as conn:
+            wf = conn.execute(
+                "SELECT id, assigned_to_email "
+                "FROM review_workflow "
+                "WHERE entity_type='document' AND entity_id=?",
+                (document_id,),
+            ).fetchone()
+            if wf:
+                current_email = wf['assigned_to_email'] or ''
+                aud = conn.execute(
+                    "SELECT actor_email, action, notes, created_at "
+                    "FROM review_workflow_audit "
+                    "WHERE workflow_id=? "
+                    "ORDER BY id DESC LIMIT 1",
+                    (wf['id'],),
+                ).fetchone()
+                if aud:
+                    last_action = aud['action'] or ''
+                    last_actor = aud['actor_email'] or ''
+                    last_notes = aud['notes'] or ''
+                    last_at = (aud['created_at'] or '')[:19]
+    except sqlite3.OperationalError:
+        pass
+
+    can_reassign = (
+        role in ('owner', 'firm_admin')
+        or (ctx_email and ctx_email.lower() == current_email.lower()
+            and current_email != '')
+    )
+
+    # Source-of-assignment badge for the current viewer.
+    if not current_email:
+        assign_badge = ('<span style="color:#aaa;">'
+                         'Pool (unassigned)</span>')
+    elif last_action == 'auto_assign':
+        assign_badge = (
+            f'<strong>{esc(current_email)}</strong> '
+            f'<span style="color:#888;font-size:11px;">'
+            f'(auto: client primary)</span>'
+        )
+    elif last_action == 'reassign':
+        assign_badge = (
+            f'<strong>{esc(current_email)}</strong> '
+            f'<span style="color:#888;font-size:11px;">'
+            f'(reassigned by {esc(last_actor)} on {esc(last_at)})</span>'
+        )
+    else:
+        assign_badge = (
+            f'<strong>{esc(current_email)}</strong> '
+            f'<span style="color:#888;font-size:11px;">'
+            f'({esc(last_action or "assigned")})</span>'
+        )
+    notes_line = (
+        f'<div style="color:#888;font-size:11px;margin-top:4px;">'
+        f'Last note: {esc(last_notes)}</div>'
+        if last_notes else ''
+    )
+
+    if not can_reassign:
+        return f"""
+        <div style="margin:24px 0;padding:14px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <div style="color:#aaa;font-size:12px;">Assigned to</div>
+            <div style="color:#e0e0e0;">{assign_badge}</div>
+            {notes_line}
+        </div>"""
+
+    from src.integrations.client_assignment import get_firm_employees  # noqa: PLC0415
+    employees = get_firm_employees(DB_PATH, firm_code)
+    options = [
+        '<option value="">&mdash; (back to pool / au pool) &mdash;</option>'
+    ]
+    for e in employees:
+        sel = 'selected' if e['email'].lower() == current_email.lower() else ''
+        options.append(
+            f'<option value="{esc(e["email"])}" {sel}>'
+            f'{esc(e["display_name"])} ({esc(e["email"])})</option>'
+        )
+
+    reasons = [
+        ('help',           'Asking for help on a complex item'),
+        ('out_of_office',  'Employee out of office / on vacation'),
+        ('specialization', 'Specialization needed (audit, tax)'),
+        ('other',          'Other (free text)'),
+    ]
+    reason_opts = ''.join(
+        f'<option value="{esc(v)}">{esc(label)}</option>'
+        for v, label in reasons
+    )
+
+    return f"""
+    <div style="margin:24px 0;padding:14px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+                <div style="color:#aaa;font-size:12px;">Assigned to</div>
+                <div style="color:#e0e0e0;">{assign_badge}</div>
+                {notes_line}
+            </div>
+        </div>
+        <form method="POST" action="/document/reassign" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <input type="hidden" name="document_id" value="{esc(document_id)}">
+            <label style="color:#aaa;font-size:12px;flex:1;min-width:240px;">Reassign to
+                <select name="assignee_email" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:6px;border-radius:4px;width:100%;">
+                    {''.join(options)}
+                </select>
+            </label>
+            <label style="color:#aaa;font-size:12px;min-width:200px;">Reason
+                <select name="reason_code" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:6px;border-radius:4px;width:100%;">
+                    {reason_opts}
+                </select>
+            </label>
+            <label style="color:#aaa;font-size:12px;flex:2;min-width:200px;">Note (optional)
+                <input type="text" name="reason_text" placeholder="e.g. Need tax-credit eligibility check"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:6px;border-radius:4px;width:100%;">
+            </label>
+            <button type="submit" style="background:#3498db;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">
+                &#x21AA; Reassign
+            </button>
+        </form>
+    </div>"""
 
 
 # ---------------------------------------------------------------------------
@@ -26009,6 +26160,87 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                               whatsapp_number, client_firm, new_token))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
+                return
+
+            # --- Hybrid assignment: per-document reassign (Phase 5) ---
+            if path == "/document/reassign":
+                rd_id = normalize_text(form.get("document_id", "")).strip()
+                if not rd_id:
+                    self._flash_redirect("/", error="Missing document_id")
+                    return
+                # Permission: admins always; otherwise the helper
+                # enforces "actor must be the current assignee".
+                rd_target_firm = ctx.get("firm_code") or "OWNER"
+                # For owner, look up the document's firm so we operate
+                # against the right scope.
+                if ctx.get("role") == "owner":
+                    with open_db() as _firm_conn:
+                        _r = _firm_conn.execute(
+                            "SELECT c.firm_code AS firm_code "
+                            "FROM documents d "
+                            "LEFT JOIN clients c USING (client_code) "
+                            "WHERE d.document_id=?",
+                            (rd_id,),
+                        ).fetchone()
+                        if _r and _r["firm_code"]:
+                            rd_target_firm = _r["firm_code"]
+                # Detail-page access check (employees only see their docs).
+                row = get_document(rd_id)
+                if row is None:
+                    self._flash_redirect("/", error="Document not found")
+                    return
+                if not ctx["can_view_all_clients"]:
+                    allowed_keys = {normalize_key(c)
+                                     for c in ctx.get("allowed_clients", [])}
+                    if normalize_key(row["client_code"]) not in allowed_keys:
+                        # Allow when the actor is the current assignee.
+                        ctx_email_lc = (ctx.get("email") or "").strip().lower()
+                        with open_db() as _conn:
+                            _wf = _conn.execute(
+                                "SELECT 1 FROM review_workflow "
+                                "WHERE entity_type='document' AND entity_id=? "
+                                "  AND LOWER(COALESCE(assigned_to_email,''))=?",
+                                (rd_id, ctx_email_lc),
+                            ).fetchone()
+                        if not _wf:
+                            self._flash_redirect(
+                                "/", error=t("err_forbidden", lang),
+                            )
+                            return
+                new_email = normalize_text(
+                    form.get("assignee_email", "")).strip()
+                reason_code = normalize_text(
+                    form.get("reason_code", "")).strip()
+                reason_text = normalize_text(
+                    form.get("reason_text", "")).strip()
+                full_reason = (
+                    f"{reason_code}: {reason_text}".strip(': ').strip()
+                ) if (reason_code or reason_text) else ''
+                from src.integrations.review_workflow import (  # noqa: PLC0415
+                    reassign_document, WorkflowPermissionError,
+                )
+                try:
+                    reassign_document(
+                        DB_PATH,
+                        firm_code=rd_target_firm,
+                        document_id=rd_id,
+                        new_assignee_email=new_email or None,
+                        actor_email=(ctx.get("email")
+                                      or user.get("username") or ""),
+                        actor_role=ctx.get("role") or "",
+                        reason=full_reason,
+                    )
+                except WorkflowPermissionError as exc:
+                    self._flash_redirect(
+                        f"/document?id={urlquote(rd_id)}",
+                        error=str(exc),
+                    )
+                    return
+                self._flash_redirect(
+                    f"/document?id={urlquote(rd_id)}",
+                    flash=("Reassigned" if new_email else
+                            "Returned to pool"),
+                )
                 return
 
             # --- Hybrid assignment: set primary + secondary on a client ---

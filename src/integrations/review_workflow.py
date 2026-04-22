@@ -240,6 +240,89 @@ def assign(
                           entity_type=entity_type, entity_id=entity_id) or {}
 
 
+def reassign_document(
+    db_path: Path | str,
+    *,
+    firm_code: str,
+    document_id: str,
+    new_assignee_email: Optional[str],
+    actor_email: str,
+    actor_role: str,
+    reason: str = '',
+) -> dict[str, Any]:
+    """Document-level assignment override (Phase 5).
+
+    Allowed when:
+      - actor is owner / firm_admin (full power), OR
+      - actor is the currently-assigned employee handing the doc off
+        to a colleague (ask-for-help flow).
+
+    Empty / None new_assignee_email moves the document back to the
+    pool. Always upserts the review_workflow row + writes an audit
+    entry with action='reassign' and the reason.
+    """
+    new_email = (new_assignee_email or '').strip() or None
+    actor_email = (actor_email or '').strip()
+    if not actor_email:
+        raise WorkflowPermissionError('actor_email is required to reassign')
+    now = _iso_now()
+    with _open(db_path) as conn:
+        wf = conn.execute(
+            "SELECT id, status, assigned_to_email "
+            "FROM review_workflow "
+            "WHERE firm_code=? AND entity_type='document' AND entity_id=?",
+            (firm_code, document_id),
+        ).fetchone()
+        prev_email = (wf['assigned_to_email'] or '').strip() if wf else ''
+        # Permission: admins always; otherwise actor must be the
+        # current assignee. Employees handing off to themselves is a
+        # no-op but allowed (no-op short-circuits below).
+        if actor_role not in ('owner', 'firm_admin'):
+            if not prev_email or prev_email.lower() != actor_email.lower():
+                raise WorkflowPermissionError(
+                    f"role={actor_role!r} can only reassign documents "
+                    f"currently assigned to them"
+                )
+        if wf is None:
+            conn.execute(
+                "INSERT INTO review_workflow "
+                "(firm_code, entity_type, entity_id, status, "
+                " assigned_to_email, priority, assigned_at) "
+                "VALUES (?, 'document', ?, ?, ?, 'normal', ?)",
+                (firm_code, document_id,
+                 STATUS_ASSIGNED if new_email else STATUS_ASSIGNED,
+                 new_email, now),
+            )
+            wf_row = conn.execute(
+                "SELECT id FROM review_workflow "
+                "WHERE firm_code=? AND entity_type='document' AND entity_id=?",
+                (firm_code, document_id),
+            ).fetchone()
+            wf_id = wf_row['id']
+        else:
+            wf_id = wf['id']
+            conn.execute(
+                "UPDATE review_workflow "
+                "SET assigned_to_email=?, assigned_at=? "
+                "WHERE id=?",
+                (new_email, now, wf_id),
+            )
+        notes_parts = [f"reason={reason}"] if reason else []
+        notes_parts.append(
+            f"prev={prev_email or 'pool'} new={new_email or 'pool'}"
+        )
+        _log_audit(
+            conn, workflow_id=wf_id, actor_email=actor_email,
+            actor_role=actor_role, action='reassign',
+            from_status=None, to_status=STATUS_ASSIGNED,
+            notes='; '.join(notes_parts),
+        )
+        conn.commit()
+    return get_workflow(db_path, firm_code=firm_code,
+                          entity_type='document',
+                          entity_id=document_id) or {}
+
+
 def submit_for_review(
     db_path: Path | str,
     *,
