@@ -3670,12 +3670,28 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
     try:
         _db = sqlite3.connect(str(DB_PATH))
         _db.row_factory = _dict_factory
+        # Make sure the soft-delete / modification-type columns exist so
+        # the SELECT below never hits "no such column" on pre-migration DBs.
+        try:
+            from src.engines.line_item_operations import _ensure_operations_schema as _lio_schema
+            _lio_schema(_db)
+        except Exception:
+            pass
+        try:
+            from src.db.optimistic import add_version_column_if_missing as _addv
+            _addv(_db, "invoice_lines")
+        except Exception:
+            pass
         lines = _db.execute(
             """SELECT line_id, line_number, description, quantity, unit_price,
                       line_total_pretax, tax_code, tax_regime, gst_amount,
                       qst_amount, hst_amount, province_of_supply, line_notes,
-                      gl_account, category, is_capital, capital_notes
-               FROM invoice_lines WHERE document_id = ?
+                      gl_account, category, is_capital, capital_notes,
+                      COALESCE(version, 1) AS version,
+                      COALESCE(modification_type, '') AS modification_type,
+                      COALESCE(deleted_at, '') AS deleted_at
+               FROM invoice_lines
+               WHERE document_id = ? AND (deleted_at IS NULL OR deleted_at = '')
                ORDER BY line_number""",
             (document_id,),
         ).fetchall()
@@ -3743,14 +3759,43 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             )
 
         rid = f"li-{line_id}"
+        # CPA-modified badge (split / merged / allocated).
+        mod_type = ""
+        try:
+            mod_type = str(ln["modification_type"] or "") if "modification_type" in ln.keys() else ""
+        except Exception:
+            mod_type = ""
+        mod_badge = ""
+        if mod_type:
+            _mod_label_key = {
+                "split": "line_op_badge_split",
+                "merged": "line_op_badge_merged",
+                "allocated": "line_op_badge_allocated",
+            }.get(mod_type, "")
+            if _mod_label_key:
+                _mod_title = esc(t('line_history_title', lang))
+                _mod_label = esc(t(_mod_label_key, lang))
+                mod_badge = (
+                    f"<span class='badge li-mod-badge li-mod-{esc(mod_type)}' "
+                    f"title='{_mod_title}'>{_mod_label}</span>"
+                )
+        line_pretax_val = str(ln['line_total_pretax'] or '0')
+        desc_cell = f"{esc(desc_val)} {mod_badge}".strip()
         # Display row (read-only presentation)
         rows_html += (
-            f"<tr id='{rid}-view' data-line-id='{line_id}'>"
+            f"<tr id='{rid}-view' data-line-id='{line_id}' "
+            f"data-version='{int(ln['version']) if 'version' in ln.keys() and ln['version'] is not None else 1}' "
+            f"data-pretax='{esc(line_pretax_val)}' data-gl='{esc(gl_val)}' "
+            f"data-tax='{esc(tax_val)}' data-description='{esc(desc_val)}' "
+            f"data-mod-type='{esc(mod_type)}'>"
+            f"<td style='text-align:center;'>"
+            f"<input type='checkbox' class='oto-line-merge-sel' value='{line_id}' "
+            f"onchange='otoLineMergeToggle();'></td>"
             f"<td>{esc(str(ln['line_number']))}</td>"
-            f"<td class='li-desc-cell'>{esc(desc_val)}</td>"
+            f"<td class='li-desc-cell'>{desc_cell}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['quantity'] or ''))}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['unit_price'] or ''))}</td>"
-            f"<td style='text-align:right;'>{esc(str(ln['line_total_pretax'] or ''))}</td>"
+            f"<td style='text-align:right;'>{esc(line_pretax_val)}</td>"
             f"<td style='text-align:center;' class='li-gl-cell'><strong>{gl_cell}</strong></td>"
             f"<td style='text-align:center;' class='li-tax-cell'>{esc(tax_val)}</td>"
             f"<td style='text-align:right;'>{esc(str(ln['gst_amount'] or '0.00'))}</td>"
@@ -3759,16 +3804,20 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             f"<td>{esc(str(ln['province_of_supply'] or ''))}</td>"
             f"<td style='text-align:center;'>{cap_cell}</td>"
             f"<td class='small muted'>{esc(str(ln['line_notes'] or ''))}</td>"
-            f"<td style='text-align:center;'>"
+            f"<td style='text-align:center;white-space:nowrap;'>"
             f"<button type='button' class='btn-small' "
-            f"onclick=\"otoLineEdit('{line_id}')\" title='Edit'>\u270f\ufe0f</button>"
+            f"onclick=\"otoLineEdit('{line_id}')\" title='Edit'>\u270f\ufe0f</button> "
+            f"<button type='button' class='btn-small' "
+            f"onclick=\"otoLineOpenSplit('{line_id}')\">{esc(t('line_op_split', lang))}</button> "
+            f"<button type='button' class='btn-small' "
+            f"onclick=\"otoLineOpenAllocate('{line_id}')\">{esc(t('line_op_allocate', lang))}</button>"
             f"</td>"
             f"</tr>"
         )
         # Edit row (hidden until toggled). colspan spans all 14 columns.
         rows_html += (
             f"<tr id='{rid}-edit' data-line-id='{line_id}' style='display:none;background:#f7fafc;'>"
-            f"<td colspan='14'>"
+            f"<td colspan='15'>"
             f"<div style='display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;'>"
             f"<label style='display:flex;flex-direction:column;font-size:12px;'>"
             f"<span>{esc(t('line_col_description', lang))}</span>"
@@ -3806,14 +3855,59 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
         gap_text = t("line_gap_amount", lang).replace("{amount}", f"{gap:.2f}")
         recon_badge = f'<span class="badge badge-hold">{esc(t("line_reconciled_no", lang))}</span> <span class="small muted">{esc(gap_text)}</span>'
 
+    # Document current version (sent with every write so optimistic
+    # concurrency rejects stale edits).
+    try:
+        _doc_ver_val = int(row["version"]) if "version" in row.keys() and row["version"] is not None else 1
+    except Exception:
+        _doc_ver_val = 1
+    # Strings for the bilingual split/merge/allocate modals (each must
+    # survive being embedded into a JSON-encoded JS initialiser).
+    _op_strings = {
+        "split_title":    t("line_op_split_title", lang),
+        "merge_title":    t("line_op_merge_title", lang),
+        "allocate_title": t("line_op_allocate_title", lang),
+        "add_line":       t("line_op_add_line", lang),
+        "remove_line":    t("line_op_remove_line", lang),
+        "new_line":       t("line_op_new_line", lang),
+        "amount":         t("line_op_amount", lang),
+        "percent":        t("line_op_percent", lang),
+        "mode_amount":    t("line_op_mode_amount", lang),
+        "mode_percent":   t("line_op_mode_percent", lang),
+        "sum_label":      t("line_op_sum_label", lang),
+        "target_label":   t("line_op_target_label", lang),
+        "sum_mismatch":   t("line_op_sum_mismatch", lang),
+        "merged_desc":    t("line_op_merged_description", lang),
+        "select_2_plus":  t("line_op_select_2_plus", lang),
+        "reason":         t("line_op_reason", lang),
+        "submit":         t("line_op_submit", lang),
+        "cancel":         t("line_op_cancel", lang),
+        "gl_account":     t("line_col_gl", lang),
+        "description":    t("line_col_description", lang),
+        "tax_code":       t("line_col_tax_regime", lang),
+        "toast_split":    t("line_op_toast_split", lang),
+        "toast_merged":   t("line_op_toast_merged", lang),
+        "toast_allocated": t("line_op_toast_allocated", lang),
+        "merge_btn":      t("line_op_merge", lang),
+    }
+    _op_strings_json = json.dumps(_op_strings, ensure_ascii=True)
+
     card = f"""
-<div class="card">
+<div class="card" id="oto-line-items-card" data-document-id="{esc(document_id)}" data-doc-version="{_doc_ver_val}">
   <h3>{esc(t("line_items_section", lang))}</h3>
   <div style="margin-bottom:8px;"><strong>{esc(t("line_reconciliation_status", lang))}:</strong> {recon_badge}</div>
+  <div id="oto-line-merge-toolbar" style="display:none;margin-bottom:8px;padding:8px;background:#eef6ff;border:1px solid #c6dcf5;border-radius:4px;">
+    <span id="oto-line-merge-count">0</span>
+    <button type="button" class="btn-primary btn-small" style="margin-left:8px;"
+            onclick="otoLineOpenMerge();">{esc(t("line_op_merge", lang))}</button>
+    <button type="button" class="btn-small" style="margin-left:4px;"
+            onclick="otoLineMergeClear();">{esc(t("line_op_cancel", lang))}</button>
+  </div>
   <datalist id="oto-gl-datalist">{gl_datalist_options}</datalist>
   <div style="overflow-x:auto;">
   <table>
     <thead><tr>
+      <th></th>
       <th>{esc(t("line_col_num", lang))}</th>
       <th>{esc(t("line_col_description", lang))}</th>
       <th>{esc(t("line_col_qty", lang))}</th>
@@ -3893,6 +3987,318 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
     }};
   }})();
   </script>
+
+  <!-- Split / Merge / Allocate modal (single dialog repurposed per op) -->
+  <style>
+    .oto-modal-backdrop {{ position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:9000; display:none; }}
+    .oto-modal {{ position:fixed; top:10%; left:50%; transform:translateX(-50%); width:min(760px,95vw);
+                   background:#fff; border-radius:6px; box-shadow:0 10px 40px rgba(0,0,0,.2); z-index:9001;
+                   padding:16px; display:none; max-height:80vh; overflow-y:auto; }}
+    .oto-modal h3 {{ margin:0 0 8px 0; }}
+    .oto-modal-row {{ display:grid; grid-template-columns:2fr 1.5fr 1.5fr 1fr auto; gap:6px; margin-bottom:4px; }}
+    .oto-modal-foot {{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; border-top:1px solid #eee; padding-top:10px; }}
+    .oto-modal .sum-ok {{ color:#1e7e34; }}
+    .oto-modal .sum-bad {{ color:#c0392b; }}
+    .badge.li-mod-badge {{ font-size:10px; padding:2px 6px; margin-left:4px; }}
+    .badge.li-mod-split {{ background:#e8f4ff; color:#0b5fa5; border:1px solid #b6d7f0; }}
+    .badge.li-mod-merged {{ background:#f2ecff; color:#5a2aad; border:1px solid #d8c6f7; }}
+    .badge.li-mod-allocated {{ background:#fff3e0; color:#9a5a00; border:1px solid #f5d39a; }}
+    #oto-toast {{ position:fixed; top:16px; right:16px; background:#1e7e34; color:#fff; padding:10px 14px;
+                   border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.2); z-index:9999; display:none; }}
+    #oto-toast.err {{ background:#c0392b; }}
+  </style>
+  <div class="oto-modal-backdrop" id="oto-line-modal-backdrop" onclick="otoLineCloseModal();"></div>
+  <div class="oto-modal" id="oto-line-modal" role="dialog" aria-modal="true">
+    <h3 id="oto-line-modal-title"></h3>
+    <div id="oto-line-modal-subhead" class="small muted" style="margin-bottom:8px;"></div>
+    <div id="oto-line-modal-mode-row" style="display:none;margin-bottom:10px;">
+      <label><input type="radio" name="oto-alloc-mode" value="amount" checked onchange="otoLineModeChange();"> <span id="oto-lbl-mode-amount"></span></label>
+      <label style="margin-left:12px;"><input type="radio" name="oto-alloc-mode" value="percentage" onchange="otoLineModeChange();"> <span id="oto-lbl-mode-percent"></span></label>
+    </div>
+    <div id="oto-line-modal-merged-desc-row" style="display:none;margin-bottom:8px;">
+      <label style="display:flex;flex-direction:column;font-size:12px;">
+        <span id="oto-lbl-merged-desc"></span>
+        <input type="text" id="oto-line-modal-merged-desc">
+      </label>
+    </div>
+    <div id="oto-line-modal-rows"></div>
+    <div style="margin-top:6px;">
+      <button type="button" class="btn-small" onclick="otoLineModalAddRow();" id="oto-line-modal-addbtn"></button>
+    </div>
+    <div style="margin-top:10px;">
+      <label style="display:flex;flex-direction:column;font-size:12px;">
+        <span id="oto-lbl-reason"></span>
+        <input type="text" id="oto-line-modal-reason" placeholder="">
+      </label>
+    </div>
+    <div class="oto-modal-foot">
+      <div>
+        <span id="oto-lbl-sum"></span>: <strong id="oto-line-modal-sum" class="sum-bad">0.00</strong>
+        &nbsp;/&nbsp; <span id="oto-lbl-target"></span>: <strong id="oto-line-modal-target">0.00</strong>
+      </div>
+      <div>
+        <button type="button" class="btn-small" onclick="otoLineCloseModal();" id="oto-btn-cancel"></button>
+        <button type="button" class="btn-primary" onclick="otoLineModalSubmit();" id="oto-btn-submit"></button>
+      </div>
+    </div>
+  </div>
+  <div id="oto-toast"></div>
+
+  <script>
+  (function() {{
+    if (window.__otoLineOpsInstalled) return;
+    window.__otoLineOpsInstalled = true;
+    var S = {_op_strings_json};
+    var state = {{ op: null, sourceLineIds: [], targetPretax: 0, mode: 'amount' }};
+
+    function el(id) {{ return document.getElementById(id); }}
+    function rowsContainer() {{ return el('oto-line-modal-rows'); }}
+    function card() {{ return el('oto-line-items-card'); }}
+    function docId() {{ return (card() && card().getAttribute('data-document-id')) || ''; }}
+    function docVersion() {{ var c=card(); return c ? parseInt(c.getAttribute('data-doc-version') || '1', 10) : 1; }}
+    function lineVersion(lid) {{
+      var row = el('li-' + lid + '-view');
+      if (!row) return 1;
+      return parseInt(row.getAttribute('data-version') || '1', 10);
+    }}
+    function toast(msg, isErr) {{
+      var t = el('oto-toast');
+      t.textContent = msg; t.className = isErr ? 'err' : '';
+      t.style.display = 'block';
+      setTimeout(function() {{ t.style.display = 'none'; }}, 3500);
+    }}
+
+    function fmt(n) {{ n = (+n) || 0; return n.toFixed(2); }}
+
+    function makeRow(initial) {{
+      var d = document.createElement('div');
+      d.className = 'oto-modal-row';
+      d.innerHTML =
+        "<input type='text' class='oto-row-desc' placeholder='" + S.description + "' value='" + (initial && initial.description || '') + "'>" +
+        "<input type='text' class='oto-row-gl' list='oto-gl-datalist' placeholder='" + S.gl_account + "' value='" + (initial && initial.gl_account || '') + "'>" +
+        "<select class='oto-row-tax'>" +
+          "<option value='T'>T</option><option value='E'>E</option>" +
+          "<option value='M'>M</option><option value='Z'>Z</option>" +
+        "</select>" +
+        "<input type='number' class='oto-row-val' step='0.01' min='0' placeholder='" +
+          (state.mode === 'percentage' ? S.percent : S.amount) +
+          "' value='" + (initial && (initial.amount || initial.percentage) || '') + "'>" +
+        "<button type='button' class='btn-small' onclick='this.parentElement.remove();otoLineModalRecalc();'>" + S.remove_line + "</button>";
+      rowsContainer().appendChild(d);
+      if (initial && initial.tax_code) {{
+        d.querySelector('.oto-row-tax').value = initial.tax_code;
+      }}
+      d.querySelector('.oto-row-val').addEventListener('input', otoLineModalRecalc);
+      otoLineModalRecalc();
+    }}
+
+    window.otoLineModalAddRow = function() {{ makeRow(); }};
+
+    window.otoLineModalRecalc = function() {{
+      var sum = 0;
+      Array.prototype.forEach.call(rowsContainer().querySelectorAll('.oto-row-val'),
+        function(i) {{ sum += parseFloat(i.value || '0') || 0; }});
+      el('oto-line-modal-sum').textContent = fmt(sum);
+      var target = (state.op === 'allocate' && state.mode === 'percentage') ? 100 : state.targetPretax;
+      el('oto-line-modal-target').textContent = fmt(target);
+      var sumEl = el('oto-line-modal-sum');
+      var ok = Math.abs(sum - target) < 0.015;
+      sumEl.className = ok ? 'sum-ok' : 'sum-bad';
+    }};
+
+    window.otoLineModeChange = function() {{
+      state.mode = document.querySelector('input[name="oto-alloc-mode"]:checked').value;
+      Array.prototype.forEach.call(rowsContainer().querySelectorAll('.oto-row-val'),
+        function(i) {{ i.placeholder = state.mode === 'percentage' ? S.percent : S.amount; }});
+      otoLineModalRecalc();
+    }};
+
+    function resetModal() {{
+      rowsContainer().innerHTML = '';
+      el('oto-line-modal-reason').value = '';
+      el('oto-line-modal-merged-desc').value = '';
+    }}
+
+    function openModal() {{
+      el('oto-line-modal-backdrop').style.display = 'block';
+      el('oto-line-modal').style.display = 'block';
+      // Apply localized button labels.
+      el('oto-line-modal-addbtn').textContent = S.add_line;
+      el('oto-btn-cancel').textContent = S.cancel;
+      el('oto-btn-submit').textContent = S.submit;
+      el('oto-lbl-sum').textContent = S.sum_label;
+      el('oto-lbl-target').textContent = S.target_label;
+      el('oto-lbl-reason').textContent = S.reason;
+      el('oto-lbl-mode-amount').textContent = S.mode_amount;
+      el('oto-lbl-mode-percent').textContent = S.mode_percent;
+      el('oto-lbl-merged-desc').textContent = S.merged_desc;
+    }}
+
+    window.otoLineCloseModal = function() {{
+      el('oto-line-modal-backdrop').style.display = 'none';
+      el('oto-line-modal').style.display = 'none';
+      resetModal();
+    }};
+
+    window.otoLineOpenSplit = function(lineId) {{
+      var row = el('li-' + lineId + '-view');
+      if (!row) return;
+      var pretax = parseFloat(row.getAttribute('data-pretax') || '0') || 0;
+      state.op = 'split';
+      state.sourceLineIds = [String(lineId)];
+      state.targetPretax = pretax;
+      state.mode = 'amount';
+      el('oto-line-modal-title').textContent = S.split_title;
+      el('oto-line-modal-subhead').textContent = row.getAttribute('data-description') + ' · ' + fmt(pretax);
+      el('oto-line-modal-mode-row').style.display = 'none';
+      el('oto-line-modal-merged-desc-row').style.display = 'none';
+      resetModal();
+      makeRow({{ description: '', gl_account: row.getAttribute('data-gl'), tax_code: row.getAttribute('data-tax') }});
+      makeRow({{ description: '', gl_account: row.getAttribute('data-gl'), tax_code: row.getAttribute('data-tax') }});
+      openModal();
+    }};
+
+    window.otoLineOpenAllocate = function(lineId) {{
+      var row = el('li-' + lineId + '-view');
+      if (!row) return;
+      var pretax = parseFloat(row.getAttribute('data-pretax') || '0') || 0;
+      state.op = 'allocate';
+      state.sourceLineIds = [String(lineId)];
+      state.targetPretax = pretax;
+      state.mode = 'amount';
+      var amountRadio = document.querySelector('input[name="oto-alloc-mode"][value="amount"]');
+      if (amountRadio) amountRadio.checked = true;
+      el('oto-line-modal-title').textContent = S.allocate_title;
+      el('oto-line-modal-subhead').textContent = row.getAttribute('data-description') + ' · ' + fmt(pretax);
+      el('oto-line-modal-mode-row').style.display = '';
+      el('oto-line-modal-merged-desc-row').style.display = 'none';
+      resetModal();
+      makeRow({{ description: '', gl_account: row.getAttribute('data-gl'), tax_code: row.getAttribute('data-tax') }});
+      makeRow({{ description: '', gl_account: '',                           tax_code: row.getAttribute('data-tax') }});
+      openModal();
+    }};
+
+    function selectedMergeIds() {{
+      var ids = [];
+      Array.prototype.forEach.call(document.querySelectorAll('.oto-line-merge-sel:checked'),
+        function(cb) {{ ids.push(cb.value); }});
+      return ids;
+    }}
+
+    window.otoLineMergeToggle = function() {{
+      var ids = selectedMergeIds();
+      el('oto-line-merge-toolbar').style.display = ids.length >= 2 ? '' : 'none';
+      el('oto-line-merge-count').textContent = ids.length + ' ' + (S.select_2_plus || '');
+    }};
+    window.otoLineMergeClear = function() {{
+      Array.prototype.forEach.call(document.querySelectorAll('.oto-line-merge-sel'),
+        function(cb) {{ cb.checked = false; }});
+      otoLineMergeToggle();
+    }};
+
+    window.otoLineOpenMerge = function() {{
+      var ids = selectedMergeIds();
+      if (ids.length < 2) {{ toast(S.select_2_plus, true); return; }}
+      var sum = 0;
+      var firstGl = null, firstTax = null;
+      ids.forEach(function(lid) {{
+        var r = el('li-' + lid + '-view');
+        if (!r) return;
+        sum += parseFloat(r.getAttribute('data-pretax') || '0') || 0;
+        if (firstGl === null) firstGl = r.getAttribute('data-gl');
+        if (firstTax === null) firstTax = r.getAttribute('data-tax');
+      }});
+      state.op = 'merge';
+      state.sourceLineIds = ids;
+      state.targetPretax = sum;
+      state.mode = 'amount';
+      el('oto-line-modal-title').textContent = S.merge_title;
+      el('oto-line-modal-subhead').textContent = ids.length + ' → 1  ·  ' + fmt(sum);
+      el('oto-line-modal-mode-row').style.display = 'none';
+      el('oto-line-modal-merged-desc-row').style.display = '';
+      resetModal();
+      makeRow({{ description: '(merged)', gl_account: firstGl || '', tax_code: firstTax || '', amount: sum }});
+      // Merge has exactly one result row — hide add button.
+      el('oto-line-modal-addbtn').style.display = 'none';
+      openModal();
+    }};
+
+    function readRows() {{
+      var out = [];
+      Array.prototype.forEach.call(rowsContainer().querySelectorAll('.oto-modal-row'),
+        function(d) {{
+          var entry = {{
+            description: d.querySelector('.oto-row-desc').value,
+            gl_account:  d.querySelector('.oto-row-gl').value,
+            tax_code:    d.querySelector('.oto-row-tax').value,
+          }};
+          var v = parseFloat(d.querySelector('.oto-row-val').value || '0') || 0;
+          if (state.op === 'allocate' && state.mode === 'percentage') entry.percentage = v;
+          else entry.amount = v;
+          out.push(entry);
+        }});
+      return out;
+    }}
+
+    window.otoLineModalSubmit = function() {{
+      var rows = readRows();
+      var reason = el('oto-line-modal-reason').value;
+      var clientRequestId = 'cli-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      var url, body, toastMsg;
+      if (state.op === 'split') {{
+        url  = '/document/' + encodeURIComponent(docId()) + '/line/' + encodeURIComponent(state.sourceLineIds[0]) + '/split';
+        body = {{
+          splits: rows, reason: reason,
+          expected_version: lineVersion(state.sourceLineIds[0]),
+          expected_document_version: docVersion(),
+          client_request_id: clientRequestId,
+        }};
+        toastMsg = S.toast_split.replace('{{n}}', rows.length);
+      }} else if (state.op === 'allocate') {{
+        url  = '/document/' + encodeURIComponent(docId()) + '/line/' + encodeURIComponent(state.sourceLineIds[0]) + '/allocate';
+        body = {{
+          allocations: rows, mode: state.mode, reason: reason,
+          expected_version: lineVersion(state.sourceLineIds[0]),
+          expected_document_version: docVersion(),
+          client_request_id: clientRequestId,
+        }};
+        toastMsg = S.toast_allocated.replace('{{n}}', rows.length);
+      }} else {{  // merge
+        url  = '/document/' + encodeURIComponent(docId()) + '/lines/merge';
+        var mergedDesc = el('oto-line-modal-merged-desc').value || rows[0].description;
+        var evs = {{}};
+        state.sourceLineIds.forEach(function(lid) {{ evs[lid] = lineVersion(lid); }});
+        body = {{
+          line_ids: state.sourceLineIds.map(function(x) {{ return parseInt(x, 10); }}),
+          merged_description: mergedDesc, reason: reason,
+          expected_versions: evs,
+          expected_document_version: docVersion(),
+          gl_account: rows[0].gl_account, tax_code: rows[0].tax_code,
+          client_request_id: clientRequestId,
+        }};
+        toastMsg = S.toast_merged;
+      }}
+      fetch(url, {{
+        method: 'POST', credentials: 'same-origin',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(body),
+      }})
+      .then(function(r) {{ return r.json().then(function(j) {{ return {{ ok: r.ok, body: j, status: r.status }}; }}); }})
+      .then(function(res) {{
+        if (!res.ok) {{
+          var err = (res.body && (res.body.message || res.body.error)) || 'error';
+          toast(err, true);
+          return;
+        }}
+        toast(toastMsg, false);
+        otoLineCloseModal();
+        // Reload detail page to reflect new lines + audit trail.
+        setTimeout(function() {{ window.location.reload(); }}, 600);
+      }})
+      .catch(function(e) {{ toast(String(e), true); }});
+    }};
+  }})();
+  </script>
 </div>"""
 
     # Deposit allocation section
@@ -3950,6 +4356,113 @@ def render_line_items_card(document_id: str, row: Any, lang: str = "fr") -> str:
             pass
 
     return card + deposit_card
+
+
+def render_line_history_card(document_id: str, lang: str = "fr") -> str:
+    """Render the CPA line-item audit trail as an expandable card.
+
+    Hidden entirely when no manual modifications exist. Each entry shows
+    operation, performed_by, timestamp, before/after snapshot, and reason.
+    """
+    try:
+        from src.engines.line_item_operations import get_audit_trail, has_cpa_modifications
+    except Exception:
+        return ""
+    try:
+        with sqlite3.connect(str(DB_PATH)) as _db:
+            _db.row_factory = _dict_factory
+            if not has_cpa_modifications(_db, document_id):
+                return ""
+            trail = get_audit_trail(_db, document_id)
+    except Exception:
+        return ""
+
+    if not trail:
+        return ""
+
+    def _fmt_entry_one(e: dict[str, Any]) -> str:
+        """Render a single {description, pretax, gl_account, ...} snapshot."""
+        desc = esc(str(e.get("description") or ""))
+        amt = e.get("pretax")
+        amt_s = f"{float(amt):.2f}" if amt is not None else ""
+        gl = esc(str(e.get("gl_account") or ""))
+        tax = esc(str(e.get("tax_code") or ""))
+        return f"{desc} — {amt_s} / GL {gl} / {tax}"
+
+    rows_html = ""
+    for entry in trail:
+        op = esc(str(entry.get("operation") or ""))
+        who = esc(str(entry.get("performed_by") or ""))
+        when = esc(str(entry.get("performed_at") or ""))
+        reason = str(entry.get("reason") or "")
+        before = entry.get("before")  # already decoded
+        after = entry.get("after")
+        if isinstance(before, list):
+            before_html = "".join(f"<li>{_fmt_entry_one(b)}</li>" for b in before)
+        elif isinstance(before, dict):
+            before_html = f"<li>{_fmt_entry_one(before)}</li>"
+        else:
+            before_html = ""
+        if isinstance(after, list):
+            after_html = "".join(f"<li>{_fmt_entry_one(a)}</li>" for a in after)
+        elif isinstance(after, dict):
+            after_html = f"<li>{_fmt_entry_one(after)}</li>"
+        else:
+            after_html = ""
+        reason_block = (
+            f"<div class='small muted' style='margin-top:4px;'>"
+            f"{esc(t('line_history_reason', lang))}: {esc(reason)}</div>"
+            if reason else ""
+        )
+        rows_html += (
+            f"<div style='padding:8px 0;border-bottom:1px solid #eee;'>"
+            f"<div><strong>{when}</strong> — {who} — <em>{op}</em></div>"
+            f"<div class='grid-2' style='gap:16px;margin-top:6px;'>"
+            f"<div><div class='small muted'>{esc(t('line_history_before', lang))}</div>"
+            f"<ul style='margin:2px 0 0 16px;padding:0;'>{before_html}</ul></div>"
+            f"<div><div class='small muted'>{esc(t('line_history_after', lang))}</div>"
+            f"<ul style='margin:2px 0 0 16px;padding:0;'>{after_html}</ul></div>"
+            f"</div>{reason_block}</div>"
+        )
+
+    # OCR baseline line — we know at least one OCR extraction happened.
+    # The original line count comes from the earliest audit's source_line_ids
+    # union with any still-active OCR lines (modification_type is null).
+    try:
+        ocr_lines_note = ""
+        with sqlite3.connect(str(DB_PATH)) as _db2:
+            _db2.row_factory = _dict_factory
+            n_row = _db2.execute(
+                """SELECT COUNT(*) AS n FROM invoice_lines
+                   WHERE document_id = ?
+                     AND (modification_type IS NULL OR modification_type = '')""",
+                (document_id,),
+            ).fetchone()
+            n = int(n_row["n"]) if n_row else 0
+        if n:
+            ocr_lines_note = (
+                f"<div style='padding:8px 0;color:#666;'>"
+                f"{esc(t('line_history_ocr_extracted', lang).replace('{n}', str(n)))}"
+                f"</div>"
+            )
+    except Exception:
+        ocr_lines_note = ""
+
+    return (
+        f"<div class='card'><details open id='oto-line-history-card'><summary>"
+        f"<strong>{esc(t('line_history_title', lang))}</strong> "
+        f"<span class='badge'>{len(trail)}</span>"
+        f"</summary>"
+        f"<div style='margin-top:8px;'>"
+        f"{rows_html}"
+        f"{ocr_lines_note}"
+        f"<details style='margin-top:8px;'><summary class='small muted'>"
+        f"{esc(t('line_history_show_original', lang))}</summary>"
+        f"<div class='small muted' style='margin-top:4px;'>"
+        f"{esc(t('line_history_ocr_extracted', lang).replace('{n}', '—'))}"
+        f"</div></details>"
+        f"</div></details></div>"
+    )
 
 
 def render_fraud_flags(row: Any, lang: str = "fr") -> str:
@@ -17509,6 +18022,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     </div></div>
     {qbo_actions}
     {render_line_items_card(document_id, row, lang)}
+    {render_line_history_card(document_id, lang)}
     {render_doc_communications(document_id, row, ctx, lang)}
     {render_fraud_flags(row, lang)}
     {raw_ocr_section}
@@ -24216,6 +24730,133 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "qst_amount": effective_qst,
                     "version": _vres.new_version,
                 })
+                return
+
+            # --- Line item split / merge / allocate (CPA corrections) ---
+            # URL shapes:
+            #   POST /document/<doc_id>/line/<line_id>/split
+            #   POST /document/<doc_id>/lines/merge
+            #   POST /document/<doc_id>/line/<line_id>/allocate
+            # All consume JSON and enforce version-based concurrency on
+            # the source line(s) + parent document. ``client_request_id``
+            # makes replays idempotent.
+            if path.startswith("/document/") and (
+                path.endswith("/split") or path.endswith("/allocate") or path.endswith("/lines/merge")
+            ):
+                try:
+                    payload = json.loads(raw.decode("utf-8")) if raw else {}
+                except Exception:
+                    self._send_json({"ok": False, "error": "invalid_json"}, status=400)
+                    return
+                # Parse path: /document/<doc>/line/<line_id>/<op>  |  /document/<doc>/lines/merge
+                parts = [p for p in path.strip("/").split("/") if p]
+                try:
+                    if len(parts) == 5 and parts[0] == "document" and parts[2] == "line":
+                        doc_id_url = parts[1]
+                        line_id_url = int(parts[3])
+                        op = parts[4]
+                    elif len(parts) == 4 and parts[0] == "document" and parts[2] == "lines" and parts[3] == "merge":
+                        doc_id_url = parts[1]
+                        line_id_url = None
+                        op = "merge"
+                    else:
+                        self._send_json({"ok": False, "error": "bad_path"}, status=404)
+                        return
+                except (ValueError, IndexError):
+                    self._send_json({"ok": False, "error": "bad_path"}, status=400)
+                    return
+                if not _require_document_in_firm(doc_id_url, ctx):
+                    self._send_json({"ok": False, "error": "forbidden"}, status=403)
+                    return
+                try:
+                    _check_period_not_locked_for_doc(doc_id_url, lang)
+                except Exception as _pc:
+                    self._send_json({"ok": False, "error": f"period_locked:{_pc}"}, status=409)
+                    return
+                performed_by = (user.get("username") if user else "") or DEFAULT_REVIEWER
+                reason = payload.get("reason")
+                client_request_id = payload.get("client_request_id")
+                expected_version = payload.get("expected_version")
+                expected_doc_version = payload.get("expected_document_version") or payload.get("expected_parent_version")
+                from src.engines import line_item_operations as _lio
+                try:
+                    with open_db() as _conn:
+                        from src.db.optimistic import add_version_column_if_missing as _addv
+                        try:
+                            _addv(_conn, "documents")
+                            _addv(_conn, "invoice_lines")
+                        except sqlite3.OperationalError:
+                            pass
+                        if op == "split":
+                            if expected_version is None:
+                                self._send_json({"ok": False, "error": "version_required"}, status=400)
+                                return
+                            result = _lio.split_line(
+                                document_id=doc_id_url,
+                                line_id=line_id_url,
+                                splits=payload.get("splits") or [],
+                                expected_version=int(expected_version),
+                                expected_doc_version=int(expected_doc_version) if expected_doc_version is not None else None,
+                                performed_by=performed_by,
+                                reason=reason,
+                                client_request_id=client_request_id,
+                                conn=_conn,
+                            )
+                        elif op == "allocate":
+                            if expected_version is None:
+                                self._send_json({"ok": False, "error": "version_required"}, status=400)
+                                return
+                            result = _lio.allocate_line(
+                                document_id=doc_id_url,
+                                line_id=line_id_url,
+                                allocations=payload.get("allocations") or [],
+                                mode=payload.get("mode", "amount"),
+                                expected_version=int(expected_version),
+                                expected_doc_version=int(expected_doc_version) if expected_doc_version is not None else None,
+                                performed_by=performed_by,
+                                reason=reason,
+                                client_request_id=client_request_id,
+                                conn=_conn,
+                            )
+                        else:  # merge
+                            ev = payload.get("expected_versions") or {}
+                            try:
+                                ev_int = {int(k): int(v) for k, v in ev.items()}
+                            except Exception:
+                                ev_int = {}
+                            result = _lio.merge_lines(
+                                document_id=doc_id_url,
+                                line_ids=[int(i) for i in (payload.get("line_ids") or [])],
+                                merged_description=payload.get("merged_description") or payload.get("description") or "",
+                                expected_versions=ev_int or None,
+                                expected_doc_version=int(expected_doc_version) if expected_doc_version is not None else None,
+                                gl_account=payload.get("gl_account"),
+                                tax_code=payload.get("tax_code"),
+                                performed_by=performed_by,
+                                reason=reason,
+                                client_request_id=client_request_id,
+                                conn=_conn,
+                            )
+                except _lio.LineItemOperationError as _lioe:
+                    self._send_json({"ok": False, "error": _lioe.code, "message": str(_lioe)}, status=400)
+                    return
+                except Exception as _oce:
+                    # OptimisticConcurrencyError is raised by our db layer; check by class name
+                    # so we don't have to hoist yet another symbol into this 27k-line file's imports.
+                    if type(_oce).__name__ == "OptimisticConcurrencyError":
+                        self._send_json({
+                            "ok": False, "error": "version_conflict",
+                            "message": str(_oce), "reload_required": True,
+                        }, status=409)
+                        return
+                    # Unique index on (document_id, client_request_id) — duplicate request.
+                    if isinstance(_oce, sqlite3.IntegrityError):
+                        self._send_json({"ok": False, "error": "duplicate_request", "message": str(_oce)}, status=409)
+                        return
+                    logging.exception("line item op failed")
+                    self._send_json({"ok": False, "error": f"db_error:{_oce}"}, status=500)
+                    return
+                self._send_json(result)
                 return
 
             if path in ("/assign", "/document/assign"):
