@@ -420,12 +420,29 @@ def reject(
     _require_role(actor_role, {'firm_admin', 'owner'})
     if not reason:
         raise ValueError("rejection requires a non-empty reason")
-    return _reviewer_transition(
+    result = _reviewer_transition(
         db_path, firm_code=firm_code, entity_type=entity_type,
         entity_id=entity_id, actor_email=actor_email,
         actor_role=actor_role, to_status=STATUS_REJECTED,
         action='reject', rejection_reason=reason,
     )
+    # Scope 1.3: notify the portal uploader. Best-effort; failures must
+    # not block the rejection itself (which is already committed above).
+    if entity_type == 'document':
+        try:
+            from src.integrations.portal_my_uploads import (
+                notify_uploader_on_rejection,
+            )
+            notify_uploader_on_rejection(
+                db_path,
+                document_id=entity_id,
+                rejection_reason=reason,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "uploader rejection notify failed"
+            )
+    return result
 
 
 def escalate(

@@ -20186,6 +20186,30 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_html(html_str)
             return
 
+        if section == "my_uploads":
+            from src.integrations.portal_my_uploads import (
+                my_uploads as _pmu_list,
+                team_rejections as _pmu_team,
+                render_my_uploads_page as _pmu_render,
+            )
+            uploads = _pmu_list(DB_PATH, user_id=portal_user['id'])
+            # Admins also see a firm/client rejection summary.
+            team = None
+            if (portal_user.get('role') or '') == 'admin':
+                team = _pmu_team(
+                    DB_PATH,
+                    firm_code=portal_user['firm_code'],
+                    client_code=portal_user['client_code'],
+                )
+            html_str = _pmu_render(
+                client=dict(client), user_token=user_token,
+                portal_user=dict(portal_user),
+                uploads=uploads, team_rejections=team,
+                flash=flash, flash_error=flash_error,
+            )
+            self._send_html(html_str)
+            return
+
         self._send_html(_mup.render_invalid_token(), status=404)
 
     def _handle_user_portal_post(self, path: str, raw: bytes, ct: str,
