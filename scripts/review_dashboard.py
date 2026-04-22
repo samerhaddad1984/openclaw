@@ -20210,6 +20210,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._send_html(html_str)
             return
 
+        if section == "tasks":
+            from src.integrations import client_requests as _cr
+            requests = _cr.list_open_for_user(
+                DB_PATH,
+                firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+                portal_user_id=portal_user['id'],
+            )
+            self._send_html(_cr.render_client_tasks_page(
+                client=dict(client), user_token=user_token,
+                portal_user=dict(portal_user), requests=requests,
+                flash=flash, flash_error=flash_error,
+            ))
+            return
+
         self._send_html(_mup.render_invalid_token(), status=404)
 
     def _handle_user_portal_post(self, path: str, raw: bytes, ct: str,
@@ -20257,6 +20272,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return self._handle_user_portal_user_action(
                 section, raw, ct, client, portal_user, user_token,
             )
+        if section.startswith("tasks/") and section.endswith("/complete"):
+            # /cp/{token}/tasks/{id}/complete
+            try:
+                req_id = int(section.split("/")[1])
+            except (ValueError, IndexError):
+                self._send_html(_mup.render_invalid_token(), status=404)
+                return True
+            from src.integrations import client_requests as _cr
+            existing = _cr.get_request(DB_PATH, request_id=req_id)
+            if (existing is None
+                    or existing.get('firm_code') != portal_user['firm_code']
+                    or existing.get('client_code') != portal_user['client_code']):
+                self._send_html('<h1>Not found</h1>', status=404)
+                return True
+            _cr.mark_completed(
+                DB_PATH, request_id=req_id,
+                completed_by_portal_user_id=portal_user['id'],
+            )
+            self._user_portal_redirect(
+                user_token, "tasks",
+                flash="Marqué complété / Marked complete",
+            )
+            return True
 
         self._send_html(_mup.render_invalid_token(), status=404)
         return True
@@ -23032,6 +23070,51 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_cpa_messages(ctx, user, code,
                                                     flash=flash, flash_error=flash_error,
                                                     lang=lang))
+                return
+
+            # Scope 1.4: outstanding CPA requests per client
+            if path == "/clients/requests":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(code, ctx):
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
+                from src.integrations import client_requests as _cr
+                from src.integrations import multi_user_portal as _mup_for_req
+                firm = ctx.get("firm_code") or "OWNER"
+                reqs = _cr.list_open_for_client(
+                    DB_PATH, firm_code=firm, client_code=code,
+                    include_completed=True,
+                )
+                # Portal users so CPA can target a specific one.
+                portal_users = []
+                try:
+                    portal_users = _mup_for_req.list_users(
+                        DB_PATH, firm_code=firm, client_code=code,
+                    )
+                except Exception:
+                    logging.exception("list_users failed")
+                with open_db() as _rconn:
+                    cr_row = _rconn.execute(
+                        "SELECT client_name FROM clients WHERE client_code=?",
+                        (code,),
+                    ).fetchone()
+                cr_name = cr_row["client_name"] if cr_row else code
+                body = _cr.render_cpa_requests_page(
+                    firm_code=firm, client_code=code, client_name=cr_name,
+                    requests=reqs, portal_users=portal_users,
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    f"Requests — {code}", body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
                 return
 
             # ------------------------------------------------------------------
@@ -27904,6 +27987,62 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/edit?code={urlquote(sc_code)}",
                     flash=f"Portal link sent to {_row['contact_email']}",
+                )
+                return
+
+            # Scope 1.4: CPA creates an outstanding request for a client
+            if path == "/clients/requests":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                rq_code = normalize_text(form.get("client_code", "")).strip()
+                # The form action is /clients/{code}/requests in theory; fall
+                # back to a POST that carries client_code in the body too so
+                # either wiring works.
+                if not rq_code:
+                    rq_code = normalize_text(qs.get("code", [""])[0]).strip()
+                if not _require_client_in_firm(rq_code, ctx):
+                    self._flash_redirect("/clients",
+                                         error=t("err_forbidden", lang))
+                    return
+                title = (form.get("title", "") or "").strip()
+                description = (form.get("description", "") or "").strip()
+                due_date = (form.get("due_date", "") or "").strip() or None
+                raw_target = (form.get("target_portal_user_id", "") or "").strip()
+                target_id: int | None = None
+                if raw_target:
+                    try:
+                        target_id = int(raw_target)
+                    except ValueError:
+                        target_id = None
+                if not title:
+                    self._flash_redirect(
+                        f"/clients/requests?code={urlquote(rq_code)}",
+                        error="Title is required",
+                    )
+                    return
+                firm = ctx.get("firm_code") or "OWNER"
+                try:
+                    from src.integrations import client_requests as _cr
+                    _cr.create_request(
+                        DB_PATH,
+                        firm_code=firm, client_code=rq_code,
+                        title=title, description=description,
+                        due_date=due_date,
+                        target_portal_user_id=target_id,
+                        created_by_email=(user.get("email")
+                                           or user.get("username") or ""),
+                    )
+                except Exception as _exc:
+                    logging.exception("create_request failed")
+                    self._flash_redirect(
+                        f"/clients/requests?code={urlquote(rq_code)}",
+                        error=f"Create failed: {_exc}",
+                    )
+                    return
+                self._flash_redirect(
+                    f"/clients/requests?code={urlquote(rq_code)}",
+                    flash="Request created",
                 )
                 return
 
