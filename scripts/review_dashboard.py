@@ -16117,6 +16117,76 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
 
 
+def render_team_workload(
+    ctx: dict[str, Any], user: dict[str, Any],
+    rows: list[dict[str, Any]],
+    flash: str = '', flash_error: str = '', lang: str = 'fr',
+) -> str:
+    """Team workload report table — per-employee summary of who's
+    carrying what."""
+    if not rows:
+        body = (
+            '<div class="card"><h2>&#x1F4CA; Team workload</h2>'
+            '<p>No active team members to report on yet.</p>'
+            '</div>'
+        )
+        return page_layout("Team workload", body, user=user,
+                            flash=flash, flash_error=flash_error, lang=lang)
+    def _cell(v):
+        if v is None:
+            return '<span style="color:#888;">—</span>'
+        return esc(str(v))
+    tr = []
+    for r in rows:
+        avg_h = r['avg_resolution_hours']
+        avg_cell = (f'{avg_h:.1f}h' if avg_h is not None else '—')
+        tr.append(
+            '<tr>'
+            f'<td style="padding:8px;color:#e0e0e0;">'
+            f'<strong>{esc(r["display_name"])}</strong>'
+            f'<div style="color:#888;font-size:11px;">{esc(r["email"])}'
+            f' &middot; {esc(r["role"])}</div></td>'
+            f'<td style="padding:8px;text-align:right;color:#e0e0e0;">'
+            f'{_cell(r["primary_clients"])}</td>'
+            f'<td style="padding:8px;text-align:right;color:#888;">'
+            f'{_cell(r["secondary_clients"])}</td>'
+            f'<td style="padding:8px;text-align:right;'
+            f'color:{"#e74c3c" if r["open_docs"] >= 25 else "#e0e0e0"};">'
+            f'<strong>{_cell(r["open_docs"])}</strong></td>'
+            f'<td style="padding:8px;text-align:right;color:#2ecc71;">'
+            f'{_cell(r["completed_this_week"])}</td>'
+            f'<td style="padding:8px;text-align:right;color:#aaa;">'
+            f'{esc(avg_cell)}</td>'
+            '</tr>'
+        )
+    body = f"""
+    <div style="padding:24px;">
+        <h2 style="color:white;">&#x1F4CA; Team workload</h2>
+        <p style="color:#888;font-size:13px;">
+            Per-employee breakdown of client leadership and open document load.
+            Open docs include assigned + in-progress + rejected-awaiting-fix.
+            Avg resolution covers the last 90 days.
+        </p>
+        <table style="width:100%;border-collapse:collapse;background:#1a2e4a;border-radius:8px;">
+            <thead>
+                <tr style="background:#0d1b2a;">
+                    <th style="color:#aaa;padding:8px;text-align:left;">Employee</th>
+                    <th style="color:#aaa;padding:8px;text-align:right;">Primary clients</th>
+                    <th style="color:#aaa;padding:8px;text-align:right;">Secondary</th>
+                    <th style="color:#aaa;padding:8px;text-align:right;">Open docs</th>
+                    <th style="color:#aaa;padding:8px;text-align:right;">Done (7d)</th>
+                    <th style="color:#aaa;padding:8px;text-align:right;">Avg resolve</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(tr)}
+            </tbody>
+        </table>
+    </div>"""
+    return page_layout("Team workload", body, user=user,
+                        flash=flash, flash_error=flash_error, lang=lang)
+
+
 def _render_unassigned_clients_banner(
     ctx: dict[str, Any], *, lang: str = 'fr',
 ) -> str:
@@ -21694,6 +21764,24 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
 
             # Cleanup Item 1: per-uploader reports (CPA view).
+            if path == "/reports/team_workload":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations.team_workload import (  # noqa: PLC0415
+                    get_team_workload,
+                )
+                firm_scope = (ctx.get("firm_code")
+                              if ctx.get("role") != "owner" else None)
+                wl = get_team_workload(DB_PATH, firm_code=firm_scope)
+                self._send_html(render_team_workload(ctx, user, wl,
+                                                       flash, flash_error,
+                                                       lang=lang))
+                return
+
             if path in ("/reports/by_uploader", "/reports/by_uploader.csv",
                          "/reports/by_uploader/drill"):
                 if not _can_do(ctx, "view_all_clients"):
