@@ -15613,6 +15613,12 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 only_my_queue: bool, only_unassigned: bool, lang: str = "fr",
                 page: int = 1, per_page: int = 50,
                 uploader_emails: list[str] | None = None) -> str:
+    # Hybrid assignment: surface unassigned-client nudge to owner /
+    # firm_admin. Backward compatible — existing clients start with
+    # NULL primary so a fresh upgrade may show a lot of pool clients;
+    # the banner gives one-click access to filter them.
+    unassigned_banner = _render_unassigned_clients_banner(ctx, lang=lang)
+
     # SQL-level pagination — fetch only the rows needed for this page
     total_rows = count_documents(ctx=ctx, status=status, q=q,
                                  include_ignored=include_ignored,
@@ -16100,6 +16106,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         '<div class="queue-page">'
         + header_html
         + _learning_stats_html
+        + unassigned_banner
         + upload_html
         + filters_html
         + table_html
@@ -16108,6 +16115,62 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
     )
     return page_layout(t("dashboard_title", lang), body_html,
                        user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _render_unassigned_clients_banner(
+    ctx: dict[str, Any], *, lang: str = 'fr',
+) -> str:
+    """Phase 6 migration nudge.
+
+    Show owner / firm_admin how many clients still have no primary
+    employee assigned. Silent when count is 0 so it doesn't nag a
+    firm that's fully set up.
+    """
+    if ctx.get('role') not in ('owner', 'firm_admin'):
+        return ''
+    firm_code = ctx.get('firm_code') or 'OWNER'
+    try:
+        with open_db() as conn:
+            if ctx.get('role') == 'owner':
+                # Owner sees across all firms they administer.
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM clients "
+                    "WHERE COALESCE(primary_employee_email, '') = ''"
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM clients "
+                    "WHERE firm_code = ? "
+                    "  AND COALESCE(primary_employee_email, '') = ''",
+                    (firm_code,),
+                ).fetchone()
+    except sqlite3.OperationalError:
+        return ''
+    n = int(row['n'] or 0) if row else 0
+    if n <= 0:
+        return ''
+    # Bilingual copy matches the rest of the dashboard.
+    msg_fr = (
+        f"Vous avez <strong>{n}</strong> client(s) sans employé responsable."
+    )
+    msg_en = (
+        f"You have <strong>{n}</strong> client(s) with no primary employee."
+    )
+    return (
+        '<div style="margin:16px 0;padding:14px 16px;background:#fff7e6;'
+        'border:1px solid #f5c16c;border-radius:6px;color:#4a2a00;'
+        'display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+        '<div style="font-size:18px;">&#128681;</div>'
+        '<div style="flex:1;min-width:240px;">'
+        f'<div>{msg_fr}</div>'
+        f'<div style="color:#6b4a00;font-size:12px;">{msg_en}</div>'
+        '</div>'
+        '<a href="/clients?assignee=__pool__" '
+        ' style="background:#d97706;color:white;padding:8px 14px;'
+        ' border-radius:4px;text-decoration:none;">'
+        'Assigner / Assign &rarr;</a>'
+        '</div>'
+    )
 
 
 # ---------------------------------------------------------------------------
