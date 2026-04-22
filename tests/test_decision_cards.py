@@ -286,6 +286,34 @@ class TestDecisionCardRendering:
 
 
 # ---------------------------------------------------------------------------
+# Regression: lang must be in scope inside _build_decision_cards
+# ---------------------------------------------------------------------------
+class TestDecisionCardsLangAvailable:
+    """Pre-existing bug: commit dc8c3b4997 introduced `money(amount, lang)`
+    calls inside ``_build_decision_cards`` without passing `lang` in, so any
+    card-generating path raised ``NameError: name 'lang' is not defined``.
+    """
+
+    def test_decision_cards_lang_available(self):
+        # Scenario 1 (credit memo, no tax breakdown) is the first `lang`
+        # reference in the function — it fires NameError before the fix.
+        row = _make_row(doc_type="credit_note", amount="-2260.00")
+        raw = {"gst_amount": None, "qst_amount": None}
+        # Must not raise NameError — both default ('fr') and explicit 'en'
+        # must work, and the rendered text must pick up the chosen language
+        # through money().
+        cards_default = _build_decision_cards(row, raw, "doc-lang-default")
+        cards_en = _build_decision_cards(row, raw, "doc-lang-en", "en")
+        assert cards_default, "credit memo scenario should generate a card"
+        assert cards_en, "credit memo scenario should generate a card (en)"
+        # Sanity: the generated French string must contain a money-formatted
+        # amount. The bug site is the `issue_fr`/`issue_en` f-string.
+        card = cards_default[0]
+        assert "2" in card["issue_fr"]  # 2260 is in the formatted amount
+        assert "2" in card["issue_en"]
+
+
+# ---------------------------------------------------------------------------
 # Similarity helper
 # ---------------------------------------------------------------------------
 class TestSimpleSimilarity:

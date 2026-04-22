@@ -16484,7 +16484,7 @@ _QST_RATE = 0.09975
 
 
 def _build_decision_cards(row: sqlite3.Row, raw_result: dict[str, Any],
-                          document_id: str) -> list[dict[str, Any]]:
+                          document_id: str, lang: str = "fr") -> list[dict[str, Any]]:
     """Detect up to 10 blocked/uncertain scenarios and return decision card dicts.
 
     Each card: icon, title_fr, title_en, severity ('red'|'amber'|'blue'),
@@ -17152,7 +17152,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     review_reason = get_plain_review_reason(row)
     blocking_issues = compute_blocking_issues(row)
     blocking_html = "".join(f"<li>{esc(x)}</li>" for x in blocking_issues) or f"<li>{esc(t('badge_none', lang))}</li>"
-    decision_cards = _build_decision_cards(row, raw_result, document_id)
+    decision_cards = _build_decision_cards(row, raw_result, document_id, lang)
     decision_cards_html = _render_decision_cards(decision_cards, document_id)
 
     # Auto-approval suggestion banner and learning progress
