@@ -165,6 +165,43 @@ directly. Every override is logged with `(cpa)` suffixed to the
 actor email so the audit trail distinguishes CPA actions from
 client actions.
 
+## 14. Correcting document lines
+
+OCR produces one line per invoice row, but it isn't always right: a
+mixed purchase can land on one line, a single item's name can be cut
+in two, a service may need to be allocated across two GL accounts.
+The document detail page offers three actions from the *Line items*
+card:
+
+**Split** — one line → several lines on the same document. Example:
+*Metro Plus $127.50* split into *Grocery $84.00* (tax Z) and
+*Cleaning supplies $43.50* (tax T). The sum of the new amounts must
+equal the original, to the cent.
+
+**Merge** — several lines → one. Example: OCR read *Pain aux* and
+*raisins* as two rows when it's a single item. Tick the checkboxes
+on the left of the rows to merge; a toolbar appears at the top with
+a *Merge* button.
+
+**Allocate** — one line → several GL accounts, by amount or
+percentage. Example: Internet $100 allocated 60% to Operating
+expenses (5500) and 40% to Taxable benefits (2320).
+
+**Badge**: every CPA-modified line carries a small badge (*Split*,
+*Merged*, *Allocated*) next to its description, so you can tell it
+apart from the original OCR line.
+
+**Audit trail**: the document detail page shows a *Line item history*
+section (open by default when modifications exist) listing each
+operation with who, when, why, and before/after state. Nothing is
+ever deleted — original lines remain in the database, soft-deleted
+only, so the audit trail is complete.
+
+Each operation enforces version-based concurrency: if two reviewers
+touch the same line, one wins and the other sees a *Reload page*
+message. A client request id makes each operation idempotent —
+replaying the same request does not double-split.
+
 ## FAQ
 
 **Q: How do I revoke a client employee's access immediately?**

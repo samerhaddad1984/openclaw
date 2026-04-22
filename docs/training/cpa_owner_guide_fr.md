@@ -174,6 +174,49 @@ est journalisé avec `(cpa)` ajouté au courriel de l'acteur pour
 que la piste d'audit distingue les actions du CPA de celles du
 client.
 
+## 14. Corriger les lignes d'un document
+
+L'OCR produit une ligne par poste de facture, mais il n'est pas
+toujours exact : un achat mixte peut arriver sur une seule ligne,
+un nom d'article peut être coupé en deux, un service peut devoir
+être réparti entre deux comptes du grand livre. Le détail d'un
+document offre trois actions accessibles depuis la carte *Postes de
+facture* :
+
+**Séparer (Split)** — une ligne → plusieurs lignes sur le même
+document. Exemple : *Metro Plus 127,50 $* séparé en *Épicerie
+84,00 $* (taxable Z) et *Produits ménagers 43,50 $* (taxable T).
+La somme des nouveaux montants doit égaler le montant original au
+cent près.
+
+**Fusionner (Merge)** — plusieurs lignes → une seule. Exemple :
+l'OCR a lu *Pain aux* et *raisins* comme deux postes alors qu'il
+s'agit d'un seul article. Cochez les cases à gauche des lignes à
+fusionner; une barre d'outils apparaît en haut avec un bouton
+*Fusionner*.
+
+**Répartir (Allocate)** — une ligne → plusieurs comptes du grand
+livre, par montant ou par pourcentage. Exemple : Internet 100 $
+réparti 60 % au compte Frais d'exploitation (5500) et 40 % au
+compte Avantages imposables (2320).
+
+**Badge** : chaque ligne modifiée par un CPA porte un petit badge
+(*Séparée*, *Fusionnée*, *Répartie*) à droite de sa description,
+pour la distinguer des lignes OCR d'origine.
+
+**Piste d'audit** : le détail du document affiche une section
+*Historique des lignes* (ouverte par défaut si des modifications
+existent) qui liste chaque opération avec l'auteur, la date, la
+raison, ainsi que l'état avant/après. Rien n'est supprimé — les
+lignes originales restent dans la base, simplement marquées
+*supprimées* logiquement, pour que la piste d'audit soit complète.
+
+Chaque opération exige une vérification de version (concurrence
+optimiste) : si deux réviseurs touchent la même ligne, un seul
+passe et l'autre reçoit un message *Rechargez la page*. Un identifiant
+de requête client rend chaque opération idempotente — rejouer la
+même requête ne double pas le split.
+
 ## Questions fréquentes
 
 **Q : Comment révoquer l'accès d'un employé client immédiatement?**
