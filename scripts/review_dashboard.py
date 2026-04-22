@@ -1185,12 +1185,56 @@ def bootstrap_schema() -> None:
             # into invitation-based personal links (see
             # client_portal_users + client_portal_invitations below).
             ("portal_mode",                 "TEXT DEFAULT 'single'"),
+            # Hybrid assignment model: client has a primary employee
+            # (auto-assignee for new docs) + optional secondary as
+            # fallback when primary is inactive. Owner/firm_admin always
+            # see everything regardless. NULL = unassigned (firm pool).
+            ("primary_employee_email",      "TEXT"),
+            ("secondary_employee_email",    "TEXT"),
+            ("assignment_updated_at",       "TEXT"),
+            ("assignment_updated_by",       "TEXT"),
         ):
             if _ccol not in client_cols:
                 try:
                     conn.execute(f"ALTER TABLE clients ADD COLUMN {_ccol} {_cdef}")
                 except sqlite3.OperationalError:
                     pass
+        # Indexes for fast "who's assigned to which clients" lookups.
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_clients_primary_employee "
+                "ON clients(firm_code, primary_employee_email)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_clients_secondary_employee "
+                "ON clients(firm_code, secondary_employee_email)"
+            )
+        except sqlite3.OperationalError:
+            pass
+        # Audit trail for client-level assignment changes. Independent
+        # of review_workflow_audit (which tracks per-document state).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_assignment_history (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                firm_code           TEXT NOT NULL,
+                client_code         TEXT NOT NULL,
+                action              TEXT NOT NULL,
+                previous_primary    TEXT,
+                new_primary         TEXT,
+                previous_secondary  TEXT,
+                new_secondary       TEXT,
+                reason              TEXT,
+                changed_by          TEXT,
+                changed_at          TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_client_assign_hist_client "
+                "ON client_assignment_history(firm_code, client_code, changed_at DESC)"
+            )
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
         # Bank connections firm_code (denormalized for fast firm-scoped reads).
