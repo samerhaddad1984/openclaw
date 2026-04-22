@@ -23072,6 +23072,40 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                     lang=lang))
                 return
 
+            # Scope 2.2: QBO imported-data summary (full historical pull)
+            if path == "/clients/imported_data":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(code, ctx):
+                    self._flash_redirect("/clients",
+                                          error="Client not found")
+                    return
+                from src.integrations import qbo_historical as _qh
+                firm = ctx.get("firm_code") or "OWNER"
+                data = _qh.summary(DB_PATH, firm_code=firm, client_code=code)
+                with open_db() as _conn:
+                    cn_row = _conn.execute(
+                        "SELECT client_name FROM clients WHERE client_code=?",
+                        (code,),
+                    ).fetchone()
+                cn_name = cn_row['client_name'] if cn_row else code
+                body = _qh.render_imported_data_page(
+                    firm_code=firm, client_code=code,
+                    client_name=cn_name, data=data,
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    f"Imported data — {code}", body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
+                return
+
             # Scope 2.1: bulk client CSV import form + preview
             if path == "/clients/import":
                 if not _can_do(ctx, "view_all_clients"):
@@ -28024,6 +28058,54 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/edit?code={urlquote(sc_code)}",
                     flash=f"Portal link sent to {_row['contact_email']}",
+                )
+                return
+
+            # Scope 2.2: run / confirm / rollback the QBO historical pull
+            if path in ("/clients/imported_data/run",
+                        "/clients/imported_data/confirm",
+                        "/clients/imported_data/rollback"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                id_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(id_code, ctx):
+                    self._flash_redirect(
+                        "/clients", error=t("err_forbidden", lang),
+                    )
+                    return
+                from src.integrations import qbo_historical as _qh
+                firm = ctx.get("firm_code") or "OWNER"
+                actor = user.get("email") or user.get("username") or ""
+                if path.endswith("/run"):
+                    try:
+                        _qh.run_historical_pull(
+                            DB_PATH, firm_code=firm, client_code=id_code,
+                            years=2, triggered_by=actor,
+                        )
+                        msg = "Historical pull complete"
+                    except Exception as exc:  # noqa: BLE001
+                        logging.exception("historical pull failed")
+                        self._flash_redirect(
+                            f"/clients/imported_data?code={urlquote(id_code)}",
+                            error=f"Pull failed: {exc}",
+                        )
+                        return
+                elif path.endswith("/confirm"):
+                    _qh.confirm_import(
+                        DB_PATH, firm_code=firm, client_code=id_code,
+                        decided_by=actor,
+                    )
+                    msg = "Import confirmed"
+                else:
+                    _qh.rollback_import(
+                        DB_PATH, firm_code=firm, client_code=id_code,
+                        decided_by=actor,
+                    )
+                    msg = "Import rolled back"
+                self._flash_redirect(
+                    f"/clients/imported_data?code={urlquote(id_code)}",
+                    flash=msg,
                 )
                 return
 
