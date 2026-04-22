@@ -23072,6 +23072,43 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                     lang=lang))
                 return
 
+            # Scope 2.1: bulk client CSV import form + preview
+            if path == "/clients/import":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import client_import as _ci
+                body = _ci.render_import_page(
+                    firm_code=ctx.get("firm_code") or "OWNER",
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    "Bulk client import", body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
+                return
+
+            if path == "/clients/import/template.csv":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html("<h1>Forbidden</h1>", status=403)
+                    return
+                from src.integrations import client_import as _ci
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header(
+                    "Content-Disposition",
+                    'attachment; filename="otocpa_clients_template.csv"'
+                )
+                payload = _ci.generate_template_csv()
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+
             # Scope 1.4: outstanding CPA requests per client
             if path == "/clients/requests":
                 if not _can_do(ctx, "view_all_clients"):
@@ -27988,6 +28025,50 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     f"/clients/edit?code={urlquote(sc_code)}",
                     flash=f"Portal link sent to {_row['contact_email']}",
                 )
+                return
+
+            # Scope 2.1: Bulk client CSV import (dry-run or commit)
+            if path == "/clients/import":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                ct = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ct:
+                    self._flash_redirect(
+                        "/clients/import",
+                        error="Missing CSV file / fichier CSV manquant",
+                    )
+                    return
+                fields, file_bytes, filename = _parse_multipart_simple(raw, ct)
+                if not file_bytes:
+                    self._flash_redirect(
+                        "/clients/import",
+                        error="Missing CSV file / fichier CSV manquant",
+                    )
+                    return
+                from src.integrations import client_import as _ci
+                rows, headers, fatal = _ci.parse_csv(file_bytes)
+                if fatal:
+                    self._flash_redirect(
+                        "/clients/import",
+                        error=f"Could not parse CSV: {fatal}",
+                    )
+                    return
+                dry_run = bool(fields.get("dry_run"))
+                firm = ctx.get("firm_code") or "OWNER"
+                result = _ci.import_rows(
+                    DB_PATH, firm_code=firm, rows=rows, dry_run=dry_run,
+                )
+                # Render the same page with the preview section populated.
+                body = _ci.render_import_page(
+                    firm_code=firm, preview=result,
+                    flash=(f"Imported {result['imported']} of "
+                           f"{result['total']}. Skipped {result['skipped']}."),
+                )
+                self._send_html(page_layout(
+                    "Bulk client import", body,
+                    user=user, lang=lang,
+                ))
                 return
 
             # Scope 1.4: CPA creates an outstanding request for a client
