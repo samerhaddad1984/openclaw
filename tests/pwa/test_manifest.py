@@ -138,3 +138,30 @@ def test_install_prompt_starts_hidden():
     # user's environment.
     assert 'id="pwa-install"' in html
     assert 'display:none' in html
+
+
+# ---------------------------------------------------------------------------
+# Service worker
+# ---------------------------------------------------------------------------
+
+def test_service_worker_file_exists():
+    sw = ROOT / 'static' / 'pwa' / 'sw.js'
+    assert sw.exists()
+    text = sw.read_text('utf-8')
+    # Must precache the offline page.
+    assert "'/c/offline'" in text or '"/c/offline"' in text
+    # Network-first for navigation.
+    assert "mode === 'navigate'" in text or 'mode === "navigate"' in text
+
+
+def test_service_worker_scope_correct():
+    sw = ROOT / 'static' / 'pwa' / 'sw.js'
+    text = sw.read_text('utf-8')
+    # POST requests bypass the cache (never queue mutations).
+    assert "req.method !== 'GET'" in text
+
+
+def test_offline_page_renders():
+    html = rd._render_offline_page()
+    assert '<!doctype html>' in html.lower()
+    assert 'location.reload()' in html
