@@ -14874,23 +14874,50 @@ def render_learning_page(ctx: dict[str, Any], user: dict[str, Any],
 
 def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                         flash: str = '', flash_error: str = '',
-                        lang: str = 'fr') -> str:
+                        lang: str = 'fr',
+                        assignee_filter: str = '') -> str:
+    """Clients list. assignee_filter values:
+      ''            -> no filter
+      '__mine__'    -> only clients where current user is primary or secondary
+      '__pool__'    -> only clients with no primary AND no secondary
+      '<email>'     -> only clients where that employee is primary or secondary
+    """
     firm_filter = ctx.get("firm_code") if ctx.get("role") != "owner" else None
+    extra_where: str = ''
+    extra_params: list[Any] = []
+    if assignee_filter == '__mine__':
+        my_email = (ctx.get('email') or '').strip().lower()
+        if my_email:
+            extra_where = (" AND (LOWER(primary_employee_email) = ? "
+                            "  OR LOWER(secondary_employee_email) = ?)")
+            extra_params = [my_email, my_email]
+    elif assignee_filter == '__pool__':
+        extra_where = (" AND COALESCE(primary_employee_email,'') = '' "
+                        " AND COALESCE(secondary_employee_email,'') = ''")
+    elif assignee_filter:
+        extra_where = (" AND (LOWER(primary_employee_email) = ? "
+                        "  OR LOWER(secondary_employee_email) = ?)")
+        extra_params = [assignee_filter.lower(), assignee_filter.lower()]
     with open_db() as conn:
+        base_select = (
+            "SELECT client_code, client_name, contact_email, "
+            "       language, active, whatsapp_number, "
+            "       primary_employee_email, secondary_employee_email "
+            "FROM clients"
+        )
         if firm_filter and firm_filter != "OWNER":
-            clients = conn.execute('''
-                SELECT client_code, client_name, contact_email,
-                       language, active, whatsapp_number
-                FROM clients WHERE firm_code = ?
-                ORDER BY client_code
-            ''', (firm_filter,)).fetchall()
+            sql = f"{base_select} WHERE firm_code = ?{extra_where} ORDER BY client_code"
+            clients = conn.execute(sql, (firm_filter, *extra_params)).fetchall()
         else:
-            clients = conn.execute('''
-                SELECT client_code, client_name, contact_email,
-                       language, active, whatsapp_number
-                FROM clients
-                ORDER BY client_code
-            ''').fetchall()
+            sql = f"{base_select} WHERE 1=1{extra_where} ORDER BY client_code"
+            clients = conn.execute(sql, tuple(extra_params)).fetchall()
+        # Employees: hard-restrict to clients in their allowed list
+        # (their portfolio + clients where they are primary/secondary,
+        # built in build_user_context).
+        if not ctx.get("can_view_all_clients"):
+            allowed = {normalize_key(c) for c in ctx.get("allowed_clients", [])}
+            clients = [c for c in clients
+                       if normalize_key(c["client_code"]) in allowed]
         # Fetch all WhatsApp numbers in one query, group by client_code.
         wa_by_client: dict[str, list[sqlite3.Row]] = {}
         try:
@@ -15025,6 +15052,25 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                 f'padding:1px 8px;display:inline-block;font-size:11px;margin-top:4px;">'
                 f'&#128172; {unread} new</div>'
             )
+        # Hybrid assignment "Lead" badge
+        primary_email = (c['primary_employee_email']
+                          if 'primary_employee_email' in c.keys() else '') or ''
+        secondary_email = (c['secondary_employee_email']
+                            if 'secondary_employee_email' in c.keys() else '') or ''
+        if primary_email:
+            lead_cell = (
+                f'<div style="color:#e0e0e0;">{esc(primary_email)}</div>'
+            )
+            if secondary_email:
+                lead_cell += (
+                    f'<div style="color:#888;font-size:11px;">'
+                    f'2nd: {esc(secondary_email)}</div>'
+                )
+        else:
+            lead_cell = (
+                '<div style="color:#aaa;">'
+                '&#x1F465; Pool (unassigned)</div>'
+            )
         rows += f"""
         <tr>
             <td style="color:#2ecc71;font-weight:bold;vertical-align:top;">{esc(c['client_code'])}</td>
@@ -15032,6 +15078,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
             <td style="color:#aaa;vertical-align:top;">{esc(c['contact_email'] or '')}</td>
             <td style="color:#e0e0e0;vertical-align:top;">{esc(c['language'] or 'fr')}</td>
             <td style="vertical-align:top;">{'&#x2705;' if c['active'] else '&#x274C;'}</td>
+            <td style="vertical-align:top;">{lead_cell}</td>
             <td style="vertical-align:top;">{wa_cell}</td>
             <td style="vertical-align:top;">{bank_cell}</td>
             <td style="vertical-align:top;">{qbo_cell}</td>
@@ -15055,6 +15102,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                 + Nouveau client / New client
             </a>
         </div>
+        {_render_assignee_filter_html(ctx, assignee_filter)}
 
         <table style="width:100%;border-collapse:collapse;background:#1a2e4a;border-radius:8px;">
             <thead>
@@ -15064,6 +15112,7 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
                     <th style="color:#aaa;padding:12px;text-align:left;">Email</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Langue</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">Actif</th>
+                    <th style="color:#aaa;padding:12px;text-align:left;">&#x1F465; Lead</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4F1; WhatsApp</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F3E6; Bank</th>
                     <th style="color:#aaa;padding:12px;text-align:left;">&#x1F4D2; QBO</th>
@@ -15075,6 +15124,45 @@ def render_clients_page(ctx: dict[str, Any], user: dict[str, Any],
         </table>
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _render_assignee_filter_html(
+    ctx: dict[str, Any], current: str = '',
+) -> str:
+    """Filter dropdown for /clients page (owner / firm_admin only).
+
+    Lets admins narrow the list to: All / Mine / Pool / a specific
+    employee. Posts via GET so the URL is shareable.
+    """
+    if ctx.get("role") not in ("owner", "firm_admin"):
+        return ''
+    from src.integrations.client_assignment import get_firm_employees  # noqa: PLC0415
+    firm_code = ctx.get("firm_code") or "OWNER"
+    employees = get_firm_employees(DB_PATH, firm_code)
+    options = [
+        ('',          'All clients'),
+        ('__mine__',  'Only mine'),
+        ('__pool__',  'Pool (unassigned)'),
+    ]
+    for e in employees:
+        options.append((e['email'], f"{e['display_name']} ({e['email']})"))
+    sel_html = ''.join(
+        f'<option value="{esc(v)}" {"selected" if v == current else ""}>'
+        f'{esc(label)}</option>'
+        for v, label in options
+    )
+    return (
+        '<form method="GET" action="/clients" '
+        ' style="margin:12px 0;display:flex;gap:8px;align-items:center;">'
+        '<label style="color:#aaa;">Show clients assigned to:</label>'
+        f'<select name="assignee" style="background:#0d1b2a;color:white;'
+        f'border:1px solid #2c3e50;padding:6px;border-radius:4px;'
+        f'min-width:280px;">{sel_html}</select>'
+        '<button type="submit" style="background:#3498db;color:white;'
+        ' border:none;padding:6px 14px;border-radius:4px;cursor:pointer;">'
+        'Apply</button>'
+        '</form>'
+    )
 
 
 def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
@@ -15090,6 +15178,16 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
     whatsapp_val = esc(client['whatsapp_number'] or '') if is_edit else ''
     active_checked = 'checked' if (not is_edit or client['active']) else ''
     code_readonly = 'readonly style="background:#334155;"' if is_edit else ''
+
+    # Hybrid assignment: owner / firm_admin sees a Team Assignment
+    # section (primary + secondary employee dropdowns + history). Other
+    # roles see a read-only badge of the current assignment so they
+    # know who's on the file.
+    assignment_section = ''
+    if is_edit:
+        assignment_section = _render_client_assignment_section(
+            client, ctx, lang=lang,
+        )
 
     # Bank connections (edit mode only — needs an existing client_code).
     bank_section = ''
@@ -15396,12 +15494,118 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
                 </a>
             </div>
         </form>
+        {assignment_section}
         {portal_section}
         {wa_section}
         {bank_section}
         {qbo_section}
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _render_client_assignment_section(
+    client: dict[str, Any], ctx: dict[str, Any], *, lang: str = 'fr',
+) -> str:
+    """Team-assignment block for the client edit page.
+
+    Owner / firm_admin: editable primary + secondary dropdowns plus the
+    last few entries of client_assignment_history.
+
+    Employees: read-only badge showing who's primary / secondary so they
+    know the current assignment without being able to change it.
+    """
+    code = client.get('client_code') or ''
+    primary = (client.get('primary_employee_email') or '').strip()
+    secondary = (client.get('secondary_employee_email') or '').strip()
+    role = ctx.get('role') or ''
+    can_edit = role in ('owner', 'firm_admin')
+
+    # firm_code: owner sees clients across firms, scope by client row.
+    firm_code = client.get('firm_code') or ctx.get('firm_code') or 'OWNER'
+    from src.integrations.client_assignment import (  # noqa: PLC0415
+        get_firm_employees, get_assignment_history,
+    )
+    employees = get_firm_employees(DB_PATH, firm_code)
+
+    def _opt_select(selected: str) -> str:
+        out = ['<option value="">&mdash; (unassigned / non assigné) &mdash;</option>']
+        for e in employees:
+            sel = 'selected' if e['email'].lower() == selected.lower() else ''
+            label = esc(f"{e['display_name']} ({e['email']}) [{e['role']}]")
+            out.append(f'<option value="{esc(e["email"])}" {sel}>{label}</option>')
+        return ''.join(out)
+
+    if not can_edit:
+        # Read-only view for employees.
+        primary_label = esc(primary) or '<em>unassigned</em>'
+        secondary_label = esc(secondary) or '<em>none</em>'
+        return f"""
+        <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+            <h3 style="color:white;margin-top:0;">&#x1F465; Team assignment</h3>
+            <div style="color:#e0e0e0;">Primary: <strong>{primary_label}</strong></div>
+            <div style="color:#e0e0e0;">Secondary: <strong>{secondary_label}</strong></div>
+            <p style="color:#888;font-size:12px;margin:8px 0 0 0;">
+                Only owner or firm admin can change team assignment.
+            </p>
+        </div>"""
+
+    history = get_assignment_history(DB_PATH, firm_code=firm_code,
+                                       client_code=code, limit=5)
+    history_html = ''
+    if history:
+        items = []
+        for h in history:
+            stamp = esc((h.get('changed_at') or '')[:19])
+            who = esc(h.get('changed_by') or '')
+            action = esc(h.get('action') or '')
+            new_p = esc(h.get('new_primary') or '—')
+            new_s = esc(h.get('new_secondary') or '—')
+            reason = esc(h.get('reason') or '')
+            reason_html = (f' &mdash; <em>{reason}</em>') if reason else ''
+            items.append(
+                f'<li style="color:#aaa;">'
+                f'<span style="color:#e0e0e0;">{stamp}</span>'
+                f' &middot; {action} by {who} &middot; '
+                f'primary={new_p}, secondary={new_s}{reason_html}'
+                f'</li>'
+            )
+        history_html = (
+            '<details style="margin-top:12px;">'
+            '<summary style="color:#aaa;cursor:pointer;">'
+            'Recent assignment changes</summary>'
+            f'<ul style="margin:8px 0 0 16px;">{"".join(items)}</ul>'
+            '</details>'
+        )
+
+    return f"""
+    <div style="margin-top:24px;padding:16px;background:#0d1b2a;border-radius:6px;border:1px solid #2c3e50;">
+        <h3 style="color:white;margin-top:0;">&#x1F465; Team assignment</h3>
+        <p style="color:#888;font-size:12px;margin:0 0 12px 0;">
+            New documents on this client are auto-routed to the primary employee.
+            If primary is inactive the secondary takes over.
+        </p>
+        <form method="POST" action="/clients/assignment" style="display:flex;flex-direction:column;gap:10px;">
+            <input type="hidden" name="client_code" value="{esc(code)}">
+            <label style="color:#e0e0e0;">Primary
+                <select name="primary_email" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+                    {_opt_select(primary)}
+                </select>
+            </label>
+            <label style="color:#e0e0e0;">Secondary (coverage)
+                <select name="secondary_email" style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+                    {_opt_select(secondary)}
+                </select>
+            </label>
+            <label style="color:#e0e0e0;">Reason (optional)
+                <input type="text" name="reason" placeholder="e.g. Sophie covering for Jean while on leave"
+                       style="background:#0d1b2a;color:white;border:1px solid #2c3e50;padding:8px;border-radius:4px;width:100%;">
+            </label>
+            <button type="submit" style="background:#2ecc71;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;align-self:flex-start;">
+                &#x1F4BE; Save assignment
+            </button>
+        </form>
+        {history_html}
+    </div>"""
 
 
 def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
@@ -21234,15 +21438,14 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # Client management (owner/manager)
             # ------------------------------------------------------------------
             if path == "/clients":
-                if not _can_do(ctx, "view_all_clients"):
-                    self._send_html(page_layout(
-                        t("err_forbidden", lang),
-                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2>'
-                        f'<p>{esc(t("err_mgr_owner_required", lang))}</p>'
-                        f'<p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
-                        user=user, lang=lang), status=403)
-                    return
-                self._send_html(render_clients_page(ctx, user, flash, flash_error, lang=lang))
+                # Hybrid assignment: employees may view /clients too —
+                # the renderer scopes the list to clients where they
+                # are primary, secondary, or in their portfolio.
+                assignee_qs = qs.get("assignee", [""])[0].strip()
+                self._send_html(render_clients_page(
+                    ctx, user, flash, flash_error, lang=lang,
+                    assignee_filter=assignee_qs,
+                ))
                 return
 
             if path == "/clients/new":
@@ -25806,6 +26009,59 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                               whatsapp_number, client_firm, new_token))
                     conn.commit()
                 self._flash_redirect("/clients", flash=f"Client {client_code} saved")
+                return
+
+            # --- Hybrid assignment: set primary + secondary on a client ---
+            if path == "/clients/assignment":
+                # Owner / firm_admin only — employees see assignment but
+                # cannot change it (re-checked in update_client_assignment).
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                ac_code = normalize_text(form.get("client_code", "")).strip()
+                if not ac_code or not _require_client_in_firm(ac_code, ctx):
+                    self._flash_redirect("/clients",
+                                          error="Client not found")
+                    return
+                primary = normalize_text(form.get("primary_email", "")).strip()
+                secondary = normalize_text(
+                    form.get("secondary_email", "")).strip()
+                reason = normalize_text(form.get("reason", "")).strip()
+                # firm_admin scoped to their firm; owner can target any.
+                target_firm = (ctx.get("firm_code")
+                                if ctx.get("role") != "owner" else None)
+                if target_firm is None:
+                    with open_db() as _firm_conn:
+                        _frow = _firm_conn.execute(
+                            "SELECT firm_code FROM clients WHERE client_code=?",
+                            (ac_code,),
+                        ).fetchone()
+                    target_firm = _frow["firm_code"] if _frow else "OWNER"
+                from src.integrations.client_assignment import (  # noqa: PLC0415
+                    update_client_assignment, ClientAssignmentError,
+                )
+                try:
+                    update_client_assignment(
+                        DB_PATH,
+                        firm_code=target_firm,
+                        client_code=ac_code,
+                        primary_email=primary or None,
+                        secondary_email=secondary or None,
+                        changed_by=(user.get("email")
+                                     or user.get("username") or ""),
+                        actor_role=ctx.get("role") or "",
+                        reason=reason,
+                    )
+                except ClientAssignmentError as exc:
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(ac_code)}",
+                        error=str(exc),
+                    )
+                    return
+                self._flash_redirect(
+                    f"/clients/edit?code={urlquote(ac_code)}",
+                    flash="Team assignment saved",
+                )
                 return
 
             # --- Sprint 4: Rotate client portal token ---
