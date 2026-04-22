@@ -90,6 +90,16 @@ def save_and_queue_document(
         db_path=db_path,
     )
 
+    # Hybrid assignment: route the new doc to the client's primary
+    # employee if one is set. No-op when the client has no primary
+    # (firm pool) or the primary/secondary aren't active. Errors here
+    # are non-fatal — the document is already saved.
+    try:
+        from src.integrations.auto_assign import auto_assign_new_document
+        auto_assign_new_document(document_id=doc_id, db_path=db_path)
+    except Exception:
+        log.exception("auto_assign_new_document failed for %s", doc_id)
+
     get_upload_queue().enqueue(
         doc_id,
         file_path,

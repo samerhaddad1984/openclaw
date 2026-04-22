@@ -455,10 +455,21 @@ def handle_whatsapp_webhook(
                 ingest_source="whatsapp",
             )
             results.append(result)
+            doc_id = result.get("document_id")
+            if result.get("ok") and doc_id:
+                # Hybrid assignment: route to the client's primary
+                # employee. Non-fatal on failure.
+                try:
+                    from src.integrations.auto_assign import (
+                        auto_assign_new_document,
+                    )
+                    auto_assign_new_document(document_id=doc_id)
+                except Exception:
+                    pass
             log_messaging_event(
                 client_code=client_code, platform="whatsapp",
                 direction="inbound", message_type="media",
-                document_id=result.get("document_id"),
+                document_id=doc_id,
                 status="delivered" if result.get("ok") else "failed",
             )
         except Exception as exc:

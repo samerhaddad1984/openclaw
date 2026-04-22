@@ -290,6 +290,15 @@ def handle_openclaw_ingest(
     doc_id = result.get("document_id")
     ok     = bool(result.get("ok"))
 
+    if ok and doc_id:
+        # Hybrid assignment: route to the client's primary employee.
+        # Non-fatal on failure — the document is already saved.
+        try:
+            from src.integrations.auto_assign import auto_assign_new_document
+            auto_assign_new_document(document_id=doc_id, db_path=db_path)
+        except Exception:
+            pass
+
     log_messaging_event(
         client_code=client_code,
         platform=platform,
