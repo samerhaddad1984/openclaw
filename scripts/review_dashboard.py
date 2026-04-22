@@ -1716,7 +1716,8 @@ def bootstrap_schema() -> None:
                 expires_at TEXT,
                 accepted_at TEXT,
                 status TEXT DEFAULT 'pending',
-                invited_language TEXT
+                invited_language TEXT,
+                whatsapp_number TEXT
             )
         """)
         # Idempotent: old DBs get the invited_language column too.
@@ -1737,6 +1738,17 @@ def bootstrap_schema() -> None:
                 conn.execute(
                     "ALTER TABLE client_portal_invitations "
                     "ADD COLUMN client_request_id TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass
+        # WhatsApp number staged on the invitation row; copied onto
+        # the user row on acceptance so the invitee doesn't have to
+        # re-register their own number.
+        if 'whatsapp_number' not in _cpi_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE client_portal_invitations "
+                    "ADD COLUMN whatsapp_number TEXT"
                 )
             except sqlite3.OperationalError:
                 pass
@@ -19554,6 +19566,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         email = (form.get("email", [""])[0] or "").strip()
         full_name = (form.get("full_name", [""])[0] or "").strip()
         role = (form.get("role", ["contributor"])[0] or "contributor").strip()
+        whatsapp_number = (
+            form.get("whatsapp_number", [""])[0] or ""
+        ).strip() or None
         client_request_id = (
             form.get("client_request_id", [""])[0] or ""
         ).strip() or None
@@ -19568,6 +19583,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 email=email, full_name=full_name, role=role,
                 invited_by=portal_user['email'],
                 client_request_id=client_request_id,
+                whatsapp_number=whatsapp_number,
             )
         except ValueError as exc:
             self._user_portal_redirect(user_token, "admin",
@@ -19682,6 +19698,40 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 self._user_portal_redirect(user_token, "admin",
                                              flash=f"Role set to {role}")
+                return True
+            if action == 'whatsapp':
+                form = urllib.parse.parse_qs(
+                    raw.decode('utf-8'), keep_blank_values=True,
+                )
+                raw_number = (
+                    form.get('whatsapp_number', [''])[0] or ''
+                ).strip()
+                try:
+                    out = _mup.set_user_whatsapp_number(
+                        DB_PATH,
+                        firm_code=portal_user['firm_code'],
+                        client_code=portal_user['client_code'],
+                        user_id=target_id,
+                        raw_number=raw_number or None,
+                        actor_email=portal_user['email'],
+                    )
+                except ValueError as exc:
+                    self._user_portal_redirect(
+                        user_token, "admin",
+                        error=f"WhatsApp: {exc}",
+                    )
+                    return True
+                if out.get('normalized'):
+                    msg = (
+                        f"Numéro WhatsApp enregistré / saved: "
+                        f"{out['normalized']}"
+                    )
+                else:
+                    msg = (
+                        "Numéro WhatsApp retiré / "
+                        "WhatsApp number cleared"
+                    )
+                self._user_portal_redirect(user_token, "admin", flash=msg)
                 return True
         except PermissionError as exc:
             self._user_portal_redirect(user_token, "admin", error=str(exc))
@@ -26574,6 +26624,59 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/portal_users?code={urlquote(pu_code)}",
                     flash="User removed.",
+                )
+                return
+
+            # CPA-side override: reassign or clear a portal user's
+            # WhatsApp number. Useful when a client admin is away
+            # and an uploader's phone needs to be registered or
+            # revoked without delay.
+            if path == "/clients/portal_users/whatsapp":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                pu_code = normalize_text(form.get("client_code", "")).strip()
+                try:
+                    pu_user_id = int(form.get("user_id", "0") or 0)
+                except ValueError:
+                    pu_user_id = 0
+                raw_wa = normalize_text(
+                    form.get("whatsapp_number", "") or ""
+                ).strip() or None
+                if not pu_user_id or not _require_client_in_firm(pu_code, ctx):
+                    self._flash_redirect(
+                        "/clients", error=t("err_forbidden", lang),
+                    )
+                    return
+                from src.integrations import multi_user_portal as _mup_wa
+                try:
+                    out = _mup_wa.set_user_whatsapp_number(
+                        DB_PATH,
+                        firm_code=ctx.get("firm_code") or "OWNER",
+                        client_code=pu_code,
+                        user_id=pu_user_id,
+                        raw_number=raw_wa,
+                        actor_email=(user.get("username") or "") + " (cpa)",
+                    )
+                except (LookupError, ValueError) as exc:
+                    self._flash_redirect(
+                        f"/clients/portal_users?code={urlquote(pu_code)}",
+                        error=f"WhatsApp: {exc}",
+                    )
+                    return
+                if out.get("normalized"):
+                    msg = (
+                        "Numéro WhatsApp mis à jour / "
+                        f"WhatsApp updated: {out['normalized']}"
+                    )
+                else:
+                    msg = (
+                        "Numéro WhatsApp retiré / "
+                        "WhatsApp cleared"
+                    )
+                self._flash_redirect(
+                    f"/clients/portal_users?code={urlquote(pu_code)}",
+                    flash=msg,
                 )
                 return
 

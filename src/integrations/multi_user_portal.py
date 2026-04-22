@@ -608,6 +608,7 @@ def create_invitation(
     email: str, full_name: str, role: str,
     invited_by: str, lang: str | None = None,
     client_request_id: str | None = None,
+    whatsapp_number: str | None = None,
 ) -> dict[str, Any]:
     """Create or replace a pending invitation for (client, email).
 
@@ -616,11 +617,36 @@ def create_invitation(
     flips to 'cancelled') so resending doesn't orphan invite tokens.
     ``lang='fr'|'en'`` is remembered on the row so the accept page +
     email render in the same language the inviter chose.
+
+    ``whatsapp_number`` (optional, any NANP-ish shape) is normalized
+    to E.164 and validated for uniqueness up front. Storing it on
+    the invitation row lets ``accept_invitation`` copy it onto the
+    user without a separate round-trip.
     """
     if role not in VALID_ROLES:
         raise ValueError(f"invalid role {role!r}")
     if not email or '@' not in email:
         raise ValueError(f"invalid email {email!r}")
+    # Validate + normalize the WhatsApp number (if any) before we
+    # mint the invitation token so typos surface at the admin
+    # without needing a second submit.
+    normalized_wa: str | None = None
+    if whatsapp_number and whatsapp_number.strip():
+        check = validate_whatsapp_number(
+            db_path, raw_number=whatsapp_number,
+            firm_code=firm_code, client_code=client_code,
+        )
+        if not check['valid']:
+            if check['error'] == 'invalid_format':
+                raise ValueError(
+                    "Invalid WhatsApp number format / "
+                    "Format de numéro WhatsApp invalide"
+                )
+            raise ValueError(
+                "WhatsApp number already registered to another user / "
+                "Numéro WhatsApp déjà enregistré à un autre utilisateur"
+            )
+        normalized_wa = check['normalized']
 
     # Item 5: idempotency — if this exact (firm, client, request_id)
     # triple already has an invitation, return it unchanged instead of
@@ -659,8 +685,24 @@ def create_invitation(
         # client_request_id is missing.
         _cpi_cols = {r['name'] for r in conn.execute(
             "PRAGMA table_info(client_portal_invitations)").fetchall()}
+        has_wa_col = 'whatsapp_number' in _cpi_cols
         try:
-            if 'client_request_id' in _cpi_cols and 'invited_language' in _cpi_cols:
+            if ('client_request_id' in _cpi_cols
+                    and 'invited_language' in _cpi_cols
+                    and has_wa_col):
+                cur = conn.execute(
+                    "INSERT INTO client_portal_invitations "
+                    "(firm_code, client_code, email, full_name, invited_role, "
+                    " invitation_token, invited_by, invited_at, expires_at, "
+                    " status, invited_language, client_request_id, "
+                    " whatsapp_number) "
+                    "VALUES (?,?,?,?,?,?,?,?,?, 'pending', ?, ?, ?)",
+                    (firm_code, client_code, email, full_name, role, token,
+                     invited_by, now, expires, invited_language,
+                     client_request_id, normalized_wa),
+                )
+            elif ('client_request_id' in _cpi_cols
+                    and 'invited_language' in _cpi_cols):
                 cur = conn.execute(
                     "INSERT INTO client_portal_invitations "
                     "(firm_code, client_code, email, full_name, invited_role, "
@@ -780,6 +822,24 @@ def accept_invitation(
         role=inv['invited_role'], invited_by=inv['invited_by'] or 'cpa',
         status='active',
     )
+    # If the invite staged a WhatsApp number, promote it onto the
+    # new user row. Re-validates in case the number was claimed by
+    # someone else between invite creation + acceptance.
+    invited_wa = inv.get('whatsapp_number')
+    if invited_wa:
+        try:
+            set_user_whatsapp_number(
+                db_path, firm_code=inv['firm_code'],
+                client_code=inv['client_code'],
+                user_id=user['id'],
+                raw_number=invited_wa,
+                actor_email=inv.get('invited_by') or 'cpa',
+            )
+            user = get_user(db_path, user_id=user['id']) or user
+        except ValueError:
+            # Collision at accept time → leave the user row
+            # without a WhatsApp number; admin can reassign.
+            pass
     with _open(db_path) as conn:
         conn.execute(
             "UPDATE client_portal_invitations SET status='accepted', "
@@ -1074,6 +1134,7 @@ def render_cpa_portal_users(
             f'<div class="flash error">{_esc(flash_error)}</div>'
         )
 
+    from src.integrations.phone_normalizer import format_display
     rows = ''
     for u in users:
         role = _esc(u.get('role') or '')
@@ -1090,10 +1151,30 @@ def render_cpa_portal_users(
                 'style="background:#dc2626;color:white;">Force remove</button>'
                 '</form>'
             )
+        wa_raw = u.get('whatsapp_number') or ''
+        wa_display = _esc(format_display(wa_raw)) if wa_raw else (
+            '<em style="color:#6b7280;">Non enregistré / '
+            'Not registered</em>'
+        )
+        wa_form = (
+            '<form method="POST" '
+            'action="/clients/portal_users/whatsapp" '
+            'style="display:inline-flex;gap:4px;margin-top:4px;">'
+            f'<input type="hidden" name="client_code" value="{code}">'
+            f'<input type="hidden" name="user_id" value="{u["id"]}">'
+            f'<input type="text" name="whatsapp_number" '
+            f'value="{_esc(wa_raw)}" '
+            'placeholder="+1 (514) 555-0100" '
+            'style="width:150px;font-size:12px;">'
+            '<button type="submit" style="font-size:12px;">'
+            'Override</button></form>'
+        )
+        wa_cell = f'<div style="font-size:12px;">{wa_display}</div>{wa_form}'
         rows += (
             f'<tr><td>{_esc(u.get("full_name") or "")}</td>'
             f'<td>{_esc(u.get("email") or "")}</td>'
             f'<td>{role}</td><td>{status}</td>'
+            f'<td>{wa_cell}</td>'
             f'<td>{int(u.get("upload_count") or 0)}</td>'
             f'<td>{_esc(u.get("last_active_at") or "never")}</td>'
             f'<td>{actions}</td></tr>'
@@ -1128,9 +1209,10 @@ def render_cpa_portal_users(
         '<h3>Users</h3>'
         '<table style="width:100%;border-collapse:collapse;">'
         '<thead><tr><th>Name</th><th>Email</th><th>Role</th>'
-        '<th>Status</th><th>Uploads</th><th>Last active</th>'
+        '<th>Status</th><th>WhatsApp</th>'
+        '<th>Uploads</th><th>Last active</th>'
         '<th>CPA override</th></tr></thead>'
-        f'<tbody>{rows or "<tr><td colspan=7>No users yet.</td></tr>"}</tbody>'
+        f'<tbody>{rows or "<tr><td colspan=8>No users yet.</td></tr>"}</tbody>'
         '</table>'
         '<h3>Pending invitations</h3>'
         '<table style="width:100%;border-collapse:collapse;">'
@@ -1155,6 +1237,7 @@ def render_user_portal_admin(
     invitations: list[dict[str, Any]] | None = None,
     flash: str = '', flash_error: str = '',
 ) -> str:
+    from src.integrations.phone_normalizer import format_display
     name = _esc(client.get('client_name') or client.get('client_code') or '')
     flash_html = ''
     if flash:
@@ -1177,6 +1260,28 @@ def render_user_portal_admin(
         full_name = _esc(u.get('full_name') or '')
         uploads = int(u.get('upload_count') or 0)
         last = _esc(u.get('last_active_at') or 'never')
+        wa_raw = u.get('whatsapp_number') or ''
+        if wa_raw:
+            wa_display_html = (
+                f'<div style="font-size:12px;color:#374151;">'
+                f'{_esc(format_display(wa_raw))}</div>'
+            )
+        else:
+            wa_display_html = (
+                '<div class="muted">'
+                '<em>Non enregistré / Not registered</em></div>'
+            )
+        wa_cell = wa_display_html + (
+            f'<form method="POST" '
+            f'action="/cp/{_esc(user_token)}/users/{uid}/whatsapp" '
+            'style="display:inline-flex;gap:4px;align-items:center;">'
+            f'<input type="text" name="whatsapp_number" '
+            f'value="{_esc(wa_raw)}" placeholder="+1 (514) 555-0100" '
+            'style="width:150px;" data-wa-field="1">'
+            '<button type="submit" style="font-size:12px;">'
+            'Enregistrer / Save</button>'
+            '</form>'
+        )
         actions = ''
         if status == 'active':
             actions += (
@@ -1217,6 +1322,7 @@ def render_user_portal_admin(
         user_rows += (
             f'<tr><td>{full_name}</td><td>{email}</td>'
             f'<td>{role}</td><td>{status}</td>'
+            f'<td>{wa_cell}</td>'
             f'<td>{uploads}</td><td>{last}</td>'
             f'<td>{actions}</td></tr>'
         )
@@ -1234,35 +1340,50 @@ def render_user_portal_admin(
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<title>Team admin</title>'
-        '<style>body{font-family:system-ui,Arial;max-width:900px;'
+        '<style>body{font-family:system-ui,Arial;max-width:1000px;'
         'margin:2rem auto;padding:1rem;}'
         'table{width:100%;border-collapse:collapse;margin:1rem 0;}'
-        'th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;}'
+        'th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;'
+        'vertical-align:top;font-size:14px;}'
         'form.inline{display:inline;}'
         '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
         'border-radius:6px;margin-bottom:1rem;}'
+        '.muted{color:#6b7280;font-size:12px;}'
+        '.wa-ok{color:#166534;font-size:12px;}'
+        '.wa-bad{color:#b91c1c;font-size:12px;}'
         '</style></head><body>'
         f'<p><a href="/cp/{_esc(user_token)}/upload">&larr; Back to upload</a></p>'
         f'<h1>{name} — team admin</h1>'
         f'{flash_html}'
-        '<div class="card"><h2>Invite someone</h2>'
+        '<div class="card"><h2>Invite someone / Inviter quelqu\'un</h2>'
         f'<form method="POST" action="/cp/{_esc(user_token)}/invite" '
         'id="portal-invite-form" '
         'onsubmit="return _inviteSubmit(this);" '
-        'style="display:grid;grid-template-columns:1fr 1fr 120px auto;gap:8px;">'
+        'style="display:grid;grid-template-columns:1fr 1fr 180px 120px auto;'
+        'gap:8px;align-items:start;">'
         # Item 5: client_request_id minted per form render; double-
         # click submits the same id twice, backend replays cached row.
         f'<input type="hidden" name="client_request_id" value="'
         f'{_esc(_invite_request_id())}">'
         '<input type="email" name="email" placeholder="Email" required>'
-        '<input type="text" name="full_name" placeholder="Full name">'
+        '<input type="text" name="full_name" placeholder="Full name / Nom">'
+        '<input type="text" name="whatsapp_number" id="invite-wa-field" '
+        'placeholder="WhatsApp (optional / optionnel)" '
+        'data-wa-field="1">'
         '<select name="role">'
         '<option value="contributor">Contributor</option>'
         '<option value="admin">Admin</option>'
         '</select>'
         '<button type="submit" id="portal-invite-btn" class="primary" '
         'style="background:#1e40af;color:white;padding:8px 14px;border:none;">'
-        'Send invitation</button></form>'
+        'Send invitation</button>'
+        '<div id="invite-wa-hint" class="muted" '
+        'style="grid-column:1 / -1;">'
+        "Les utilisateurs enregistrés peuvent envoyer des reçus par "
+        "WhatsApp depuis ce numéro. / Registered users can send "
+        "receipts via WhatsApp from this number."
+        '</div>'
+        '</form>'
         '<script>'
         'function _inviteSubmit(f){'
         'var b=document.getElementById("portal-invite-btn");'
@@ -1274,12 +1395,45 @@ def render_user_portal_admin(
         'b.style.background="#1e40af";b.style.cursor="pointer";'
         'b.textContent="Send invitation";}, 30000);}'
         'return true;}'
+        # Live WhatsApp validation on any input with data-wa-field.
+        # Calls /cp/<tok>/validate_whatsapp and renders a hint beside
+        # the field. Debounced so we don't hammer the endpoint on
+        # every keystroke.
+        '(function(){'
+        f'var base="/cp/{_esc(user_token)}/validate_whatsapp";'
+        'function attach(inp){'
+        'var hint=document.createElement("span");'
+        'hint.className="muted";hint.style.marginLeft="6px";'
+        'inp.parentNode.insertBefore(hint, inp.nextSibling);'
+        'var t=null;'
+        'inp.addEventListener("input", function(){'
+        'clearTimeout(t);var v=inp.value.trim();'
+        'if(!v){hint.textContent="";return;}'
+        't=setTimeout(function(){'
+        'var fd=new FormData();fd.append("number", v);'
+        'if(inp.dataset.userId){fd.append("user_id", inp.dataset.userId);}'
+        'fetch(base,{method:"POST",body:fd}).then(function(r){return r.json();})'
+        '.then(function(j){'
+        'if(j.valid){hint.className="wa-ok";'
+        'hint.textContent="✓ " + (j.normalized || "OK");}'
+        'else if(j.error==="already_used"){hint.className="wa-bad";'
+        'hint.textContent=j.used_in_firm ? '
+        '"Already registered / Déjà enregistré (firm)" : '
+        '"Already registered at another firm";}'
+        'else{hint.className="wa-bad";'
+        'hint.textContent="Invalid format / Format invalide";}'
+        '}).catch(function(){});'
+        '}, 350);'
+        '});}'
+        'document.querySelectorAll("[data-wa-field]").forEach(attach);'
+        '})();'
         '</script>'
         '</div>'
-        '<h2>Team members</h2>'
+        '<h2>Team members / Membres</h2>'
         '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th>'
-        '<th>Status</th><th>Uploads</th><th>Last active</th><th>Actions</th></tr></thead>'
-        f'<tbody>{user_rows or "<tr><td colspan=7>No members yet.</td></tr>"}</tbody>'
+        '<th>Status</th><th>WhatsApp</th>'
+        '<th>Uploads</th><th>Last active</th><th>Actions</th></tr></thead>'
+        f'<tbody>{user_rows or "<tr><td colspan=8>No members yet.</td></tr>"}</tbody>'
         '</table>'
         '<h2>Pending invitations</h2>'
         '<table><thead><tr><th>Email</th><th>Role</th>'
