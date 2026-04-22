@@ -1040,6 +1040,10 @@ def bootstrap_schema() -> None:
             ("uploaded_by_portal_user_id", "INTEGER"),
             ("uploader_name",              "TEXT"),
             ("uploader_email",             "TEXT"),
+            # Channel the document arrived on ('portal', 'whatsapp',
+            # 'email', 'api', 'manual'). Defaulting to 'portal' keeps
+            # existing reports correct for pre-WhatsApp rows.
+            ("uploaded_via_channel",       "TEXT DEFAULT 'portal'"),
         ):
             if col not in existing:
                 try:
@@ -1646,6 +1650,9 @@ def bootstrap_schema() -> None:
                 removed_at TEXT,
                 version INTEGER DEFAULT 1,
                 first_tour_completed_at TEXT,
+                whatsapp_number TEXT,
+                whatsapp_verified INTEGER DEFAULT 0,
+                whatsapp_verified_at TEXT,
                 UNIQUE(firm_code, client_code, email)
             )
         """)
@@ -1661,6 +1668,28 @@ def bootstrap_schema() -> None:
                 )
             except sqlite3.OperationalError:
                 pass
+        # WhatsApp identity columns: each portal user may tie one
+        # E.164 number so inbound Twilio media can be attributed.
+        for _col, _typedef in (
+            ('whatsapp_number', 'TEXT'),
+            ('whatsapp_verified', 'INTEGER DEFAULT 0'),
+            ('whatsapp_verified_at', 'TEXT'),
+        ):
+            if _col not in _cpu_cols:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE client_portal_users "
+                        f"ADD COLUMN {_col} {_typedef}"
+                    )
+                except sqlite3.OperationalError:
+                    pass
+        # Partial unique index keeps the number unique inside a firm
+        # without penalising rows that never register one.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_cpu_whatsapp_firm "
+            "ON client_portal_users(firm_code, whatsapp_number) "
+            "WHERE whatsapp_number IS NOT NULL"
+        )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cpu_token "
             "ON client_portal_users(user_token)"

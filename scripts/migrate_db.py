@@ -1346,6 +1346,29 @@ def run_migration(db_path: Path = DB_PATH) -> None:
         ])
 
         # ------------------------------------------------------------------ #
+        # WhatsApp identity + ingest channel tracking
+        # Expected by: src/integrations/whatsapp.py (per-user attribution)
+        # ------------------------------------------------------------------ #
+        changed += add_missing(conn, "client_portal_users", [
+            ("whatsapp_number",      "TEXT"),
+            ("whatsapp_verified",    "INTEGER DEFAULT 0"),
+            ("whatsapp_verified_at", "TEXT"),
+        ])
+        # Partial unique index: two users inside the same firm can't
+        # share a number; NULL rows are exempt.
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_cpu_whatsapp_firm "
+                "ON client_portal_users(firm_code, whatsapp_number) "
+                "WHERE whatsapp_number IS NOT NULL"
+            )
+        except sqlite3.OperationalError:
+            pass
+        changed += add_missing(conn, "documents", [
+            ("uploaded_via_channel", "TEXT DEFAULT 'portal'"),
+        ])
+
+        # ------------------------------------------------------------------ #
         # Trap 9: gst_filings — amendment tracking columns
         # Expected by: src/engines/amendment_engine.py
         # ------------------------------------------------------------------ #
