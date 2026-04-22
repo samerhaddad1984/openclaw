@@ -447,6 +447,127 @@ def mark_active(
 
 
 # ---------------------------------------------------------------------------
+# WhatsApp identity
+# ---------------------------------------------------------------------------
+#
+# A portal user can register at most one WhatsApp number; that number
+# is globally unique because the Twilio webhook has no other way to
+# disambiguate two people who happen to register the same handset
+# across firms. We still enforce firm-scoped uniqueness explicitly
+# even though the DB index covers it, so the error message we show
+# can distinguish "already used in this firm" from "used at a
+# different firm" (the admin cares about the former, the CPA about
+# the latter).
+
+
+def validate_whatsapp_number(
+    db_path: Path | str, *,
+    raw_number: str,
+    firm_code: str,
+    client_code: str,
+    current_user_id: int | None = None,
+) -> dict[str, Any]:
+    """Check if *raw_number* can be saved for this user.
+
+    Returns a dict::
+
+        {
+            'valid': bool,
+            'normalized': str | None,
+            'error': str | None,
+            'already_used': bool,
+            'used_in_firm': bool,  # vs. another firm
+        }
+
+    ``current_user_id`` lets edit flows accept the number they
+    already own without flagging a "duplicate".
+    """
+    from src.integrations.phone_normalizer import normalize_phone
+    normalized = normalize_phone(raw_number)
+    if normalized is None:
+        return {
+            'valid': False,
+            'normalized': None,
+            'error': 'invalid_format',
+            'already_used': False,
+            'used_in_firm': False,
+        }
+    with _open(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, firm_code, client_code FROM client_portal_users "
+            "WHERE whatsapp_number=? "
+            "AND COALESCE(status,'invited') != 'removed'",
+            (normalized,),
+        ).fetchone()
+    if row and row['id'] != current_user_id:
+        return {
+            'valid': False,
+            'normalized': normalized,
+            'error': 'already_used',
+            'already_used': True,
+            'used_in_firm': row['firm_code'] == firm_code,
+        }
+    return {
+        'valid': True,
+        'normalized': normalized,
+        'error': None,
+        'already_used': False,
+        'used_in_firm': False,
+    }
+
+
+def set_user_whatsapp_number(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str, user_id: int,
+    raw_number: str | None, actor_email: str,
+) -> dict[str, Any]:
+    """Attach (or clear) a WhatsApp number on a portal user row.
+
+    Pass ``raw_number=None`` (or empty) to clear. Raises ``ValueError``
+    on invalid format and on uniqueness collisions — callers should
+    surface the message to the UI.
+    """
+    if raw_number is None or not str(raw_number).strip():
+        with _open(db_path) as conn:
+            conn.execute(
+                "UPDATE client_portal_users SET whatsapp_number=NULL, "
+                "whatsapp_verified=0, whatsapp_verified_at=NULL "
+                "WHERE id=? AND firm_code=? AND client_code=?",
+                (user_id, firm_code, client_code),
+            )
+            _audit(conn, firm_code=firm_code, client_code=client_code,
+                    actor_email=actor_email,
+                    action='whatsapp_number_cleared',
+                    portal_user_id=user_id, detail='')
+            conn.commit()
+        return {'normalized': None}
+
+    check = validate_whatsapp_number(
+        db_path, raw_number=raw_number,
+        firm_code=firm_code, client_code=client_code,
+        current_user_id=user_id,
+    )
+    if not check['valid']:
+        if check['error'] == 'invalid_format':
+            raise ValueError("Invalid WhatsApp number format")
+        raise ValueError("WhatsApp number already registered to another user")
+    normalized = check['normalized']
+    with _open(db_path) as conn:
+        conn.execute(
+            "UPDATE client_portal_users SET whatsapp_number=?, "
+            "whatsapp_verified=1, whatsapp_verified_at=? "
+            "WHERE id=? AND firm_code=? AND client_code=?",
+            (normalized, _iso_now(), user_id, firm_code, client_code),
+        )
+        _audit(conn, firm_code=firm_code, client_code=client_code,
+                actor_email=actor_email,
+                action='whatsapp_number_set',
+                portal_user_id=user_id, detail=normalized)
+        conn.commit()
+    return {'normalized': normalized}
+
+
+# ---------------------------------------------------------------------------
 # Invitation lifecycle
 # ---------------------------------------------------------------------------
 

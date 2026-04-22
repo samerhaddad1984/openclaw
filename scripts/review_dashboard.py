@@ -19377,12 +19377,64 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return self._handle_user_portal_invite(
                 raw, ct, client, portal_user, user_token,
             )
+        if section == "validate_whatsapp":
+            return self._handle_user_portal_validate_whatsapp(
+                raw, ct, client, portal_user, user_token,
+            )
         if section.startswith("users/"):
             return self._handle_user_portal_user_action(
                 section, raw, ct, client, portal_user, user_token,
             )
 
         self._send_html(_mup.render_invalid_token(), status=404)
+        return True
+
+    def _handle_user_portal_validate_whatsapp(
+        self, raw, ct, client, portal_user, user_token,
+    ):
+        """Admin-only: live validation for the invite/edit form.
+
+        Used by JS on the admin page so the "Available" /
+        "Already registered" hint can render before submit.
+        """
+        from src.integrations import multi_user_portal as _mup
+        if (portal_user.get('role') or '') != 'admin':
+            self._send_json({'valid': False, 'error': 'forbidden'},
+                              status=403)
+            return True
+        # Accept either form-encoded or JSON.
+        raw_number = ''
+        target_user_id = None
+        if 'application/json' in (ct or '').lower():
+            try:
+                payload = json.loads(raw.decode('utf-8') or '{}')
+                raw_number = str(payload.get('number') or '')
+                target_user_id = payload.get('user_id')
+            except Exception:
+                raw_number = ''
+        else:
+            form = urllib.parse.parse_qs(
+                raw.decode('utf-8'), keep_blank_values=True,
+            )
+            raw_number = (form.get('number', [''])[0] or '').strip()
+            try:
+                raw_user_id = (form.get('user_id', [''])[0] or '').strip()
+                target_user_id = int(raw_user_id) if raw_user_id else None
+            except ValueError:
+                target_user_id = None
+        check = _mup.validate_whatsapp_number(
+            DB_PATH, raw_number=raw_number,
+            firm_code=portal_user['firm_code'],
+            client_code=portal_user['client_code'],
+            current_user_id=target_user_id,
+        )
+        self._send_json({
+            'valid': check['valid'],
+            'normalized': check['normalized'],
+            'error': check['error'],
+            'already_used': check['already_used'],
+            'used_in_firm': check['used_in_firm'],
+        })
         return True
 
     def _handle_user_portal_upload(self, raw, ct, client, portal_user,
