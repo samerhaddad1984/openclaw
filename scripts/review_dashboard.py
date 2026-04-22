@@ -3103,6 +3103,7 @@ def get_documents(
             d.manual_hold_reason, d.manual_hold_by, d.manual_hold_at,
             d.fraud_flags, d.substance_flags,
             d.uploaded_by_portal_user_id, d.uploader_name, d.uploader_email,
+            COALESCE(d.uploaded_via_channel, 'portal') AS uploaded_via_channel,
             COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
             da.assigned_by, da.assigned_at, da.note AS assignment_note,
             pj.posting_id, pj.posting_status, pj.approval_state,
@@ -3157,6 +3158,8 @@ def get_document(document_id: str) -> dict | None:
                 COALESCE(d.deposit_allocated, 0) AS deposit_allocated,
                 COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
                 da.assigned_by, da.assigned_at, da.note AS assignment_note,
+                d.uploader_name, d.uploader_email,
+                COALESCE(d.uploaded_via_channel, 'portal') AS uploaded_via_channel,
                 pj.posting_id, pj.posting_status, pj.approval_state,
                 pj.reviewer AS posting_reviewer, pj.external_id,
                 pj.payload_json AS posting_payload_json,
@@ -16017,10 +16020,20 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         try:
             from src.integrations.queue_filters import (
                 render_uploader_badge as _render_upl_badge,
+                render_channel_badge as _render_chan_badge,
             )
             _uploader_badge_html = _render_upl_badge(
                 row.get("uploader_name"), row.get("uploader_email"),
             )
+            # Channel chip next to the uploader so the queue shows
+            # at a glance whether a doc arrived via portal or WhatsApp.
+            # Suppress the 'portal' chip — it's the default and
+            # would add noise on every row.
+            _channel_val = (row.get("uploaded_via_channel") or "").lower()
+            if _channel_val and _channel_val != 'portal':
+                _uploader_badge_html += _render_chan_badge(
+                    _channel_val, lang=lang,
+                )
         except Exception:
             _uploader_badge_html = ""
         row_html.append(f"""<tr class="data-row" onclick="toggleRowDetail('{_detail_id}')">
@@ -16867,6 +16880,33 @@ def _render_decision_cards(cards: list[dict[str, Any]], document_id: str) -> str
 # Document detail page
 # ---------------------------------------------------------------------------
 
+def _render_uploader_attribution(row, *, lang: str = "fr") -> str:
+    """"Uploaded by Marie via WhatsApp" with a channel badge.
+
+    Handles three cases:
+    - portal user identified → name + email + channel badge
+    - anonymous (legacy) → fallback label + channel badge if non-portal
+    - missing column → empty string
+    """
+    try:
+        from src.integrations.queue_filters import (
+            render_channel_badge as _chan_badge,
+        )
+    except Exception:
+        _chan_badge = lambda *_a, **_kw: ''  # noqa: E731
+    name = (row.get("uploader_name") or "").strip()
+    email = (row.get("uploader_email") or "").strip()
+    channel = (row.get("uploaded_via_channel") or "portal").lower()
+    badge = _chan_badge(channel, lang=lang) if channel != 'portal' else ''
+    if name or email:
+        who = esc(name or email)
+        if email and name:
+            who = f'{esc(name)} <span class="muted" style="color:#6b7280;">({esc(email)})</span>'
+        return f'{who} {badge}'
+    anon = "Anonyme / Anonymous"
+    return f'<em class="muted">{anon}</em> {badge}'
+
+
 def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                     flash: str, flash_error: str, lang: str = "fr") -> str:
     row = get_document(document_id)
@@ -17237,6 +17277,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             <div><strong>{esc(t("doc_field_amount", lang))}</strong><div>{esc(row["amount"])}</div></div>
             <div><strong>{esc(t("doc_field_date", lang))}</strong><div>{esc(row["document_date"])}</div></div>
             <div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>
+            <div><strong>{"Téléversé par / Uploaded by" if lang == "fr" else "Uploaded by / Téléversé par"}</strong><div>{_render_uploader_attribution(row, lang=lang)}</div></div>
             {_summary_gl_cell}
         </div>
     </div>

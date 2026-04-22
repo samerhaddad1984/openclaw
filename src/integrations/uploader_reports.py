@@ -117,6 +117,34 @@ def aggregate(
         )
     where_sql = 'WHERE ' + ' AND '.join(where) if where else ''
 
+    # Detect whether the optional channel column exists so older DBs
+    # (pre-migration) still produce a report — they just won't show a
+    # channel breakdown. Same idea as the drift guard: degrade, don't
+    # crash.
+    with _open(db_path) as _probe:
+        _doc_cols = {
+            r['name'] for r in
+            _probe.execute("PRAGMA table_info(documents)").fetchall()
+        }
+    if 'uploaded_via_channel' in _doc_cols:
+        channel_exprs = (
+            ",\n          SUM(CASE WHEN LOWER(COALESCE("
+            "d.uploaded_via_channel,'portal')) "
+            "= 'portal' THEN 1 ELSE 0 END) AS portal_count"
+            ",\n          SUM(CASE WHEN LOWER(COALESCE("
+            "d.uploaded_via_channel,'')) "
+            "= 'whatsapp' THEN 1 ELSE 0 END) AS whatsapp_count"
+            ",\n          SUM(CASE WHEN LOWER(COALESCE("
+            "d.uploaded_via_channel,'')) "
+            "= 'email' THEN 1 ELSE 0 END) AS email_count"
+        )
+    else:
+        # Fallback: every row counts as 'portal' for reporting.
+        channel_exprs = (
+            ",\n          COUNT(*) AS portal_count"
+            ",\n          0 AS whatsapp_count"
+            ",\n          0 AS email_count"
+        )
     # We need:
     # - uploader identity (email + name)
     # - client_code (the uploader can belong to multiple clients; group
@@ -124,6 +152,7 @@ def aggregate(
     # - role (looked up from client_portal_users when present)
     # - count, sum, first/last date
     # - status breakdown
+    # - channel breakdown (portal vs whatsapp vs email etc.)
     sql = f"""
         SELECT
           COALESCE(d.uploader_email,'__anonymous__') AS uploader_email,
@@ -141,6 +170,7 @@ def aggregate(
                     ('posted','approved','ready') THEN 1 ELSE 0 END) AS approved_count,
           SUM(CASE WHEN LOWER(COALESCE(d.review_status,'')) IN
                     ('rejected','ignored','deleted') THEN 1 ELSE 0 END) AS rejected_count
+          {channel_exprs}
         FROM documents d
         LEFT JOIN client_portal_users cpu
           ON cpu.client_code = d.client_code
@@ -304,6 +334,18 @@ def render_report_page(
     row_html = ''
     for r in rows:
         uploader_key = r['uploader_email']
+        # Channel breakdown: "45 portal / 23 WhatsApp" — omit zeros
+        # so a single-channel uploader doesn't get a noisy cell.
+        channel_parts = []
+        if int(r.get('portal_count') or 0):
+            channel_parts.append(f'{int(r["portal_count"])} portal')
+        if int(r.get('whatsapp_count') or 0):
+            channel_parts.append(
+                f'{int(r["whatsapp_count"])} WhatsApp'
+            )
+        if int(r.get('email_count') or 0):
+            channel_parts.append(f'{int(r["email_count"])} email')
+        channel_cell = _esc(' / '.join(channel_parts) or '—')
         row_html += (
             '<tr>'
             f'<td>{_esc(r["uploader_name"])}</td>'
@@ -312,6 +354,7 @@ def render_report_page(
             f'<td><span style="background:#e5e7eb;padding:2px 8px;'
             f'border-radius:10px;font-size:12px;">{_esc(r["role"])}</span></td>'
             f'<td style="text-align:right;">{r["document_count"]}</td>'
+            f'<td style="font-size:12px;color:#374151;">{channel_cell}</td>'
             f'<td style="text-align:right;">${r["total_amount"]:,.2f}</td>'
             f'<td style="text-align:right;color:#6b7280;">{r["pending_count"]}</td>'
             f'<td style="text-align:right;color:#16a34a;">{r["approved_count"]}</td>'
@@ -325,7 +368,7 @@ def render_report_page(
             '</tr>'
         )
     if not row_html:
-        row_html = '<tr><td colspan="12" style="text-align:center;color:#6b7280;">No uploads in this range.</td></tr>'
+        row_html = '<tr><td colspan="13" style="text-align:center;color:#6b7280;">No uploads in this range.</td></tr>'
 
     csv_href = (
         f'/reports/by_uploader.csv?start={_esc(start)}'
@@ -357,6 +400,7 @@ def render_report_page(
         f'<th>{_sort_link("client_code", "Client")}</th>'
         '<th>Role</th>'
         f'<th>{_sort_link("document_count", "Docs")}</th>'
+        '<th>Channel</th>'
         f'<th>{_sort_link("total_amount", "Total")}</th>'
         f'<th>{_sort_link("pending_count", "Pending")}</th>'
         f'<th>{_sort_link("approved_count", "Approved")}</th>'
