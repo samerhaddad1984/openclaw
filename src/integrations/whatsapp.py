@@ -83,6 +83,74 @@ def normalize_phone(phone: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Portal-user lookup (multi-user client portal)
+# ---------------------------------------------------------------------------
+
+def get_portal_user_by_whatsapp_phone(
+    phone: str,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Resolve *phone* to a ``client_portal_users`` row, if registered.
+
+    Returns ``{'status': 'active', 'user': {...}, 'client': {...}}`` when
+    an active portal user owns the number, ``{'status': 'suspended'}`` or
+    ``{'status': 'removed'}`` when the number historically belonged to
+    someone whose access has since been revoked, or ``None`` when the
+    number has never been registered to a portal user (caller falls
+    through to legacy lookups).
+
+    ``db_path`` defaults to the module-level ``DB_PATH``; we read the
+    module attribute at call time so tests can ``monkeypatch.setattr``
+    the constant without reimporting.
+    """
+    from src.integrations.phone_normalizer import normalize_phone as _e164
+    normalized = _e164(phone)
+    if normalized is None:
+        return None
+    if db_path is None:
+        db_path = DB_PATH
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT cpu.*, c.client_name, c.language "
+                "FROM client_portal_users cpu "
+                "LEFT JOIN clients c "
+                "  ON c.client_code = cpu.client_code "
+                "WHERE cpu.whatsapp_number = ? "
+                "ORDER BY CASE COALESCE(cpu.status,'invited') "
+                "         WHEN 'active' THEN 0 "
+                "         WHEN 'suspended' THEN 1 "
+                "         WHEN 'removed' THEN 2 "
+                "         ELSE 3 END "
+                "LIMIT 1",
+                (normalized,),
+            ).fetchone()
+    except sqlite3.OperationalError:
+        # Table may not exist on legacy databases; fall through.
+        return None
+    if row is None:
+        return None
+    status = row['status'] or 'invited'
+    user = {
+        'id': row['id'],
+        'firm_code': row['firm_code'],
+        'client_code': row['client_code'],
+        'email': row['email'],
+        'full_name': row['full_name'],
+        'role': row['role'],
+        'status': status,
+        'whatsapp_number': row['whatsapp_number'],
+    }
+    client = {
+        'client_code': row['client_code'],
+        'client_name': row['client_name'],
+        'language': (row['language'] or 'fr'),
+    }
+    return {'status': status, 'user': user, 'client': client}
+
+
+# ---------------------------------------------------------------------------
 # Client lookup
 # ---------------------------------------------------------------------------
 
@@ -345,6 +413,57 @@ def _reply_not_registered() -> str:
     )
 
 
+def _reply_suspended(lang: str) -> str:
+    if lang == 'fr':
+        return (
+            "Votre accès WhatsApp est suspendu. "
+            "Contactez votre administrateur."
+        )
+    return (
+        "Your WhatsApp access is suspended. "
+        "Please contact your administrator."
+    )
+
+
+def _reply_removed(lang: str) -> str:
+    if lang == 'fr':
+        return (
+            "Votre accès WhatsApp a été révoqué. Contactez votre "
+            "administrateur si c'est une erreur."
+        )
+    return (
+        "Your WhatsApp access has been revoked. Contact your "
+        "administrator if this is incorrect."
+    )
+
+
+def _reply_portal_unknown(lang: str) -> str:
+    if lang == 'fr':
+        return (
+            "Ce numéro n'est pas enregistré. Demandez à "
+            "l'administrateur de votre entreprise de l'ajouter, ou "
+            "utilisez votre lien de portail."
+        )
+    return (
+        "This number isn't registered. Please ask your company admin "
+        "to add it, or use your portal link."
+    )
+
+
+def _reply_portal_success(lang: str, name: str, count: int) -> str:
+    if lang == 'fr':
+        plural = 's' if count != 1 else ''
+        return (
+            f"Merci {name}! {count} reçu{plural} reçu{plural}. "
+            "Votre comptable va les examiner."
+        )
+    plural = 's' if count != 1 else ''
+    return (
+        f"Thanks {name}! {count} receipt{plural} received. "
+        "Your accountant will review them."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Core webhook handler
 # ---------------------------------------------------------------------------
@@ -380,12 +499,57 @@ def handle_whatsapp_webhook(
     print(f"DEBUG TWILIO FROM: {from_number}")
     print(f"DEBUG TWILIO ALL: {dict(form_data)}")
 
-    # 2. Look up client by sender phone
-    client      = get_client_by_whatsapp_phone(from_number)
-    lang        = _get_language(client)
-    client_code = (client or {}).get("client_code")
+    # 2a. Portal-user lookup first (multi-user client portal).
+    # A registered portal user identifies the sender by name + email,
+    # which lets the queue show "Uploaded by Marie via WhatsApp".
+    # Suspended / removed users get a specific bilingual rejection
+    # so the operator knows whether the number was ever registered.
+    portal_hit = get_portal_user_by_whatsapp_phone(from_number)
+    portal_user: dict[str, Any] | None = None
+    if portal_hit is not None:
+        p_status = portal_hit['status']
+        p_lang = (portal_hit['client'].get('language') or 'fr').lower()
+        if p_lang not in ('fr', 'en'):
+            p_lang = 'fr'
+        if p_status == 'active':
+            portal_user = portal_hit['user']
+            client = portal_hit['client']
+            lang = p_lang
+            client_code = client['client_code']
+        else:
+            # Suspended or removed — don't fall through to legacy
+            # lookups (we don't want a shared dashboard_users number
+            # to rescue an explicitly revoked uploader).
+            reply = (
+                _reply_suspended(p_lang) if p_status == 'suspended'
+                else _reply_removed(p_lang)
+            )
+            log_messaging_event(
+                client_code=portal_hit['client'].get('client_code'),
+                platform="whatsapp", direction="inbound",
+                message_type="text" if num_media == 0 else "media",
+                status=f"portal_user_{p_status}",
+            )
+            send_whatsapp_message(from_number, reply)
+            return {
+                "ok": True, "reply_body": reply,
+                "client_code": portal_hit['client'].get('client_code'),
+                "results": [],
+            }
+    else:
+        client = None
+        lang = 'fr'
+        client_code = None
 
-    if client is None:
+    # 2b. Legacy lookup (client_whatsapp_numbers, dashboard_users,
+    # clients). Kept so shared company phones that predate the
+    # multi-user portal keep working.
+    if portal_user is None:
+        client      = get_client_by_whatsapp_phone(from_number)
+        lang        = _get_language(client)
+        client_code = (client or {}).get("client_code")
+
+    if portal_user is None and client is None:
         log_messaging_event(
             client_code=None, platform="whatsapp", direction="inbound",
             message_type="text" if num_media == 0 else "media",
@@ -457,6 +621,46 @@ def handle_whatsapp_webhook(
             results.append(result)
             doc_id = result.get("document_id")
             if result.get("ok") and doc_id:
+                # Tag channel + uploader identity on the document
+                # row. Portal users get their full name / email /
+                # numeric user id; legacy (shared-phone) senders
+                # only get channel='whatsapp'.
+                try:
+                    with _open_db() as id_conn:
+                        if portal_user is not None:
+                            id_conn.execute(
+                                "UPDATE documents SET "
+                                " uploaded_via_channel='whatsapp', "
+                                " uploaded_by_portal_user_id=?, "
+                                " uploader_name=?, uploader_email=? "
+                                "WHERE document_id=?",
+                                (portal_user['id'],
+                                 portal_user.get('full_name')
+                                    or portal_user.get('email'),
+                                 portal_user.get('email'),
+                                 doc_id),
+                            )
+                            # Increment the per-user upload counter
+                            # so the admin page's "45 uploads" field
+                            # reflects WhatsApp activity alongside
+                            # portal uploads.
+                            id_conn.execute(
+                                "UPDATE client_portal_users "
+                                "SET upload_count=upload_count+1, "
+                                "last_active_at=? WHERE id=?",
+                                (_utc_now_iso(), portal_user['id']),
+                            )
+                        else:
+                            id_conn.execute(
+                                "UPDATE documents SET "
+                                "uploaded_via_channel='whatsapp' "
+                                "WHERE document_id=?",
+                                (doc_id,),
+                            )
+                        id_conn.commit()
+                except sqlite3.OperationalError:
+                    # Older DBs without the column — safe to skip.
+                    pass
                 # Hybrid assignment: route to the client's primary
                 # employee. Non-fatal on failure.
                 try:
@@ -484,7 +688,15 @@ def handle_whatsapp_webhook(
     any_ok = any(r.get("ok") for r in processed)
 
     if processed:
-        reply = _reply_success(lang) if any_ok else _reply_failure(lang)
+        if any_ok and portal_user is not None:
+            ok_count = sum(1 for r in processed if r.get("ok"))
+            name = (portal_user.get('full_name')
+                    or portal_user.get('email') or '').split('@')[0]
+            reply = _reply_portal_success(lang, name, ok_count)
+        elif any_ok:
+            reply = _reply_success(lang)
+        else:
+            reply = _reply_failure(lang)
         send_whatsapp_message(from_number, reply)
         log_messaging_event(
             client_code=client_code, platform="whatsapp",
