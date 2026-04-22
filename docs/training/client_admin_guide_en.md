@@ -91,6 +91,31 @@ Tab **My documents**:
 - **Approved / Posted**: validated and recorded.
 - **Rejected**: returned with a note; action required.
 
+## 9. Registering WhatsApp numbers for your team
+
+Each person on your team can register one WhatsApp number
+(company handset or personal phone) on their portal row. Once
+registered, they can send receipt photos directly to your firm's
+shared WhatsApp number and every document gets tagged with *their*
+name instead of being anonymous.
+
+On the **Manage team** page, each row has a WhatsApp field. Paste
+the number (any format — we normalize to `+1 (514) 555-0100`) and
+hit *Save*. The live check tells you whether the number is free
+or already claimed by another user.
+
+**Security notes:**
+
+- **Only registered numbers work.** Random numbers messaging the
+  firm Twilio line are rejected with a bilingual "not registered"
+  reply, so nothing unattributed lands in your queue.
+- **Removing a user revokes their WhatsApp.** Next message from
+  that handset gets "your WhatsApp access has been revoked".
+  Suspend is similar but temporary.
+- **Numbers are unique across the whole system.** If someone else
+  at a different firm already registered the same handset, the
+  form tells you so you don't silently collide at Twilio.
+
 ## FAQ
 
 **Q: I lost my personal link.**

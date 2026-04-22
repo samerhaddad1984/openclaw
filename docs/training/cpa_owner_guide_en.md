@@ -133,6 +133,38 @@ Each client has a two-way message thread:
 - Client gets a notification (email and/or WhatsApp per their
   preferences).
 
+## 13. Seeing who sent what
+
+Every document in the review queue carries:
+
+- **Uploader badge** (coloured chip with the person's name).
+- **Channel badge** (Portal / WhatsApp / Email / API / Manual) —
+  the portal chip is hidden to reduce noise, so a WhatsApp chip
+  means exactly that: this receipt arrived via Twilio.
+
+**Queue filters**
+
+- *By uploader* — multi-select dropdown, one entry per uploader
+  currently in scope with counts.
+- *By channel* — same pattern. Use it when you want to verify all
+  WhatsApp submissions in a date range (handy for debugging Twilio
+  routing or auditing a single contributor).
+
+**Per-uploader report**
+
+**Reports → By uploader** shows each contributor's volume with a
+*Channel* column: "Marie: 45 portal / 23 WhatsApp" gives you the
+channel mix at a glance. CSV export includes the channel
+breakdown too.
+
+**CPA override for WhatsApp numbers**
+
+When a client admin is unavailable, **Clients → [Client] →
+Portal users** lets you reassign or clear a WhatsApp number
+directly. Every override is logged with `(cpa)` suffixed to the
+actor email so the audit trail distinguishes CPA actions from
+client actions.
+
 ## FAQ
 
 **Q: How do I revoke a client employee's access immediately?**

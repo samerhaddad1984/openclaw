@@ -49,6 +49,26 @@ Tab **Messages** — two-way thread with your CPA.
 - Ask how to categorize an ambiguous receipt.
 - Report a missing document.
 
+## 6. Sending receipts via WhatsApp
+
+If your company uses WhatsApp, you can snap a receipt and text it
+to the firm's WhatsApp number. The document gets tagged with *your*
+name so your CPA knows exactly who sent it.
+
+**To enable this:**
+
+1. Ask your company admin to register your phone number under your
+   row on the *Manage team* page. This takes 30 seconds.
+2. Once registered, text photos of receipts or PDF invoices to
+   the firm's WhatsApp line. You'll get a confirmation reply in
+   your language with the count.
+3. Your phone number is tied to your identity in the system — if
+   you leave the company, admin can remove your access and the
+   number stops working.
+
+**Supported:** JPG/PNG photos and PDF attachments. Audio notes
+and videos are skipped gracefully.
+
 ## FAQ
 
 **Q: My upload won't go through.**

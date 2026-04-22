@@ -139,6 +139,41 @@ Chaque client a un fil de messages bidirectionnel :
 - Le client reçoit une notification (courriel et / ou WhatsApp selon
   ses préférences).
 
+## 13. Voir qui a envoyé quoi
+
+Chaque document dans la file de révision porte :
+
+- **Badge téléverseur** (pastille colorée avec le nom de la
+  personne).
+- **Badge canal** (Portail / WhatsApp / Courriel / API / Manuel) —
+  la pastille « portail » est cachée pour réduire le bruit, donc
+  une pastille WhatsApp signifie exactement : ce reçu est arrivé
+  via Twilio.
+
+**Filtres de la file**
+
+- *Par téléverseur* — menu multi-sélection, une entrée par
+  téléverseur dans la portée avec décompte.
+- *Par canal* — même principe. Utilisez-le pour vérifier toutes
+  les soumissions WhatsApp sur une période (pratique pour déboguer
+  le routage Twilio ou auditer un contributeur en particulier).
+
+**Rapport par téléverseur**
+
+**Rapports → Par téléverseur** montre le volume de chaque
+contributeur avec une colonne *Canal* : « Marie : 45 portail /
+23 WhatsApp » donne le mix à un coup d'œil. L'exportation CSV
+inclut aussi la ventilation par canal.
+
+**Remplacement CPA pour les numéros WhatsApp**
+
+Quand l'administrateur client n'est pas disponible, **Clients →
+[Client] → Utilisateurs du portail** vous permet de réattribuer
+ou d'effacer un numéro WhatsApp directement. Chaque remplacement
+est journalisé avec `(cpa)` ajouté au courriel de l'acteur pour
+que la piste d'audit distingue les actions du CPA de celles du
+client.
+
 ## Questions fréquentes
 
 **Q : Comment révoquer l'accès d'un employé client immédiatement?**

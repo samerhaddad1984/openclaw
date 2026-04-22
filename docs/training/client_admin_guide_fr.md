@@ -97,6 +97,34 @@ Onglet **Mes documents** :
 - **Approuvé / Posted** : validé et comptabilisé.
 - **Rejeté / Rejected** : renvoyé avec une note; action requise.
 
+## 9. Enregistrer les numéros WhatsApp de votre équipe
+
+Chaque personne de votre équipe peut enregistrer **un** numéro
+WhatsApp (téléphone d'entreprise ou personnel) sur sa ligne du
+portail. Une fois enregistré, elle peut envoyer des photos de reçus
+directement au numéro WhatsApp partagé de votre cabinet, et chaque
+document est attribué à *son* nom plutôt qu'à un anonyme.
+
+Sur la page **Gérer votre équipe**, chaque ligne a un champ
+WhatsApp. Collez le numéro (n'importe quel format — nous le
+normalisons en `+1 (514) 555-0100`) et cliquez *Enregistrer*. La
+validation en direct vous dit si le numéro est libre ou déjà pris
+par un autre utilisateur.
+
+**Notes de sécurité :**
+
+- **Seuls les numéros enregistrés fonctionnent.** Les messages en
+  provenance de numéros inconnus sont rejetés avec une réponse
+  bilingue « non enregistré » — rien d'anonyme n'atterrit dans
+  votre file.
+- **Retirer un utilisateur révoque son accès WhatsApp.** Le
+  prochain message de ce téléphone recevra « votre accès WhatsApp
+  a été révoqué ». *Suspendre* est similaire mais temporaire.
+- **Les numéros sont uniques à l'échelle du système.** Si
+  quelqu'un d'autre dans un autre cabinet a déjà enregistré le
+  même téléphone, le formulaire vous prévient pour éviter une
+  collision silencieuse chez Twilio.
+
 ## Questions fréquentes
 
 **Q : J'ai perdu mon lien personnel.**

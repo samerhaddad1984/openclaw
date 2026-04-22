@@ -50,6 +50,28 @@ Onglet **Messages** — fil bidirectionnel avec votre CPA.
 - Demandez comment catégoriser un reçu ambigu.
 - Signalez un document manquant.
 
+## 6. Envoyer des reçus par WhatsApp
+
+Si votre entreprise utilise WhatsApp, vous pouvez prendre une photo
+d'un reçu et la texter au numéro WhatsApp du cabinet. Le document
+est attribué à *votre* nom, donc votre CPA sait exactement qui a
+envoyé quoi.
+
+**Pour activer :**
+
+1. Demandez à l'administrateur de votre entreprise d'enregistrer
+   votre numéro de téléphone sous votre ligne sur la page *Gérer
+   votre équipe*. Ça prend 30 secondes.
+2. Une fois enregistré, textez des photos de reçus ou des PDF de
+   factures à la ligne WhatsApp du cabinet. Vous recevrez une
+   confirmation dans votre langue avec le décompte.
+3. Votre numéro de téléphone est lié à votre identité dans le
+   système — si vous quittez l'entreprise, l'administrateur peut
+   retirer votre accès et le numéro cesse de fonctionner.
+
+**Formats acceptés :** photos JPG/PNG et pièces jointes PDF. Les
+notes vocales et vidéos sont ignorées sans erreur.
+
 ## Questions fréquentes
 
 **Q : Mon téléversement ne passe pas.**
