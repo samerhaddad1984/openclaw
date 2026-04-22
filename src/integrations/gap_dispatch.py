@@ -134,8 +134,12 @@ def dispatch_get(
 
     # -------------------- Gap 2: review queue --------------------
     if path == '/my_tasks':
+        # Hybrid assignment: review_workflow.assigned_to_email is the
+        # canonical assignee identifier. Fall back to username for
+        # legacy installs that haven't populated dashboard_users.email.
+        assignee = (user.get('email') or user.get('username') or '').strip()
         body = _gr.render_my_tasks(
-            db_path, assignee_email=user.get('username') or '',
+            db_path, assignee_email=assignee,
             lang=lang, flash=flash, flash_error=flash_error,
         )
         _send_layout(handler, page_layout, 'My tasks', body, user=user,

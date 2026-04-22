@@ -2225,6 +2225,32 @@ def get_portfolio_clients(username: str) -> list[str]:
         return []
 
 
+def get_hybrid_assigned_clients(firm_code: str, email: str) -> list[str]:
+    """Return clients where the user is primary or secondary employee.
+
+    Hybrid assignment: an employee can be a client's primary (gets
+    auto-routed new docs) or secondary (covers when primary is out).
+    Either role makes the client visible in the employee's portfolio.
+    """
+    if not email or not firm_code:
+        return []
+    try:
+        with open_db() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT client_code FROM clients "
+                "WHERE firm_code = ? AND ("
+                "  LOWER(primary_employee_email)   = LOWER(?) OR "
+                "  LOWER(secondary_employee_email) = LOWER(?)"
+                ") ORDER BY client_code",
+                (firm_code, email, email),
+            ).fetchall()
+        return [r["client_code"] for r in rows]
+    except sqlite3.OperationalError:
+        # primary_employee_email column may be missing on bootstraps
+        # that pre-date the hybrid migration.
+        return []
+
+
 def get_all_portfolios() -> dict[str, list[str]]:
     try:
         with open_db() as conn:
@@ -2285,12 +2311,28 @@ def build_user_context(user: dict[str, Any]) -> dict[str, Any]:
         role = "employee"
     base = ROLE_CONFIG[role]
     username = normalize_key(user.get("username") or "")
-
-    db_clients = get_portfolio_clients(username) if role == "employee" else []
+    # Hybrid assignment uses email as the assignee identifier (matches
+    # review_workflow.assigned_to_email + clients.primary_employee_email).
+    # Fall back to username when email is unset — many legacy installs
+    # use the email as the username.
+    email = normalize_text(user.get("email") or user.get("username") or "")
     firm_code = normalize_text(user.get("firm_code") or "OWNER") or "OWNER"
+
+    if role == "employee":
+        db_clients = get_portfolio_clients(username)
+        # Hybrid: also include clients where this employee is the
+        # primary or secondary, even if no portfolio row exists.
+        # Union, preserve sort.
+        hybrid_clients = get_hybrid_assigned_clients(firm_code, email)
+        if hybrid_clients:
+            merged = sorted({*db_clients, *hybrid_clients})
+            db_clients = merged
+    else:
+        db_clients = []
 
     return {
         "username": username,
+        "email": email,
         "display_name": normalize_text(user.get("display_name") or user.get("username")),
         "role": role,
         "firm_code": firm_code,
@@ -2844,11 +2886,29 @@ def _build_documents_where(
 
     if not ctx["can_view_all_clients"]:
         allowed = ctx.get("allowed_clients", [])
-        if not allowed:
+        # Hybrid: even when the employee has zero portfolio clients,
+        # an explicit document-level override (review_workflow.
+        # assigned_to_email = me) must still surface the document.
+        # We OR a workflow-override clause with the in-portfolio clause.
+        ctx_email = (ctx.get("email") or "").strip()
+        client_clause: list[str] = []
+        if allowed:
+            placeholders = ",".join("?" for _ in allowed)
+            client_clause.append(
+                f"COALESCE(d.client_code, '') IN ({placeholders})"
+            )
+            params.extend(allowed)
+        if ctx_email:
+            client_clause.append(
+                "EXISTS (SELECT 1 FROM review_workflow rw "
+                " WHERE rw.entity_type='document' "
+                "   AND rw.entity_id = d.document_id "
+                "   AND LOWER(rw.assigned_to_email) = LOWER(?))"
+            )
+            params.append(ctx_email)
+        if not client_clause:
             return "WHERE 1=0", []
-        placeholders = ",".join("?" for _ in allowed)
-        where.append(f"COALESCE(d.client_code, '') IN ({placeholders})")
-        params.extend(allowed)
+        where.append("(" + " OR ".join(client_clause) + ")")
 
     # Firm-scoped isolation: non-owner roles only see documents belonging to
     # clients in their firm. Owner (and legacy OWNER firm) sees everything.
@@ -2864,8 +2924,67 @@ def _build_documents_where(
     elif only_unassigned:
         where.append("COALESCE(da.assigned_to, d.assigned_to, '') = ''")
     elif not ctx["can_view_all_assignments"]:
-        where.append("(COALESCE(da.assigned_to, d.assigned_to, '') = '' OR COALESCE(da.assigned_to, d.assigned_to, '') = ?)")
+        # Hybrid assignment visibility for employees. Three layers, in
+        # priority order; a document shows up if ANY layer matches:
+        #
+        #   1. Explicit document-level override:
+        #        review_workflow.assigned_to_email == me
+        #
+        #   2. No doc-level override AND I'm primary/secondary on the
+        #      client (hybrid client-level routing).
+        #
+        #   3. Legacy fallback (only when the client has NEITHER a
+        #      primary NOR a secondary configured — i.e. the firm
+        #      hasn't migrated this client to the hybrid model):
+        #        - the doc has no override AND
+        #        - it is unassigned at the document_assignments layer
+        #          OR assigned to me by username.
+        #
+        # The legacy fallback prevents regression for firms that
+        # haven't set up primary employees yet, while making sure
+        # hybrid-configured clients route strictly through layers 1+2
+        # (so employees don't see colleagues' explicitly assigned docs).
+        ctx_email_lc = (ctx.get("email") or "").strip().lower()
+        no_override_sql = (
+            "NOT EXISTS (SELECT 1 FROM review_workflow rw_no "
+            " WHERE rw_no.entity_type='document' "
+            "   AND rw_no.entity_id = d.document_id "
+            "   AND COALESCE(rw_no.assigned_to_email,'') <> '')"
+        )
+        no_hybrid_sql = (
+            "NOT EXISTS (SELECT 1 FROM clients c_nohyb "
+            " WHERE c_nohyb.client_code = d.client_code "
+            "   AND (COALESCE(c_nohyb.primary_employee_email,'') <> '' "
+            "     OR COALESCE(c_nohyb.secondary_employee_email,'') <> ''))"
+        )
+        clauses: list[str] = []
+        if ctx_email_lc:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM review_workflow rw "
+                " WHERE rw.entity_type='document' "
+                "   AND rw.entity_id = d.document_id "
+                "   AND LOWER(rw.assigned_to_email) = ?)"
+            )
+            params.append(ctx_email_lc)
+            clauses.append(
+                "(" + no_override_sql + " AND "
+                "EXISTS (SELECT 1 FROM clients c_hyb "
+                " WHERE c_hyb.client_code = d.client_code "
+                "   AND ("
+                "     LOWER(c_hyb.primary_employee_email)   = ? "
+                "  OR LOWER(c_hyb.secondary_employee_email) = ? "
+                "   )))"
+            )
+            params.extend([ctx_email_lc, ctx_email_lc])
+        # Legacy fallback (only when client has no hybrid configured).
+        clauses.append(
+            "(" + no_override_sql + " AND " + no_hybrid_sql + " AND ("
+            "  COALESCE(da.assigned_to, d.assigned_to, '') = '' "
+            "  OR COALESCE(da.assigned_to, d.assigned_to, '') = ?"
+            "))"
+        )
         params.append(ctx["username"])
+        where.append("(" + " OR ".join(clauses) + ")")
 
     wanted = normalize_key(status)
     if wanted:
@@ -16382,7 +16501,25 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     # Access control
     if not ctx["can_view_all_clients"]:
         allowed_keys = {normalize_key(c) for c in ctx.get("allowed_clients", [])}
-        if normalize_key(row["client_code"]) not in allowed_keys:
+        client_ok = normalize_key(row["client_code"]) in allowed_keys
+        # Hybrid override: even outside their portfolio, an employee
+        # may have been explicitly assigned this single document via
+        # review_workflow (e.g. colleague asked for help on a tax item).
+        override_ok = False
+        ctx_email = (ctx.get("email") or "").strip().lower()
+        if not client_ok and ctx_email:
+            try:
+                with open_db() as _conn:
+                    _row = _conn.execute(
+                        "SELECT 1 FROM review_workflow "
+                        "WHERE entity_type='document' AND entity_id=? "
+                        "  AND LOWER(COALESCE(assigned_to_email,'')) = ?",
+                        (document_id, ctx_email),
+                    ).fetchone()
+                override_ok = _row is not None
+            except sqlite3.OperationalError:
+                override_ok = False
+        if not (client_ok or override_ok):
             return page_layout(
                 t("err_access_denied", lang),
                 f'<div class="card"><h2>{esc(t("err_access_denied", lang))}</h2><p><a href="/">{esc(t("btn_back_to_queue", lang))}</a></p></div>',
