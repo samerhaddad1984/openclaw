@@ -135,6 +135,111 @@ def fetch_posted_documents(
         conn.close()
 
 
+def fetch_posted_document_lines(
+    client_code: str,
+    period_start: str,
+    period_end: str,
+    db_path: Path = DB_PATH,
+) -> list[dict[str, Any]]:
+    """Fetch one row per *line* for posted documents in the period.
+
+    Documents that have `invoice_lines` rows get one entry per line, carrying
+    the line's description / amount / GL account / tax code. Documents without
+    line items get a single synthetic line derived from the document totals so
+    the fallback path still emits something.
+
+    The returned dicts expose the same document-level keys as
+    `fetch_posted_documents` plus line-level overrides: `line_number`,
+    `description`, `amount`, `gl_account`, `tax_code`, and `_has_line_items`
+    (True when sourced from `invoice_lines`).
+    """
+    docs = fetch_posted_documents(client_code, period_start, period_end, db_path)
+    if not docs:
+        return []
+
+    out: list[dict[str, Any]] = []
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        for doc in docs:
+            try:
+                # Filter out soft-deleted sources (replaced by split/merge/allocate).
+                try:
+                    lines = conn.execute(
+                        """SELECT line_number, description, quantity, unit_price,
+                                  line_total_pretax, tax_code, gl_account,
+                                  gst_amount, qst_amount, hst_amount
+                             FROM invoice_lines
+                            WHERE document_id = ?
+                              AND (deleted_at IS NULL OR deleted_at = '')
+                            ORDER BY line_number""",
+                        (doc["document_id"],),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    lines = conn.execute(
+                        """SELECT line_number, description, quantity, unit_price,
+                                  line_total_pretax, tax_code, gl_account,
+                                  gst_amount, qst_amount, hst_amount
+                             FROM invoice_lines
+                            WHERE document_id = ?
+                            ORDER BY line_number""",
+                        (doc["document_id"],),
+                    ).fetchall()
+            except sqlite3.OperationalError:
+                lines = []
+
+            if not lines:
+                # Fallback: synthesize one line from the document totals so
+                # downstream exporters can still produce a row.
+                synthetic = dict(doc)
+                synthetic["line_number"] = 1
+                synthetic["description"] = f"{doc.get('vendor', '')} expense"
+                synthetic["_has_line_items"] = False
+                out.append(synthetic)
+                continue
+
+            for line in lines:
+                pre_tax = _dec(line["line_total_pretax"])
+                gst = _dec(line["gst_amount"])
+                qst = _dec(line["qst_amount"])
+                hst = _dec(line["hst_amount"])
+                total = pre_tax + gst + qst + hst
+                row = dict(doc)
+                row["line_number"] = line["line_number"]
+                row["description"] = (line["description"] or "").strip() or (
+                    f"{doc.get('vendor', '')} expense"
+                )
+                # Line-level GL + tax override the document-level value.
+                row["gl_account"] = line["gl_account"] or doc.get("gl_account", "")
+                row["tax_code"] = line["tax_code"] or doc.get("tax_code", "")
+                row["amount"] = float(total) if total > _ZERO else float(pre_tax)
+                row["_line_pre_tax"] = pre_tax
+                row["_line_gst"] = gst
+                row["_line_qst"] = qst
+                row["_line_hst"] = hst
+                row["_has_line_items"] = True
+                out.append(row)
+
+    return out
+
+
+def _line_taxes(row: dict[str, Any]) -> dict[str, Decimal]:
+    """Return per-line tax breakdown. Prefer stored line-level values; fall back
+    to deriving them from the row's amount + tax_code."""
+    if row.get("_has_line_items"):
+        pre_tax = row.get("_line_pre_tax", _ZERO)
+        gst = row.get("_line_gst", _ZERO)
+        qst = row.get("_line_qst", _ZERO)
+        hst = row.get("_line_hst", _ZERO)
+        # If the per-line tax columns are all zero but we *do* have a tax code,
+        # derive from the line amount so non-zero totals reconcile.
+        if gst == _ZERO and qst == _ZERO and hst == _ZERO:
+            derived = _extract_taxes(_dec(row.get("amount")), row.get("tax_code", ""))
+            return {"pre_tax": derived["pre_tax"], "gst": derived["gst"],
+                    "qst": derived["qst"], "hst": derived["hst"]}
+        return {"pre_tax": pre_tax, "gst": gst, "qst": qst, "hst": hst}
+    return _extract_taxes(_dec(row.get("amount")), row.get("tax_code", ""))
+
+
 def _period_dates(period: str) -> tuple[str, str]:
     """Convert '2026-01' to ('2026-01-01', '2026-01-31')."""
     parts = period.strip().split("-")
@@ -149,28 +254,37 @@ def _period_dates(period: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 def generate_csv(docs: list[dict[str, Any]], **_kw: Any) -> bytes:
-    """Generate a UTF-8 BOM CSV with standard columns."""
+    """Generate a UTF-8 BOM CSV with one row per line item.
+
+    `docs` accepts either:
+      - line rows from `fetch_posted_document_lines` (preferred; one row per
+        invoice line), or
+      - document rows from `fetch_posted_documents` (legacy; one row per doc).
+    """
     buf = io.StringIO()
     buf.write("")  # We'll prepend BOM at byte level
     writer = csv.writer(buf)
     writer.writerow([
         "Date", "Vendor", "Description", "GL Account", "Amount",
-        "GST", "QST", "HST", "Tax Code", "Document ID",
+        "GST", "QST", "HST", "Tax Code", "Document ID", "Line Number",
     ])
-    for doc in docs:
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for row in docs:
+        amount = _dec(row.get("amount"))
+        taxes = _line_taxes(row)
         writer.writerow([
-            sanitize_csv_cell(doc.get("document_date", "")),
-            sanitize_csv_cell(doc.get("vendor", "")),
-            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
-            sanitize_csv_cell(doc.get("gl_account", "")),
+            sanitize_csv_cell(row.get("document_date", "")),
+            sanitize_csv_cell(row.get("vendor", "")),
+            sanitize_csv_cell(
+                row.get("description") or f"{row.get('vendor', '')} expense"
+            ),
+            sanitize_csv_cell(row.get("gl_account", "")),
             str(amount),
             str(taxes["gst"]),
             str(taxes["qst"]),
             str(taxes["hst"]),
-            sanitize_csv_cell(doc.get("tax_code", "")),
-            sanitize_csv_cell(doc.get("document_id", "")),
+            sanitize_csv_cell(row.get("tax_code", "")),
+            sanitize_csv_cell(row.get("document_id", "")),
+            sanitize_csv_cell(row.get("line_number", "")),
         ])
     # UTF-8 BOM for Excel French character support
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
@@ -195,32 +309,33 @@ _SAGE50_TAX_MAP = {
 
 
 def generate_sage50(docs: list[dict[str, Any]]) -> bytes:
-    """Generate Sage 50 Canada import CSV."""
+    """Generate Sage 50 Canada import CSV with one row per line item."""
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
         "Date", "Reference", "Description", "Account Number",
         "Debit", "Credit", "Tax Code",
     ])
-    for doc in docs:
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for row in docs:
+        taxes = _line_taxes(row)
         # Sage 50 date format: MM/DD/YYYY
-        raw_date = doc.get("document_date", "")
+        raw_date = row.get("document_date", "")
         try:
             dt = datetime.strptime(raw_date, "%Y-%m-%d")
             sage_date = dt.strftime("%m/%d/%Y")
         except Exception:
             sage_date = raw_date
-        tc = (doc.get("tax_code", "") or "").strip().upper()
+        tc = (row.get("tax_code", "") or "").strip().upper()
         sage_tax = _SAGE50_TAX_MAP.get(tc, "")
         debit = str(taxes["pre_tax"])
         credit = ""
         writer.writerow([
             sanitize_csv_cell(sage_date),
-            sanitize_csv_cell(doc.get("document_id", "")),
-            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
-            sanitize_csv_cell(doc.get("gl_account", "")),
+            sanitize_csv_cell(row.get("document_id", "")),
+            sanitize_csv_cell(
+                row.get("description") or f"{row.get('vendor', '')} expense"
+            ),
+            sanitize_csv_cell(row.get("gl_account", "")),
             debit,
             credit,
             sanitize_csv_cell(sage_tax),
@@ -233,28 +348,29 @@ def generate_sage50(docs: list[dict[str, Any]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 def generate_acomba(docs: list[dict[str, Any]]) -> bytes:
-    """Generate Acomba import file (tab-delimited, French headers)."""
+    """Generate Acomba import file with one row per line item (tab-delimited)."""
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter="\t")
     writer.writerow([
         "No_Pièce", "Date", "No_Compte", "Description",
         "Débit", "Crédit", "TPS", "TVQ",
     ])
-    for doc in docs:
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for row in docs:
+        taxes = _line_taxes(row)
         # Acomba date: YYYYMMDD
-        raw_date = doc.get("document_date", "")
+        raw_date = row.get("document_date", "")
         try:
             dt = datetime.strptime(raw_date, "%Y-%m-%d")
             acomba_date = dt.strftime("%Y%m%d")
         except Exception:
             acomba_date = raw_date.replace("-", "")
         writer.writerow([
-            sanitize_csv_cell(doc.get("document_id", "")),
+            sanitize_csv_cell(row.get("document_id", "")),
             sanitize_csv_cell(acomba_date),
-            sanitize_csv_cell(doc.get("gl_account", "")),
-            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
+            sanitize_csv_cell(row.get("gl_account", "")),
+            sanitize_csv_cell(
+                row.get("description") or f"{row.get('vendor', '')} expense"
+            ),
             str(taxes["pre_tax"]),
             "",
             str(taxes["gst"]),
@@ -268,7 +384,12 @@ def generate_acomba(docs: list[dict[str, Any]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 def generate_qbd_iif(docs: list[dict[str, Any]]) -> bytes:
-    """Generate QuickBooks Desktop IIF (Intuit Interchange Format)."""
+    """Generate QuickBooks Desktop IIF (Intuit Interchange Format).
+
+    Emits one SPL per line item (one SPL per GL account) plus tax SPLs. Input
+    may be document-level rows (legacy) or line-level rows — we group by
+    document_id and preserve each line's GL/description/amount.
+    """
     lines: list[str] = []
     # Header definitions
     lines.append(
@@ -279,45 +400,66 @@ def generate_qbd_iif(docs: list[dict[str, Any]]) -> bytes:
     )
     lines.append("!ENDTRNS")
 
-    for i, doc in enumerate(docs):
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    # Group rows by document_id, preserving insertion order.
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in docs:
+        doc_id = row.get("document_id", "")
+        grouped.setdefault(doc_id, []).append(row)
+
+    for i, (doc_id, doc_rows) in enumerate(grouped.items()):
+        header = doc_rows[0]
         # IIF date: MM/DD/YYYY
-        raw_date = doc.get("document_date", "")
+        raw_date = header.get("document_date", "")
         try:
             dt = datetime.strptime(raw_date, "%Y-%m-%d")
             iif_date = dt.strftime("%m/%d/%Y")
         except Exception:
             iif_date = raw_date
-        vendor = doc.get("vendor", "")
-        doc_id = doc.get("document_id", "")
-        memo = f"{vendor} expense"
-        gl = doc.get("gl_account", "")
+        vendor = header.get("vendor", "")
+
+        # Sum pre-tax + taxes across all lines for the TRNS total.
+        total_pretax = _ZERO
+        total_gst = _ZERO
+        total_qst = _ZERO
+        total_hst = _ZERO
+        for r in doc_rows:
+            taxes = _line_taxes(r)
+            total_pretax += taxes["pre_tax"]
+            total_gst += taxes["gst"]
+            total_qst += taxes["qst"]
+            total_hst += taxes["hst"]
+        trns_amount = total_pretax + total_gst + total_qst + total_hst
+        trns_memo = f"{vendor} expense"
 
         # TRNS line — the total (Accounts Payable credit)
         lines.append(
             f"TRNS\t{i+1}\tBILL\t{iif_date}\tAccounts Payable\t{vendor}\t"
-            f"-{amount}\t{doc_id}\t{memo}\tN\tN\t"
+            f"-{trns_amount}\t{doc_id}\t{trns_memo}\tN\tN\t"
         )
-        # SPL line — the expense account debit
-        lines.append(
-            f"SPL\t{i+1}\tBILL\t{iif_date}\t{gl}\t{taxes['pre_tax']}\t"
-            f"{doc_id}\t{memo}\tN\t\t\t"
-        )
-        # SPL lines for taxes if applicable
-        if taxes["gst"] > _ZERO:
+        # One SPL per line item
+        for r in doc_rows:
+            ltaxes = _line_taxes(r)
+            gl = r.get("gl_account", "")
+            line_memo = r.get("description") or trns_memo
             lines.append(
-                f"SPL\t{i+1}\tBILL\t{iif_date}\tGST Paid\t{taxes['gst']}\t"
+                f"SPL\t{i+1}\tBILL\t{iif_date}\t{gl}\t{ltaxes['pre_tax']}\t"
+                f"{doc_id}\t{line_memo}\tN\t\t\t"
+            )
+        # Aggregated tax SPLs (one per tax type — QBD IIF expects the tax
+        # accounts, not per-line duplicates)
+        if total_gst > _ZERO:
+            lines.append(
+                f"SPL\t{i+1}\tBILL\t{iif_date}\tGST Paid\t{total_gst}\t"
                 f"{doc_id}\tGST\tN\t\t\t"
             )
-        if taxes["qst"] > _ZERO:
+        if total_qst > _ZERO:
             lines.append(
-                f"SPL\t{i+1}\tBILL\t{iif_date}\tQST Paid\t{taxes['qst']}\t"
+                f"SPL\t{i+1}\tBILL\t{iif_date}\tQST Paid\t{total_qst}\t"
                 f"{doc_id}\tQST\tN\t\t\t"
             )
-        if taxes["hst"] > _ZERO:
+        if total_hst > _ZERO:
             lines.append(
-                f"SPL\t{i+1}\tBILL\t{iif_date}\tHST Paid\t{taxes['hst']}\t"
+                f"SPL\t{i+1}\tBILL\t{iif_date}\tHST Paid\t{total_hst}\t"
                 f"{doc_id}\tHST\tN\t\t\t"
             )
         lines.append("ENDTRNS")
@@ -330,16 +472,23 @@ def generate_qbd_iif(docs: list[dict[str, Any]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 def generate_xero(docs: list[dict[str, Any]]) -> bytes:
-    """Generate Xero bank statement import CSV."""
+    """Generate Xero-friendly CSV with one row per line item.
+
+    Xero's "bank statement" format is single-line per transaction, but CPAs
+    importing this into Xero's invoice / bill view expect per-line splits.
+    We emit one row per invoice line and include the GL account + reference
+    so Xero can reconstruct the full coding.
+    """
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
         "Date", "Amount", "Payee", "Description",
         "Reference", "Cheque Number", "Analysed Amount",
+        "Line Number", "Account",
     ])
-    for doc in docs:
-        amount = _dec(doc.get("amount"))
-        raw_date = doc.get("document_date", "")
+    for row in docs:
+        amount = _dec(row.get("amount"))
+        raw_date = row.get("document_date", "")
         # Xero date: DD/MM/YYYY
         try:
             dt = datetime.strptime(raw_date, "%Y-%m-%d")
@@ -349,11 +498,15 @@ def generate_xero(docs: list[dict[str, Any]]) -> bytes:
         writer.writerow([
             sanitize_csv_cell(xero_date),
             str(amount),
-            sanitize_csv_cell(doc.get("vendor", "")),
-            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
-            sanitize_csv_cell(doc.get("document_id", "")),
+            sanitize_csv_cell(row.get("vendor", "")),
+            sanitize_csv_cell(
+                row.get("description") or f"{row.get('vendor', '')} expense"
+            ),
+            sanitize_csv_cell(row.get("document_id", "")),
             "",
             str(amount),
+            sanitize_csv_cell(row.get("line_number", "")),
+            sanitize_csv_cell(row.get("gl_account", "")),
         ])
     return buf.getvalue().encode("utf-8")
 
@@ -363,17 +516,16 @@ def generate_xero(docs: list[dict[str, Any]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 def generate_wave(docs: list[dict[str, Any]]) -> bytes:
-    """Generate Wave Accounting import CSV."""
+    """Generate Wave Accounting import CSV with one row per line item."""
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
         "Transaction Date", "Description", "Debit", "Credit",
         "Account Name", "Tax Name", "Tax Amount",
     ])
-    for doc in docs:
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
-        tc = (doc.get("tax_code", "") or "").strip().upper()
+    for row in docs:
+        taxes = _line_taxes(row)
+        tc = (row.get("tax_code", "") or "").strip().upper()
         tax_name = ""
         tax_amount = _ZERO
         if tc in ("T", "GST_QST", "M"):
@@ -383,11 +535,13 @@ def generate_wave(docs: list[dict[str, Any]]) -> bytes:
             tax_name = "HST"
             tax_amount = taxes["hst"]
         writer.writerow([
-            sanitize_csv_cell(doc.get("document_date", "")),
-            sanitize_csv_cell(f"{doc.get('vendor', '')} expense"),
+            sanitize_csv_cell(row.get("document_date", "")),
+            sanitize_csv_cell(
+                row.get("description") or f"{row.get('vendor', '')} expense"
+            ),
             str(taxes["pre_tax"]),
             "",
-            sanitize_csv_cell(doc.get("gl_account", "")),
+            sanitize_csv_cell(row.get("gl_account", "")),
             sanitize_csv_cell(tax_name),
             str(tax_amount),
         ])
@@ -436,37 +590,41 @@ def generate_excel(docs: list[dict[str, Any]], client_code: str, period: str) ->
                     max_len = max(max_len, len(str(cell.value)))
             ws.column_dimensions[col_letter].width = min(max_len + 3, 40)
 
-    # --- Sheet 1: Transactions ---
+    # --- Sheet 1: Transactions (one row per line item) ---
     ws1 = wb.active
     ws1.title = "Transactions"
     txn_headers = [
         "Date", "Vendor", "Description", "GL Account", "Amount",
-        "GST", "QST", "HST", "Tax Code", "Document ID",
+        "GST", "QST", "HST", "Tax Code", "Document ID", "Line Number",
     ]
     _style_header(ws1, txn_headers)
-    for row_idx, doc in enumerate(docs, 2):
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
-        ws1.cell(row=row_idx, column=1, value=doc.get("document_date", ""))
-        ws1.cell(row=row_idx, column=2, value=doc.get("vendor", ""))
-        ws1.cell(row=row_idx, column=3, value=f"{doc.get('vendor', '')} expense")
-        ws1.cell(row=row_idx, column=4, value=doc.get("gl_account", ""))
+    for row_idx, row in enumerate(docs, 2):
+        amount = _dec(row.get("amount"))
+        taxes = _line_taxes(row)
+        ws1.cell(row=row_idx, column=1, value=row.get("document_date", ""))
+        ws1.cell(row=row_idx, column=2, value=row.get("vendor", ""))
+        ws1.cell(
+            row=row_idx, column=3,
+            value=row.get("description") or f"{row.get('vendor', '')} expense",
+        )
+        ws1.cell(row=row_idx, column=4, value=row.get("gl_account", ""))
         ws1.cell(row=row_idx, column=5, value=float(amount))
         ws1.cell(row=row_idx, column=6, value=float(taxes["gst"]))
         ws1.cell(row=row_idx, column=7, value=float(taxes["qst"]))
         ws1.cell(row=row_idx, column=8, value=float(taxes["hst"]))
-        ws1.cell(row=row_idx, column=9, value=doc.get("tax_code", ""))
-        ws1.cell(row=row_idx, column=10, value=doc.get("document_id", ""))
+        ws1.cell(row=row_idx, column=9, value=row.get("tax_code", ""))
+        ws1.cell(row=row_idx, column=10, value=row.get("document_id", ""))
+        ws1.cell(row=row_idx, column=11, value=row.get("line_number", ""))
     _auto_width(ws1)
 
-    # --- Sheet 2: GST/QST Summary ---
+    # --- Sheet 2: GST/QST Summary (aggregated across lines) ---
     ws2 = wb.create_sheet("GST-QST Summary")
     _style_header(ws2, ["Tax Code", "Count", "Total Amount", "GST", "QST", "HST"])
     tax_summary: dict[str, dict[str, Any]] = {}
-    for doc in docs:
-        tc = (doc.get("tax_code", "") or "").strip().upper() or "NONE"
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for row in docs:
+        tc = (row.get("tax_code", "") or "").strip().upper() or "NONE"
+        amount = _dec(row.get("amount"))
+        taxes = _line_taxes(row)
         if tc not in tax_summary:
             tax_summary[tc] = {"count": 0, "total": _ZERO, "gst": _ZERO, "qst": _ZERO, "hst": _ZERO}
         tax_summary[tc]["count"] += 1
@@ -483,14 +641,13 @@ def generate_excel(docs: list[dict[str, Any]], client_code: str, period: str) ->
         ws2.cell(row=row_idx, column=6, value=float(s["hst"]))
     _auto_width(ws2)
 
-    # --- Sheet 3: Trial Balance ---
+    # --- Sheet 3: Trial Balance (aggregated by GL across lines) ---
     ws3 = wb.create_sheet("Trial Balance")
     _style_header(ws3, ["GL Account", "Debit", "Credit", "Net Balance"])
     gl_totals: dict[str, Decimal] = {}
-    for doc in docs:
-        gl = doc.get("gl_account", "") or "Unassigned"
-        amount = _dec(doc.get("amount"))
-        taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for row in docs:
+        gl = row.get("gl_account", "") or "Unassigned"
+        taxes = _line_taxes(row)
         gl_totals[gl] = gl_totals.get(gl, _ZERO) + taxes["pre_tax"]
     for row_idx, (gl, total) in enumerate(sorted(gl_totals.items()), 2):
         ws3.cell(row=row_idx, column=1, value=gl)
@@ -499,24 +656,33 @@ def generate_excel(docs: list[dict[str, Any]], client_code: str, period: str) ->
         ws3.cell(row=row_idx, column=4, value=float(total))
     _auto_width(ws3)
 
-    # --- Sheet 4: GL Detail ---
+    # --- Sheet 4: GL Detail (one row per line item) ---
     ws4 = wb.create_sheet("GL Detail")
-    _style_header(ws4, ["GL Account", "Date", "Vendor", "Amount", "Tax Code", "Document ID"])
-    gl_docs: dict[str, list[dict]] = {}
-    for doc in docs:
-        gl = doc.get("gl_account", "") or "Unassigned"
-        gl_docs.setdefault(gl, []).append(doc)
+    _style_header(
+        ws4,
+        ["GL Account", "Date", "Vendor", "Description", "Amount", "Tax Code",
+         "Document ID", "Line Number"],
+    )
+    gl_rows: dict[str, list[dict]] = {}
+    for row in docs:
+        gl = row.get("gl_account", "") or "Unassigned"
+        gl_rows.setdefault(gl, []).append(row)
     row_idx = 2
-    for gl in sorted(gl_docs.keys()):
-        for doc in gl_docs[gl]:
-            amount = _dec(doc.get("amount"))
-            taxes = _extract_taxes(amount, doc.get("tax_code", ""))
+    for gl in sorted(gl_rows.keys()):
+        for row in gl_rows[gl]:
+            taxes = _line_taxes(row)
             ws4.cell(row=row_idx, column=1, value=gl)
-            ws4.cell(row=row_idx, column=2, value=doc.get("document_date", ""))
-            ws4.cell(row=row_idx, column=3, value=doc.get("vendor", ""))
-            ws4.cell(row=row_idx, column=4, value=float(taxes["pre_tax"]))
-            ws4.cell(row=row_idx, column=5, value=doc.get("tax_code", ""))
-            ws4.cell(row=row_idx, column=6, value=doc.get("document_id", ""))
+            ws4.cell(row=row_idx, column=2, value=row.get("document_date", ""))
+            ws4.cell(row=row_idx, column=3, value=row.get("vendor", ""))
+            ws4.cell(
+                row=row_idx, column=4,
+                value=row.get("description")
+                or f"{row.get('vendor', '')} expense",
+            )
+            ws4.cell(row=row_idx, column=5, value=float(taxes["pre_tax"]))
+            ws4.cell(row=row_idx, column=6, value=row.get("tax_code", ""))
+            ws4.cell(row=row_idx, column=7, value=row.get("document_id", ""))
+            ws4.cell(row=row_idx, column=8, value=row.get("line_number", ""))
             row_idx += 1
     _auto_width(ws4)
 
@@ -545,7 +711,7 @@ def generate_annual_zip(
         for month in range(1, 13):
             period = f"{year:04d}-{month:02d}"
             start, end = _period_dates(period)
-            docs = fetch_posted_documents(client_code, start, end, db_path)
+            docs = fetch_posted_document_lines(client_code, start, end, db_path)
             all_year_docs.extend(docs)
             csv_bytes = generate_csv(docs)
             zf.writestr(f"OtoCPA_Export_{client_code}_{period}.csv", csv_bytes)
@@ -569,7 +735,7 @@ def generate_annual_zip(
             total_hst = _ZERO
             for doc in month_docs:
                 amt = _dec(doc.get("amount"))
-                taxes = _extract_taxes(amt, doc.get("tax_code", ""))
+                taxes = _line_taxes(doc)
                 total_amt += amt
                 total_gst += taxes["gst"]
                 total_qst += taxes["qst"]
@@ -590,8 +756,7 @@ def generate_annual_zip(
         gl_totals: dict[str, Decimal] = {}
         for doc in all_year_docs:
             gl = doc.get("gl_account", "") or "Unassigned"
-            amt = _dec(doc.get("amount"))
-            taxes = _extract_taxes(amt, doc.get("tax_code", ""))
+            taxes = _line_taxes(doc)
             gl_totals[gl] = gl_totals.get(gl, _ZERO) + taxes["pre_tax"]
         for gl in sorted(gl_totals.keys()):
             tw.writerow([gl, str(gl_totals[gl]), "0.00", str(gl_totals[gl])])

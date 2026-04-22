@@ -238,30 +238,109 @@ class QBOPush(QBOPull):
         keys = doc.keys()
         vendor_name = (doc['vendor'] if 'vendor' in keys else None) or ''
         vendor_qbo_id = self._resolve_vendor_qbo_id(vendor_name)
-        amount = float((doc['amount'] if 'amount' in keys else 0) or 0)
-        account_code = doc['gl_account'] if 'gl_account' in keys else None
-        account_qbo_id = self._resolve_qbo_account_id(account_code) if account_code else None
-
         if not vendor_qbo_id:
             raise RuntimeError(f"No QBO vendor mapped for '{vendor_name}'")
-        if not account_qbo_id:
-            raise RuntimeError(f"No QBO account mapped for GL {account_code}")
+
+        document_id = doc['document_id'] if 'document_id' in keys else None
+        invoice_lines = self._fetch_invoice_lines(document_id) if document_id else []
+
+        if invoice_lines:
+            qbo_lines = self._build_expense_lines_from_invoice_lines(
+                invoice_lines, document_id,
+            )
+        else:
+            # Single-line fallback for documents without OCR line-item extraction.
+            amount = float((doc['amount'] if 'amount' in keys else 0) or 0)
+            account_code = doc['gl_account'] if 'gl_account' in keys else None
+            account_qbo_id = self._resolve_qbo_account_id(account_code) if account_code else None
+            if not account_qbo_id:
+                raise RuntimeError(f"No QBO account mapped for GL {account_code}")
+            qbo_lines = [{
+                'Amount': amount,
+                'DetailType': 'AccountBasedExpenseLineDetail',
+                'Description': vendor_name,
+                'AccountBasedExpenseLineDetail': {
+                    'AccountRef': {'value': account_qbo_id},
+                },
+            }]
 
         return {
             'VendorRef': {'value': vendor_qbo_id},
             'TxnDate': doc['document_date'] if 'document_date' in keys else None,
             'DueDate': doc['due_date'] if 'due_date' in keys else None,
-            'Line': [
-                {
-                    'Amount': amount,
-                    'DetailType': 'AccountBasedExpenseLineDetail',
-                    'Description': doc['vendor'] if 'vendor' in keys else '',
-                    'AccountBasedExpenseLineDetail': {
-                        'AccountRef': {'value': account_qbo_id},
-                    }
-                }
-            ],
+            'Line': qbo_lines,
         }
+
+    def _fetch_invoice_lines(self, document_id: str) -> list[dict[str, Any]]:
+        """Fetch invoice_lines for a document. Returns [] if none or missing.
+
+        Soft-deleted lines (``deleted_at`` set by a split/merge/allocate
+        operation) are excluded so the QBO push reflects the CPA's final
+        line layout, not the raw OCR extraction.
+        """
+        with self._open() as conn:
+            try:
+                # First try the query filtering by deleted_at. If the column
+                # doesn't exist on an older DB, fall back to the unfiltered
+                # SELECT.
+                try:
+                    rows = conn.execute(
+                        """SELECT line_number, description, quantity, unit_price,
+                                  line_total_pretax, tax_code, gl_account
+                             FROM invoice_lines
+                            WHERE document_id = ?
+                              AND (deleted_at IS NULL OR deleted_at = '')
+                            ORDER BY line_number""",
+                        (document_id,),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    rows = conn.execute(
+                        """SELECT line_number, description, quantity, unit_price,
+                                  line_total_pretax, tax_code, gl_account
+                             FROM invoice_lines
+                            WHERE document_id = ?
+                            ORDER BY line_number""",
+                        (document_id,),
+                    ).fetchall()
+            except sqlite3.OperationalError:
+                return []
+        return [dict(r) for r in rows]
+
+    def _build_expense_lines_from_invoice_lines(
+        self,
+        invoice_lines: list[dict[str, Any]],
+        document_id: Optional[str],
+    ) -> list[dict[str, Any]]:
+        """Convert invoice_lines rows into QBO AccountBasedExpenseLineDetail entries.
+
+        Each invoice line becomes a distinct QBO Line with its own AccountRef +
+        (optional) TaxCodeRef + Description. Any line missing a QBO-mapped GL
+        account is a hard error — we never silently collapse detail.
+        """
+        qbo_lines: list[dict[str, Any]] = []
+        for line in invoice_lines:
+            gl_code = line.get('gl_account')
+            account_qbo_id = self._resolve_qbo_account_id(gl_code) if gl_code else None
+            if not account_qbo_id:
+                raise RuntimeError(
+                    f"No QBO account mapped for GL {gl_code!r} on "
+                    f"document_id={document_id} line {line.get('line_number')}"
+                )
+
+            amount = float(line.get('line_total_pretax') or 0)
+            detail: dict[str, Any] = {'AccountRef': {'value': account_qbo_id}}
+            tax_code = line.get('tax_code')
+            if tax_code:
+                detail['TaxCodeRef'] = {'value': str(tax_code)}
+            detail['BillableStatus'] = 'NotBillable'
+
+            qbo_lines.append({
+                'Amount': amount,
+                'DetailType': 'AccountBasedExpenseLineDetail',
+                'Description': line.get('description') or '',
+                'AccountBasedExpenseLineDetail': detail,
+            })
+        return qbo_lines
 
     # ------------------------------------------------------------------
     # Account / vendor resolution
