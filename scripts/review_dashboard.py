@@ -12303,9 +12303,94 @@ def render_portal_invalid_page() -> str:
     )
 
 
+def _build_portal_manifest(
+    token: str, *, lang: str = 'fr', is_multi: bool = False,
+) -> dict:
+    """Return the JSON body for /c/{token}/manifest.json.
+
+    Scope matches the token prefix (``/c/<tok>/`` or ``/cp/<tok>/``)
+    so the installed PWA only intercepts navigation inside the
+    client's own portal.
+    """
+    prefix = '/cp/' if is_multi else '/c/'
+    scope = f'{prefix}{token}/'
+    start_url = f'{scope}upload'
+    if lang == 'fr':
+        name = 'OtoCPA — Portail Client'
+        short = 'OtoCPA'
+        desc = 'Téléversez vos reçus à votre comptable'
+    else:
+        name = 'OtoCPA — Client Portal'
+        short = 'OtoCPA'
+        desc = 'Upload receipts to your accountant'
+    return {
+        'name': name,
+        'short_name': short,
+        'description': desc,
+        'start_url': start_url,
+        'scope': scope,
+        'display': 'standalone',
+        'orientation': 'portrait',
+        'theme_color': '#2a8759',
+        'background_color': '#ffffff',
+        'lang': 'fr-CA' if lang == 'fr' else 'en-CA',
+        'categories': ['business', 'finance', 'productivity'],
+        'icons': [
+            {
+                'src': '/static/pwa/icon-192.png',
+                'sizes': '192x192',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+            {
+                'src': '/static/pwa/icon-512.png',
+                'sizes': '512x512',
+                'type': 'image/png',
+                'purpose': 'any maskable',
+            },
+        ],
+    }
+
+
+def _render_offline_page() -> str:
+    """Bilingual offline fallback served when fetch() fails.
+
+    The service worker redirects navigation requests here when the
+    network is unreachable. Kept intentionally self-contained so the
+    page can render from cache without extra asset fetches.
+    """
+    return (
+        "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>OtoCPA &middot; Hors ligne / Offline</title>"
+        "<style>"
+        "body{font-family:system-ui,-apple-system,sans-serif;"
+        "background:#f3f4f6;color:#111827;margin:0;padding:0;}"
+        ".wrap{max-width:560px;margin:48px auto;padding:24px;}"
+        ".card{background:white;border-radius:12px;padding:24px;"
+        "box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center;}"
+        "h1{color:#991b1b;font-size:22px;margin:0 0 12px;}"
+        "p{margin:8px 0;line-height:1.5;}"
+        ".muted{color:#6b7280;font-size:14px;}"
+        "button{background:#2a8759;color:white;border:none;"
+        "padding:12px 20px;border-radius:8px;font-size:15px;"
+        "font-weight:600;cursor:pointer;margin-top:12px;}"
+        "</style></head><body><div class='wrap'><div class='card'>"
+        "<h1>📡 Hors ligne / Offline</h1>"
+        "<p lang='fr'>Vous semblez être hors ligne. "
+        "Reconnectez-vous et réessayez.</p>"
+        "<p lang='en' class='muted'>You appear to be offline. "
+        "Reconnect and try again.</p>"
+        "<button onclick=\"location.reload()\">"
+        "Réessayer / Retry</button>"
+        "</div></div></body></html>"
+    )
+
+
 def _portal_page_shell(client: dict, token: str, tab: str, body: str,
-                       flash: str = "", flash_error: str = "") -> str:
-    """Wrap portal body in common shell (header + tabs + flash)."""
+                       flash: str = "", flash_error: str = "",
+                       *, is_multi: bool = False) -> str:
+    """Wrap portal body in common shell (header + tabs + flash + PWA)."""
     name = esc(client.get("client_name") or client.get("client_code") or "")
     # Pick a lang attribute from the client's preferred language; default
     # to French (Quebec default). Screen readers will switch voices
@@ -12318,15 +12403,108 @@ def _portal_page_shell(client: dict, token: str, tab: str, body: str,
         flash_html = f'<div class="flash ok">{esc(flash)}</div>'
     elif flash_error:
         flash_html = f'<div class="flash err">{esc(flash_error)}</div>'
+    # PWA head tags: manifest link, Apple touch-icon, theme color.
+    # Per-client manifest carries the right language + scope.
+    manifest_path = (
+        f"/cp/{esc(token)}/manifest.json" if is_multi
+        else f"/c/{esc(token)}/manifest.json"
+    )
+    pwa_head = (
+        f'<link rel="manifest" href="{manifest_path}">'
+        '<meta name="theme-color" content="#2a8759">'
+        '<meta name="apple-mobile-web-app-capable" content="yes">'
+        '<meta name="apple-mobile-web-app-status-bar-style" '
+        'content="default">'
+        '<meta name="apple-mobile-web-app-title" content="OtoCPA">'
+        '<link rel="apple-touch-icon" href="/static/pwa/icon-192.png">'
+    )
+    # Register the service worker + install-prompt shim. Both are
+    # safe-degrading on browsers without the APIs.
+    pwa_script = (
+        "<script>"
+        # Service worker registration (global scope so /c/* + /cp/*
+        # can share one cache).
+        "if('serviceWorker' in navigator){"
+        "window.addEventListener('load',function(){"
+        "navigator.serviceWorker.register('/static/pwa/sw.js',"
+        "{scope:'/'}).catch(function(e){console.warn('sw reg:',e);});"
+        "});}"
+        # Android install prompt.
+        "var _deferredInstall=null;"
+        "window.addEventListener('beforeinstallprompt',function(e){"
+        "e.preventDefault();_deferredInstall=e;"
+        "var b=document.getElementById('pwa-install');"
+        "if(b){b.style.display='inline-block';}"
+        "});"
+        "function _pwaInstall(){"
+        "if(_deferredInstall){_deferredInstall.prompt();"
+        "_deferredInstall.userChoice.then(function(){"
+        "_deferredInstall=null;"
+        "var b=document.getElementById('pwa-install');"
+        "if(b){b.style.display='none';}"
+        "});}"
+        "}"
+        # iOS Safari instruction (no beforeinstallprompt support).
+        "(function(){"
+        "var ua=navigator.userAgent||'';"
+        "var isIOS=/iPhone|iPad|iPod/i.test(ua);"
+        "var isSafari=/Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua);"
+        "var standalone=window.navigator.standalone===true;"
+        "if(isIOS && isSafari && !standalone){"
+        "window.addEventListener('DOMContentLoaded',function(){"
+        "var hint=document.getElementById('pwa-ios-hint');"
+        "if(hint){hint.style.display='block';}"
+        "});"
+        "}})();"
+        "</script>"
+    )
+    install_ui = _render_install_ui(client_lang)
     return (
         f"<!doctype html><html lang='{client_lang}'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>OtoCPA &middot; {name}</title>"
+        f"{pwa_head}"
         f"<style>{_PORTAL_STYLE}</style></head><body>"
         f"<header class='portal'><h1>OtoCPA</h1>"
         f"<div class='sub'>{name}</div></header>"
-        f"<div class='wrap'>{_portal_tabs(tab, token)}{flash_html}{body}</div>"
+        f"<div class='wrap'>{_portal_tabs(tab, token)}{install_ui}"
+        f"{flash_html}{body}</div>"
+        f"{pwa_script}"
         "</body></html>"
+    )
+
+
+def _render_install_ui(lang: str) -> str:
+    """Install CTA + iOS instruction, bilingual.
+
+    Both nodes start hidden; JS flips the one that applies to the
+    user's environment (Android → button, iOS Safari → tooltip).
+    """
+    if lang == 'en':
+        btn_label = '📲 Add to Home Screen'
+        ios_hint = (
+            "📲 To install: tap the Share button (square with arrow) "
+            "then <strong>Add to Home Screen</strong>."
+        )
+    else:
+        btn_label = "📲 Ajouter à l'écran d'accueil"
+        ios_hint = (
+            "📲 Pour installer : touchez le bouton Partager "
+            "(carré avec flèche) puis <strong>Ajouter à l'écran "
+            "d'accueil</strong>."
+        )
+    return (
+        '<div style="margin-bottom:8px;">'
+        f'<button id="pwa-install" onclick="_pwaInstall()" '
+        'style="display:none;background:#2a8759;color:white;'
+        'border:none;padding:10px 14px;border-radius:8px;'
+        'font-size:13px;font-weight:600;cursor:pointer;">'
+        f'{btn_label}</button>'
+        f'<div id="pwa-ios-hint" style="display:none;'
+        'background:#fff3cd;border:1px solid #ffeaa7;'
+        'padding:10px 12px;border-radius:8px;font-size:13px;'
+        f'color:#6b4e00;">{ios_hint}</div>'
+        '</div>'
     )
 
 
@@ -18605,6 +18783,100 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ------------------------------------------------------------------
+    # PWA (Progressive Web App) helpers
+    # ------------------------------------------------------------------
+    def _serve_pwa_static(self, path: str) -> None:
+        """Serve a file from /opt/otocpa/static/pwa/ with the right MIME.
+
+        Whitelist the filenames we know about so the route can't be
+        used to read arbitrary paths (`..` + trailing / trickery).
+        """
+        allowed = {
+            '/static/pwa/icon-192.png': ('image/png', 'icon-192.png'),
+            '/static/pwa/icon-512.png': ('image/png', 'icon-512.png'),
+            '/static/pwa/sw.js': (
+                'application/javascript; charset=utf-8', 'sw.js',
+            ),
+        }
+        entry = allowed.get(path)
+        if entry is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+        mime, fname = entry
+        fpath = ROOT_DIR / 'static' / 'pwa' / fname
+        try:
+            body = fpath.read_bytes()
+        except Exception:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', mime)
+        self.send_header('Content-Length', str(len(body)))
+        # Service worker MUST NOT be cached, or updates won't roll out.
+        # Icons get a modest cache window.
+        if path.endswith('/sw.js'):
+            self.send_header(
+                'Cache-Control',
+                'no-cache, no-store, must-revalidate',
+            )
+            # Service-Worker-Allowed broadens the scope header so the
+            # SW can control /c/* even though it lives at /static/pwa/.
+            self.send_header('Service-Worker-Allowed', '/')
+        else:
+            self.send_header('Cache-Control', 'public, max-age=86400')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_portal_manifest(
+        self, token: str, *, is_multi: bool,
+    ) -> None:
+        """Bilingual PWA manifest; language = client preferred language.
+
+        ``is_multi`` is a routing hint from the request path. We try
+        that namespace first but fall back to the other so a
+        misrouted manifest (e.g. shell emits ``/c/...`` for a
+        multi-user token) still resolves the right language.
+        """
+        lang = 'fr'
+        resolved_multi = is_multi
+        try:
+            with open_db() as _conn:
+                row = _conn.execute(
+                    "SELECT language FROM clients WHERE portal_token=?",
+                    (token,),
+                ).fetchone()
+                if row and row['language']:
+                    lang = row['language'].lower()
+                    resolved_multi = False
+                else:
+                    from src.integrations import (
+                        multi_user_portal as _mup,
+                    )
+                    _mode, client, _user = _mup.resolve_portal_access(
+                        DB_PATH, token=token,
+                    )
+                    if client and client.get('language'):
+                        lang = client['language'].lower()
+                        resolved_multi = True
+        except Exception:
+            pass
+        if lang not in ('fr', 'en'):
+            lang = 'fr'
+        manifest = _build_portal_manifest(token, lang=lang,
+                                              is_multi=resolved_multi)
+        body = json.dumps(manifest).encode('utf-8')
+        self.send_response(200)
+        # Some browsers are strict about the manifest MIME type.
+        self.send_header('Content-Type',
+                          'application/manifest+json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'public, max-age=3600')
+        self.end_headers()
+        self.wfile.write(body)
+
     def _build_health_response(self) -> dict[str, Any]:
         """Build the JSON response for GET /health."""
         import shutil as _shutil
@@ -19866,6 +20138,36 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # --- /health (no authentication) ---
             if path == "/health":
                 self._send_json(self._build_health_response())
+                return
+
+            # --- PWA static assets (no authentication) ---
+            # Icons + service worker live in /opt/otocpa/static/pwa/.
+            # Served directly so the service worker scope can cover
+            # /c/ without a separate bundler.
+            if path.startswith("/static/pwa/"):
+                self._serve_pwa_static(path)
+                return
+            if path == "/static/pwa/sw.js":
+                self._serve_pwa_static(path)
+                return
+
+            # --- Per-client manifest (/c/<token>/manifest.json) ---
+            # Bilingual manifest: body fields render in the client's
+            # preferred language so "Add to Home Screen" on iOS +
+            # install UI on Android show "OtoCPA Portail Client" (FR)
+            # or "OtoCPA Client Portal" (EN).
+            if path.endswith("/manifest.json") and path.startswith("/c/"):
+                tok = path[len("/c/"):-len("/manifest.json")]
+                self._serve_portal_manifest(tok, is_multi=False)
+                return
+            if path.endswith("/manifest.json") and path.startswith("/cp/"):
+                tok = path[len("/cp/"):-len("/manifest.json")]
+                self._serve_portal_manifest(tok, is_multi=True)
+                return
+
+            # --- Portal offline fallback ---
+            if path == "/c/offline":
+                self._send_html(_render_offline_page())
                 return
 
             # --- /upload/status (no auth; document_ids are unguessable) ---
