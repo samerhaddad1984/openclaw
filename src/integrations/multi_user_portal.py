@@ -1235,6 +1235,7 @@ def render_user_portal_admin(
     *, client: dict[str, Any], user_token: str,
     users: list[dict[str, Any]],
     invitations: list[dict[str, Any]] | None = None,
+    audit_entries: list[dict[str, Any]] | None = None,
     flash: str = '', flash_error: str = '',
 ) -> str:
     from src.integrations.phone_normalizer import format_display
@@ -1298,6 +1299,13 @@ def render_user_portal_admin(
                 '<button type="submit">Reactivate</button></form> '
             )
         if status != 'removed':
+            actions += (
+                f'<form method="POST" '
+                f'action="/cp/{_esc(user_token)}/users/{uid}/rotate_token" '
+                'style="display:inline;" '
+                'onsubmit="return confirm(\'Rotate this user\\\'s access link? Their old link stops working immediately. / Renouveler ce lien? L\\\'ancien cessera de fonctionner immédiatement.\');">'
+                '<button type="submit">Rotate link / Renouveler</button></form> '
+            )
             actions += (
                 f'<form method="POST" '
                 f'action="/cp/{_esc(user_token)}/users/{uid}/remove" '
@@ -1440,7 +1448,41 @@ def render_user_portal_admin(
         '<th>Status</th><th>Expires</th></tr></thead>'
         f'<tbody>{invite_rows or "<tr><td colspan=4>None.</td></tr>"}</tbody>'
         '</table>'
-        '</body></html>'
+        + _render_portal_audit_section(audit_entries or [])
+        + '</body></html>'
+    )
+
+
+def _render_portal_audit_section(entries: list[dict[str, Any]]) -> str:
+    """Render the client-admin view of the portal audit trail.
+
+    Bilingual FR/EN throughout — CPAs and client admins share the same
+    screen, so we never rely on a session lang flag.
+    """
+    if not entries:
+        return (
+            '<h2>Historique / Activity log</h2>'
+            '<p class="muted"><em>Aucune activité. / No activity yet.</em></p>'
+        )
+    rows = ''
+    for e in entries:
+        when = _esc(e.get('created_at') or '')
+        actor = _esc(e.get('actor_email') or '')
+        action = _esc(e.get('action') or '')
+        detail = _esc(e.get('detail') or '')
+        rows += (
+            f'<tr><td style="white-space:nowrap;">{when}</td>'
+            f'<td>{actor}</td><td>{action}</td>'
+            f'<td class="muted">{detail}</td></tr>'
+        )
+    return (
+        '<h2>Historique / Activity log</h2>'
+        '<table><thead><tr>'
+        '<th>Quand / When</th><th>Par / By</th>'
+        '<th>Action</th><th>Détail / Detail</th>'
+        '</tr></thead>'
+        f'<tbody>{rows}</tbody>'
+        '</table>'
     )
 
 

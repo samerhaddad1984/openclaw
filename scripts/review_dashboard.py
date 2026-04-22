@@ -20159,6 +20159,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 return
             from src.integrations.multi_user_portal import (
                 list_users as _mup_list, list_invitations as _mup_invites,
+                recent_audit as _mup_recent_audit,
             )
             users = _mup_list(DB_PATH, firm_code=portal_user['firm_code'],
                                 client_code=portal_user['client_code'])
@@ -20166,12 +20167,20 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 DB_PATH, firm_code=portal_user['firm_code'],
                 client_code=portal_user['client_code'],
             )
+            # Last 50 audit entries are surfaced to the client admin.
+            audit_rows = _mup_recent_audit(
+                DB_PATH,
+                firm_code=portal_user['firm_code'],
+                client_code=portal_user['client_code'],
+                limit=50,
+            )
             from src.integrations.multi_user_portal import (
                 render_user_portal_admin as _mup_render_admin,
             )
             html_str = _mup_render_admin(
                 client=dict(client), user_token=user_token,
                 users=users, invitations=invites,
+                audit_entries=audit_rows,
                 flash=flash, flash_error=flash_error,
             )
             self._send_html(html_str)
@@ -20525,6 +20534,28 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 )
                 self._user_portal_redirect(user_token, "admin",
                                              flash=f"Role set to {role}")
+                return True
+            if action == 'rotate_token':
+                # Admin can rotate any teammate's token (including their own).
+                # On self-rotate, the browser must pick up the new token —
+                # we issue it via the redirect URL.
+                new_tok = _mup.rotate_user_token(
+                    DB_PATH, firm_code=portal_user['firm_code'],
+                    client_code=portal_user['client_code'],
+                    user_id=target_id, actor_email=portal_user['email'],
+                )
+                if target_id == portal_user['id']:
+                    # Self-rotate: the admin token we were using just died.
+                    # Redirect to the new admin URL so their session keeps working.
+                    self._user_portal_redirect(
+                        new_tok, "admin",
+                        flash="Votre lien a été renouvelé / Your link was rotated",
+                    )
+                else:
+                    self._user_portal_redirect(
+                        user_token, "admin",
+                        flash="Lien renouvelé / Link rotated for user",
+                    )
                 return True
             if action == 'whatsapp':
                 form = urllib.parse.parse_qs(
