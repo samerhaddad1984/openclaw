@@ -20112,6 +20112,13 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self) -> None:
+        # Initialize `lang` before the try so the 500-error handler below
+        # can safely call ui_t("back", lang) even if the exception fires
+        # before any authenticated branch has assigned `lang`.
+        try:
+            lang = self._get_lang_from_cookie() or "fr"
+        except Exception:
+            lang = "fr"
         try:
             _set_impersonation_context(self)
             parsed = urllib.parse.urlparse(self.path)

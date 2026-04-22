@@ -390,3 +390,37 @@ class TestErrorHandler:
         text = body.decode("utf-8", errors="replace")
         assert "visible-in-debug" in text
         assert "Traceback" in text
+
+    def test_t_wrapper_no_unbound_local(self, rd, http_server, monkeypatch):
+        """Pre-existing bug (commit 85a40138fb): the ``do_GET`` 500-handler
+        calls ``ui_t("back", lang)``, but ``lang`` is only assigned *inside*
+        the try on the authenticated path. When the exception fires before
+        authentication (e.g. ``get_session_user`` raising), the error branch
+        tripped ``UnboundLocalError: cannot access local variable 'lang'``
+        and the client saw ``RemoteDisconnected``.
+
+        The fix initializes ``lang`` before the try. This test forces the
+        pre-auth crash path and asserts the 500 body reaches the client with
+        a language-appropriate back-link label from ``ui_t``.
+        """
+        monkeypatch.delenv("OTOCPA_DEBUG", raising=False)
+
+        # Boom fires inside do_GET *before* any `lang = ...` assignment —
+        # _set_impersonation_context is the first call after the try:.
+        def _boom(_handler):
+            raise RuntimeError("pre-auth-boom")
+        monkeypatch.setattr(rd, "_set_impersonation_context", _boom)
+
+        status, _h, body = _request(f"{http_server}/qbo/status", method="GET")
+        text = body.decode("utf-8", errors="replace")
+        # Not a RemoteDisconnected / empty body — we got a rendered 500.
+        assert status == 500
+        assert "Internal Server Error" in text
+        # ui_t("back", lang) produced an actual link text — no UnboundLocalError
+        # would have prevented the anchor tag from being written.
+        assert "<a href=\"/\">" in text
+        # The anchor has non-empty text content (the ui_t("back", ...) output).
+        import re
+        m = re.search(r'<a href="/">([^<]+)</a>', text)
+        assert m is not None, "back-link anchor missing from 500 body"
+        assert m.group(1).strip(), "ui_t('back', lang) produced empty text"
