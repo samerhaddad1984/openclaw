@@ -23072,6 +23072,42 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                     lang=lang))
                 return
 
+            # Scope 2.3: opening balances for mid-year adoption
+            if path == "/clients/opening_balances":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(code, ctx):
+                    self._flash_redirect("/clients",
+                                          error="Client not found")
+                    return
+                from src.integrations import opening_balances as _ob
+                firm = ctx.get("firm_code") or "OWNER"
+                state = _ob.get_opening_balance_state(
+                    DB_PATH, firm_code=firm, client_code=code,
+                )
+                with open_db() as _conn:
+                    cn = _conn.execute(
+                        "SELECT client_name FROM clients WHERE client_code=?",
+                        (code,),
+                    ).fetchone()
+                cn_name = cn['client_name'] if cn else code
+                body = _ob.render_opening_balances_page(
+                    firm_code=firm, client_code=code,
+                    client_name=cn_name, state=state,
+                    flash=flash, flash_error=flash_error,
+                )
+                self._send_html(page_layout(
+                    f"Opening balances — {code}", body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
+                return
+
             # Scope 2.2: QBO imported-data summary (full historical pull)
             if path == "/clients/imported_data":
                 if not _can_do(ctx, "view_all_clients"):
@@ -28059,6 +28095,74 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     f"/clients/edit?code={urlquote(sc_code)}",
                     flash=f"Portal link sent to {_row['contact_email']}",
                 )
+                return
+
+            # Scope 2.3: post / reverse opening balances
+            if path in ("/clients/opening_balances",
+                        "/clients/opening_balances/reverse"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                ob_code = normalize_text(form.get("client_code", "")).strip()
+                if not _require_client_in_firm(ob_code, ctx):
+                    self._flash_redirect(
+                        "/clients", error=t("err_forbidden", lang),
+                    )
+                    return
+                from src.integrations import opening_balances as _ob
+                firm = ctx.get("firm_code") or "OWNER"
+                actor = user.get("email") or user.get("username") or ""
+                if path.endswith("/reverse"):
+                    _ob.reverse_opening_balances(
+                        DB_PATH, firm_code=firm, client_code=ob_code,
+                        reversed_by=actor,
+                    )
+                    self._flash_redirect(
+                        f"/clients/opening_balances?code={urlquote(ob_code)}",
+                        flash="Opening balances reversed",
+                    )
+                    return
+                as_of = (form.get("as_of_date", "") or "").strip()
+                description = (form.get("description", "") or "").strip()
+                force = bool(form.get("force"))
+                rows: list[dict[str, Any]] = []
+                for i in range(100):
+                    acct = (form.get(f"account_code_{i}", "") or "").strip()
+                    side = (form.get(f"side_{i}", "") or "").strip().lower()
+                    amt = (form.get(f"amount_{i}", "") or "").strip()
+                    if not acct and not amt:
+                        continue
+                    try:
+                        amt_f = float(amt)
+                    except ValueError:
+                        continue
+                    if amt_f <= 0:
+                        continue
+                    rows.append({'account_code': acct, 'side': side,
+                                 'amount': amt_f})
+                if not as_of or not rows:
+                    self._flash_redirect(
+                        f"/clients/opening_balances?code={urlquote(ob_code)}",
+                        error="as_of_date and at least one row required",
+                    )
+                    return
+                result = _ob.post_opening_balances(
+                    DB_PATH, firm_code=firm, client_code=ob_code,
+                    as_of_date=as_of, rows=rows,
+                    description=description, posted_by=actor,
+                    force=force,
+                )
+                if result.get('ok'):
+                    self._flash_redirect(
+                        f"/clients/opening_balances?code={urlquote(ob_code)}",
+                        flash=f"Posted {result['rows_posted']} rows "
+                              f"(entry {result['entry_id']})",
+                    )
+                else:
+                    self._flash_redirect(
+                        f"/clients/opening_balances?code={urlquote(ob_code)}",
+                        error=f"Post failed: {result.get('reason')}",
+                    )
                 return
 
             # Scope 2.2: run / confirm / rollback the QBO historical pull
