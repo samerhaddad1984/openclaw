@@ -12815,10 +12815,20 @@ def _portal_tabs(active: str, token: str, *,
     else:
         base = f"/c/{esc(token)}"
         items = [
-            ("upload", "&#128228; Upload"),
+            ("upload",
+             "&#128228; Téléverser" if lang == 'fr' else "&#128228; Upload"),
             ("documents", "&#128196; Documents"),
-            ("bank", "&#127970; Bank"),
+            ("bank",
+             "&#127970; Banque" if lang == 'fr' else "&#127970; Bank"),
             ("messages", "&#128172; Messages"),
+            ("my_uploads",
+             "&#128228; Mes téléversements" if lang == 'fr'
+             else "&#128228; My uploads"),
+            ("tasks",
+             "&#9989; Tâches" if lang == 'fr' else "&#9989; Tasks"),
+            ("settings",
+             "&#9881;&#65039; Paramètres" if lang == 'fr'
+             else "&#9881;&#65039; Settings"),
         ]
     parts = []
     for key, label in items:
@@ -13374,6 +13384,128 @@ def _render_portal_user_settings(
 def json_dumps(value: str) -> str:
     """Minimal JSON-string escape for inline JS confirm() text."""
     return json.dumps(value)
+
+
+def _render_single_portal_settings(
+    *, client: dict, token: str, lang: str = 'fr',
+    flash: str = '', flash_error: str = '',
+    nav_html: str = '',
+) -> str:
+    """Settings page for the legacy /c/ single-user portal.
+
+    Lets the client rotate their portal token themselves and upgrade
+    to multi-user mode when they need to add a teammate.
+    """
+    name = esc(client.get('client_name') or client.get('client_code') or '')
+    contact = esc(client.get('contact_email') or '')
+    portal_mode = (client.get('portal_mode') or 'single').strip()
+    if lang == 'fr':
+        title = 'Paramètres'
+        rotate_label = 'Renouveler mon lien d\'accès'
+        rotate_help = (
+            'Si vous croyez que votre lien a été partagé ou compromis, '
+            'cliquez ci-dessous. Un nouveau lien est généré et l\'ancien '
+            'cesse immédiatement de fonctionner.'
+        )
+        rotate_confirm = (
+            'Renouveler le lien? L\'ancien cessera immédiatement de '
+            'fonctionner.'
+        )
+        upgrade_heading = 'Besoin de donner accès à d\'autres personnes?'
+        upgrade_body = (
+            'Vous pouvez passer ce portail en mode multi-utilisateurs et '
+            'inviter votre équipe. Vous deviendrez administrateur. '
+            'Chaque personne obtient son propre lien.'
+        )
+        upgrade_label = 'Passer au mode multi-utilisateurs'
+        upgrade_confirm = (
+            'Convertir en mode multi-utilisateurs? Vous deviendrez '
+            'administrateur. Votre lien actuel continuera de fonctionner '
+            'comme lien d\'administrateur. Continuer?'
+        )
+        email_label = 'Votre courriel'
+        mode_label = 'Mode actuel'
+    else:
+        title = 'Settings'
+        rotate_label = 'Rotate my access link'
+        rotate_help = (
+            'If you think your link was shared or compromised, click '
+            'below. A new link is generated and the old one stops '
+            'working immediately.'
+        )
+        rotate_confirm = (
+            'Rotate the link? The old one stops working immediately.'
+        )
+        upgrade_heading = 'Need to give others access?'
+        upgrade_body = (
+            'You can upgrade this portal to multi-user mode and invite '
+            'your team. You will become the admin. Each person gets '
+            'their own link.'
+        )
+        upgrade_label = 'Upgrade to multi-user'
+        upgrade_confirm = (
+            'Convert to multi-user mode? You will become the admin. '
+            'Your current link will keep working as the admin link. '
+            'Continue?'
+        )
+        email_label = 'Your email'
+        mode_label = 'Current mode'
+    flash_html = ''
+    if flash:
+        flash_html = (
+            f'<div style="background:#d4edda;padding:8px;margin-bottom:10px;">'
+            f'{esc(flash)}</div>'
+        )
+    if flash_error:
+        flash_html += (
+            f'<div style="background:#f8d7da;padding:8px;margin-bottom:10px;">'
+            f'{esc(flash_error)}</div>'
+        )
+    # Upgrade block only shown in single mode.
+    upgrade_block = ''
+    if portal_mode != 'multi':
+        upgrade_block = (
+            '<div class="card" data-testid="upgrade-block">'
+            f'<h2>{esc(upgrade_heading)}</h2>'
+            f'<p>{esc(upgrade_body)}</p>'
+            f'<form method="POST" action="/c/{esc(token)}/upgrade" '
+            f'onsubmit="return confirm({json_dumps(upgrade_confirm)});">'
+            '<button type="submit" style="background:#1e40af;color:white;'
+            'padding:10px 16px;border:none;border-radius:6px;cursor:pointer;">'
+            f'&#128101; {esc(upgrade_label)}</button>'
+            '</form></div>'
+        )
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        f'<title>{esc(title)}</title>'
+        '<style>body{font-family:system-ui,Arial;max-width:800px;'
+        'margin:2rem auto;padding:1rem;}'
+        '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
+        'border-radius:6px;margin-bottom:1rem;}'
+        '.muted{color:#6b7280;font-size:13px;}'
+        '.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;}'
+        '.tabs a{padding:8px 14px;background:#f3f4f6;color:#111827;'
+        'border-radius:8px 8px 0 0;text-decoration:none;font-size:14px;}'
+        '.tabs a.active{background:#2a8759;color:white;}'
+        '</style></head><body>'
+        f'{nav_html}'
+        f'<h1>{name} — {esc(title)}</h1>'
+        f'{flash_html}'
+        '<div class="card" data-testid="settings-info">'
+        f'<p>{esc(email_label)}: <strong>{contact}</strong></p>'
+        f'<p>{esc(mode_label)}: <strong>{esc(portal_mode)}</strong></p>'
+        '</div>'
+        '<div class="card" data-testid="rotate-block">'
+        f'<p class="muted">{esc(rotate_help)}</p>'
+        f'<form method="POST" action="/c/{esc(token)}/rotate_token" '
+        f'onsubmit="return confirm({json_dumps(rotate_confirm)});">'
+        '<button type="submit" style="background:#dc2626;color:white;'
+        'padding:10px 16px;border:none;border-radius:6px;cursor:pointer;">'
+        f'&#128257; {esc(rotate_label)}</button>'
+        '</form></div>'
+        f'{upgrade_block}'
+        '</body></html>'
+    )
 
 
 def render_portal_whatsapp(client: dict, token: str) -> str:
@@ -19968,6 +20100,74 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         elif section == "whatsapp":
             log_portal_access(client["client_code"], client["firm_code"], token, self, "view_whatsapp")
             html_str = render_portal_whatsapp(dict(client), token)
+        elif section == "my_uploads":
+            # Scope 1.3 in single-user mode. There is no portal user
+            # id so we list every upload for this client and let the
+            # uploader sort themselves out via the vendor/filename.
+            log_portal_access(client["client_code"], client["firm_code"],
+                              token, self, "view_my_uploads")
+            from src.integrations.portal_my_uploads import (
+                my_uploads_for_client as _pmu_for_client,
+                render_my_uploads_page as _pmu_render,
+            )
+            uploads = _pmu_for_client(
+                DB_PATH, firm_code=client["firm_code"],
+                client_code=client["client_code"],
+            )
+            # Single-user mode: synthesize a minimal portal_user shell
+            # so the renderer's "admin sees team rejections" branch
+            # stays off.
+            single_user = {
+                'id': 0,
+                'role': 'owner',
+                'email': client.get('contact_email') or '',
+            }
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
+            nav = _portal_tabs('my_uploads', token,
+                                is_multi=False, lang=_c_lang)
+            html_str = _pmu_render(
+                client=dict(client), user_token=token,
+                portal_user=single_user, uploads=uploads,
+                flash=flash, flash_error=flash_error,
+                nav_html=nav,
+            )
+        elif section == "tasks":
+            log_portal_access(client["client_code"], client["firm_code"],
+                              token, self, "view_tasks")
+            from src.integrations import client_requests as _cr
+            requests = _cr.list_open_for_client(
+                DB_PATH,
+                firm_code=client["firm_code"],
+                client_code=client["client_code"],
+            )
+            single_user = {'id': 0, 'role': 'owner',
+                           'email': client.get('contact_email') or ''}
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
+            nav = _portal_tabs('tasks', token,
+                                is_multi=False, lang=_c_lang)
+            html_str = _cr.render_client_tasks_page(
+                client=dict(client), user_token=token,
+                portal_user=single_user, requests=requests,
+                flash=flash, flash_error=flash_error,
+                nav_html=nav,
+            )
+        elif section == "settings":
+            log_portal_access(client["client_code"], client["firm_code"],
+                              token, self, "view_settings")
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
+            nav = _portal_tabs('settings', token,
+                                is_multi=False, lang=_c_lang)
+            html_str = _render_single_portal_settings(
+                client=dict(client), token=token,
+                lang=_c_lang, flash=flash, flash_error=flash_error,
+                nav_html=nav,
+            )
         else:
             self._portal_send_invalid()
             return
@@ -19997,6 +20197,67 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
         firm_code = client["firm_code"] or "OWNER"
         section = section.strip("/").lower()
 
+        if section == "rotate_token":
+            # Scope 1.2 self-service for single-user portal: rotate the
+            # client's portal_token directly. The old URL stops working
+            # immediately — we render a landing page with the new link.
+            new_token = generate_portal_token()
+            with open_db() as conn:
+                conn.execute(
+                    "UPDATE clients SET portal_token=?, "
+                    "portal_token_created_at=datetime('now'), "
+                    "portal_token_rotated_count="
+                    "COALESCE(portal_token_rotated_count,0)+1 "
+                    "WHERE client_code=?",
+                    (new_token, client_code),
+                )
+                conn.commit()
+            log_portal_access(client_code, firm_code, token, self,
+                              "self_rotate_token")
+            body = (
+                '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                '<title>Lien renouvelé / Link rotated</title>'
+                '<style>body{font-family:system-ui,Arial;max-width:640px;'
+                'margin:3rem auto;padding:1rem;text-align:center;}'
+                '.card{background:#d4edda;border:1px solid #c3e6cb;'
+                'padding:2rem;border-radius:8px;}</style></head><body>'
+                '<div class="card">'
+                '<h1>&#128257; Lien renouvelé / Link rotated</h1>'
+                '<p>Votre ancien lien cesse immédiatement de fonctionner.</p>'
+                '<p>Your old link stops working immediately.</p>'
+                f'<p><a href="/c/{esc(new_token)}/upload">'
+                'Continuer / Continue</a></p>'
+                '</div></body></html>'
+            )
+            self._send_html(body)
+            return True
+        if section == "upgrade":
+            from src.integrations.multi_user_portal import (
+                upgrade_to_multi_user as _upgrade,
+            )
+            try:
+                result = _upgrade(
+                    DB_PATH,
+                    client_code=client_code,
+                    upgrading_user_email=(
+                        client.get("contact_email") or ""
+                    ),
+                    upgrading_user_name=(
+                        client.get("client_name") or ""
+                    ),
+                )
+            except Exception:
+                logging.exception("portal self-upgrade failed")
+                self._portal_redirect(
+                    token, "settings",
+                    error="Upgrade failed / Échec de la mise à niveau",
+                )
+                return True
+            log_portal_access(client_code, firm_code, token, self,
+                              "upgrade_to_multi")
+            new_token = result.get("user_token") or token
+            self._redirect(f"/cp/{new_token}/admin")
+            return True
         if section == "upload":
             is_async = _wants_async_upload(self)
             if "multipart/form-data" not in ct:

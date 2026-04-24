@@ -48,18 +48,21 @@ RD = _load_review_dashboard()
 # ---------------------------------------------------------------------------
 
 
-def test_single_mode_nav_unchanged():
-    """Legacy /c/ nav remains the 4 original tabs pointing at /c/."""
+def test_single_mode_nav_uses_c_prefix_and_includes_bank():
+    """Legacy /c/ nav continues to use /c/ prefix and keeps the Bank
+    tab. After the single-user UX expansion it also surfaces
+    my_uploads / tasks / settings — but never the admin tab, because
+    single-user mode has no role system."""
     html = RD._portal_tabs('upload', 'TOKEN')
+    # Still /c/ prefixed
     assert 'href="/c/TOKEN"' in html
     assert 'href="/c/TOKEN/documents"' in html
     assert 'href="/c/TOKEN/bank"' in html
     assert 'href="/c/TOKEN/messages"' in html
-    # Multi-mode tabs are NOT present in single mode.
-    assert 'my_uploads' not in html
-    assert 'tasks' not in html
-    assert '/admin' not in html
-    assert 'settings' not in html
+    # No Team/admin tab in single mode.
+    assert '/c/TOKEN/admin' not in html
+    assert 'Team' not in html
+    assert 'Équipe' not in html
 
 
 def test_multi_mode_nav_uses_cp_prefix():
@@ -151,14 +154,16 @@ def test_upload_page_multi_contributor_no_team():
     assert 'href="/cp/USER_TOK/tasks"' in html
 
 
-def test_upload_page_single_mode_unchanged():
+def test_upload_page_single_mode_keeps_c_prefix_and_no_admin():
+    """Single-mode upload page uses /c/ URLs and no admin tab."""
     client = {'client_code': 'ACME', 'client_name': 'Acme',
               'language': 'fr'}
     html = RD.render_portal_upload(client, 'SINGLE_TOK')
-    # Single-mode default: /c/ prefix, no admin/tasks/my_uploads.
     assert 'href="/c/SINGLE_TOK"' in html
+    # Must not leak /cp/ URLs into the legacy nav.
     assert '/cp/SINGLE_TOK' not in html
-    assert 'my_uploads' not in html
+    # Admin route is multi-only.
+    assert '/c/SINGLE_TOK/admin' not in html
 
 
 # ---------------------------------------------------------------------------

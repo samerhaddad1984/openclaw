@@ -108,6 +108,67 @@ def my_uploads(
 
 
 # ---------------------------------------------------------------------------
+# Single-user mode: list every upload for a client
+# ---------------------------------------------------------------------------
+
+
+def my_uploads_for_client(
+    db_path: Path | str, *,
+    firm_code: str, client_code: str,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Return documents for a client regardless of uploader.
+
+    Used by the single-user `/c/{token}/my_uploads` page where there
+    is no per-user identity. Shape matches ``my_uploads`` so the same
+    renderer can display both lists.
+    """
+    with _open(db_path) as conn:
+        try:
+            rows = list(conn.execute(
+                """
+                SELECT
+                    d.document_id, d.vendor, d.amount, d.document_date,
+                    d.uploaded_at, d.review_status,
+                    d.manual_hold_reason,
+                    d.file_name, d.uploader_name, d.uploader_email,
+                    rw.status AS wf_status,
+                    rw.rejection_reason AS wf_rejection_reason,
+                    rw.last_review_at AS wf_last_review_at,
+                    rw.last_reviewer_email AS wf_last_reviewer
+                FROM documents d
+                LEFT JOIN review_workflow rw
+                    ON rw.entity_type='document'
+                    AND rw.entity_id=d.document_id
+                WHERE d.firm_code = ? AND d.client_code = ?
+                ORDER BY d.uploaded_at DESC, d.document_id DESC
+                LIMIT ?
+                """,
+                (firm_code, client_code, int(limit)),
+            ))
+        except sqlite3.OperationalError:
+            rows = list(conn.execute(
+                """
+                SELECT document_id, vendor, amount, document_date,
+                       uploaded_at, review_status, manual_hold_reason,
+                       file_name, uploader_name, uploader_email
+                FROM documents
+                WHERE firm_code = ? AND client_code = ?
+                ORDER BY uploaded_at DESC, document_id DESC
+                LIMIT ?
+                """,
+                (firm_code, client_code, int(limit)),
+            ))
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        d["status"] = _doc_status(d)
+        d["rejection_reason"] = d.get("wf_rejection_reason") or ""
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Admin view — rejections across the whole client
 # ---------------------------------------------------------------------------
 
