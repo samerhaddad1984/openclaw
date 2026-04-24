@@ -69,6 +69,17 @@ name so your CPA knows exactly who sent it.
 **Supported:** JPG/PNG photos and PDF attachments. Audio notes
 and videos are skipped gracefully.
 
+## If a document gets rejected (Scope 1.3)
+
+If your CPA needs you to re-upload or clarify a receipt, the
+document shows up in your **My uploads** tab with:
+
+- the **rejection reason** the CPA typed,
+- a **Re-upload corrected version** button that lands on the
+  upload page with the context prefilled.
+
+You also get an email notification so nothing is lost in the queue.
+
 ## FAQ
 
 **Q: My upload won't go through.**

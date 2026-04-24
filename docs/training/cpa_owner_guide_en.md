@@ -202,6 +202,57 @@ touch the same line, one wins and the other sees a *Reload page*
 message. A client request id makes each operation idempotent —
 replaying the same request does not double-split.
 
+## Migration from a previous product (Scope 2)
+
+If you're moving existing clients in from Caseware / Sage / Excel /
+QuickBooks:
+
+1. **Bulk CSV import**: Menu **Clients → Bulk import**. Download the
+   template, fill one row per client, upload, preview validation
+   errors, then commit or dry-run. Rejected rows come back as a
+   downloadable CSV with reasons.
+2. **QBO historical pull**: for each QBO-connected client, menu
+   **Clients → Imported data**. Pulls two complete years + YTD,
+   shows totals per year, lets you **Confirm** or **Rollback**.
+3. **Opening balances**: menu **Clients → Opening balances**.
+   Enter the as-of date and per-account balance; the trial balance
+   must balance (|Σ debits − Σ credits| ≤ $0.01) or posting is
+   refused. Attach supporting PDFs.
+4. **Other formats**: menu **Clients → Historical import** accepts
+   generic CSV, IIF (QuickBooks Desktop), Excel trial balance,
+   Sage 50, and Caseware TB exports. Auto-detects format, shows
+   a 20-row preview, prompts for account mapping when the source
+   CoA differs from the client's OtoCPA CoA, and retains the raw
+   file (sha256 recorded).
+5. **Prior-year comparative**: financial statements show the
+   imported prior-year column with a provenance label ("imported
+   from Caseware / Sage 50 / …") and a disclosure note.
+
+## Lifecycle events (Scope 3)
+
+- **Archive a client**: Menu **Clients → Edit → Archive**. Pick a
+  reason (left_firm / business_closed / dormant / other). Portal
+  tokens are revoked, new uploads are refused, history is
+  preserved for the regulatory 7-year retention window. List +
+  reactivate from **Clients → Archived**.
+- **Employee out of office**: Menu **Settings → Out of office**.
+  Set start/end date and coverage colleague; new documents route
+  to the coverage employee (existing assignments are untouched).
+  End early by clicking **End / Terminer**.
+- **Employee leaves the firm**: Menu **Admin → Team → Depart**.
+  Specify a replacement; every open workflow, client primary, and
+  secondary is rebalanced to them. Dashboard access is revoked.
+- **Workload balancing**: Menu **Admin → Workload** shows per-
+  employee queue depth with green/yellow/red colour coding.
+  Inline form to bulk-reassign from one employee to another.
+- **Recurring reminders**: On each client page, **Schedule a
+  recurring reminder** — one-time, weekly, monthly, quarterly,
+  annually. Pick from the canned templates (monthly bank
+  statement, quarterly GST/QST, annual T4 summary, year-end docs)
+  or write your own bilingual title + body.
+- **Inactive clients**: Menu **Admin → At-risk clients** lists
+  anyone dormant for 90+ days. Nudge or archive.
+
 ## FAQ
 
 **Q: How do I revoke a client employee's access immediately?**

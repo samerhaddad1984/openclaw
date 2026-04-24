@@ -125,11 +125,57 @@ par un autre utilisateur.
   même téléphone, le formulaire vous prévient pour éviter une
   collision silencieuse chez Twilio.
 
+## Gérer votre équipe (Portée 1.1)
+
+Depuis l'onglet **Admin** du portail (visible aux admins seulement) :
+
+- **Inviter un utilisateur** : nom, courriel, rôle (admin /
+  contributeur), numéro WhatsApp optionnel. Il reçoit un courriel
+  avec son lien personnel.
+- **Suspendre** : conserve l'historique mais désactive le jeton.
+  Réversible.
+- **Réactiver** : réactive un utilisateur suspendu.
+- **Retirer** : définitif ; les téléversements restent attribués
+  à son nom.
+- **Changer le rôle** : contributeur ↔ admin.
+- **Modifier WhatsApp** : ajouter, modifier ou retirer un numéro.
+- **Faire tourner mon lien d'accès** (Portée 1.2) : invalide
+  l'ancien et vous envoie un nouveau lien.
+- **Piste d'audit** : chaque action (invitation, suspension,
+  réactivation, changement de rôle, rotation de jeton) est
+  journalisée avec l'acteur et l'horodatage.
+
+## Suivi des demandes (Portée 1.4)
+
+Lorsque votre CPA vous demande quelque chose de précis (« envoyez
+le relevé bancaire de mars »), cela apparaît dans l'onglet
+**Tâches** du portail. Chaque tâche a un titre, une date
+d'échéance optionnelle, un utilisateur cible optionnel et un
+bouton **Marquer terminé**. Téléverser un document lié marque la
+tâche automatiquement comme remplie.
+
+## Si vous perdez votre lien (Portée 1.2)
+
+Allez sur `/c/` (page d'accueil sans jeton), cliquez sur **J'ai
+oublié mon lien d'accès**, entrez votre courriel et le nom de
+l'entreprise. Si vous êtes un utilisateur actif, un nouveau lien
+sera envoyé. Limité à une demande par heure par courriel. Les
+admins de votre équipe sont notifiés chaque fois qu'un
+contributeur demande une récupération.
+
+## Téléversements rejetés (Portée 1.3)
+
+Si votre CPA rejette un document que vous avez téléversé, il
+apparaît dans l'onglet **Mes téléversements** avec le motif du
+rejet + un bouton **Re-téléverser la version corrigée**. Vous
+recevez aussi un courriel.
+
 ## Questions fréquentes
 
 **Q : J'ai perdu mon lien personnel.**
-R : Demandez à un autre admin de votre équipe, ou contactez votre
-CPA qui peut régénérer votre jeton.
+R : Utilisez le formulaire **J'ai oublié mon lien d'accès** sur
+`/c/` (voir ci-dessus), ou demandez à un autre admin de votre
+équipe, ou contactez votre CPA qui peut régénérer votre jeton.
 
 **Q : Un collègue a quitté l'entreprise.**
 R : Allez dans **Gérer l'équipe → [Personne] → Retirer**. Accès

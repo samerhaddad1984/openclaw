@@ -217,6 +217,63 @@ passe et l'autre reçoit un message *Rechargez la page*. Un identifiant
 de requête client rend chaque opération idempotente — rejouer la
 même requête ne double pas le split.
 
+## Migration depuis un autre produit (Portée 2)
+
+Si vous migrez des clients existants depuis Caseware / Sage / Excel /
+QuickBooks :
+
+1. **Importation CSV en lot** : menu **Clients → Import en lot**.
+   Téléchargez le modèle, remplissez une ligne par client,
+   téléversez, consultez l'aperçu des erreurs de validation, puis
+   confirmez ou simulez. Les lignes rejetées sont disponibles en
+   CSV avec les raisons.
+2. **Pull historique QBO** : pour chaque client QBO connecté,
+   menu **Clients → Données importées**. Récupère deux années
+   complètes + ADÉ, affiche les totaux par année et permet de
+   **Confirmer** ou **Annuler**.
+3. **Soldes d'ouverture** : menu **Clients → Soldes d'ouverture**.
+   Entrez la date d'adoption et les soldes par compte ; la balance
+   de vérification doit s'équilibrer (|Σ débits − Σ crédits| ≤ $0,01)
+   sinon la comptabilisation est refusée. Joignez les PDF.
+4. **Autres formats** : menu **Clients → Import historique**
+   accepte CSV générique, IIF (QuickBooks Desktop), Excel balance
+   de vérification, Sage 50 et exportations Caseware. Détection
+   automatique, aperçu de 20 lignes, mappage des comptes lorsque
+   le plan comptable source diffère, fichier brut conservé
+   (sha256 enregistré).
+5. **Comparatif année antérieure** : les états financiers affichent
+   la colonne année antérieure importée avec une étiquette de
+   provenance (« importé depuis Caseware / Sage 50 / … ») et une
+   note d'information.
+
+## Événements du cycle de vie (Portée 3)
+
+- **Archiver un client** : menu **Clients → Modifier → Archiver**.
+  Choisissez un motif (left_firm / business_closed / dormant /
+  other). Les jetons du portail sont révoqués, les nouveaux
+  téléversements refusés, l'historique préservé pendant la
+  période de conservation réglementaire de 7 ans. Liste et
+  réactivation depuis **Clients → Archivés**.
+- **Absence d'un employé** : menu **Paramètres → Absence**.
+  Entrez les dates de début/fin et le collègue de remplacement ;
+  les nouveaux documents sont routés vers la couverture (les
+  attributions existantes ne sont pas touchées). Terminez en
+  cliquant **End / Terminer**.
+- **Départ d'un employé** : menu **Admin → Équipe → Départ**.
+  Spécifiez un remplaçant ; tout flux de travail ouvert, les
+  pointeurs client primaire/secondaire sont rééquilibrés.
+  L'accès au tableau de bord est révoqué.
+- **Équilibre de charge** : menu **Admin → Charge** affiche la
+  profondeur de file par employé avec code couleur vert/jaune/rouge.
+  Formulaire inline pour réassigner en lot.
+- **Rappels récurrents** : sur chaque fiche client, **Planifier un
+  rappel récurrent** — ponctuel, hebdomadaire, mensuel, trimestriel,
+  annuel. Choisissez un modèle (relevé bancaire mensuel, TPS/TVQ
+  trimestrielle, sommaire T4 annuel, documents de fin d'année) ou
+  rédigez votre propre titre + message bilingue.
+- **Clients inactifs** : menu **Admin → Clients à risque** liste
+  toute fiche dormante depuis 90+ jours. Relancer ou archiver.
+
 ## Questions fréquentes
 
 **Q : Comment révoquer l'accès d'un employé client immédiatement?**

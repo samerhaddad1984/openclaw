@@ -116,10 +116,51 @@ or already claimed by another user.
   at a different firm already registered the same handset, the
   form tells you so you don't silently collide at Twilio.
 
+## Managing your team (Scope 1.1)
+
+From the portal **Admin** tab (visible only to admins):
+
+- **Invite a user**: enter name, email, role (admin / contributor),
+  optional WhatsApp number. They get a branded email with a
+  personal link.
+- **Suspend**: user keeps their history but their token stops
+  working. Reversible.
+- **Reactivate**: revives a suspended user.
+- **Remove**: permanent; uploads stay attributed to their name.
+- **Change role**: promote contributor to admin or vice versa.
+- **Edit WhatsApp**: add, change, or remove a number per user.
+- **Rotate your access link** (Scope 1.2): invalidates the old
+  link and emails you a new one.
+- **Audit trail**: every action (invite, suspend, reactivate,
+  role change, token rotation) is logged with actor + timestamp.
+
+## Request tracking (Scope 1.4)
+
+When your CPA needs something specific ("send me March bank
+statement"), it shows up in the **Tasks** tab of your portal.
+Each task has a title, optional due date, optional target user,
+and a **Mark complete** button. Uploading a linked document
+auto-marks the task fulfilled.
+
+## If you lose your link (Scope 1.2)
+
+Go to `/c/` (the landing page with no token), click **Forgot my
+access link**, enter your email + company name. If you're an
+active portal user a new link will be emailed to you. Rate limited
+to one request per hour per email. Admins on your team get
+notified whenever a contributor requests a recovery.
+
+## Rejected uploads (Scope 1.3)
+
+If your CPA rejects a document you uploaded, it appears in the
+**My uploads** tab with the CPA's rejection reason + a
+**Re-upload corrected version** button. You also get an email.
+
 ## FAQ
 
 **Q: I lost my personal link.**
-A: Ask another admin on your team, or contact your CPA who can
+A: Use the **Forgot my access link** form on `/c/` (see above),
+or ask another admin on your team, or contact your CPA who can
 regenerate your token.
 
 **Q: A colleague left the company.**

@@ -72,6 +72,18 @@ envoyé quoi.
 **Formats acceptés :** photos JPG/PNG et pièces jointes PDF. Les
 notes vocales et vidéos sont ignorées sans erreur.
 
+## Si un document est rejeté (Portée 1.3)
+
+Si votre CPA doit vous faire re-téléverser ou préciser un reçu, le
+document apparaît dans l'onglet **Mes téléversements** avec :
+
+- le **motif de rejet** rédigé par le CPA,
+- un bouton **Re-téléverser la version corrigée** qui ouvre la
+  page de téléversement avec le contexte pré-rempli.
+
+Vous recevez aussi une notification par courriel pour ne rien
+rater dans la file.
+
 ## Questions fréquentes
 
 **Q : Mon téléversement ne passe pas.**
