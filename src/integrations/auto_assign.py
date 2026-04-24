@@ -150,6 +150,25 @@ def auto_assign_new_document(
             # No active assignee — leave in pool.
             return None
 
+        # Scope 3.2: OOO coverage. If the chosen assignee is currently
+        # out of office (with an active coverage window), route NEW
+        # documents to the coverage colleague instead. Existing
+        # assignments are never touched — that is a bulk_reassign
+        # decision, not an OOO side-effect.
+        try:
+            from src.integrations.employee_ooo import get_coverage_for
+            cover = get_coverage_for(
+                db_path, firm_code=firm_code,
+                employee_email=chosen_email,
+            )
+            if cover and _employee_active(
+                conn, firm_code=firm_code, email=cover,
+            ):
+                chosen_email = cover
+                reason = 'ooo_coverage'
+        except Exception:
+            log.debug("ooo coverage lookup skipped", exc_info=True)
+
         from datetime import datetime, timezone
         now = (datetime.now(timezone.utc)
                .replace(microsecond=0).isoformat())

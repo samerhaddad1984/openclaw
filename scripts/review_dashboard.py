@@ -21221,6 +21221,63 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                     flash_error=flash_error, lang=lang))
                 return
 
+            # Scope 3.2: employee out-of-office + coverage UI
+            if path == "/settings/ooo":
+                from src.integrations import employee_ooo as _ooo
+                firm = ctx.get("firm_code") or "OWNER"
+                my_email = user.get("email") or ""
+                active = _ooo.list_active_ooo(DB_PATH, firm)
+                mine = [a for a in active if (a['employee_email'] or '').lower()
+                        == (my_email or '').lower()]
+                with open_db() as _conn:
+                    emps = [dict(r) for r in _conn.execute(
+                        "SELECT email, username FROM dashboard_users "
+                        "WHERE firm_code=? AND COALESCE(active,1)=1 "
+                        "AND LOWER(email) != LOWER(?) ORDER BY email",
+                        (firm, my_email),
+                    ).fetchall()]
+                mine_html = ''
+                if mine:
+                    m = mine[0]
+                    mine_html = (
+                        f'<div class="card" style="background:#fef3c7;">'
+                        f'<strong>Active OOO / Absence en cours:</strong> '
+                        f'{esc(m["start_date"])} → {esc(m["end_date"])}, '
+                        f'coverage: {esc(m.get("coverage_email") or "—")} '
+                        '<form method="POST" action="/settings/ooo/end" '
+                        'style="display:inline;margin-left:1rem;">'
+                        '<button type="submit">End / Terminer</button>'
+                        '</form></div>'
+                    )
+                cov_options = ''.join(
+                    f'<option value="{esc(e["email"])}">'
+                    f'{esc(e["email"])}</option>' for e in emps
+                )
+                form_html = (
+                    '<form method="POST" action="/settings/ooo/set">'
+                    '<label>Start / Début <input type="date" name="start_date" required></label> '
+                    '<label>End / Fin <input type="date" name="end_date" required></label><br>'
+                    '<label>Coverage / Remplacement '
+                    f'<select name="coverage_email">{cov_options}</select></label><br>'
+                    '<label>Auto-reply subject / Objet '
+                    '<input type="text" name="auto_reply_subject"></label><br>'
+                    '<label>Auto-reply body / Message<br>'
+                    '<textarea name="auto_reply_body" rows="3" cols="60"></textarea>'
+                    '</label><br>'
+                    '<button type="submit">Set OOO / Activer absence</button>'
+                    '</form>'
+                )
+                body = (
+                    '<h1>Out of office / Absence</h1>'
+                    f'{mine_html}'
+                    f'<div class="card">{form_html}</div>'
+                )
+                self._send_html(page_layout(
+                    "OOO", body, user=user, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                ))
+                return
+
             if path == "/bank/connect":
                 client_code = qs.get("client", [""])[0].strip()
                 plaid_configured = bool(os.environ.get("PLAID_CLIENT_ID")
@@ -24146,6 +24203,75 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     )
                     conn.commit()
                 self._flash_redirect("/settings/2fa", flash=("Authentification à deux facteurs désactivée." if lang == "fr" else "Two-factor authentication disabled."))
+                return
+
+            # Scope 3.2: OOO set / end
+            if path in ("/settings/ooo/set", "/settings/ooo/end"):
+                from src.integrations import employee_ooo as _ooo
+                firm = ctx.get("firm_code") or "OWNER"
+                me = user.get("email") or user.get("username") or ""
+                if path.endswith("/set"):
+                    start = (form.get("start_date") or "").strip()
+                    end_ = (form.get("end_date") or "").strip()
+                    cov = (form.get("coverage_email") or "").strip() or None
+                    subj = (form.get("auto_reply_subject") or "").strip()
+                    bod = (form.get("auto_reply_body") or "").strip()
+                    r = _ooo.set_ooo(
+                        DB_PATH, firm_code=firm, employee_email=me,
+                        coverage_email=cov, start_date=start,
+                        end_date=end_,
+                        auto_reply_subject=subj, auto_reply_body=bod,
+                        created_by=me,
+                    )
+                    if not r.get("ok"):
+                        self._flash_redirect(
+                            "/settings/ooo",
+                            error=f"OOO failed: {r.get('reason')}",
+                        )
+                        return
+                    self._flash_redirect(
+                        "/settings/ooo", flash="OOO activated",
+                    )
+                    return
+                # /settings/ooo/end
+                r = _ooo.end_ooo(
+                    DB_PATH, firm_code=firm, employee_email=me,
+                    ended_by=me, reason='cancelled',
+                )
+                self._flash_redirect(
+                    "/settings/ooo",
+                    flash="OOO ended" if r.get("ok") else "No active OOO",
+                )
+                return
+
+            # Scope 3.2: admin tool — depart employee (reassign + revoke)
+            if path == "/admin/employee/depart":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                from src.integrations import employee_ooo as _ooo
+                firm = ctx.get("firm_code") or "OWNER"
+                emp = (form.get("employee_email") or "").strip()
+                repl = (form.get("replacement_email") or "").strip()
+                if not emp or not repl:
+                    self._flash_redirect(
+                        "/admin/team",
+                        error="Missing employee_email or replacement_email",
+                    )
+                    return
+                r = _ooo.depart_employee(
+                    DB_PATH, firm_code=firm, employee_email=emp,
+                    replacement_email=repl,
+                    actor=user.get("email") or user.get("username") or "",
+                )
+                self._flash_redirect(
+                    "/admin/team",
+                    flash=(
+                        f"Reassigned {r['workflows_reassigned']} workflows, "
+                        f"{r['primaries_updated']} primaries, "
+                        f"{r['secondaries_updated']} secondaries"
+                    ),
+                )
                 return
 
             # --- Bank: exchange public token and save connection ---
