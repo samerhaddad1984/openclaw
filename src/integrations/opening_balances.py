@@ -208,6 +208,50 @@ def has_native_activity_on_or_after(
             return False
 
 
+def has_any_native_activity(
+    db_path: Path | str, *, client_code: str,
+) -> bool:
+    """True when ANY non-opening GL row exists for this client.
+
+    The spec wants opening balances to be the very first posting on a
+    client's ledger. Even activity AT a date BEFORE ``as_of_date``
+    invalidates the premise: the ledger has been accumulating without
+    any opening anchor, so introducing one now would double-count.
+    """
+    ensure_schema(db_path)
+    with _open(db_path) as conn:
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM gl_transactions "
+                "WHERE client_code=? "
+                "  AND source NOT IN (?, ?) "
+                "LIMIT 1",
+                (client_code, SOURCE_OPENING, SOURCE_OPENING_REVERSAL),
+            ).fetchone()
+            return row is not None
+        except sqlite3.OperationalError:
+            return False
+
+
+def is_period_locked(db_path: Path | str, *,
+                     client_code: str, period: str) -> bool:
+    """Consult period_close_locks. Missing table → False (tests bootstrap
+    minimal schemas without the locks table)."""
+    with _open(db_path) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND "
+            "name='period_close_locks'"
+        ).fetchone()
+        if not exists:
+            return False
+        row = conn.execute(
+            "SELECT 1 FROM period_close_locks "
+            "WHERE client_code=? AND period=?",
+            (client_code, period),
+        ).fetchone()
+    return row is not None
+
+
 def get_opening_balance_state(
     db_path: Path | str, *,
     firm_code: str, client_code: str,
@@ -260,6 +304,33 @@ def post_opening_balances(
         return {
             'ok': False,
             'reason': 'native_activity_after_as_of_date',
+            'validation': validation,
+        }
+
+    # Scope 2.3 safety backfill: reject when ANY native activity
+    # exists on the client's ledger. Per spec, opening balances must
+    # be the first posting — even activity dated BEFORE as_of_date
+    # means the ledger has been accumulating against an implicit
+    # zero opening, so introducing one retroactively double-counts.
+    if not force and has_any_native_activity(
+        db_path, client_code=client_code,
+    ):
+        return {
+            'ok': False,
+            'reason': 'native_activity_before_as_of_date',
+            'validation': validation,
+        }
+
+    # Scope 2.3 safety backfill: refuse to write into a period
+    # closed via period_close_locks. The close wizard enforces the
+    # same invariant; without this check, a back-dated opening
+    # balance could overwrite a sealed period.
+    if not force and is_period_locked(
+        db_path, client_code=client_code, period=as_of_date[:7],
+    ):
+        return {
+            'ok': False,
+            'reason': 'period_locked',
             'validation': validation,
         }
 
