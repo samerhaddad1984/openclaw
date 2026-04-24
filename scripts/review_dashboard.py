@@ -23162,6 +23162,77 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 ))
                 return
 
+            # Scope 2.4: historical data import (Caseware/Sage/Excel/IIF/CSV)
+            if path == "/clients/import_historical":
+                if not _can_do(ctx, "view_all_clients"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                hi_code = qs.get("code", [""])[0].strip()
+                if not _require_client_in_firm(hi_code, ctx):
+                    self._flash_redirect("/clients", error="Client not found")
+                    return
+                from src.integrations import historical_import as _hi
+                firm = ctx.get("firm_code") or "OWNER"
+                imports = _hi.list_imports(
+                    DB_PATH, firm_code=firm, client_code=hi_code,
+                )
+                # Build preview from the latest draft/mapped job if any.
+                preview_blob = None
+                if imports and imports[0]['status'] in (
+                    _hi.STATUS_DRAFT, _hi.STATUS_MAPPED,
+                ):
+                    latest = imports[0]
+                    try:
+                        _pv = json.loads(latest.get('preview_json') or '{}')
+                    except Exception:
+                        _pv = {}
+                    preview_blob = {
+                        'job_id': latest['id'],
+                        'sample': _pv.get('sample') or [],
+                        'unmapped': _hi.detect_unmapped(
+                            DB_PATH, hi_code, _pv.get('accounts') or []
+                        ),
+                    }
+                gl_acct_rows = []
+                try:
+                    with open_db() as _conn:
+                        _conn.row_factory = sqlite3.Row
+                        tbl = _conn.execute(
+                            "SELECT 1 FROM sqlite_master WHERE "
+                            "type='table' AND name='gl_accounts'"
+                        ).fetchone()
+                        if tbl:
+                            rows = _conn.execute(
+                                "SELECT account_code, account_name "
+                                "FROM gl_accounts WHERE client_code=? "
+                                "ORDER BY account_code",
+                                (hi_code,)
+                            ).fetchall()
+                            gl_acct_rows = [dict(r) for r in rows]
+                except Exception:
+                    gl_acct_rows = []
+                with open_db() as _conn:
+                    cn_row = _conn.execute(
+                        "SELECT client_name FROM clients "
+                        "WHERE client_code=?", (hi_code,),
+                    ).fetchone()
+                cn_name = cn_row['client_name'] if cn_row else hi_code
+                body = _hi.render_import_historical_page(
+                    firm_code=firm, client_code=hi_code,
+                    client_name=cn_name, imports=imports,
+                    lang=lang, flash=flash, flash_error=flash_error,
+                    preview=preview_blob, gl_accounts=gl_acct_rows,
+                )
+                self._send_html(page_layout(
+                    f"Historical import — {hi_code}", body,
+                    user=user, lang=lang, flash=flash,
+                    flash_error=flash_error,
+                ))
+                return
+
             if path == "/clients/import/template.csv":
                 if not _can_do(ctx, "view_all_clients"):
                     self._send_html("<h1>Forbidden</h1>", status=403)
@@ -28255,6 +28326,129 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "Bulk client import", body,
                     user=user, lang=lang,
                 ))
+                return
+
+            # Scope 2.4: historical import actions (upload / mapping /
+            # post / rollback)
+            if path in ("/clients/import_historical/upload",
+                        "/clients/import_historical/mapping",
+                        "/clients/import_historical/post",
+                        "/clients/import_historical/rollback"):
+                if not _can_do(ctx, "view_all_clients"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                from src.integrations import historical_import as _hi
+                firm = ctx.get("firm_code") or "OWNER"
+                actor = user.get("email") or user.get("username") or ""
+                if path.endswith("/upload"):
+                    ct = self.headers.get("Content-Type", "")
+                    if "multipart/form-data" not in ct:
+                        self._flash_redirect(
+                            "/clients",
+                            error="Missing file / fichier manquant",
+                        )
+                        return
+                    fields, file_bytes, filename = _parse_multipart_simple(
+                        raw, ct
+                    )
+                    hi_code = normalize_text(
+                        fields.get("client_code", "")
+                    ).strip()
+                    if not _require_client_in_firm(hi_code, ctx):
+                        self._flash_redirect(
+                            "/clients", error=t("err_forbidden", lang),
+                        )
+                        return
+                    if not file_bytes:
+                        self._flash_redirect(
+                            f"/clients/import_historical?code={urlquote(hi_code)}",
+                            error="Missing file / fichier manquant",
+                        )
+                        return
+                    blob_root = Path(DB_PATH).parent / "historical_blobs"
+                    result = _hi.ingest_upload(
+                        DB_PATH, blob_root, firm, hi_code,
+                        filename or "import.dat", file_bytes,
+                    )
+                    if not result.get("ok"):
+                        reason = result.get("reason", "unknown")
+                        self._flash_redirect(
+                            f"/clients/import_historical?code={urlquote(hi_code)}",
+                            error=f"Import failed: {reason}",
+                        )
+                        return
+                    self._flash_redirect(
+                        f"/clients/import_historical?code={urlquote(hi_code)}",
+                        flash=(
+                            f"Draft import #{result['job_id']} created "
+                            f"({result['format']}, {result['row_count']} rows)."
+                        ),
+                    )
+                    return
+                # mapping / post / rollback need client_code + job_id
+                hi_code = normalize_text(
+                    form.get("client_code", "")
+                ).strip()
+                if not _require_client_in_firm(hi_code, ctx):
+                    self._flash_redirect(
+                        "/clients", error=t("err_forbidden", lang),
+                    )
+                    return
+                try:
+                    job_id = int(form.get("job_id", "0"))
+                except (TypeError, ValueError):
+                    job_id = 0
+                if job_id <= 0:
+                    self._flash_redirect(
+                        f"/clients/import_historical?code={urlquote(hi_code)}",
+                        error="Missing job_id",
+                    )
+                    return
+                if path.endswith("/mapping"):
+                    mapping = {
+                        k[4:]: v for k, v in form.items()
+                        if k.startswith("map_") and v
+                    }
+                    _hi.save_mapping(DB_PATH, job_id, mapping)
+                    msg = "Mapping saved"
+                elif path.endswith("/post"):
+                    job = _hi.get_import(DB_PATH, job_id)
+                    sample = []
+                    if job and job.get("preview_json"):
+                        try:
+                            sample = (
+                                json.loads(job["preview_json"]).get("sample")
+                                or []
+                            )
+                        except Exception:
+                            sample = []
+                    # Apply any saved mapping before posting.
+                    mapping = {}
+                    if job and job.get("mapping_json"):
+                        try:
+                            mapping = json.loads(job["mapping_json"]) or {}
+                        except Exception:
+                            mapping = {}
+                    mapped_rows = _hi.apply_mapping(sample, mapping)
+                    result = _hi.post_import(
+                        DB_PATH, job_id, mapped_rows, posted_by=actor,
+                    )
+                    msg = (
+                        f"Posted {result.get('posted', 0)} rows"
+                        if result.get("ok")
+                        else f"Post failed: {result.get('reason')}"
+                    )
+                else:
+                    result = _hi.rollback_import(DB_PATH, job_id, by=actor)
+                    msg = (
+                        f"Rolled back {result.get('deleted', 0)} rows"
+                        if result.get("ok")
+                        else f"Rollback failed: {result.get('reason')}"
+                    )
+                self._flash_redirect(
+                    f"/clients/import_historical?code={urlquote(hi_code)}",
+                    flash=msg,
+                )
                 return
 
             # Scope 1.4: CPA creates an outstanding request for a client
