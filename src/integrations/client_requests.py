@@ -346,6 +346,7 @@ def render_client_tasks_page(
     portal_user: dict[str, Any],
     requests: list[dict[str, Any]],
     flash: str = '', flash_error: str = '',
+    nav_html: str = '',
 ) -> str:
     """Render /cp/{user_token}/tasks — the client-side task inbox."""
     name = _esc(client.get("client_name") or client.get("client_code") or "")
@@ -403,6 +404,10 @@ def render_client_tasks_page(
             f'<tbody>{rows_html}</tbody></table>'
         )
 
+    back = '' if nav_html else (
+        f'<p><a href="/cp/{_esc(user_token)}/upload">'
+        '&larr; Retour / Back</a></p>'
+    )
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<title>Tâches / Tasks</title>'
@@ -414,9 +419,12 @@ def render_client_tasks_page(
         '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
         'border-radius:6px;margin-bottom:1rem;}'
         '.muted{color:#6b7280;font-size:12px;}'
+        '.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;}'
+        '.tabs a{padding:8px 14px;background:#f3f4f6;color:#111827;'
+        'border-radius:8px 8px 0 0;text-decoration:none;font-size:14px;}'
+        '.tabs a.active{background:#2a8759;color:white;}'
         '</style></head><body>'
-        f'<p><a href="/cp/{_esc(user_token)}/upload">'
-        '&larr; Retour / Back</a></p>'
+        f'{nav_html}{back}'
         f'<h1>{name} — Tâches / Tasks</h1>'
         f'{flash_html}'
         '<div class="card">'

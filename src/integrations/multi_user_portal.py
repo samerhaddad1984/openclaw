@@ -1237,6 +1237,7 @@ def render_user_portal_admin(
     invitations: list[dict[str, Any]] | None = None,
     audit_entries: list[dict[str, Any]] | None = None,
     flash: str = '', flash_error: str = '',
+    nav_html: str = '',
 ) -> str:
     from src.integrations.phone_normalizer import format_display
     name = _esc(client.get('client_name') or client.get('client_code') or '')
@@ -1354,13 +1355,20 @@ def render_user_portal_admin(
         'th,td{border-bottom:1px solid #eee;padding:8px;text-align:left;'
         'vertical-align:top;font-size:14px;}'
         'form.inline{display:inline;}'
+        '.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;}'
+        '.tabs a{padding:8px 14px;background:#f3f4f6;color:#111827;'
+        'border-radius:8px 8px 0 0;text-decoration:none;font-size:14px;}'
+        '.tabs a.active{background:#2a8759;color:white;}'
         '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
         'border-radius:6px;margin-bottom:1rem;}'
         '.muted{color:#6b7280;font-size:12px;}'
         '.wa-ok{color:#166534;font-size:12px;}'
         '.wa-bad{color:#b91c1c;font-size:12px;}'
         '</style></head><body>'
-        f'<p><a href="/cp/{_esc(user_token)}/upload">&larr; Back to upload</a></p>'
+        f'{nav_html}'
+        + ('' if nav_html else
+           f'<p><a href="/cp/{_esc(user_token)}/upload">'
+           '&larr; Back to upload</a></p>') +
         f'<h1>{name} — team admin</h1>'
         f'{flash_html}'
         '<div class="card"><h2>Invite someone / Inviter quelqu\'un</h2>'

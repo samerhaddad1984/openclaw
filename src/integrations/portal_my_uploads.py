@@ -257,6 +257,7 @@ def render_my_uploads_page(
     portal_user: dict[str, Any], uploads: list[dict[str, Any]],
     team_rejections: list[dict[str, Any]] | None = None,
     flash: str = "", flash_error: str = "",
+    nav_html: str = "",
 ) -> str:
     """Render /cp/{user_token}/my_uploads as bilingual HTML.
 
@@ -362,7 +363,7 @@ def render_my_uploads_page(
             f'{team_block}</div>'
         )
 
-    back = (
+    back = '' if nav_html else (
         f'<p><a href="/cp/{_esc(user_token)}/upload">'
         '&larr; Retour / Back</a></p>'
     )
@@ -378,8 +379,12 @@ def render_my_uploads_page(
         '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
         'border-radius:6px;margin-bottom:1rem;}'
         '.muted{color:#6b7280;font-size:12px;}'
+        '.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;}'
+        '.tabs a{padding:8px 14px;background:#f3f4f6;color:#111827;'
+        'border-radius:8px 8px 0 0;text-decoration:none;font-size:14px;}'
+        '.tabs a.active{background:#2a8759;color:white;}'
         '</style></head><body>'
-        f'{back}'
+        f'{nav_html}{back}'
         f'<h1>{name} — Mes téléversements / My uploads</h1>'
         f'{flash_html}'
         '<div class="card" data-testid="my-uploads">'

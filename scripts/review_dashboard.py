@@ -12780,19 +12780,52 @@ def _portal_status_badge(status: str) -> str:
     return f'<span class="badge badge-review">{esc(status)}</span>'
 
 
-def _portal_tabs(active: str, token: str) -> str:
-    items = [
-        ("upload", "&#128228; Upload"),
-        ("documents", "&#128196; Documents"),
-        ("bank", "&#127970; Bank"),
-        ("messages", "&#128172; Messages"),
-    ]
+def _portal_tabs(active: str, token: str, *,
+                 is_multi: bool = False, role: str = '',
+                 lang: str = 'fr') -> str:
+    """Portal navigation tabs.
+
+    In single-mode (legacy `/c/{token}`) we emit the original 4 tabs.
+    In multi-mode (`/cp/{token}`) we emit the user-visible set:
+      upload, documents, messages, my_uploads, tasks, settings,
+      plus Team (admins only). URLs use the correct `/cp/` prefix
+      so clicking a tab stays inside the multi-user session.
+    """
+    if is_multi:
+        base = f"/cp/{esc(token)}"
+        items = [
+            ("upload",
+             "&#128228; Téléverser" if lang == 'fr' else "&#128228; Upload"),
+            ("documents", "&#128196; Documents"),
+            ("messages", "&#128172; Messages"),
+            ("my_uploads",
+             "&#128228; Mes téléversements" if lang == 'fr'
+             else "&#128228; My uploads"),
+            ("tasks",
+             "&#9989; Tâches" if lang == 'fr' else "&#9989; Tasks"),
+            ("settings",
+             "&#9881;&#65039; Paramètres" if lang == 'fr'
+             else "&#9881;&#65039; Settings"),
+        ]
+        if (role or '').lower() == 'admin':
+            items.append((
+                "admin",
+                "&#128101; Équipe" if lang == 'fr' else "&#128101; Team",
+            ))
+    else:
+        base = f"/c/{esc(token)}"
+        items = [
+            ("upload", "&#128228; Upload"),
+            ("documents", "&#128196; Documents"),
+            ("bank", "&#127970; Bank"),
+            ("messages", "&#128172; Messages"),
+        ]
     parts = []
     for key, label in items:
         path = "" if key == "upload" else f"/{key}"
         cls = "active" if active == key else ""
         parts.append(
-            f'<a class="{cls}" href="/c/{esc(token)}{path}">{label}</a>'
+            f'<a class="{cls}" href="{base}{path}">{label}</a>'
         )
     return f'<nav class="tabs">{"".join(parts)}</nav>'
 
@@ -12902,7 +12935,8 @@ def _render_offline_page() -> str:
 
 def _portal_page_shell(client: dict, token: str, tab: str, body: str,
                        flash: str = "", flash_error: str = "",
-                       *, is_multi: bool = False) -> str:
+                       *, is_multi: bool = False,
+                       role: str = '') -> str:
     """Wrap portal body in common shell (header + tabs + flash + PWA)."""
     name = esc(client.get("client_name") or client.get("client_code") or "")
     # Pick a lang attribute from the client's preferred language; default
@@ -12980,7 +13014,9 @@ def _portal_page_shell(client: dict, token: str, tab: str, body: str,
         f"<style>{_PORTAL_STYLE}</style></head><body>"
         f"<header class='portal'><h1>OtoCPA</h1>"
         f"<div class='sub'>{name}</div></header>"
-        f"<div class='wrap'>{_portal_tabs(tab, token)}{install_ui}"
+        f"<div class='wrap'>"
+        f"{_portal_tabs(tab, token, is_multi=is_multi, role=role, lang=client_lang)}"
+        f"{install_ui}"
         f"{flash_html}{body}</div>"
         f"{pwa_script}"
         "</body></html>"
@@ -13022,7 +13058,9 @@ def _render_install_ui(lang: str) -> str:
 
 
 def render_portal_upload(client: dict, token: str,
-                          flash: str = "", flash_error: str = "") -> str:
+                          flash: str = "", flash_error: str = "",
+                          *, is_multi: bool = False,
+                          role: str = "") -> str:
     body = f"""
     <div class="card">
         <h2>&#128228; Envoyer un document / Upload a document</h2>
@@ -13053,10 +13091,15 @@ def render_portal_upload(client: dict, token: str,
     }})();
     </script>
     """
-    return _portal_page_shell(client, token, "upload", body, flash, flash_error)
+    return _portal_page_shell(
+        client, token, "upload", body, flash, flash_error,
+        is_multi=is_multi, role=role,
+    )
 
 
-def render_portal_documents(client: dict, token: str) -> str:
+def render_portal_documents(client: dict, token: str, *,
+                            is_multi: bool = False,
+                            role: str = "") -> str:
     from src.formatting import format_date_short, money
     client_lang = (client.get("language") or "fr").strip().lower()
     if client_lang not in ("fr", "en"):
@@ -13075,7 +13118,10 @@ def render_portal_documents(client: dict, token: str) -> str:
             '<p class="muted">Aucun document encore soumis. / No documents submitted yet.</p>'
             '</div>'
         )
-        return _portal_page_shell(client, token, "documents", body)
+        return _portal_page_shell(
+        client, token, "documents", body,
+        is_multi=is_multi, role=role,
+    )
     items = ""
     for r in rows:
         raw_date = (r["created_at"] or "")[:10]
@@ -13110,7 +13156,10 @@ def render_portal_documents(client: dict, token: str) -> str:
         </table>
     </div>
     """
-    return _portal_page_shell(client, token, "documents", body)
+    return _portal_page_shell(
+        client, token, "documents", body,
+        is_multi=is_multi, role=role,
+    )
 
 
 def render_portal_bank(client: dict, token: str,
@@ -13188,7 +13237,9 @@ def render_portal_bank(client: dict, token: str,
 
 
 def render_portal_messages(client: dict, token: str,
-                            flash: str = "", flash_error: str = "") -> str:
+                            flash: str = "", flash_error: str = "",
+                            *, is_multi: bool = False,
+                            role: str = "") -> str:
     # Mark inbound (cpa-sent) messages as read when client views them.
     with open_db() as conn:
         conn.execute(
@@ -13238,7 +13289,91 @@ def render_portal_messages(client: dict, token: str,
         </form>
     </div>
     """
-    return _portal_page_shell(client, token, "messages", body, flash, flash_error)
+    return _portal_page_shell(
+        client, token, "messages", body, flash, flash_error,
+        is_multi=is_multi, role=role,
+    )
+
+
+def _render_portal_user_settings(
+    *, client: dict, user_token: str,
+    portal_user: dict, lang: str = 'fr',
+    flash: str = '', flash_error: str = '',
+    nav_html: str = '',
+) -> str:
+    """Scope 1.2 self-service page. The user rotates their own token
+    here — the rotation POST goes to /cp/{token}/rotate_my_token; on
+    success the new token lands in the user's email and the current
+    session is invalidated."""
+    name = esc(client.get('client_name') or client.get('client_code') or '')
+    email = esc(portal_user.get('email') or '')
+    if lang == 'fr':
+        title = 'Paramètres'
+        rotate_label = 'Renouveler mon lien d\'accès'
+        help_fr = (
+            'Si vous croyez que votre lien a été compromis, cliquez '
+            'ci-dessous. Un nouveau lien vous sera envoyé par courriel '
+            'et l\'ancien cessera immédiatement de fonctionner.'
+        )
+        confirm_msg = (
+            'Renouveler le lien? L\'ancien cessera immédiatement de '
+            'fonctionner.'
+        )
+        my_email_label = 'Votre courriel'
+    else:
+        title = 'Settings'
+        rotate_label = 'Rotate my access link'
+        help_fr = (
+            'If you think your link is compromised, click below. '
+            'A new link will be emailed to you and the old one '
+            'stops working immediately.'
+        )
+        confirm_msg = (
+            'Rotate the link? The old one stops working immediately.'
+        )
+        my_email_label = 'Your email'
+    flash_html = ''
+    if flash:
+        flash_html = (
+            f'<div style="background:#d4edda;padding:8px;margin-bottom:10px;">'
+            f'{esc(flash)}</div>'
+        )
+    if flash_error:
+        flash_html += (
+            f'<div style="background:#f8d7da;padding:8px;margin-bottom:10px;">'
+            f'{esc(flash_error)}</div>'
+        )
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        f'<title>{esc(title)}</title>'
+        '<style>body{font-family:system-ui,Arial;max-width:800px;'
+        'margin:2rem auto;padding:1rem;}'
+        '.card{background:#f9fafb;border:1px solid #e5e7eb;padding:1rem;'
+        'border-radius:6px;margin-bottom:1rem;}'
+        '.muted{color:#6b7280;font-size:13px;}'
+        '.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;}'
+        '.tabs a{padding:8px 14px;background:#f3f4f6;color:#111827;'
+        'border-radius:8px 8px 0 0;text-decoration:none;font-size:14px;}'
+        '.tabs a.active{background:#2a8759;color:white;}'
+        '</style></head><body>'
+        f'{nav_html}'
+        f'<h1>{name} — {esc(title)}</h1>'
+        f'{flash_html}'
+        '<div class="card">'
+        f'<p>{esc(my_email_label)}: <strong>{email}</strong></p>'
+        f'<p class="muted">{esc(help_fr)}</p>'
+        f'<form method="POST" action="/cp/{esc(user_token)}/rotate_my_token" '
+        f'onsubmit="return confirm({json_dumps(confirm_msg)});">'
+        f'<button type="submit" style="background:#dc2626;color:white;'
+        'padding:10px 16px;border:none;border-radius:6px;cursor:pointer;">'
+        f'&#128257; {esc(rotate_label)}</button>'
+        '</form></div></body></html>'
+    )
+
+
+def json_dumps(value: str) -> str:
+    """Minimal JSON-string escape for inline JS confirm() text."""
+    return json.dumps(value)
 
 
 def render_portal_whatsapp(client: dict, token: str) -> str:
@@ -20123,18 +20258,26 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return
 
         # Default landing = upload
+        _pu_role = (portal_user.get('role') or '') if portal_user else ''
         if section in ("", "upload"):
-            html_str = render_portal_upload(dict(client), user_token,
-                                              flash, flash_error)
+            html_str = render_portal_upload(
+                dict(client), user_token, flash, flash_error,
+                is_multi=True, role=_pu_role,
+            )
             self._send_html(html_str)
             return
         if section == "documents":
-            html_str = render_portal_documents(dict(client), user_token)
+            html_str = render_portal_documents(
+                dict(client), user_token,
+                is_multi=True, role=_pu_role,
+            )
             self._send_html(html_str)
             return
         if section == "messages":
-            html_str = render_portal_messages(dict(client), user_token,
-                                                flash, flash_error)
+            html_str = render_portal_messages(
+                dict(client), user_token, flash, flash_error,
+                is_multi=True, role=_pu_role,
+            )
             self._send_html(html_str)
             return
         if section == "status":
@@ -20149,6 +20292,16 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                        client_code=client['client_code'])
             self._send_json({"events": events})
             return
+        # Build multi-mode nav once so every standalone page can
+        # inject the same tabs (role-gated for admin-only links).
+        _pu_lang = (client.get('language') or 'fr').strip().lower()
+        if _pu_lang not in ('fr', 'en'):
+            _pu_lang = 'fr'
+        _multi_nav = _portal_tabs(
+            section or 'upload', user_token,
+            is_multi=True, role=_pu_role, lang=_pu_lang,
+        )
+
         if section == "admin":
             if (portal_user.get('role') or '') != 'admin':
                 self._send_html(
@@ -20182,6 +20335,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 users=users, invitations=invites,
                 audit_entries=audit_rows,
                 flash=flash, flash_error=flash_error,
+                nav_html=_multi_nav,
             )
             self._send_html(html_str)
             return
@@ -20206,6 +20360,7 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 portal_user=dict(portal_user),
                 uploads=uploads, team_rejections=team,
                 flash=flash, flash_error=flash_error,
+                nav_html=_multi_nav,
             )
             self._send_html(html_str)
             return
@@ -20222,7 +20377,23 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 client=dict(client), user_token=user_token,
                 portal_user=dict(portal_user), requests=requests,
                 flash=flash, flash_error=flash_error,
+                nav_html=_multi_nav,
             ))
+            return
+
+        if section == "settings":
+            # Scope 1.2 — self-service token rotation page. Lets the
+            # current user rotate their own token without needing the
+            # admin to do it for them.
+            html_str = _render_portal_user_settings(
+                client=dict(client),
+                user_token=user_token,
+                portal_user=dict(portal_user),
+                lang=_pu_lang,
+                flash=flash, flash_error=flash_error,
+                nav_html=_multi_nav,
+            )
+            self._send_html(html_str)
             return
 
         self._send_html(_mup.render_invalid_token(), status=404)
@@ -20272,6 +20443,44 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return self._handle_user_portal_user_action(
                 section, raw, ct, client, portal_user, user_token,
             )
+        if section == "rotate_my_token":
+            # Scope 1.2 self-service: current portal user rotates their
+            # own token. On success their current cookie / URL stops
+            # working — we redirect them to a landing page that says so.
+            from src.integrations import portal_recovery as _pr
+            try:
+                result = _pr.rotate_my_token(
+                    DB_PATH, user_id=portal_user['id'],
+                )
+            except LookupError:
+                self._send_html('<h1>Not found</h1>', status=404)
+                return True
+            # The old user_token is now invalid. Tell the user their
+            # new link has been emailed.
+            new_token = result.get("new_token") or ""
+            body = (
+                '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                '<title>Lien renouvelé / Link rotated</title>'
+                '<style>body{font-family:system-ui,Arial;max-width:640px;'
+                'margin:3rem auto;padding:1rem;text-align:center;}'
+                '.card{background:#d4edda;border:1px solid #c3e6cb;'
+                'padding:2rem;border-radius:8px;}</style></head><body>'
+                '<div class="card">'
+                '<h1>&#128257; Lien renouvelé / Link rotated</h1>'
+                '<p>Votre ancien lien cessera immédiatement de fonctionner. '
+                'Un nouveau lien vous a été envoyé par courriel.</p>'
+                '<p>Your old link stops working immediately. A new link '
+                'was emailed to you.</p>'
+                + (
+                    f'<p class="muted" style="font-size:12px;">'
+                    f'<a href="/cp/{esc(new_token)}/upload">'
+                    'Continuer maintenant / Continue now</a></p>'
+                    if new_token else ''
+                )
+                + '</div></body></html>'
+            )
+            self._send_html(body)
+            return True
         if section.startswith("tasks/") and section.endswith("/complete"):
             # /cp/{token}/tasks/{id}/complete
             try:
