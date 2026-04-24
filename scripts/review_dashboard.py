@@ -16191,6 +16191,15 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
             client, ctx, lang=lang,
         )
 
+    # Portal mode visibility: show single vs multi + recent upgrade
+    # events from client_portal_user_audit so the CPA can spot
+    # self-service upgrades at a glance.
+    portal_mode_section = ''
+    if is_edit:
+        portal_mode_section = _render_portal_mode_section(
+            client, lang=lang,
+        )
+
     # Bank connections (edit mode only — needs an existing client_code).
     bank_section = ''
     if is_edit:
@@ -16497,12 +16506,103 @@ def render_client_form(ctx: dict[str, Any], user: dict[str, Any],
             </div>
         </form>
         {assignment_section}
+        {portal_mode_section}
         {portal_section}
         {wa_section}
         {bank_section}
         {qbo_section}
     </div>
     """, user=user, flash=flash, flash_error=flash_error, lang=lang)
+
+
+def _render_portal_mode_section(
+    client: dict[str, Any], *, lang: str = 'fr',
+) -> str:
+    """Show portal mode + recent self-service upgrade/mode-change
+    events on the CPA client edit page.
+
+    Recent events are read from ``client_portal_user_audit``; we scope
+    to this client and surface the five most recent
+    ``portal_mode_changed`` rows.
+    """
+    mode = (client.get('portal_mode') or 'single').strip()
+    cc = client.get('client_code') or ''
+    recent = []
+    try:
+        with open_db() as conn:
+            rows = conn.execute(
+                "SELECT actor_email, detail, created_at "
+                "FROM client_portal_user_audit "
+                "WHERE client_code=? AND action='portal_mode_changed' "
+                "ORDER BY id DESC LIMIT 5",
+                (cc,),
+            ).fetchall()
+        recent = [dict(r) for r in rows]
+    except Exception:
+        recent = []
+    user_count = 0
+    if mode == 'multi':
+        try:
+            with open_db() as conn:
+                user_count = conn.execute(
+                    "SELECT COUNT(*) FROM client_portal_users "
+                    "WHERE client_code=? AND status IN ('active','invited')",
+                    (cc,),
+                ).fetchone()[0] or 0
+        except Exception:
+            user_count = 0
+    if lang == 'fr':
+        heading = 'Mode du portail'
+        single_msg = (
+            'Portail mono-utilisateur. Le client peut passer '
+            'en mode multi-utilisateurs lui-même depuis '
+            '/c/<token>/settings.'
+        )
+        multi_msg = (
+            f'Portail multi-utilisateurs actif. {user_count} '
+            'utilisateur(s) enregistré(s).'
+        )
+        mode_label = 'Mode actuel'
+        history_label = 'Historique récent des changements de mode'
+        none_label = 'Aucun changement de mode enregistré.'
+    else:
+        heading = 'Portal mode'
+        single_msg = (
+            'Single-user portal enabled. Client can self-upgrade to '
+            'multi-user from /c/<token>/settings.'
+        )
+        multi_msg = (
+            f'Multi-user portal active. {user_count} user(s) registered.'
+        )
+        mode_label = 'Current mode'
+        history_label = 'Recent portal-mode history'
+        none_label = 'No mode changes on record.'
+    msg = multi_msg if mode == 'multi' else single_msg
+    rows_html = ''
+    for r in recent:
+        rows_html += (
+            f'<tr><td style="color:#bbb;">{esc(r.get("created_at") or "")}</td>'
+            f'<td>{esc(r.get("actor_email") or "")}</td>'
+            f'<td class="muted">{esc(r.get("detail") or "")}</td></tr>'
+        )
+    if not rows_html:
+        rows_html = (
+            f'<tr><td colspan="3" class="muted">{esc(none_label)}</td></tr>'
+        )
+    return (
+        '<div data-testid="portal-mode-section" '
+        'style="margin-top:24px;padding:16px;background:#0d1b2a;'
+        'border-radius:6px;border:1px solid #2c3e50;">'
+        f'<h3 style="color:white;margin-top:0;">&#128101; {esc(heading)}</h3>'
+        f'<p style="color:#e0e0e0;">{esc(mode_label)}: '
+        f'<strong data-testid="portal-mode-value">{esc(mode)}</strong></p>'
+        f'<p style="color:#e0e0e0;">{esc(msg)}</p>'
+        f'<h4 style="color:white;margin-top:12px;">{esc(history_label)}</h4>'
+        '<table style="width:100%;font-size:13px;color:#e0e0e0;" '
+        'data-testid="portal-mode-history">'
+        '<tbody>' + rows_html + '</tbody></table>'
+        '</div>'
+    )
 
 
 def _render_client_assignment_section(
