@@ -97,6 +97,125 @@ def set_portal_mode(
     return {'ok': True, 'mode': mode}
 
 
+def upgrade_to_multi_user(
+    db_path: Path | str, *,
+    client_code: str,
+    upgrading_user_email: str = '',
+    upgrading_user_name: str = '',
+    notify_cpa: bool = True,
+) -> dict[str, Any]:
+    """Self-service upgrade from single-user to multi-user.
+
+    Atomically:
+      1. Flip ``clients.portal_mode`` from ``single`` → ``multi``.
+      2. Promote the upgrading user to ``role='admin'`` in
+         ``client_portal_users`` (creates the row if missing, reuses
+         the existing ``clients.portal_token`` so the link keeps
+         working).
+      3. Audit the event.
+      4. Optionally enqueue a CPA notification.
+
+    Idempotent: if the client is already in multi-mode, returns
+    ``{'ok': True, 'already_multi': True}`` without changes.
+    """
+    with _open(db_path) as conn:
+        row = conn.execute(
+            "SELECT firm_code, portal_token, portal_mode, contact_email, "
+            "client_name FROM clients WHERE client_code=?",
+            (client_code,),
+        ).fetchone()
+        if not row:
+            raise LookupError(f"unknown client_code {client_code!r}")
+        firm_code = row['firm_code']
+        current_mode = (row['portal_mode'] or 'single').strip()
+        if current_mode == 'multi':
+            return {'ok': True, 'already_multi': True,
+                    'firm_code': firm_code}
+        portal_token = row['portal_token'] or secrets.token_urlsafe(32)
+        admin_email = (upgrading_user_email
+                       or row['contact_email'] or '').strip()
+        admin_name = (upgrading_user_name
+                      or row['client_name'] or admin_email)
+        # Flip the mode first.
+        conn.execute(
+            "UPDATE clients SET portal_mode='multi' WHERE client_code=?",
+            (client_code,),
+        )
+        # Upsert the admin user. Reuse the client's portal_token so the
+        # same URL keeps working — now as the admin's personal link.
+        existing = conn.execute(
+            "SELECT id FROM client_portal_users "
+            "WHERE firm_code=? AND client_code=? "
+            "AND LOWER(email)=LOWER(?)",
+            (firm_code, client_code, admin_email),
+        ).fetchone()
+        now = _iso_now()
+        if existing:
+            conn.execute(
+                "UPDATE client_portal_users SET role='admin', "
+                "status='active', user_token=?, full_name=COALESCE(?, full_name) "
+                "WHERE id=?",
+                (portal_token, admin_name or None, existing['id']),
+            )
+            user_id = existing['id']
+            action = 'user_role_changed'
+        else:
+            cur = conn.execute(
+                "INSERT INTO client_portal_users "
+                "(firm_code, client_code, email, full_name, role, status, "
+                " user_token, invited_by, invited_at, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (firm_code, client_code, admin_email, admin_name,
+                 'admin', 'active', portal_token,
+                 'self_upgrade', now, now),
+            )
+            user_id = cur.lastrowid
+            action = 'user_created'
+        conn.execute(
+            "INSERT INTO client_portal_user_audit "
+            "(firm_code, client_code, actor_email, action, detail) "
+            "VALUES (?,?,?,?,?)",
+            (firm_code, client_code, admin_email,
+             'portal_mode_changed',
+             'mode=multi;reason=self_upgrade'),
+        )
+        conn.execute(
+            "INSERT INTO client_portal_user_audit "
+            "(firm_code, client_code, actor_email, action, detail) "
+            "VALUES (?,?,?,?,?)",
+            (firm_code, client_code, admin_email, action,
+             f'user_id={user_id};role=admin;source=self_upgrade'),
+        )
+        conn.commit()
+    # CPA notification (best-effort).
+    if notify_cpa:
+        try:
+            from src.integrations import notification_sender as _ns
+            _ns.enqueue(
+                db_path,
+                client_code=client_code,
+                kind='portal_upgraded',
+                title=(
+                    f'Client {client_code} upgraded to multi-user portal'
+                ),
+                body=(
+                    f'{admin_email or "A client admin"} upgraded '
+                    f'{client_code} to multi-user mode. They are now '
+                    'the portal admin and can invite their team.'
+                ),
+                priority=2,
+            )
+        except Exception:
+            log.exception('portal upgrade notification failed')
+    return {
+        'ok': True, 'already_multi': False,
+        'firm_code': firm_code,
+        'admin_user_id': user_id,
+        'admin_email': admin_email,
+        'user_token': portal_token,
+    }
+
+
 def get_client(
     db_path: Path | str, *, firm_code: str | None = None, client_code: str,
 ) -> dict[str, Any] | None:
