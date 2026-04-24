@@ -22972,6 +22972,57 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                        lang=lang))
                 return
 
+            # Scope 3.3: queue overflow dashboard widget
+            if path == "/admin/workload":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import queue_alerts as _qa
+                firm = ctx.get("firm_code") or "OWNER"
+                snap = _qa.workload_snapshot(DB_PATH, firm)
+                color = {
+                    _qa.LEVEL_GREEN: '#10b981',
+                    _qa.LEVEL_YELLOW: '#f59e0b',
+                    _qa.LEVEL_RED: '#ef4444',
+                }
+                tds = ''.join(
+                    f'<tr>'
+                    f'<td>{esc(s["employee_email"])}</td>'
+                    f'<td style="text-align:right;">{s["queue_count"]}</td>'
+                    f'<td><span style="background:{color.get(s["level"], "#888")};'
+                    f'color:white;padding:2px 8px;border-radius:4px;">'
+                    f'{esc(s["level"])}</span></td>'
+                    f'<td>'
+                    '<form method="POST" action="/admin/workload/reassign" '
+                    'style="display:inline;margin:0;">'
+                    f'<input type="hidden" name="from_email" '
+                    f'value="{esc(s["employee_email"])}">'
+                    '<input name="to_email" placeholder="to@firm.com" required> '
+                    '<button type="submit">Reassign all / Réassigner tout</button>'
+                    '</form></td></tr>'
+                    for s in snap
+                )
+                body = (
+                    '<h1>Team workload / Charge d\'équipe</h1>'
+                    '<p>Thresholds: '
+                    f'&lt;{_qa.THRESHOLD_YELLOW}=green, '
+                    f'{_qa.THRESHOLD_YELLOW}-{_qa.THRESHOLD_RED - 1}=yellow, '
+                    f'&ge;{_qa.THRESHOLD_RED}=red.</p>'
+                    '<table style="width:100%;border-collapse:collapse;">'
+                    '<thead><tr><th>Employee</th><th>Queue</th>'
+                    '<th>Level</th><th>Action</th></tr></thead>'
+                    f'<tbody>{tds or "<tr><td colspan=4>No employees</td></tr>"}</tbody>'
+                    '</table>'
+                )
+                self._send_html(page_layout(
+                    "Workload", body, user=user, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                ))
+                return
+
             if path in ("/reports/by_uploader", "/reports/by_uploader.csv",
                          "/reports/by_uploader/drill"):
                 if not _can_do(ctx, "view_all_clients"):
@@ -24241,6 +24292,31 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     "/settings/ooo",
                     flash="OOO ended" if r.get("ok") else "No active OOO",
+                )
+                return
+
+            # Scope 3.3: admin bulk reassign from workload widget
+            if path == "/admin/workload/reassign":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                from src.integrations.employee_ooo import bulk_reassign
+                firm = ctx.get("firm_code") or "OWNER"
+                frm = (form.get("from_email") or "").strip()
+                to = (form.get("to_email") or "").strip()
+                if not frm or not to:
+                    self._flash_redirect(
+                        "/admin/workload",
+                        error="from_email and to_email required",
+                    )
+                    return
+                r = bulk_reassign(
+                    DB_PATH, firm_code=firm, from_email=frm, to_email=to,
+                    actor=(user.get("email") or user.get("username") or ""),
+                )
+                self._flash_redirect(
+                    "/admin/workload",
+                    flash=f"Reassigned {r['reassigned']} items",
                 )
                 return
 
