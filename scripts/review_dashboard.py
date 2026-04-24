@@ -22851,6 +22851,51 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._send_html(render_client_form(ctx, user, client=dict(row), lang=lang))
                 return
 
+            # Scope 3.1: archived clients list
+            if path == "/clients/archived":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import client_archive as _ca
+                firm = ctx.get("firm_code") or "OWNER"
+                archived = _ca.list_archived(DB_PATH, firm)
+                rows_html = ''.join(
+                    f'<tr><td>{esc(c["client_code"])}</td>'
+                    f'<td>{esc(c.get("client_name"))}</td>'
+                    f'<td>{esc(c.get("archive_reason"))}</td>'
+                    f'<td>{esc(c.get("archived_at"))}</td>'
+                    f'<td>{esc(c.get("archived_by"))}</td>'
+                    f'<td>{esc(c.get("retention_expires_at"))}</td>'
+                    f'<td><form method="POST" action="/clients/reactivate" '
+                    'style="display:inline;margin:0;">'
+                    f'<input type="hidden" name="client_code" '
+                    f'value="{esc(c["client_code"])}">'
+                    '<button type="submit">Reactivate / Réactiver</button>'
+                    '</form></td></tr>'
+                    for c in archived
+                )
+                if not rows_html:
+                    rows_html = (
+                        '<tr><td colspan="7" style="text-align:center;">'
+                        'No archived clients / Aucun client archivé</td></tr>'
+                    )
+                body = (
+                    '<h1>Archived clients / Clients archivés</h1>'
+                    '<table style="width:100%;border-collapse:collapse;">'
+                    '<thead><tr><th>Code</th><th>Name</th><th>Reason</th>'
+                    '<th>Archived</th><th>By</th><th>Retention ends</th>'
+                    '<th></th></tr></thead>'
+                    f'<tbody>{rows_html}</tbody></table>'
+                )
+                self._send_html(page_layout(
+                    "Archived clients", body, user=user, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                ))
+                return
+
             # Cleanup Item 1: per-uploader reports (CPA view).
             if path == "/reports/team_workload":
                 if ctx.get("role") not in ("owner", "firm_admin"):
@@ -27882,6 +27927,85 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 self._flash_redirect(
                     f"/clients/edit?code={urlquote(ac_code)}",
                     flash="Team assignment saved",
+                )
+                return
+
+            # Scope 3.1: archive / reactivate / purge client
+            if path in ("/clients/archive", "/clients/reactivate",
+                        "/clients/purge"):
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._flash_redirect("/", error=t("err_forbidden", lang))
+                    return
+                from src.integrations import client_archive as _ca
+                ar_code = normalize_text(form.get("client_code", "")).strip()
+                if not ar_code or not _require_client_in_firm(ar_code, ctx):
+                    self._flash_redirect(
+                        "/clients", error="Client not found",
+                    )
+                    return
+                firm = ctx.get("firm_code") or "OWNER"
+                if firm == "OWNER" and ctx.get("role") == "owner":
+                    with open_db() as _conn:
+                        _f = _conn.execute(
+                            "SELECT firm_code FROM clients WHERE client_code=?",
+                            (ar_code,),
+                        ).fetchone()
+                    firm = _f["firm_code"] if _f else "OWNER"
+                actor = user.get("email") or user.get("username") or ""
+                if path == "/clients/archive":
+                    reason = (form.get("reason", "") or "").strip() \
+                        or _ca.REASON_OTHER
+                    notes = (form.get("notes", "") or "").strip()
+                    force = bool(form.get("force"))
+                    result = _ca.archive_client(
+                        DB_PATH, firm_code=firm, client_code=ar_code,
+                        reason=reason, actor=actor, notes=notes, force=force,
+                    )
+                    if not result.get("ok"):
+                        self._flash_redirect(
+                            f"/clients/edit?code={urlquote(ar_code)}",
+                            error=f"Archive failed: {result['reason']}",
+                        )
+                        return
+                    self._flash_redirect(
+                        "/clients/archived",
+                        flash=(
+                            f"Archived {ar_code}. Retention ends "
+                            f"{result['retention_expires_at'][:10]}."
+                        ),
+                    )
+                    return
+                if path == "/clients/reactivate":
+                    result = _ca.reactivate_client(
+                        DB_PATH, firm_code=firm, client_code=ar_code,
+                        actor=actor,
+                    )
+                    if not result.get("ok"):
+                        self._flash_redirect(
+                            "/clients/archived",
+                            error=f"Reactivate failed: {result['reason']}",
+                        )
+                        return
+                    self._flash_redirect(
+                        f"/clients/edit?code={urlquote(ar_code)}",
+                        flash=f"Reactivated {ar_code}",
+                    )
+                    return
+                # /clients/purge
+                token = (form.get("confirm_token", "") or "").strip()
+                result = _ca.purge_client(
+                    DB_PATH, firm_code=firm, client_code=ar_code,
+                    actor=actor, confirm_token=token,
+                )
+                if not result.get("ok"):
+                    self._flash_redirect(
+                        "/clients/archived",
+                        error=f"Purge failed: {result['reason']}",
+                    )
+                    return
+                self._flash_redirect(
+                    "/clients/archived",
+                    flash=f"Purged {ar_code}",
                 )
                 return
 

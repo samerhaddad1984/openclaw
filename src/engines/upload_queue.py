@@ -56,6 +56,33 @@ def save_and_queue_document(
     db_path = db_path if db_path is not None else DB_PATH
     upload_dir = upload_dir if upload_dir is not None else UPLOAD_DIR
 
+    # Scope 3.1: refuse uploads for archived clients. The check is
+    # best-effort — if the archive module or the clients table is not
+    # present (tests may construct a bare DB), we fall through to the
+    # normal path.
+    if client_code and client_code != "UNASSIGNED":
+        try:
+            from src.integrations.client_archive import can_accept_uploads
+            if not can_accept_uploads(db_path, client_code):
+                # Only raise when the client exists and is archived —
+                # unknown_client returns False too, but that would
+                # silently drop uploads for non-client-scoped ingests.
+                with sqlite3.connect(str(db_path)) as _cc_conn:
+                    _cc_conn.row_factory = sqlite3.Row
+                    _row = _cc_conn.execute(
+                        "SELECT status FROM clients WHERE client_code=?",
+                        (client_code,),
+                    ).fetchone()
+                if _row and (_row["status"] or "active") == "archived":
+                    raise PermissionError(
+                        f"client {client_code} is archived; uploads refused"
+                    )
+        except PermissionError:
+            raise
+        except Exception:
+            # Non-fatal (schema incomplete etc.) — log and continue.
+            log.debug("archive gate skipped", exc_info=True)
+
     doc_id = _new_doc_id()
     safe = _safe_filename(filename)
     client_dir = upload_dir / (client_code or "unknown")
