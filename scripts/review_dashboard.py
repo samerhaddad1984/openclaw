@@ -22972,6 +22972,55 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                                                        lang=lang))
                 return
 
+            # Scope 3.5: at-risk / inactive clients widget
+            if path == "/admin/inactive_clients":
+                if ctx.get("role") not in ("owner", "firm_admin"):
+                    self._send_html(page_layout(
+                        t("err_forbidden", lang),
+                        f'<div class="card"><h2>{esc(t("err_forbidden", lang))}</h2></div>',
+                        user=user, lang=lang), status=403)
+                    return
+                from src.integrations import client_inactivity as _ci
+                firm = ctx.get("firm_code") or "OWNER"
+                try:
+                    days = int(qs.get("days", ["90"])[0])
+                except ValueError:
+                    days = 90
+                summary = _ci.at_risk_summary(DB_PATH, firm, days=days)
+                rows_html = ''.join(
+                    f'<tr><td>{esc(c["client_code"])}</td>'
+                    f'<td>{esc(c.get("client_name"))}</td>'
+                    f'<td>{esc(c.get("last_activity_at") or "never")}</td>'
+                    f'<td style="text-align:right;">'
+                    f'{c.get("days_inactive") if c.get("days_inactive") is not None else "—"}'
+                    '</td>'
+                    f'<td><a href="/clients/edit?code={esc(c["client_code"])}">'
+                    'Review / Examiner</a></td></tr>'
+                    for c in summary['inactive_over_threshold']
+                )
+                if not rows_html:
+                    rows_html = (
+                        '<tr><td colspan="5" style="text-align:center;">'
+                        'No at-risk clients / Aucun client à risque'
+                        '</td></tr>'
+                    )
+                body = (
+                    f'<h1>At-risk clients ({days}d) / '
+                    f'Clients à risque ({days}j)</h1>'
+                    f'<p>Total: {summary["total"]}. '
+                    f'Never active: {summary["never_active_count"]}.</p>'
+                    '<table style="width:100%;border-collapse:collapse;">'
+                    '<thead><tr><th>Code</th><th>Name</th>'
+                    '<th>Last activity</th><th>Days</th><th></th>'
+                    '</tr></thead>'
+                    f'<tbody>{rows_html}</tbody></table>'
+                )
+                self._send_html(page_layout(
+                    "At-risk clients", body, user=user, lang=lang,
+                    flash=flash, flash_error=flash_error,
+                ))
+                return
+
             # Scope 3.3: queue overflow dashboard widget
             if path == "/admin/workload":
                 if ctx.get("role") not in ("owner", "firm_admin"):
