@@ -1027,6 +1027,12 @@ def bootstrap_schema() -> None:
             ("deposit_allocated",       "INTEGER DEFAULT 0"),
             # /health/page counts ai_used; missing column → 500.
             ("ai_used",                 "INTEGER DEFAULT 0"),
+            # Layer 2 honesty marker: set when OCR couldn't classify
+            # the document (no vendor signal) so we leave gl_account
+            # / category empty instead of silently defaulting to 5440 /
+            # operating_expense. CPA dashboard surfaces a count of
+            # these so the human can review.
+            ("needs_categorization",    "INTEGER DEFAULT 0"),
         ):
             if col not in existing:
                 conn.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")

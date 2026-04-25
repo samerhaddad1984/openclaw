@@ -1406,6 +1406,11 @@ _NEW_COLUMNS: list[tuple[str, str]] = [
     # Free-form flags emitted by the extraction-level sanity rules
     # (implausible_tax, vendor_low_confidence, subtotal_outlier, ...).
     ("extraction_flags",           "TEXT"),
+    # Layer 2 honesty marker: 1 when OCR couldn't classify so we
+    # left gl_account/category empty rather than silently writing
+    # a default. Layer-1 display surfaces "Non catégorisé" for
+    # these.
+    ("needs_categorization",       "INTEGER DEFAULT 0"),
 ]
 
 
@@ -1441,8 +1446,18 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
         "gst_amount":                None,
         "qst_amount":                None,
         "extraction_flags":          None,
+        "needs_categorization":      0,
         **record,
     }
+    # Coerce "no real GL signal" cases to NULL so downstream readers
+    # don't mistake an empty string for a real value. Layer-1 display
+    # treats both as uncategorised.
+    if record.get("gl_account") in ("", None):
+        record["gl_account"] = None
+        if record.get("vendor") in ("", None) or record.get("amount") in (None, 0, 0.0):
+            record["needs_categorization"] = 1
+    if record.get("category") in ("", None):
+        record["category"] = None
     conn = sqlite3.connect(str(db_path))
     try:
         _ensure_columns(conn)
@@ -1460,7 +1475,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 raw_ocr_text, hallucination_suspected,
                 handwriting_low_confidence,
                 ai_used, ai_complexity, ai_model_used, ai_cost, raw_ai_response,
-                logical_fingerprint
+                logical_fingerprint, needs_categorization
             ) VALUES (
                 :document_id, :file_name, :file_path, :client_code,
                 :vendor, :doc_type, :amount, :document_date,
@@ -1473,7 +1488,7 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 :raw_ocr_text, :hallucination_suspected,
                 :handwriting_low_confidence,
                 :ai_used, :ai_complexity, :ai_model_used, :ai_cost, :raw_ai_response,
-                :logical_fingerprint
+                :logical_fingerprint, :needs_categorization
             )
             ON CONFLICT(document_id) DO UPDATE SET
                 vendor                      = excluded.vendor,
@@ -1503,7 +1518,8 @@ def upsert_document(record: dict[str, Any], *, db_path: Path = DB_PATH) -> None:
                 ai_model_used               = excluded.ai_model_used,
                 ai_cost                     = excluded.ai_cost,
                 raw_ai_response             = excluded.raw_ai_response,
-                logical_fingerprint         = COALESCE(excluded.logical_fingerprint, documents.logical_fingerprint)
+                logical_fingerprint         = COALESCE(excluded.logical_fingerprint, documents.logical_fingerprint),
+                needs_categorization        = excluded.needs_categorization
             """,
             record,
         )
@@ -1618,7 +1634,16 @@ def enrich_extracted_fields(result: dict[str, Any], client_code: str, conn: sqli
         elif any(x in vendor_lower for x in ["hydro", "gaz", "electricit"]):
             result["gl_account"] = "5410"
         else:
-            result["gl_account"] = "5440"
+            # No reliable signal. The previous behaviour silently set
+            # gl_account='5440' / category='operating_expense' here,
+            # which the queue then displayed as if it were real data
+            # (the rcpt_16.png bug). Leave the fields empty and flag
+            # the document for human categorisation; the queue/detail
+            # display layer surfaces "Non catégorisé" / "Uncategorized"
+            # for these.
+            result["gl_account"] = ""
+            result["category"] = ""
+            result["needs_categorization"] = True
 
     # Alcohol / bar detection — overrides any prior GL because alcohol is
     # never fully deductible. CPA must verify business purpose.

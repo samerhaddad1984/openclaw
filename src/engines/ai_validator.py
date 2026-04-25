@@ -106,7 +106,11 @@ def validate_document_extraction(result: Dict) -> Tuple[Dict, List[str]]:
     gl = result.get('gl_account', '')
     if gl and gl not in VALID_GL_ACCOUNTS:
         errors.append(f'Invalid GL account: {gl}')
-        result['gl_account'] = '5440'
+        # No silent default — clear the value and flag for human
+        # categorisation. Previously this rewrote to '5440' which the
+        # queue then displayed as if real (the rcpt_16.png bug).
+        result['gl_account'] = ''
+        result['needs_categorization'] = True
 
     tax = result.get('tax_code', '')
     if tax and tax not in VALID_TAX_CODES:
