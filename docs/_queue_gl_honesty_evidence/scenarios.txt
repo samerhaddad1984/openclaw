@@ -1,0 +1,29 @@
+=== rcpt_16 (failed OCR) FR ===
+            <td class="file-cell"><a class="doc-link" href="/document?id=doc_a79fe3879fd6" onclick="event.stopPropagation()">rcpt_16.png</a>
+                <div class="doc-sub">doc_a79fe3879fd6 </div></td>
+            <td>CLI1</td>
+            <td class="vendor-cell"></td>
+            <td class="amount-cell"></td><td></td>
+            <td><span data-cell="category" class="muted">Non catégorisé</span></td><td><span data-cell="gl" class="muted">Non catégorisé</span></td>
+            <td><span class="badge badge-needsreview">Needs Review</span></td>
+            <td><form method="POST" action="/assign" class="inline-form" onclick="event.stopPropagation()">
+
+=== sroie_0192 (OCR success, single GL) FR ===
+            <td class="file-cell"><a class="doc-link" href="/document?id=doc_c22e7885fac5" onclick="event.stopPropagation()">sroie_0192.jpg</a>
+                <div class="doc-sub">doc_c22e7885fac5 </div></td>
+            <td>live_stress</td>
+            <td class="vendor-cell">SLF CASH &amp; CARRY</td>
+            <td class="amount-cell">48.0</td><td>2018-02-02</td>
+            <td><span data-cell="category">operating_expense</span></td><td><span data-cell="gl">5430</span></td>
+            <td><span class="badge badge-needsreview">Needs Review</span></td>
+            <td><form method="POST" action="/assign" class="inline-form" onclick="event.stopPropagation()">
+
+=== Invoice-FBBD891C-0073 (multi-GL, 2 lines) FR ===
+            <td class="file-cell"><a class="doc-link" href="/document?id=doc_d50179fc40e7" onclick="event.stopPropagation()">Invoice-FBBD891C-0073.pdf</a>
+                <div class="doc-sub">doc_d50179fc40e7 </div></td>
+            <td>MARCHE_BRE</td>
+            <td class="vendor-cell">CompanyCam</td>
+            <td class="amount-cell">2949.24</td><td>2025-10-06</td>
+            <td><span data-cell="category" class="muted">Non catégorisé</span></td><td><span data-cell="gl" title="5420, 5500">2 comptes GL</span></td>
+            <td><span class="badge badge-ready">Ready</span></td>
+            <td><form method="POST" action="/assign" class="inline-form" onclick="event.stopPropagation()">
