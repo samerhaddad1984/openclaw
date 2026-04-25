@@ -250,8 +250,29 @@ class QBOPush(QBOPull):
             )
         else:
             # Single-line fallback for documents without OCR line-item extraction.
+            #
+            # Layer 3 invariant: refuse to push documents the OCR engine
+            # never categorised. Pre-Layer-2 ingest silently wrote
+            # gl_account='5440' / category='operating_expense' for any
+            # doc it couldn't classify (the rcpt_16.png bug). Pushing
+            # those to QBO would put real money against a fake GL.
+            needs_cat = (
+                doc['needs_categorization'] if 'needs_categorization' in keys
+                else 0
+            )
+            if needs_cat:
+                raise RuntimeError(
+                    f"Document {document_id} is flagged "
+                    f"needs_categorization=1; refusing to push to QBO. "
+                    f"CPA must categorise it first."
+                )
             amount = float((doc['amount'] if 'amount' in keys else 0) or 0)
             account_code = doc['gl_account'] if 'gl_account' in keys else None
+            if not account_code:
+                raise RuntimeError(
+                    f"Document {document_id} has no gl_account and no line "
+                    f"items; refusing to push to QBO. CPA must categorise."
+                )
             account_qbo_id = self._resolve_qbo_account_id(account_code) if account_code else None
             if not account_qbo_id:
                 raise RuntimeError(f"No QBO account mapped for GL {account_code}")

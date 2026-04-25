@@ -99,18 +99,32 @@ def fetch_posted_documents(
     period_end: str,
     db_path: Path = DB_PATH,
 ) -> list[dict[str, Any]]:
-    """Fetch posted documents for a client and date range."""
+    """Fetch posted documents for a client and date range.
+
+    Layer 3 invariant: documents flagged ``needs_categorization=1``
+    are excluded — they have no real GL/category, so exporting them
+    would emit fake data into a CSV / journal that downstream tooling
+    might post to a real ledger. The dashboard surfaces these to the
+    CPA as a separate review queue.
+    """
     if not db_path.exists():
         return []
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
+        # Older DBs (test fixtures) may not have needs_categorization
+        # yet. Fall back to the legacy SELECT in that case.
+        existing_cols = {r[1] for r in conn.execute(
+            "PRAGMA table_info(documents)").fetchall()}
+        _need_col = "COALESCE(d.needs_categorization, 0)" if (
+            "needs_categorization" in existing_cols) else "0"
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 d.document_id, d.vendor, d.document_date, d.amount,
                 d.gl_account, d.tax_code, d.category, d.doc_type,
                 d.file_name, d.client_code,
+                {_need_col} AS needs_categorization,
                 COALESCE(pj.posting_status, '') AS posting_status,
                 COALESCE(pj.external_id, '') AS external_id
             FROM documents d
@@ -125,6 +139,7 @@ def fetch_posted_documents(
             WHERE LOWER(COALESCE(d.client_code, '')) = LOWER(?)
               AND COALESCE(d.document_date, '') >= ?
               AND COALESCE(d.document_date, '') <= ?
+              AND {_need_col} = 0
               AND (pj.posting_status = 'posted' OR COALESCE(pj.external_id, '') != '')
             ORDER BY d.document_date, d.document_id
             """,
