@@ -181,7 +181,16 @@ toujours exact : un achat mixte peut arriver sur une seule ligne,
 un nom d'article peut être coupé en deux, un service peut devoir
 être réparti entre deux comptes du grand livre. Le détail d'un
 document offre trois actions accessibles depuis la carte *Postes de
-facture* :
+facture*.
+
+> **Catégorisez ligne par ligne, pas au niveau du document.** Dès
+> qu'un document a des postes, les colonnes *Catégorie* et *Compte
+> GL* dans la file et le sommaire du document se déduisent des
+> lignes : une seule valeur quand toutes les lignes s'accordent,
+> « Plusieurs » autrement. Les champs Catégorie/Compte GL au
+> niveau du document disparaissent du formulaire d'édition pour
+> les documents à plusieurs lignes — les données par ligne sont
+> la seule source de vérité.
 
 **Séparer (Split)** — une ligne → plusieurs lignes sur le même
 document. Exemple : *Metro Plus 127,50 $* séparé en *Épicerie

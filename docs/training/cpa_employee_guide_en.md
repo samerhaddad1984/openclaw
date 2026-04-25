@@ -28,10 +28,18 @@ The **Home** page shows:
 Click a document to open the detail view:
 
 1. **Image**: zoom, rotate, select region to re-OCR.
-2. **Extracted fields**: date, vendor, amount, GST, QST, category.
-   Correct in place if needed.
-3. **Client notes**: comment left at upload time.
-4. **Action**: Approve, Reject, or Escalate.
+2. **Extracted fields** (document level): date, vendor, amount,
+   GST, QST. Correct in place if needed.
+3. **Line items**: each line carries its own **Category**, **GL
+   account**, and **Tax code**. Categorize per line — the
+   document summary is auto-derived ("Multiple" when lines span
+   2+ categories or GL accounts).
+4. **Client notes**: comment left at upload time.
+5. **Action**: Approve, Reject, or Escalate.
+
+> The doc-level Category and GL Account inputs only appear for
+> single-line documents. Once a document has line items, the
+> line-level data is the single source of truth.
 
 ## 4. Submitting for review
 

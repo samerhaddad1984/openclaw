@@ -28,10 +28,20 @@ Au tableau **Accueil** vous voyez :
 Cliquez sur un document pour ouvrir la vue détaillée :
 
 1. **Image** : zoom, rotation, sélection de zone pour re-OCR.
-2. **Champs extraits** : date, fournisseur, montant, TPS, TVQ,
-   catégorie. Corrigez en place si besoin.
-3. **Notes du client** : commentaire laissé lors du téléversement.
-4. **Action** : Approuver, Rejeter, ou Escalader.
+2. **Champs extraits** (au niveau du document) : date, fournisseur,
+   montant, TPS, TVQ. Corrigez en place si besoin.
+3. **Postes** : chaque poste porte sa propre **catégorie**, son
+   **compte GL** et son **code de taxe**. Catégorisez ligne par
+   ligne — le sommaire du document se déduit automatiquement
+   (« Plusieurs » quand les lignes couvrent 2+ catégories ou
+   comptes GL).
+4. **Notes du client** : commentaire laissé lors du téléversement.
+5. **Action** : Approuver, Rejeter, ou Escalader.
+
+> Les champs Catégorie et Compte GL au niveau du document
+> n'apparaissent que pour les documents à une seule ligne. Dès
+> qu'un document a des postes, les données par ligne sont la
+> seule source de vérité.
 
 ## 4. Soumettre pour revue
 

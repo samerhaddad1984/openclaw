@@ -2544,13 +2544,18 @@ def resolve_portal_token(token: str | None) -> sqlite3.Row | None:
     """Return the client row for a valid portal token, else None.
 
     Rejects empty/short tokens early. Only resolves active clients.
+
+    Also pulls ``language``, ``portal_mode``, and ``contact_email``
+    so callers can render the page in the client's preferred lang
+    without a second DB round-trip.
     """
     if not token or len(token) < 30:
         return None
     with open_db() as conn:
         return conn.execute(
             "SELECT client_code, firm_code, client_name, portal_token, "
-            "portal_token_created_at, portal_token_rotated_count "
+            "portal_token_created_at, portal_token_rotated_count, "
+            "language, portal_mode, contact_email "
             "FROM clients WHERE portal_token=? AND active=1",
             (token,),
         ).fetchone()
@@ -3102,6 +3107,7 @@ def get_documents(
             d.assigned_to AS document_assigned_to,
             d.manual_hold_reason, d.manual_hold_by, d.manual_hold_at,
             d.fraud_flags, d.substance_flags,
+            COALESCE(d.has_line_items, 0) AS has_line_items,
             d.uploaded_by_portal_user_id, d.uploader_name, d.uploader_email,
             COALESCE(d.uploaded_via_channel, 'portal') AS uploaded_via_channel,
             COALESCE(da.assigned_to, d.assigned_to, '') AS assigned_to,
@@ -12767,16 +12773,17 @@ th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #f3f4f6;}
 """
 
 
-def _portal_status_badge(status: str) -> str:
+def _portal_status_badge(status: str, lang: str = "fr") -> str:
+    from src.i18n.ui_labels import ui_t
     s = (status or "").strip().casefold()
     if s in {"new", ""}:
-        return '<span class="badge badge-new">New / Reçu</span>'
+        return f'<span class="badge badge-new">{esc(ui_t("portal_status_new", lang))}</span>'
     if s in {"needsreview", "needs review", "exception", "on hold", "hold"}:
-        return '<span class="badge badge-review">In Review / En révision</span>'
+        return f'<span class="badge badge-review">{esc(ui_t("portal_status_in_review", lang))}</span>'
     if s in {"posted"}:
-        return '<span class="badge badge-posted">Posted / Validé</span>'
+        return f'<span class="badge badge-posted">{esc(ui_t("portal_status_posted", lang))}</span>'
     if s in {"ready", "ready to post"}:
-        return '<span class="badge badge-ready">Ready / Prêt</span>'
+        return f'<span class="badge badge-ready">{esc(ui_t("portal_status_ready", lang))}</span>'
     return f'<span class="badge badge-review">{esc(status)}</span>'
 
 
@@ -13071,33 +13078,61 @@ def render_portal_upload(client: dict, token: str,
                           flash: str = "", flash_error: str = "",
                           *, is_multi: bool = False,
                           role: str = "") -> str:
+    from src.i18n.ui_labels import ui_t
+    lang = (client.get("language") or "fr").strip().lower()
+    if lang not in ("fr", "en"):
+        lang = "fr"
+    btn_label_js = json.dumps("✅ " + ui_t('portal_send_upload', lang))
+    files_word_js = json.dumps(ui_t('portal_files_selected', lang))
+    uploading_js = json.dumps(ui_t('portal_uploading', lang))
+    upload_failed_js = json.dumps(ui_t('portal_upload_failed', lang))
+    nothing_queued_js = json.dumps(ui_t('portal_nothing_queued', lang))
+    queued_processing_js = json.dumps(ui_t('portal_queued_for_processing', lang))
+    processing_word_js = json.dumps(ui_t('portal_processing_status', lang))
+    docs_uploaded_js = json.dumps(ui_t('portal_documents_uploaded', lang))
+    failed_word_js = json.dumps(ui_t('portal_failed_word', lang))
+    done_word_js = json.dumps(ui_t('portal_done_word', lang))
+    proc_word_js = json.dumps(ui_t('portal_processing_word', lang))
+    queued_word_js = json.dumps(ui_t('portal_queued_word', lang))
     body = f"""
     <div class="card">
-        <h2>&#128228; Envoyer un document / Upload a document</h2>
+        <h2>&#128228; {esc(ui_t('portal_upload_heading', lang))}</h2>
         <form method="POST" action="/c/{esc(token)}/upload" enctype="multipart/form-data" id="pform">
-            <div class="drop" id="dz">&#128193; Glissez vos fichiers / Drop files here</div>
+            <div class="drop" id="dz">&#128193; {esc(ui_t('portal_drop_files', lang))}</div>
             <input type="file" id="fi" name="files" multiple
                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
-            <label class="muted">Note (optional)</label>
-            <textarea name="note" rows="2" placeholder="Ex: facture d'épicerie / grocery invoice"></textarea>
+            <label class="muted">{esc(ui_t('portal_note_optional', lang))}</label>
+            <textarea name="note" rows="2" placeholder="{esc(ui_t('portal_note_placeholder', lang))}"></textarea>
             <button type="submit" id="pbtn" style="margin-top:10px;width:100%;">
-                &#9989; Envoyer / Upload
+                &#9989; {esc(ui_t('portal_send_upload', lang))}
             </button>
         </form>
         <div id="pprog" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:14px;"></div>
-        <p class="muted" style="margin-top:12px;">Formats: PDF, JPG, PNG. 20 MB max par fichier.</p>
+        <p class="muted" style="margin-top:12px;">{esc(ui_t('portal_format_hint', lang))}</p>
     </div>
     <script>
     (function(){{
+     var BTN_LABEL={btn_label_js};
+     var FILES_WORD={files_word_js};
+     var UPLOADING={uploading_js};
+     var UPLOAD_FAILED={upload_failed_js};
+     var NOTHING_QUEUED={nothing_queued_js};
+     var QUEUED_PROC={queued_processing_js};
+     var PROCESSING={processing_word_js};
+     var DOCS_UPLOADED={docs_uploaded_js};
+     var FAILED_WORD={failed_word_js};
+     var DONE_WORD={done_word_js};
+     var PROC_WORD={proc_word_js};
+     var QUEUED_WORD={queued_word_js};
      var dz=document.getElementById('dz'),fi=document.getElementById('fi'),form=document.getElementById('pform'),btn=document.getElementById('pbtn'),prog=document.getElementById('pprog');
      dz.addEventListener('click',function(){{fi.click();}});
      ['dragover','dragenter'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#e0e7ff';}});}});
      ['dragleave','drop'].forEach(function(e){{dz.addEventListener(e,function(ev){{ev.preventDefault();dz.style.background='#f9fafb';}});}});
-     dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' file(s) selected';}});
-     fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' file(s) selected';}});
+     dz.addEventListener('drop',function(ev){{fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' '+FILES_WORD;}});
+     fi.addEventListener('change',function(){{if(fi.files.length)dz.textContent=fi.files.length+' '+FILES_WORD;}});
      function show(m){{prog.style.display='block';prog.textContent=m;}}
-     function poll(ids){{fetch('/upload/status?document_ids='+encodeURIComponent(ids.join(','))).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok)return;var c=j.counts||{{}};var done=(c.ready||0)+(c.error||0);show('Processing '+ids.length+'... '+done+' done, '+(c.processing||0)+' processing, '+(c.queued||0)+' queued');if(done>=ids.length){{clearInterval(window._ppt);show('\u2705 '+ids.length+' document(s) uploaded ('+(c.error||0)+' failed).');btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';}}}}).catch(function(){{}});}}
-     form.addEventListener('submit',function(ev){{ev.preventDefault();btn.disabled=true;btn.textContent='Uploading...';var fd=new FormData(form);fetch(form.action,{{method:'POST',body:fd,headers:{{'X-Async-Upload':'1'}}}}).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok){{show('\u274c '+(j.error||'Upload failed'));btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';return;}}var ids=j.document_ids||[];if(!ids.length){{show('\u26a0\ufe0f Nothing queued');btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';return;}}show('Queued '+ids.length+' document(s). Processing...');poll(ids);window._ppt=setInterval(function(){{poll(ids);}},5000);}}).catch(function(e){{show('\u274c '+e);btn.disabled=false;btn.innerHTML='\u2705 Envoyer / Upload';}});}});
+     function poll(ids){{fetch('/upload/status?document_ids='+encodeURIComponent(ids.join(','))).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok)return;var c=j.counts||{{}};var done=(c.ready||0)+(c.error||0);show(PROCESSING+' '+ids.length+'... '+done+' '+DONE_WORD+', '+(c.processing||0)+' '+PROC_WORD+', '+(c.queued||0)+' '+QUEUED_WORD);if(done>=ids.length){{clearInterval(window._ppt);show('\u2705 '+ids.length+' '+DOCS_UPLOADED+' ('+(c.error||0)+' '+FAILED_WORD+').');btn.disabled=false;btn.innerHTML=BTN_LABEL;}}}}).catch(function(){{}});}}
+     form.addEventListener('submit',function(ev){{ev.preventDefault();btn.disabled=true;btn.textContent=UPLOADING;var fd=new FormData(form);fetch(form.action,{{method:'POST',body:fd,headers:{{'X-Async-Upload':'1'}}}}).then(function(r){{return r.json();}}).then(function(j){{if(!j.ok){{show('\u274c '+(j.error||UPLOAD_FAILED));btn.disabled=false;btn.innerHTML=BTN_LABEL;return;}}var ids=j.document_ids||[];if(!ids.length){{show('\u26a0\ufe0f '+NOTHING_QUEUED);btn.disabled=false;btn.innerHTML=BTN_LABEL;return;}}show(ids.length+' '+QUEUED_PROC);poll(ids);window._ppt=setInterval(function(){{poll(ids);}},5000);}}).catch(function(e){{show('\u274c '+e);btn.disabled=false;btn.innerHTML=BTN_LABEL;}});}});
     }})();
     </script>
     """
@@ -13111,6 +13146,7 @@ def render_portal_documents(client: dict, token: str, *,
                             is_multi: bool = False,
                             role: str = "") -> str:
     from src.formatting import format_date_short, money
+    from src.i18n.ui_labels import ui_t
     client_lang = (client.get("language") or "fr").strip().lower()
     if client_lang not in ("fr", "en"):
         client_lang = "fr"
@@ -13124,8 +13160,8 @@ def render_portal_documents(client: dict, token: str, *,
         ).fetchall()
     if not rows:
         body = (
-            '<div class="card"><h2>&#128196; Mes documents / My documents</h2>'
-            '<p class="muted">Aucun document encore soumis. / No documents submitted yet.</p>'
+            f'<div class="card"><h2>&#128196; {esc(ui_t("portal_my_documents", client_lang))}</h2>'
+            f'<p class="muted">{esc(ui_t("portal_no_documents_yet", client_lang))}</p>'
             '</div>'
         )
         return _portal_page_shell(
@@ -13149,18 +13185,18 @@ def render_portal_documents(client: dict, token: str, *,
             f'<td class="muted">{esc(date)}</td>'
             f'<td>{esc(vendor)}</td>'
             f'<td>{esc(amt_str)}</td>'
-            f'<td>{_portal_status_badge(r["review_status"] or "")}{reason_html}</td></tr>'
+            f'<td>{_portal_status_badge(r["review_status"] or "", client_lang)}{reason_html}</td></tr>'
         )
     body = f"""
     <div class="card">
-        <h2>&#128196; Mes documents / My documents</h2>
+        <h2>&#128196; {esc(ui_t("portal_my_documents", client_lang))}</h2>
         <table>
             <thead><tr>
-                <th>Fichier / File</th>
-                <th>Date</th>
-                <th>Vendeur / Vendor</th>
-                <th>Montant</th>
-                <th>Statut</th>
+                <th>{esc(ui_t("portal_col_file", client_lang))}</th>
+                <th>{esc(ui_t("portal_col_date", client_lang))}</th>
+                <th>{esc(ui_t("portal_col_vendor", client_lang))}</th>
+                <th>{esc(ui_t("portal_col_amount", client_lang))}</th>
+                <th>{esc(ui_t("portal_col_status", client_lang))}</th>
             </tr></thead>
             <tbody>{items}</tbody>
         </table>
@@ -13174,6 +13210,13 @@ def render_portal_documents(client: dict, token: str, *,
 
 def render_portal_bank(client: dict, token: str,
                         flash: str = "", flash_error: str = "") -> str:
+    from src.i18n.ui_labels import ui_t
+    lang = (client.get("language") or "fr").strip().lower()
+    if lang not in ("fr", "en"):
+        lang = "fr"
+    loading_js = json.dumps(ui_t('portal_loading', lang))
+    plaid_not_cfg_js = json.dumps(ui_t('portal_plaid_not_configured', lang))
+    conn_failed_js = json.dumps(ui_t('portal_connection_failed', lang))
     with open_db() as conn:
         conns = conn.execute(
             "SELECT id, institution_name, account_name, last_sync "
@@ -13188,38 +13231,40 @@ def render_portal_bank(client: dict, token: str,
                 f'<div style="padding:10px;border-bottom:1px solid #f3f4f6;">'
                 f'<strong>{esc(bc["institution_name"] or "")}</strong>'
                 f' &middot; <span class="muted">{esc(bc["account_name"] or "")}</span>'
-                f'<div class="muted">Last sync: {esc(bc["last_sync"] or "never")}</div>'
+                f'<div class="muted">{esc(ui_t("portal_last_sync", lang))}: {esc(bc["last_sync"] or ui_t("portal_never", lang))}</div>'
                 f'</div>'
             )
         body = f"""
         <div class="card">
-            <h2>&#127970; Compte bancaire / Bank account</h2>
-            <p class="muted">Connecté via Plaid. Votre CPA voit les transactions mais pas vos identifiants bancaires.</p>
+            <h2>&#127970; {esc(ui_t('portal_bank_account', lang))}</h2>
+            <p class="muted">{esc(ui_t('portal_bank_connected_note', lang))}</p>
             {items}
         </div>
         """
     else:
         body = f"""
         <div class="card">
-            <h2>&#127970; Connectez votre banque / Connect your bank</h2>
-            <p class="muted">Connectez votre compte bancaire de façon sécurisée via Plaid.
-            Votre CPA peut lire les transactions sans voir vos mots de passe.</p>
+            <h2>&#127970; {esc(ui_t('portal_connect_bank_heading', lang))}</h2>
+            <p class="muted">{esc(ui_t('portal_connect_bank_body', lang))}</p>
             <button id="plaid-link-btn" class="btn" style="margin-top:10px;">
-                &#127970; Connecter / Connect bank
+                &#127970; {esc(ui_t('portal_connect_bank_button', lang))}
             </button>
             <p id="plaid-status" class="muted" style="margin-top:10px;"></p>
         </div>
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
         <script>
         (function(){{
+         var LOADING={loading_js};
+         var PLAID_NOT_CFG={plaid_not_cfg_js};
+         var CONN_FAILED={conn_failed_js};
          var btn=document.getElementById('plaid-link-btn');
          var status=document.getElementById('plaid-status');
          btn.addEventListener('click',function(){{
-          status.textContent='Loading...';
+          status.textContent=LOADING;
           fetch('/c/{esc(token)}/bank/link-token',{{method:'POST'}})
            .then(function(r){{return r.json();}})
            .then(function(d){{
-            if(!d.link_token){{status.textContent=d.error||'Plaid not configured';return;}}
+            if(!d.link_token){{status.textContent=d.error||PLAID_NOT_CFG;return;}}
             status.textContent='';
             var h=Plaid.create({{
              token:d.link_token,
@@ -13231,14 +13276,14 @@ def render_portal_bank(client: dict, token: str,
               }}).then(function(r){{return r.json();}})
                 .then(function(res){{
                  if(res.ok){{window.location.reload();}}
-                 else{{status.textContent='Connection failed: '+(res.error||'unknown');}}
+                 else{{status.textContent=CONN_FAILED+': '+(res.error||'unknown');}}
                 }});
              }},
              onExit:function(){{status.textContent='';}}
             }});
             h.open();
            }})
-           .catch(function(e){{status.textContent='Error: '+e.message;}});
+           .catch(function(e){{status.textContent=CONN_FAILED+': '+e.message;}});
          }});
         }})();
         </script>
@@ -13250,6 +13295,10 @@ def render_portal_messages(client: dict, token: str,
                             flash: str = "", flash_error: str = "",
                             *, is_multi: bool = False,
                             role: str = "") -> str:
+    from src.i18n.ui_labels import ui_t
+    lang = (client.get("language") or "fr").strip().lower()
+    if lang not in ("fr", "en"):
+        lang = "fr"
     # Mark inbound (cpa-sent) messages as read when client views them.
     with open_db() as conn:
         conn.execute(
@@ -13284,9 +13333,7 @@ def render_portal_messages(client: dict, token: str,
             )
     if not thread_html:
         thread_html = (
-            '<p class="muted" style="text-align:center;">Aucun message. '
-            'Envoyez un message à votre CPA ci-dessous. / '
-            'No messages yet. Send one below.</p>'
+            f'<p class="muted" style="text-align:center;">{esc(ui_t("portal_no_messages", lang))}</p>'
         )
     body = f"""
     <div class="card">
@@ -13294,8 +13341,8 @@ def render_portal_messages(client: dict, token: str,
         <div class="thread">{thread_html}</div>
         <form method="POST" action="/c/{esc(token)}/messages" style="margin-top:14px;">
             <textarea name="body" rows="3" required
-                placeholder="Écrivez à votre CPA... / Write to your CPA..."></textarea>
-            <button type="submit" style="margin-top:8px;">&#128228; Envoyer / Send</button>
+                placeholder="{esc(ui_t('portal_message_placeholder', lang))}"></textarea>
+            <button type="submit" style="margin-top:8px;">&#128228; {esc(ui_t('portal_send_message', lang))}</button>
         </form>
     </div>
     """
@@ -17035,6 +17082,54 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         from src.engines.client_mismatch_engine import get_learning_status_icon as _get_learning_icon
     except Exception:
         pass
+    # For multi-line docs, we collapse the line-level GL/Category into a
+    # single column value: the unique line value when there's only one,
+    # else "Multiple" (lang-aware). Source of truth is invoice_lines \u2014
+    # documents.gl_account/category are stale on multi-line docs.
+    from src.i18n.ui_labels import ui_t as _q_ui_t
+    _multi_line_doc_ids = [r["document_id"] for r in rows
+                            if int(r.get("has_line_items") or 0)]
+    _line_summary_by_doc: dict[str, dict] = {}
+    if _multi_line_doc_ids:
+        try:
+            with open_db() as _qconn:
+                _placeholders = ",".join("?" for _ in _multi_line_doc_ids)
+                _line_rows = _qconn.execute(
+                    f"SELECT document_id, gl_account, category "
+                    f"FROM invoice_lines WHERE document_id IN ({_placeholders})",
+                    tuple(_multi_line_doc_ids),
+                ).fetchall()
+            for _lr in _line_rows:
+                _doc = _lr["document_id"]
+                _gl = _lr["gl_account"]
+                _cat = _lr["category"]
+                _entry = _line_summary_by_doc.setdefault(
+                    _doc, {"gl": set(), "cat": set()})
+                if (_gl or "").strip():
+                    _entry["gl"].add(_gl.strip())
+                if (_cat or "").strip():
+                    _entry["cat"].add(_cat.strip())
+        except sqlite3.OperationalError:
+            pass
+
+    def _queue_line_value(doc_id: str, has_lines: int, fallback: str,
+                          field: str) -> str:
+        """Pick the column value for Category/GL in a queue row.
+        - has_lines=0 \u2192 fallback (the doc-level value).
+        - has_lines=1 + 1 unique value \u2192 that value.
+        - has_lines=1 + 2+ unique values \u2192 "Multiple" (lang-aware).
+        """
+        if not has_lines:
+            return fallback
+        entry = _line_summary_by_doc.get(doc_id)
+        if not entry:
+            return fallback
+        values = entry["gl"] if field == "gl" else entry["cat"]
+        if len(values) == 1:
+            return next(iter(values))
+        if len(values) >= 2:
+            return _q_ui_t("doc_multiple_categories", lang)
+        return ""
     row_html: list[str] = []
     card_html: list[str] = []
     for _row_idx, row in enumerate(rows):
@@ -17094,13 +17189,19 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 )
         except Exception:
             _uploader_badge_html = ""
+        _row_has_lines = int(row.get("has_line_items") or 0)
+        _row_doc_id = row["document_id"]
+        _row_category_display = _queue_line_value(
+            _row_doc_id, _row_has_lines, row.get("category") or "", "cat")
+        _row_gl_display = _queue_line_value(
+            _row_doc_id, _row_has_lines, row.get("gl_account") or "", "gl")
         row_html.append(f"""<tr class="data-row" onclick="toggleRowDetail('{_detail_id}')">
             <td class="file-cell"><a class="doc-link" href="{_doc_url}" onclick="event.stopPropagation()">{esc(row["file_name"])}</a>
                 <div class="doc-sub">{esc(row["document_id"])} {_uploader_badge_html}</div></td>
             <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td>
             <td class="vendor-cell">{esc(row["vendor"])}</td>
             <td class="amount-cell">{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
-            <td>{esc(row["category"])}</td><td>{esc(row["gl_account"])}</td>
+            <td>{esc(_row_category_display)}</td><td>{esc(_row_gl_display)}</td>
             <td>{review_status_badge(status_display)}</td>
             <td>{assign_ctrl}</td>
             <td class="reason-cell">{_ls_badge}{queue_fraud_badges(row)} {esc(reason)}</td>
@@ -17117,7 +17218,7 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 <div style="color:#334155;">{next_action_display}</div>
             </div>
             <div>
-                <a href="{_doc_url}" class="button-link btn-primary">{esc(t("btn_open", lang)) if t("btn_open", lang) != "btn_open" else "Ouvrir / Open"}</a>
+                <a href="{_doc_url}" class="button-link btn-primary">{esc(t("btn_open", lang)) if t("btn_open", lang) != "btn_open" else esc(_q_ui_t("open", lang))}</a>
             </div>
         </div>
     </div>
@@ -18301,16 +18402,67 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
 
     _doc_has_line_items = int(row.get("has_line_items") or 0)
 
-    # When line items exist, GL and tax code are per-line — hide the
+    # When line items exist, GL/Tax/Category are per-line — hide the
     # redundant document-level fields and show a short explanation instead.
+    # The line-level data is the single source of truth; document-level
+    # values are misleading when a document spans multiple GL accounts.
+    from src.i18n.ui_labels import ui_t as _doc_ui_t
+    _line_summary = {"n_lines": 0, "n_gl_accounts": 0, "n_categories": 0}
+    _ll: list = []
     if _doc_has_line_items:
+        try:
+            with open_db() as _line_conn:
+                _ll = _line_conn.execute(
+                    "SELECT gl_account, category FROM invoice_lines "
+                    "WHERE document_id = ?",
+                    (document_id,),
+                ).fetchall()
+            _line_summary["n_lines"] = len(_ll)
+            _line_summary["n_gl_accounts"] = len({
+                (r["gl_account"] or "").strip()
+                for r in _ll if (r["gl_account"] or "").strip()})
+            _line_summary["n_categories"] = len({
+                (r["category"] or "").strip()
+                for r in _ll if (r["category"] or "").strip()})
+        except sqlite3.OperationalError:
+            pass
         _summary_gl_cell = (
-            '<div><strong>GL / Tax</strong>'
-            '<div class="small muted">Définis par les postes / Line items define the accounting entries</div></div>'
+            f'<div><strong>{esc(_doc_ui_t("doc_gl_tax_heading", lang))}</strong>'
+            f'<div class="small muted">{esc(_doc_ui_t("doc_gl_tax_line_items_note", lang))}</div></div>'
         )
+        # Replace doc-level Category cell with a line-derived view: show
+        # the single category if all lines share one, else "Multiple".
+        _cat_label = esc(t("doc_field_category", lang))
+        if _line_summary["n_categories"] <= 1:
+            _cat_value = ""
+            for _r in (_ll if _line_summary["n_lines"] else []):
+                if (_r["category"] or "").strip():
+                    _cat_value = _r["category"]
+                    break
+            _summary_category_cell = (
+                f'<div><strong>{_cat_label}</strong><div>{esc(_cat_value)}</div></div>'
+            )
+        else:
+            _summary_category_cell = (
+                f'<div><strong>{_cat_label}</strong>'
+                f'<div>{esc(_doc_ui_t("doc_multiple_categories", lang))}</div></div>'
+            )
     else:
         _summary_gl_cell = (
             f'<div><strong>{esc(t("doc_field_gl_account", lang))}</strong><div>{esc(row["gl_account"])}</div></div>'
+        )
+        _summary_category_cell = (
+            f'<div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>'
+        )
+    # Single-language uploader-by caption.
+    _uploaded_by_label = _doc_ui_t("doc_uploaded_by", lang)
+    # Line-summary banner when has_line_items.
+    _line_summary_banner = ""
+    if _doc_has_line_items and _line_summary["n_lines"]:
+        _line_summary_banner = (
+            '<div class="card" style="background:#eff6ff;border:1px solid #bfdbfe;">'
+            f'<strong>{esc(_doc_ui_t("doc_lines_count_summary", lang).format(n=_line_summary["n_lines"], m=max(_line_summary["n_gl_accounts"], 1)))}</strong>'
+            '</div>'
         )
 
     body = f"""
@@ -18326,6 +18478,7 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
     {_auto_approve_banner}
     {_learning_progress_html}
     {_handwriting_side_by_side if _show_handwriting_review else pdf_viewer_html}
+    {_line_summary_banner}
     <div class="card"><h3>{esc(t("doc_section_summary", lang))}</h3>
         <div class="grid-4">
             <div><strong>{esc(t("doc_field_status", lang))}</strong><div>{review_status_badge(accounting_status)}</div></div>
@@ -18334,8 +18487,8 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
             <div><strong>{esc(t("doc_field_assigned_to", lang))}</strong><div>{esc(assigned or t("unassigned_label", lang))}</div></div>
             <div><strong>{esc(t("doc_field_amount", lang))}</strong><div>{esc(row["amount"])}</div></div>
             <div><strong>{esc(t("doc_field_date", lang))}</strong><div>{esc(row["document_date"])}</div></div>
-            <div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>
-            <div><strong>{"Téléversé par / Uploaded by" if lang == "fr" else "Uploaded by / Téléversé par"}</strong><div>{_render_uploader_attribution(row, lang=lang)}</div></div>
+            {_summary_category_cell}
+            <div><strong>{esc(_uploaded_by_label)}</strong><div>{_render_uploader_attribution(row, lang=lang)}</div></div>
             {_summary_gl_cell}
         </div>
     </div>
@@ -18360,9 +18513,9 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 <div class="field"><label>{esc(t("field_document_date", lang))}</label><input type="text" name="document_date" value="{esc(row["document_date"])}"></div>
                 {"" if _doc_has_line_items else '<div class="field"><label>' + esc(t("col_gl_account", lang)) + '</label><input type="text" name="gl_account" value="' + esc(row["gl_account"]) + '"></div>'}
                 {"" if _doc_has_line_items else '<div class="field"><label>Tax Code</label><input type="text" name="tax_code" value="' + esc(row.get('tax_code') or '') + '"></div>'}
-                <div class="field"><label>{esc(t("col_category", lang))}</label><input type="text" name="category" value="{esc(row["category"])}"></div>
+                {"" if _doc_has_line_items else '<div class="field"><label>' + esc(t("col_category", lang)) + '</label><input type="text" name="category" value="' + esc(row["category"]) + '"></div>'}
                 <div class="field"><label>{esc(t("field_review_status", lang))}</label><select name="review_status">{status_options}</select></div>
-                {"" if not _doc_has_line_items else '<div class="field"><div class="small muted" style="padding-top:10px;">GL et taxe définis par les postes / GL and tax defined by line items</div></div>'}
+                {"" if not _doc_has_line_items else '<div class="field"><div class="small muted" style="padding-top:10px;">' + esc(_doc_ui_t("doc_gl_tax_edit_note", lang)) + '</div></div>'}
             </div>
             <button class="btn-primary" type="submit">{esc(t("btn_save_changes", lang))}</button>
         </form>
@@ -20301,6 +20454,10 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             # Scope 1.2 self-service for single-user portal: rotate the
             # client's portal_token directly. The old URL stops working
             # immediately — we render a landing page with the new link.
+            from src.i18n.ui_labels import ui_t
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
             new_token = generate_portal_token()
             with open_db() as conn:
                 conn.execute(
@@ -20314,19 +20471,21 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                 conn.commit()
             log_portal_access(client_code, firm_code, token, self,
                               "self_rotate_token")
+            _title = ui_t('portal_link_rotated_title', _c_lang)
+            _body = ui_t('portal_link_rotated_body', _c_lang)
+            _continue = ui_t('portal_continue', _c_lang)
             body = (
-                '<!DOCTYPE html><html><head><meta charset="utf-8">'
-                '<title>Lien renouvelé / Link rotated</title>'
+                f'<!DOCTYPE html><html lang="{_c_lang}"><head><meta charset="utf-8">'
+                f'<title>{esc(_title)}</title>'
                 '<style>body{font-family:system-ui,Arial;max-width:640px;'
                 'margin:3rem auto;padding:1rem;text-align:center;}'
                 '.card{background:#d4edda;border:1px solid #c3e6cb;'
                 'padding:2rem;border-radius:8px;}</style></head><body>'
                 '<div class="card">'
-                '<h1>&#128257; Lien renouvelé / Link rotated</h1>'
-                '<p>Votre ancien lien cesse immédiatement de fonctionner.</p>'
-                '<p>Your old link stops working immediately.</p>'
+                f'<h1>&#128257; {esc(_title)}</h1>'
+                f'<p>{esc(_body)}</p>'
                 f'<p><a href="/c/{esc(new_token)}/upload">'
-                'Continuer / Continue</a></p>'
+                f'{esc(_continue)}</a></p>'
                 '</div></body></html>'
             )
             self._send_html(body)
@@ -20359,19 +20518,29 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             self._redirect(f"/cp/{new_token}/admin")
             return True
         if section == "upload":
+            from src.i18n.ui_labels import ui_t
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
             is_async = _wants_async_upload(self)
             if "multipart/form-data" not in ct:
                 if is_async:
-                    self._send_json({"ok": False, "error": "No file uploaded"}, status=400)
+                    self._send_json({"ok": False,
+                                     "error": ui_t('portal_no_file_uploaded_error', _c_lang)},
+                                    status=400)
                     return True
-                self._portal_redirect(token, "", error="Aucun fichier téléversé / No file uploaded")
+                self._portal_redirect(token, "",
+                                       error=ui_t('portal_no_file_uploaded_error', _c_lang))
                 return True
             fields, files = _parse_multipart_files(raw, ct)
             if not files:
                 if is_async:
-                    self._send_json({"ok": False, "error": "No file selected"}, status=400)
+                    self._send_json({"ok": False,
+                                     "error": ui_t('portal_no_file_selected_error', _c_lang)},
+                                    status=400)
                     return True
-                self._portal_redirect(token, "", error="Aucun fichier sélectionné / No file selected")
+                self._portal_redirect(token, "",
+                                       error=ui_t('portal_no_file_selected_error', _c_lang))
                 return True
             limit_err = _batch_limit_error(files)
             if limit_err:
@@ -20406,10 +20575,9 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
                     "failed": fail_count,
                 })
                 return True
-            msg = (f"{len(document_ids)} document(s) en file de traitement / "
-                   f"{len(document_ids)} document(s) queued for processing")
+            msg = f"{len(document_ids)} {ui_t('portal_upload_flash', _c_lang)}"
             if fail_count:
-                msg += f", {fail_count} échec(s) / failed to queue"
+                msg += f", {fail_count} {ui_t('portal_upload_flash_failed', _c_lang)}"
             self._portal_redirect(token, "documents", flash=msg)
             return True
 
@@ -20490,10 +20658,15 @@ class ReviewDashboardHandler(BaseHTTPRequestHandler):
             return True
 
         if section == "messages":
+            from src.i18n.ui_labels import ui_t
+            _c_lang = (client.get("language") or "fr").strip().lower()
+            if _c_lang not in ("fr", "en"):
+                _c_lang = "fr"
             form = urllib.parse.parse_qs(raw.decode("utf-8"), keep_blank_values=True)
             body_txt = (form.get("body", [""])[0] or "").strip()
             if not body_txt:
-                self._portal_redirect(token, "messages", error="Message vide / Empty message")
+                self._portal_redirect(token, "messages",
+                                       error=ui_t('portal_empty_message_error', _c_lang))
                 return True
             try:
                 with open_db() as conn:

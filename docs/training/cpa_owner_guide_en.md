@@ -171,7 +171,14 @@ OCR produces one line per invoice row, but it isn't always right: a
 mixed purchase can land on one line, a single item's name can be cut
 in two, a service may need to be allocated across two GL accounts.
 The document detail page offers three actions from the *Line items*
-card:
+card.
+
+> **Categorize per line, not per document.** Once a document has line
+> items, the *Category* and *GL Account* columns in the queue and the
+> document summary are derived from the lines: a single value when all
+> lines agree, "Multiple" otherwise. The document-level Category/GL
+> inputs disappear from the edit form for multi-line documents — the
+> line-level data is the source of truth.
 
 **Split** — one line → several lines on the same document. Example:
 *Metro Plus $127.50* split into *Grocery $84.00* (tax Z) and

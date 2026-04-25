@@ -1,0 +1,75 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>OtoCPA &middot; PenTest Client A1</title><link rel="manifest" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/manifest.json"><meta name="theme-color" content="#2a8759"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="OtoCPA"><link rel="apple-touch-icon" href="/static/pwa/icon-192.png"><style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;margin:0;padding:0;color:#111827;}
+.wrap{max-width:720px;margin:0 auto;padding:16px 16px 80px;}
+header.portal{background:#1F3864;color:white;padding:16px;}
+header.portal h1{margin:0;font-size:20px;}
+header.portal .sub{opacity:.85;font-size:13px;margin-top:2px;}
+.tabs{display:flex;gap:4px;background:white;border-radius:10px;padding:4px;margin:16px 0;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+.tabs a{flex:1;text-align:center;padding:14px 8px;border-radius:8px;color:#374151;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;min-height:44px;box-sizing:border-box;}
+.tabs a.active{background:#1F3864;color:white;}
+.card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;}
+.card h2{margin:0 0 12px;font-size:18px;color:#1F3864;}
+.muted{color:#6b7280;font-size:13px;}
+.drop{border:2px dashed #1F3864;border-radius:10px;padding:28px;text-align:center;color:#6b7280;background:#f9fafb;cursor:pointer;}
+input[type=file]{display:block;margin:12px 0;width:100%;}
+textarea,input[type=text]{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;box-sizing:border-box;}
+button,.btn{background:#1F3864;color:white;border:none;padding:14px 18px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;display:inline-block;text-decoration:none;min-height:44px;}
+button.secondary{background:#e5e7eb;color:#111827;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th,td{padding:8px 6px;text-align:left;border-bottom:1px solid #f3f4f6;}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;}
+.badge-new{background:#dbeafe;color:#1e40af;}
+.badge-review{background:#fef3c7;color:#92400e;}
+.badge-ready{background:#dcfce7;color:#166534;}
+.badge-posted{background:#bbf7d0;color:#166534;}
+.flash{padding:12px;border-radius:8px;margin-bottom:12px;font-weight:600;}
+.flash.ok{background:#dcfce7;border:1px solid #86efac;color:#065f46;}
+.flash.err{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;}
+.msg{padding:10px 12px;border-radius:10px;margin:6px 0;max-width:85%;word-wrap:break-word;}
+.msg.in{background:#e0e7ff;}
+.msg.out{background:#1F3864;color:white;margin-left:auto;}
+.msg.sys{background:#fef3c7;color:#92400e;font-size:13px;font-style:italic;text-align:center;max-width:100%;}
+.msg .ts{display:block;font-size:11px;opacity:.7;margin-top:4px;}
+.thread{display:flex;flex-direction:column;max-height:420px;overflow-y:auto;padding:8px 4px;}
+</style></head><body><header class='portal'><h1>OtoCPA</h1><div class='sub'>PenTest Client A1</div></header><div class='wrap'><nav class="tabs"><a class="active" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c">&#128228; Upload</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/documents">&#128196; Documents</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/bank">&#127970; Bank</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/messages">&#128172; Messages</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/my_uploads">&#128228; My uploads</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/tasks">&#9989; Tasks</a><a class="" href="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/settings">&#9881;&#65039; Settings</a></nav><div style="margin-bottom:8px;"><button id="pwa-install" onclick="_pwaInstall()" style="display:none;background:#2a8759;color:white;border:none;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">📲 Add to Home Screen</button><div id="pwa-ios-hint" style="display:none;background:#fff3cd;border:1px solid #ffeaa7;padding:10px 12px;border-radius:8px;font-size:13px;color:#6b4e00;">📲 To install: tap the Share button (square with arrow) then <strong>Add to Home Screen</strong>.</div></div>
+    <div class="card">
+        <h2>&#128228; Upload a document</h2>
+        <form method="POST" action="/c/Cto0mu5NtedxESNuvdaFVR5t8YjRMMDSw5bUoHqII6c/upload" enctype="multipart/form-data" id="pform">
+            <div class="drop" id="dz">&#128193; Drop files here</div>
+            <input type="file" id="fi" name="files" multiple
+                   accept=".pdf,.jpg,.jpeg,.png,.tiff,.heic,.webp" required>
+            <label class="muted">Note (optional)</label>
+            <textarea name="note" rows="2" placeholder="Ex: grocery invoice"></textarea>
+            <button type="submit" id="pbtn" style="margin-top:10px;width:100%;">
+                &#9989; Upload
+            </button>
+        </form>
+        <div id="pprog" style="display:none;margin-top:12px;padding:10px;border-radius:8px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:14px;"></div>
+        <p class="muted" style="margin-top:12px;">Formats: PDF, JPG, PNG. 20 MB max per file.</p>
+    </div>
+    <script>
+    (function(){
+     var BTN_LABEL="\u2705 Upload";
+     var FILES_WORD="file(s) selected";
+     var UPLOADING="Uploading\u2026";
+     var UPLOAD_FAILED="Upload failed";
+     var NOTHING_QUEUED="Nothing queued";
+     var QUEUED_PROC="document(s) queued. Processing\u2026";
+     var PROCESSING="Processing\u2026";
+     var DOCS_UPLOADED="document(s) uploaded";
+     var FAILED_WORD="failed";
+     var DONE_WORD="done";
+     var PROC_WORD="processing";
+     var QUEUED_WORD="queued";
+     var dz=document.getElementById('dz'),fi=document.getElementById('fi'),form=document.getElementById('pform'),btn=document.getElementById('pbtn'),prog=document.getElementById('pprog');
+     dz.addEventListener('click',function(){fi.click();});
+     ['dragover','dragenter'].forEach(function(e){dz.addEventListener(e,function(ev){ev.preventDefault();dz.style.background='#e0e7ff';});});
+     ['dragleave','drop'].forEach(function(e){dz.addEventListener(e,function(ev){ev.preventDefault();dz.style.background='#f9fafb';});});
+     dz.addEventListener('drop',function(ev){fi.files=ev.dataTransfer.files;dz.textContent=ev.dataTransfer.files.length+' '+FILES_WORD;});
+     fi.addEventListener('change',function(){if(fi.files.length)dz.textContent=fi.files.length+' '+FILES_WORD;});
+     function show(m){prog.style.display='block';prog.textContent=m;}
+     function poll(ids){fetch('/upload/status?document_ids='+encodeURIComponent(ids.join(','))).then(function(r){return r.json();}).then(function(j){if(!j.ok)return;var c=j.counts||{};var done=(c.ready||0)+(c.error||0);show(PROCESSING+' '+ids.length+'... '+done+' '+DONE_WORD+', '+(c.processing||0)+' '+PROC_WORD+', '+(c.queued||0)+' '+QUEUED_WORD);if(done>=ids.length){clearInterval(window._ppt);show('✅ '+ids.length+' '+DOCS_UPLOADED+' ('+(c.error||0)+' '+FAILED_WORD+').');btn.disabled=false;btn.innerHTML=BTN_LABEL;}}).catch(function(){});}
+     form.addEventListener('submit',function(ev){ev.preventDefault();btn.disabled=true;btn.textContent=UPLOADING;var fd=new FormData(form);fetch(form.action,{method:'POST',body:fd,headers:{'X-Async-Upload':'1'}}).then(function(r){return r.json();}).then(function(j){if(!j.ok){show('❌ '+(j.error||UPLOAD_FAILED));btn.disabled=false;btn.innerHTML=BTN_LABEL;return;}var ids=j.document_ids||[];if(!ids.length){show('⚠️ '+NOTHING_QUEUED);btn.disabled=false;btn.innerHTML=BTN_LABEL;return;}show(ids.length+' '+QUEUED_PROC);poll(ids);window._ppt=setInterval(function(){poll(ids);},5000);}).catch(function(e){show('❌ '+e);btn.disabled=false;btn.innerHTML=BTN_LABEL;});});
+    })();
+    </script>
+    </div><script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/static/pwa/sw.js',{scope:'/'}).catch(function(e){console.warn('sw reg:',e);});});}var _deferredInstall=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_deferredInstall=e;var b=document.getElementById('pwa-install');if(b){b.style.display='inline-block';}});function _pwaInstall(){if(_deferredInstall){_deferredInstall.prompt();_deferredInstall.userChoice.then(function(){_deferredInstall=null;var b=document.getElementById('pwa-install');if(b){b.style.display='none';}});}}(function(){var ua=navigator.userAgent||'';var isIOS=/iPhone|iPad|iPod/i.test(ua);var isSafari=/Safari/i.test(ua) && !/CriOS|FxiOS/i.test(ua);var standalone=window.navigator.standalone===true;if(isIOS && isSafari && !standalone){window.addEventListener('DOMContentLoaded',function(){var hint=document.getElementById('pwa-ios-hint');if(hint){hint.style.display='block';}});}})();</script></body></html>
