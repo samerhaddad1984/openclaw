@@ -257,6 +257,15 @@ LABELS: Dict[str, Dict[str, str]] = {
     "doc_lines_count_summary":     {"fr": "Ce document contient {n} poste(s) répartis sur {m} compte(s) GL.",
                                     "en": "This document has {n} line(s) across {m} GL account(s)."},
     "doc_multiple_categories":     {"fr": "Plusieurs",                   "en": "Multiple"},
+
+    # Honest "this doc has no real categorization yet" labels. Used
+    # when OCR failed (no vendor / no amount / no confidence) so the
+    # raw documents.gl_account / category column is a silent default.
+    # We deliberately surface "Non catégorisé" so the CPA can see at
+    # a glance which docs still need a human pass.
+    "doc_uncategorized":           {"fr": "Non catégorisé",              "en": "Uncategorized"},
+    "doc_needs_review":            {"fr": "À examiner",                  "en": "Needs review"},
+    "doc_n_gl_accounts":           {"fr": "{n} comptes GL",              "en": "{n} GLs"},
 }
 
 

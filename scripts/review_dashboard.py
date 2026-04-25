@@ -17112,24 +17112,78 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
         except sqlite3.OperationalError:
             pass
 
-    def _queue_line_value(doc_id: str, has_lines: int, fallback: str,
-                          field: str) -> str:
-        """Pick the column value for Category/GL in a queue row.
-        - has_lines=0 \u2192 fallback (the doc-level value).
-        - has_lines=1 + 1 unique value \u2192 that value.
-        - has_lines=1 + 2+ unique values \u2192 "Multiple" (lang-aware).
-        """
-        if not has_lines:
-            return fallback
-        entry = _line_summary_by_doc.get(doc_id)
-        if not entry:
-            return fallback
-        values = entry["gl"] if field == "gl" else entry["cat"]
-        if len(values) == 1:
-            return next(iter(values))
-        if len(values) >= 2:
-            return _q_ui_t("doc_multiple_categories", lang)
-        return ""
+    def _row_looks_uncategorized(_r) -> bool:
+        """A document is "uncategorized" when OCR didn't produce real
+        signal AND no line items have been parsed. In that case the
+        documents.gl_account / category column is just a silent
+        default ('5440' / 'operating_expense') from the OCR engine
+        and we must NOT show it in the queue \u2014 that's the lie this
+        commit fixes."""
+        if int(_r.get("has_line_items") or 0):
+            return False
+        # OCR succeeded if it pulled a vendor AND an amount (the two
+        # most basic fields). If either is missing the doc isn't
+        # really categorized, no matter what's in gl_account.
+        _vendor = (_r.get("vendor") or "").strip()
+        _amount = _r.get("amount")
+        if _vendor and _amount not in (None, "", 0, 0.0):
+            return False
+        return True
+
+    def _queue_gl_cell(_r) -> str:
+        """Return inner HTML for the GL Account column. Wrapper span
+        carries data-cell="gl" so tests + CSS can select it."""
+        _doc_id = _r["document_id"]
+        _has_lines = int(_r.get("has_line_items") or 0)
+        if _has_lines:
+            entry = _line_summary_by_doc.get(_doc_id) or {"gl": set()}
+            gls = sorted(entry["gl"])
+            if len(gls) == 1:
+                return f'<span data-cell="gl">1: {esc(gls[0])}</span>'
+            if len(gls) >= 2:
+                _label = _q_ui_t("doc_n_gl_accounts", lang).format(n=len(gls))
+                _tip = ", ".join(gls)
+                return (
+                    f'<span data-cell="gl" title="{esc(_tip)}">'
+                    f'{esc(_label)}</span>'
+                )
+            # has_line_items=1 but no GL on any line yet: still uncategorized
+            return (
+                f'<span data-cell="gl" class="muted">'
+                f'{esc(_q_ui_t("doc_uncategorized", lang))}</span>'
+            )
+        if _row_looks_uncategorized(_r):
+            return (
+                f'<span data-cell="gl" class="muted">'
+                f'{esc(_q_ui_t("doc_uncategorized", lang))}</span>'
+            )
+        # Single-extraction OCR-success path: doc-level value is real.
+        return f'<span data-cell="gl">{esc(_r.get("gl_account") or "")}</span>'
+
+    def _queue_category_cell(_r) -> str:
+        _doc_id = _r["document_id"]
+        _has_lines = int(_r.get("has_line_items") or 0)
+        if _has_lines:
+            entry = _line_summary_by_doc.get(_doc_id) or {"cat": set()}
+            cats = sorted(entry["cat"])
+            if len(cats) == 1:
+                return f'<span data-cell="category">{esc(cats[0])}</span>'
+            if len(cats) >= 2:
+                _tip = ", ".join(cats)
+                return (
+                    f'<span data-cell="category" title="{esc(_tip)}">'
+                    f'{esc(_q_ui_t("doc_multiple_categories", lang))}</span>'
+                )
+            return (
+                f'<span data-cell="category" class="muted">'
+                f'{esc(_q_ui_t("doc_uncategorized", lang))}</span>'
+            )
+        if _row_looks_uncategorized(_r):
+            return (
+                f'<span data-cell="category" class="muted">'
+                f'{esc(_q_ui_t("doc_uncategorized", lang))}</span>'
+            )
+        return f'<span data-cell="category">{esc(_r.get("category") or "")}</span>'
     row_html: list[str] = []
     card_html: list[str] = []
     for _row_idx, row in enumerate(rows):
@@ -17189,19 +17243,15 @@ def render_home(ctx: dict[str, Any], user: dict[str, Any], status: str, q: str,
                 )
         except Exception:
             _uploader_badge_html = ""
-        _row_has_lines = int(row.get("has_line_items") or 0)
-        _row_doc_id = row["document_id"]
-        _row_category_display = _queue_line_value(
-            _row_doc_id, _row_has_lines, row.get("category") or "", "cat")
-        _row_gl_display = _queue_line_value(
-            _row_doc_id, _row_has_lines, row.get("gl_account") or "", "gl")
+        _row_category_html = _queue_category_cell(row)
+        _row_gl_html = _queue_gl_cell(row)
         row_html.append(f"""<tr class="data-row" onclick="toggleRowDetail('{_detail_id}')">
             <td class="file-cell"><a class="doc-link" href="{_doc_url}" onclick="event.stopPropagation()">{esc(row["file_name"])}</a>
                 <div class="doc-sub">{esc(row["document_id"])} {_uploader_badge_html}</div></td>
             <td>{ _unassigned_badge if row["client_code"] == "UNASSIGNED" else esc(row["client_code"])}</td>
             <td class="vendor-cell">{esc(row["vendor"])}</td>
             <td class="amount-cell">{esc(row["amount"])}</td><td>{esc(row["document_date"])}</td>
-            <td>{esc(_row_category_display)}</td><td>{esc(_row_gl_display)}</td>
+            <td>{_row_category_html}</td><td>{_row_gl_html}</td>
             <td>{review_status_badge(status_display)}</td>
             <td>{assign_ctrl}</td>
             <td class="reason-cell">{_ls_badge}{queue_fraud_badges(row)} {esc(reason)}</td>
@@ -18448,12 +18498,31 @@ def render_document(document_id: str, ctx: dict[str, Any], user: dict[str, Any],
                 f'<div>{esc(_doc_ui_t("doc_multiple_categories", lang))}</div></div>'
             )
     else:
-        _summary_gl_cell = (
-            f'<div><strong>{esc(t("doc_field_gl_account", lang))}</strong><div>{esc(row["gl_account"])}</div></div>'
+        # Honest display: when has_line_items=0 AND OCR didn't pull a
+        # vendor + amount, the gl_account/category column is just the
+        # OCR engine's silent default ('5440' / 'operating_expense').
+        # Surface "Non catégorisé" instead of the lie.
+        _doc_uncategorized = (
+            not (row.get("vendor") or "").strip()
+            or row.get("amount") in (None, "", 0, 0.0)
         )
-        _summary_category_cell = (
-            f'<div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>'
-        )
+        if _doc_uncategorized:
+            _uncat = esc(_doc_ui_t("doc_uncategorized", lang))
+            _summary_gl_cell = (
+                f'<div><strong>{esc(t("doc_field_gl_account", lang))}</strong>'
+                f'<div class="muted">{_uncat}</div></div>'
+            )
+            _summary_category_cell = (
+                f'<div><strong>{esc(t("doc_field_category", lang))}</strong>'
+                f'<div class="muted">{_uncat}</div></div>'
+            )
+        else:
+            _summary_gl_cell = (
+                f'<div><strong>{esc(t("doc_field_gl_account", lang))}</strong><div>{esc(row["gl_account"])}</div></div>'
+            )
+            _summary_category_cell = (
+                f'<div><strong>{esc(t("doc_field_category", lang))}</strong><div>{esc(row["category"])}</div></div>'
+            )
     # Single-language uploader-by caption.
     _uploaded_by_label = _doc_ui_t("doc_uploaded_by", lang)
     # Line-summary banner when has_line_items.
