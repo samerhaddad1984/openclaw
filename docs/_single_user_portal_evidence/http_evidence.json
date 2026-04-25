@@ -1,0 +1,50 @@
+{
+  "token": "V6jxD_9cr1O0NSUHAnGzY5o47rZMrwveCuuaoVPG1G8",
+  "GET /c/{token}/upload": {
+    "status": 200,
+    "bytes": 8817,
+    "nav_labels_present_either_lang": {
+      "Upload": true,
+      "Documents": true,
+      "Bank": true,
+      "Messages": true,
+      "My uploads": true,
+      "Tasks": true,
+      "Settings": true
+    },
+    "nav_hrefs_present": {
+      "/c/V6jxD_9cr1O0NSUHAnGzY5o47rZMrwveCuuaoVPG1G8/my_uploads": true,
+      "/c/V6jxD_9cr1O0NSUHAnGzY5o47rZMrwveCuuaoVPG1G8/tasks": true,
+      "/c/V6jxD_9cr1O0NSUHAnGzY5o47rZMrwveCuuaoVPG1G8/settings": true
+    },
+    "all_7_tabs_present": true
+  },
+  "GET /c/{token}/my_uploads": {
+    "status": 200,
+    "bytes": 1635,
+    "page_heading_present": true
+  },
+  "GET /c/{token}/tasks": {
+    "status": 200,
+    "bytes": 1564,
+    "page_heading_present": true
+  },
+  "GET /c/{token}/settings": {
+    "status": 200,
+    "bytes": 2788,
+    "has_upgrade_cta_either_lang": true,
+    "has_rotate_cta_either_lang": true,
+    "has_upgrade_form_action": true
+  },
+  "POST /c/{token}/upgrade": {
+    "status": 303,
+    "location": "/cp/V6jxD_9cr1O0NSUHAnGzY5o47rZMrwveCuuaoVPG1G8/admin",
+    "redirects_to_admin": true
+  },
+  "GET /cp/{token}/admin": {
+    "status": 200,
+    "bytes": 6643,
+    "has_team_tab_either_lang": true,
+    "has_invite_cta_either_lang": true
+  }
+}

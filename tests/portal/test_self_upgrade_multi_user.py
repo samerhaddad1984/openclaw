@@ -198,27 +198,34 @@ def test_upgrade_reuses_existing_portal_user(tmp_path):
 
 def test_cpa_notified_of_upgrade(tmp_path, monkeypatch):
     db = _mkdb(tmp_path)
-    # Ensure notifications table exists (Scope 2 notification_sender
-    # bootstrap is lazy in tests — stub the enqueue so we don't need
-    # its schema).
     calls = []
 
-    class _Stub:
-        @staticmethod
-        def enqueue(db_path, **kwargs):
-            calls.append(kwargs)
+    def _fake_enqueue(db_path, **kwargs):
+        calls.append(kwargs)
 
+    # Patch enqueue on the already-imported module (if any) AND swap
+    # the sys.modules entry so new imports pick up a stub too. Both
+    # paths are needed because upgrade_to_multi_user does a fresh
+    # ``from src.integrations import notification_sender`` each time.
     import sys as _sys
-    _sys.modules['src.integrations.notification_sender'] = _Stub()
+    import importlib
     try:
-        mup.upgrade_to_multi_user(
-            db, client_code='ACME',
-            upgrading_user_email='marie@acme.com',
-            notify_cpa=True,
+        ns = importlib.import_module(
+            'src.integrations.notification_sender'
         )
-    finally:
-        del _sys.modules['src.integrations.notification_sender']
-    assert calls
+        monkeypatch.setattr(ns, 'enqueue', _fake_enqueue)
+    except Exception:
+        class _Stub:
+            enqueue = staticmethod(_fake_enqueue)
+        _sys.modules['src.integrations.notification_sender'] = _Stub()
+    mup.upgrade_to_multi_user(
+        db, client_code='ACME',
+        upgrading_user_email='marie@acme.com',
+        notify_cpa=True,
+    )
+    assert calls, (
+        'notification_sender.enqueue was not called during upgrade'
+    )
     assert calls[0]['kind'] == 'portal_upgraded'
     assert 'ACME' in calls[0]['body']
 

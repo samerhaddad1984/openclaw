@@ -163,11 +163,11 @@ def upgrade_to_multi_user(
             cur = conn.execute(
                 "INSERT INTO client_portal_users "
                 "(firm_code, client_code, email, full_name, role, status, "
-                " user_token, invited_by, invited_at, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " user_token, invited_by, invited_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (firm_code, client_code, admin_email, admin_name,
                  'admin', 'active', portal_token,
-                 'self_upgrade', now, now),
+                 'self_upgrade', now),
             )
             user_id = cur.lastrowid
             action = 'user_created'
@@ -279,6 +279,16 @@ def resolve_portal_access(
         if client is not None:
             mode = (client.get('portal_mode') or 'single').lower()
             if mode == 'multi':
+                # Collision case: a self-upgraded client reuses the old
+                # client portal_token as the admin's personal user_token
+                # so the link keeps working (see
+                # upgrade_to_multi_user). When both records match,
+                # prefer the user-token resolution so the admin lands
+                # on their personal view instead of the "use your
+                # personal link" redirect.
+                user = _find_user_by_token(conn, token)
+                if user and (user.get('status') or 'invited') == 'active':
+                    return ('multi', client, user)
                 return ('multi_redirect', client, None)
             return ('single', client, None)
         user = _find_user_by_token(conn, token)
